@@ -51,17 +51,123 @@ export const getBusiness = (token: string, id: string) =>
   apiFetch<Record<string, unknown>>(`/api/v1/businesses/${id}`, { token });
 
 // Products
-export const listProducts = (token: string, businessId: string) =>
-  apiFetch<{ products: Array<Record<string, unknown>>; totalCount: number }>(
-    `/api/v1/${businessId}/products`,
+export type ProductListItem = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  slug: string;
+  description?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  variantCount?: number;
+  thumbnailUrl?: string | null;
+  createdAt: string;
+};
+
+export type ProductVariant = {
+  id?: string;
+  name: string;
+  imageUrl?: string | null;
+  imageKey?: string | null;
+  imagePreviewUrl?: string;
+  price?: number;
+  stock: number;
+  isAvailable?: boolean;
+};
+
+export type ProductDetail = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  description?: string | null;
+  category: { id: string; name: string } | null;
+  variants: Array<{
+    id: string;
+    name: string;
+    imageUrl?: string | null;
+    imageKey?: string | null;
+    price?: number;
+    stock: number;
+    isAvailable: boolean;
+  }>;
+  createdAt: string;
+};
+
+export type CreateProductInput = {
+  name: string;
+  price: number;
+  sku: string;
+  description?: string;
+  categoryName?: string;
+  categoryId?: string;
+  variants?: Array<{
+    name: string;
+    imageUrl?: string;
+    price?: number;
+    stock: number;
+    isAvailable?: boolean;
+  }>;
+};
+
+export type UpdateProductInput = {
+  name?: string;
+  price?: number;
+  sku?: string;
+  description?: string;
+  variants?: Array<{
+    id?: string;
+    name: string;
+    imageUrl?: string;
+    price?: number;
+    stock: number;
+    isAvailable?: boolean;
+  }>;
+};
+
+export const listProducts = (
+  token: string,
+  businessId: string,
+  params?: { categoryId?: string; limit?: number; offset?: number },
+) => {
+  const search = new URLSearchParams();
+  if (params?.categoryId) search.set('categoryId', params.categoryId);
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  const qs = search.toString();
+  return apiFetch<{ products: ProductListItem[]; totalCount: number }>(
+    `/api/v1/${businessId}/products${qs ? `?${qs}` : ''}`,
     { token },
   );
+};
 
-export const createProduct = (token: string, businessId: string, data: Record<string, unknown>) =>
+export const getProduct = (token: string, businessId: string, productId: string) =>
+  apiFetch<ProductDetail>(`/api/v1/${businessId}/products/${productId}`, { token });
+
+export const createProduct = (token: string, businessId: string, data: CreateProductInput) =>
   apiFetch<{ id: string; slug: string; variantCount: number }>(
     `/api/v1/${businessId}/products`,
     { method: 'POST', token, body: JSON.stringify(data) },
   );
+
+export const updateProduct = (
+  token: string,
+  businessId: string,
+  productId: string,
+  data: UpdateProductInput,
+) =>
+  apiFetch<{ updated: boolean }>(`/api/v1/${businessId}/products/${productId}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(data),
+  });
+
+export const deleteProduct = (token: string, businessId: string, productId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/products/${productId}`, {
+    method: 'DELETE',
+    token,
+  });
 
 export const listCategories = (token: string, businessId: string) =>
   apiFetch<Array<{ id: string; name: string; slug: string }>>(

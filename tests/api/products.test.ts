@@ -63,6 +63,32 @@ describe('Products API', () => {
     expect((await res.json()).updated).toBe(true);
   });
 
+  it('PUT /:businessId/products/:productId updates variants', async () => {
+    const { business, product, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]?.id;
+    expect(variantId).toBeTruthy();
+
+    const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        variants: [
+          { id: variantId, name: 'Red M', stock: 25, isAvailable: true },
+          { name: 'Green L', stock: 4, isAvailable: true },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const getRes = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      headers: authHeaders(),
+    });
+    const body = await getRes.json();
+    expect(body.variants).toHaveLength(2);
+    expect(body.variants.find((v: { id: string }) => v.id === variantId)?.stock).toBe(25);
+    expect(body.variants.some((v: { name: string }) => v.name === 'Green L')).toBe(true);
+  });
+
   it('DELETE /:businessId/products/:productId deletes product', async () => {
     const { business, product } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {

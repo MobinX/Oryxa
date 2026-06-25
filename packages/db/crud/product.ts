@@ -3,7 +3,7 @@ import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema } from '@repo/shared';
 import { slugify } from '@repo/utils';
-import { resolveStoredImageUrl } from '@repo/integrations/b2';
+import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
 
 async function mapVariantWithSignedImage<T extends { imageUrl: string | null }>(variant: T) {
   return {
@@ -78,6 +78,7 @@ export async function getProductById(businessId: string, productId: string) {
       const withImage = await mapVariantWithSignedImage(v);
       return {
         ...withImage,
+        imageKey: v.imageUrl,
         price: v.price ? parseFloat(v.price) : undefined,
         rating: v.rating ? parseFloat(v.rating) : undefined,
       };
@@ -107,6 +108,10 @@ export async function listProducts(
     limit,
     offset,
     orderBy: [desc(products.createdAt)],
+    with: {
+      category: true,
+      variants: true,
+    },
   });
 
   const [countResult] = await db
@@ -114,8 +119,32 @@ export async function listProducts(
     .from(products)
     .where(and(...conditions));
 
+  const mapped = await Promise.all(
+    items.map(async (p) => {
+      const firstWithImage = p.variants.find((v) => v.imageUrl);
+      const thumbnailUrl = firstWithImage?.imageUrl
+        ? await resolveStoredImageUrl(firstWithImage.imageUrl)
+        : null;
+
+      return {
+        id: p.id,
+        businessId: p.businessId,
+        categoryId: p.categoryId,
+        name: p.name,
+        price: parseFloat(p.price),
+        slug: p.slug,
+        sku: p.sku,
+        description: p.description,
+        createdAt: p.createdAt,
+        categoryName: p.category?.name ?? null,
+        variantCount: p.variants.length,
+        thumbnailUrl,
+      };
+    }),
+  );
+
   return {
-    products: items.map((p) => ({ ...p, price: parseFloat(p.price) })),
+    products: mapped,
     totalCount: countResult?.count ?? 0,
   };
 }
@@ -127,14 +156,73 @@ export async function updateProduct(businessId: string, productId: string, input
   });
   if (!product) return null;
 
-  await db
-    .update(products)
-    .set({
-      ...parsed,
-      price: parsed.price?.toFixed(2),
-      slug: parsed.name ? slugify(parsed.name) : undefined,
-    })
-    .where(eq(products.id, productId));
+  const { variants: variantUpdates, ...productFields } = parsed;
+
+  const hasProductUpdate =
+    productFields.name !== undefined ||
+    productFields.price !== undefined ||
+    productFields.sku !== undefined ||
+    productFields.description !== undefined;
+
+  if (hasProductUpdate) {
+    await db
+      .update(products)
+      .set({
+        ...productFields,
+        price: productFields.price?.toFixed(2),
+        slug: productFields.name ? slugify(productFields.name) : undefined,
+      })
+      .where(eq(products.id, productId));
+  }
+
+  if (variantUpdates) {
+    const existing = await db.query.variants.findMany({
+      where: eq(variants.productId, productId),
+    });
+    const incomingIds = new Set(
+      variantUpdates.filter((v) => v.id).map((v) => v.id as string),
+    );
+
+    for (const existingVariant of existing) {
+      if (!incomingIds.has(existingVariant.id)) {
+        await db.delete(variants).where(eq(variants.id, existingVariant.id));
+      }
+    }
+
+    for (const variant of variantUpdates) {
+      const imageUrl =
+        variant.imageUrl && (isB2ObjectKey(variant.imageUrl) || !variant.imageUrl.startsWith('http'))
+          ? variant.imageUrl
+          : undefined;
+
+      if (variant.id) {
+        const belongsToProduct = existing.some((v) => v.id === variant.id);
+        if (!belongsToProduct) continue;
+
+        await db
+          .update(variants)
+          .set({
+            name: variant.name,
+            stock: variant.stock,
+            isAvailable: variant.isAvailable,
+            price: variant.price?.toFixed(2),
+            rating: variant.rating?.toFixed(2),
+            ...(imageUrl !== undefined && { imageUrl }),
+          })
+          .where(and(eq(variants.id, variant.id), eq(variants.productId, productId)));
+      } else {
+        await db.insert(variants).values({
+          productId,
+          name: variant.name,
+          imageUrl,
+          price: variant.price?.toFixed(2),
+          stock: variant.stock,
+          isAvailable: variant.isAvailable,
+          rating: variant.rating?.toFixed(2),
+        });
+      }
+    }
+  }
 
   return { updated: true };
 }

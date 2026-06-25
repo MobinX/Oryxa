@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses } from '@db/schema';
 import { createBusinessInputSchema, updateBusinessInputSchema } from '@repo/shared';
@@ -25,6 +25,13 @@ export async function updateBusiness(id: string, userId: string, input: unknown)
 
   await db.update(businesses).set(parsed).where(eq(businesses.id, id));
   return { success: true };
+}
+
+export async function listBusinessesByUserId(userId: string) {
+  return db.query.businesses.findMany({
+    where: eq(businesses.userId, userId),
+    orderBy: [desc(businesses.createdAt)],
+  });
 }
 
 export async function verifyBusinessOwnership(businessId: string, userId: string) {

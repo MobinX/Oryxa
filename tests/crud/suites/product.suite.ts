@@ -87,6 +87,36 @@ export function registerProductCrudTests() {
     expect(result?.updated).toBe(true);
   });
 
+  it('updateProduct syncs variants (update, add, remove)', async () => {
+    const businessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Variant Product',
+      price: 12,
+      sku: `VAR-${Date.now()}`,
+      variants: [
+        { name: 'Small', stock: 3, isAvailable: true },
+        { name: 'Large', stock: 7, isAvailable: true },
+      ],
+    });
+    const before = await getProductById(businessId, created.id);
+    const smallId = before!.variants.find((v) => v.name === 'Small')!.id;
+    const largeId = before!.variants.find((v) => v.name === 'Large')!.id;
+
+    await updateProduct(businessId, created.id, {
+      variants: [
+        { id: smallId, name: 'Small', stock: 10, isAvailable: true },
+        { name: 'XL', stock: 2, isAvailable: true },
+      ],
+    });
+
+    const after = await getProductById(businessId, created.id);
+    expect(after?.variants).toHaveLength(2);
+    expect(after?.variants.find((v) => v.id === smallId)?.stock).toBe(10);
+    expect(after?.variants.some((v) => v.name === 'XL')).toBe(true);
+    expect(after?.variants.some((v) => v.id === largeId)).toBe(false);
+  });
+
   it('deleteProduct removes product', async () => {
     const businessId = await setup();
     const created = await createProduct({

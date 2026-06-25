@@ -46,9 +46,14 @@ export const createProductOutputSchema = z.object({
   variantCount: z.number().int(),
 });
 
+export const variantOutputSchema = baseVariantSchema.extend({
+  id: uuidSchema,
+  imageKey: z.string().nullable().optional(),
+});
+
 export const getProductByIdOutputSchema = selectProductSchema.extend({
   category: z.object({ id: uuidSchema, name: z.string() }).nullable(),
-  variants: z.array(baseVariantSchema.extend({ id: uuidSchema })),
+  variants: z.array(variantOutputSchema),
 });
 
 export const listProductsQuerySchema = z.object({
@@ -57,9 +62,19 @@ export const listProductsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+export const listProductItemSchema = selectProductSchema.extend({
+  categoryName: z.string().nullable().optional(),
+  variantCount: z.number().int().optional(),
+  thumbnailUrl: z.string().nullable().optional(),
+});
+
 export const listProductsOutputSchema = z.object({
-  products: z.array(selectProductSchema),
+  products: z.array(listProductItemSchema),
   totalCount: z.number().int(),
+});
+
+export const updateVariantInputSchema = variantInputSchema.extend({
+  id: uuidSchema.optional(),
 });
 
 export const updateProductInputSchema = z.object({
@@ -67,6 +82,7 @@ export const updateProductInputSchema = z.object({
   price: z.coerce.number().positive().optional(),
   sku: z.string().max(100).optional(),
   description: z.string().optional(),
+  variants: z.array(updateVariantInputSchema).optional(),
 });
 
 export const updateProductOutputSchema = z.object({ updated: z.boolean() });
