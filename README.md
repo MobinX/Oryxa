@@ -86,7 +86,9 @@ Aliases are configured in each package's `tsconfig.json`. Bun resolves them at r
 | `bun run dev:web` | Start Next.js app |
 | `bun run db:push` | Push schema to Postgres |
 | `bun run db:studio` | Open Drizzle Studio |
-| `bun test` | Run Vitest suite |
+| `bun test` | Run Vitest suite (PGlite in-memory DB) |
+| `bun run test:coverage` | Run tests with coverage report |
+| `bun run test:neon` | Optional: run against real Neon DB (`NEON_DATABASE_URL` required) |
 | `bun run gen:api` | Generate React Query client from OpenAPI |
 
 ## Deploy (Vercel)

@@ -5,8 +5,14 @@ import * as schema from '@db/schema';
 export type Database = PostgresJsDatabase<typeof schema>;
 
 let _db: Database | null = null;
+let _testOverride: Database | null = null;
+
+export function setTestDatabase(db: Database | null) {
+  _testOverride = db;
+}
 
 function getDb(): Database {
+  if (_testOverride) return _testOverride;
   if (_db) return _db;
 
   const connectionString = process.env.DATABASE_URL;

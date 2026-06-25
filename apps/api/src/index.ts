@@ -26,11 +26,12 @@ app.get('/', (c) => c.json({ name: 'Oryxa API', version: '1.0.0' }));
 
 app.route('/api/v1/users', usersRouter);
 app.route('/api/v1/businesses', businessesRouter);
+// OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
+app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);
 app.route('/api/v1', ordersRouter);
 app.route('/api/v1', channelsRouter);
 app.route('/api/v1', conversationsRouter);
-app.route('/api/v1', facebookCallbackRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 

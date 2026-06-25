@@ -6,9 +6,21 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      include: [
+        'apps/api/src/**/*.ts',
+        'packages/db/**/*.ts',
+        'packages/agent/**/*.ts',
+        'packages/integrations/**/*.ts',
+        'packages/shared/**/*.ts',
+        'packages/utils/**/*.ts',
+      ],
+      exclude: ['**/*.test.ts', '**/node_modules/**'],
     },
   },
   resolve: {

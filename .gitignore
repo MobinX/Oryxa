@@ -8,4 +8,3 @@ dist/
 coverage/
 .vercel
 .turbo
-packages/db/migrations/

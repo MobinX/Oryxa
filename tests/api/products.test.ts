@@ -1,64 +1,94 @@
-import { describe, it, expect, vi } from 'vitest';
-import { productsRouter } from '@api/routes/products';
+import { describe, it, expect } from 'vitest';
+import { withPglite } from '../helpers/with-pglite';
+import { seedTestWorld, authHeaders } from '../helpers/seed';
+import app from '@api/index';
 
-vi.mock('@repo/db/crud/product', () => ({
-  createProduct: vi.fn(),
-  getProductById: vi.fn(),
-  listProducts: vi.fn(),
-  listCategories: vi.fn(),
-  createCategory: vi.fn(),
-  updateProduct: vi.fn(),
-  deleteProduct: vi.fn(),
-}));
+describe('Products API', () => {
+  withPglite();
 
-vi.mock('@api/middleware/auth', () => ({
-  authMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
-vi.mock('@api/middleware/business', () => ({
-  businessAccessMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
-}));
-
-import * as productCrud from '@repo/db/crud/product';
-
-describe('Product API Routes', () => {
-  it('POST /products - should return 201 on valid payload', async () => {
-    const mockId = '11111111-2222-3333-4444-555555555555';
-    vi.mocked(productCrud.createProduct).mockResolvedValueOnce({
-      id: mockId,
-      slug: 'test-product',
-      variantCount: 0,
-    });
-
-    const businessId = '123e4567-e89b-12d3-a456-426614174000';
-    const req = new Request(`http://localhost/${businessId}/products`, {
+  it('POST /:businessId/products returns 201', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
-        name: 'Quantum Radar Schematic PDF',
+        name: 'API Product',
         price: 19.99,
-        sku: 'QR-PDF-01',
-        variants: [],
+        sku: 'API-01',
+        variants: [{ name: 'Default', stock: 5, isAvailable: true }],
       }),
     });
-
-    const res = await productsRouter.request(req);
     expect(res.status).toBe(201);
-
     const body = await res.json();
-    expect(body.id).toBe(mockId);
+    expect(body.slug).toBe('api-product');
   });
 
-  it('GET /products/:productId - should return 404 if product does not exist', async () => {
-    vi.mocked(productCrud.getProductById).mockResolvedValueOnce(null);
+  it('GET /:businessId/products lists products', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products`, { headers: authHeaders() });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.totalCount).toBeGreaterThan(0);
+  });
 
-    const businessId = '123e4567-e89b-12d3-a456-426614174000';
-    const productId = '99999999-9999-9999-9999-999999999999';
-    const req = new Request(`http://localhost/${businessId}/products/${productId}`);
-    const res = await productsRouter.request(req);
+  it('GET /:businessId/products/:productId returns product', async () => {
+    const { business, product } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBe('Test T-Shirt');
+  });
 
+  it('GET /:businessId/products/:productId returns 404 if missing', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(
+      `/api/v1/${business.id}/products/00000000-0000-0000-0000-000000000000`,
+      { headers: authHeaders() },
+    );
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toBe('Product entity missing');
+  });
+
+  it('PUT /:businessId/products/:productId updates product', async () => {
+    const { business, product } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ price: 39.99 }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it('DELETE /:businessId/products/:productId deletes product', async () => {
+    const { business, product } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+  });
+
+  it('POST /:businessId/categories creates category', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/categories`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name: 'Books' }),
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).slug).toBe('books');
+  });
+
+  it('GET /:businessId/categories lists categories', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/categories`, { headers: authHeaders() });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
   });
 });

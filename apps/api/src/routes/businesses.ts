@@ -40,6 +40,8 @@ businessesRouter.openapi(createRoute_, async (c) => {
   return c.json({ id: business.id, userId: business.userId, name: business.name }, 201);
 });
 
+businessesRouter.use('/:id', businessAccessMiddleware);
+
 const getRoute = createRoute({
   method: 'get',
   path: '/{id}',
@@ -52,7 +54,7 @@ const getRoute = createRoute({
   },
 });
 
-businessesRouter.openapi(getRoute, businessAccessMiddleware, async (c) => {
+businessesRouter.openapi(getRoute, async (c) => {
   const id = c.req.param('id');
   const business = await getBusinessById(id);
   if (!business) return c.json({ error: 'Not found' }, 404);
@@ -77,7 +79,7 @@ const updateRoute = createRoute({
   },
 });
 
-businessesRouter.openapi(updateRoute, businessAccessMiddleware, async (c) => {
+businessesRouter.openapi(updateRoute, async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   const data = c.req.valid('json');

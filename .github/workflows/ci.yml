@@ -9,20 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: oryxa_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -34,17 +20,27 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Push database schema
+      - name: Run tests (PGlite)
         env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/oryxa_test
-        run: bun run db:push
-
-      - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/oryxa_test
           INTERNAL_KEY: test-internal-key
           META_VERIFY_TOKEN: test-token
-        run: bun test
+          NODE_ENV: test
+        run: bun run test
 
       - name: Build web
         run: bun --filter web build
+
+  neon:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && vars.NEON_DATABASE_URL != ''
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Run optional Neon integration tests
+        env:
+          NEON_DATABASE_URL: ${{ vars.NEON_DATABASE_URL }}
+        run: bun run test:neon

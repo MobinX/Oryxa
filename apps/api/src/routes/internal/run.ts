@@ -17,18 +17,20 @@ internalRouter.post('/run', async (c) => {
   }
 
   const { conversationId } = parsed.data;
-
-  const executionCtx = (c.env as { executionCtx?: { waitUntil: (p: Promise<unknown>) => void } })?.executionCtx
-    ?? (c as unknown as { executionCtx?: { waitUntil: (p: Promise<unknown>) => void } }).executionCtx;
-
   const runPromise = runAgentForConversation(conversationId);
 
-  if (executionCtx?.waitUntil) {
-    executionCtx.waitUntil(runPromise);
+  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+  try {
+    waitUntil = c.executionCtx?.waitUntil?.bind(c.executionCtx);
+  } catch {
+    // No ExecutionContext outside Vercel Edge — fall through to fire-and-forget
+  }
+
+  if (waitUntil) {
+    waitUntil(runPromise);
     return c.text('accepted', 202);
   }
 
-  // Local dev: fire and forget without blocking response
   runPromise.catch((err) => console.error('Agent run error:', err));
   return c.text('accepted', 202);
 });

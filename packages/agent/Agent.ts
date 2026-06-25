@@ -1,4 +1,5 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { createAgentTools } from '@agent/tools';
@@ -12,17 +13,21 @@ export interface AgentConfig {
   customerPlatformId: string;
   customerName?: string | null;
   catalogSummary?: string;
+  /** Inject a fake or test chat model (defaults to Gemini in production). */
+  llm?: BaseChatModel;
 }
 
 export class Agent {
   constructor(private config: AgentConfig) {}
 
   async run(): Promise<string> {
-    const llm = new ChatGoogleGenerativeAI({
-      model: 'gemini-2.5-flash-lite',
-      apiKey: process.env.GEMINI_API_KEY,
-      temperature: 0.3,
-    });
+    const llm =
+      this.config.llm ??
+      new ChatGoogleGenerativeAI({
+        model: 'gemini-2.5-flash-lite',
+        apiKey: process.env.GEMINI_API_KEY,
+        temperature: 0.3,
+      });
 
     const tools = createAgentTools({
       businessId: this.config.business.id,
