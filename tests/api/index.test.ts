@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import app from '@api/index';
+import { app } from '@api/index';
 
 describe('API root', () => {
   it('GET / returns service info', async () => {
@@ -22,11 +22,11 @@ describe('API root', () => {
     const res = await app.request('/api/v1/users/me', {
       method: 'OPTIONS',
       headers: {
-        Origin: 'http://localhost:3000',
+        Origin: 'http://localhost:3400',
         'Access-Control-Request-Method': 'GET',
       },
     });
     expect(res.status).toBeLessThan(300);
-    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3400');
   });
 });

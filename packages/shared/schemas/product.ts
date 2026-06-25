@@ -14,7 +14,10 @@ export const baseProductSchema = z.object({
 export const baseVariantSchema = z.object({
   productId: uuidSchema,
   name: z.string().min(1).max(255).openapi({ example: 'Red XL' }),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.string().min(1).optional().openapi({
+    description: 'B2 object key (private bucket) or legacy public URL',
+    example: 'businesses/uuid/images/photo.png',
+  }),
   price: z.coerce.number().positive().optional(),
   stock: z.number().int().min(0).default(0),
   isAvailable: z.boolean().default(true),

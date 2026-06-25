@@ -7,7 +7,7 @@ import { uploadVariantImage } from '@/lib/api';
 type ImageUploadProps = {
   token: string;
   businessId: string;
-  onUploaded: (url: string) => void;
+  onUploaded: (result: { key: string; previewUrl: string }) => void;
 };
 
 export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps) {
@@ -19,8 +19,8 @@ export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps)
     setError(null);
     setUploading(true);
     try {
-      const { url } = await uploadVariantImage(token, businessId, file);
-      onUploaded(url);
+      const { key, url } = await uploadVariantImage(token, businessId, file);
+      onUploaded({ key, previewUrl: url });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {

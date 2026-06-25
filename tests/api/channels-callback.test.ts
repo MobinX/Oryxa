@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
-import app from '@api/index';
+import { app } from '@api/index';
 import { listChannels } from '@repo/db/crud/channel';
 
 const exchangeCodeForTokenMock = vi.fn();
@@ -20,7 +20,7 @@ describe('Facebook OAuth callback', () => {
   beforeEach(() => {
     exchangeCodeForTokenMock.mockReset();
     getUserPagesMock.mockReset();
-    process.env.WEB_URL = 'http://localhost:3000';
+    process.env.WEB_URL = 'http://localhost:3400';
   });
 
   it('returns 400 when code or state is missing', async () => {
@@ -42,7 +42,7 @@ describe('Facebook OAuth callback', () => {
     );
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe(
-      `http://localhost:3000/b/${business.id}/channels?connected=facebook`,
+      `http://localhost:3400/b/${business.id}/channels?connected=facebook`,
     );
 
     const channels = await listChannels(business.id);

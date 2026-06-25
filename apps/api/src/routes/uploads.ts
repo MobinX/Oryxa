@@ -1,7 +1,11 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
-import { uploadImageToB2 } from '@repo/integrations/b2';
+import {
+  uploadImageToB2,
+  getSignedB2Url,
+  assertB2KeyForBusiness,
+} from '@repo/integrations/b2';
 
 export const uploadsRouter = new OpenAPIHono();
 
@@ -25,10 +29,25 @@ uploadsRouter.post('/:businessId/uploads/image', async (c) => {
       originalName: file.name || 'image',
     });
 
-    return c.json({ url: result.url, key: result.key }, 201);
+    return c.json({ key: result.key, url: result.url }, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     const status = message.includes('not configured') ? 503 : 400;
     return c.json({ error: message }, status);
+  }
+});
+
+uploadsRouter.get('/:businessId/uploads/signed', async (c) => {
+  try {
+    const businessId = c.req.param('businessId');
+    const key = c.req.query('key');
+    if (!key) return c.json({ error: 'key query parameter is required' }, 400);
+
+    assertB2KeyForBusiness(key, businessId);
+    const url = await getSignedB2Url(key);
+    return c.json({ key, url });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to sign URL';
+    return c.json({ error: message }, 400);
   }
 });

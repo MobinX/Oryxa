@@ -13,6 +13,7 @@ import { ImageUpload } from '@/components/image-upload';
 type Variant = {
   name: string;
   imageUrl?: string;
+  imagePreviewUrl?: string;
   price?: number;
   stock: number;
 };
@@ -84,7 +85,7 @@ export default function ProductsPage({
                   sku,
                   description,
                   categoryName: categoryName || undefined,
-                  variants,
+                  variants: variants.map(({ imagePreviewUrl: _preview, ...variant }) => variant),
                 });
                 queryClient.invalidateQueries({ queryKey: ['products', businessId] });
                 setShowModal(false);
@@ -137,13 +138,22 @@ export default function ProductsPage({
                     <ImageUpload
                       token={token!}
                       businessId={businessId}
-                      onUploaded={(url) => {
+                      onUploaded={({ key, previewUrl }) => {
                         const next = [...variants];
-                        next[i] = { ...next[i], imageUrl: url };
+                        next[i] = { ...next[i], imageUrl: key, imagePreviewUrl: previewUrl };
                         setVariants(next);
                       }}
                     />
-                    {v.imageUrl && <span className="text-xs text-green-600">Image uploaded</span>}
+                    {v.imagePreviewUrl && (
+                      <img
+                        src={v.imagePreviewUrl}
+                        alt="Variant preview"
+                        className="h-12 w-12 rounded object-cover"
+                      />
+                    )}
+                    {v.imageUrl && !v.imagePreviewUrl && (
+                      <span className="text-xs text-green-600">Image key saved</span>
+                    )}
                   </div>
                 ))}
                 <Button

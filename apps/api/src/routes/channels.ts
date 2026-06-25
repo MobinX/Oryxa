@@ -191,7 +191,7 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
       extraInfo: JSON.stringify({ pageName: page.name }),
     });
 
-    const webUrl = process.env.WEB_URL ?? 'http://localhost:3000';
+    const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
     return c.redirect(`${webUrl}/b/${state}/channels?connected=facebook`);
   } catch (err) {
     console.error('Facebook OAuth error:', err);

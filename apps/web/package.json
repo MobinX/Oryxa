@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p ${WEB_PORT:-3000}",
+    "dev": "next dev -p ${WEB_PORT:-3400}",
     "build": "next build",
     "start": "next start",
     "gen:api": "openapi-zod-client http://localhost:3001/doc -o lib/api-generated.ts --export-schemas false 2>/dev/null || echo 'Start API first: bun run dev:api'"

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
-import app from '@api/index';
+import { app } from '@api/index';
 
 vi.mock('@api/lib/agent-runner', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@api/lib/agent-runner')>();

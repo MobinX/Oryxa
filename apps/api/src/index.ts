@@ -16,7 +16,7 @@ const app = new OpenAPIHono();
 app.use(
   '*',
   cors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3000',
+    origin: process.env.WEB_URL ?? 'http://localhost:3400',
     allowHeaders: ['Content-Type', 'Authorization', 'x-internal-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
@@ -53,14 +53,19 @@ app.doc('/doc', {
 
 app.get('/ui', swaggerUI({ url: '/doc' }));
 
-export default app;
+export { app };
 
 const port = parseInt(process.env.API_PORT ?? '3001', 10);
 
+/** Default export is Bun.serve options so `bun --hot` reloads on API_PORT, not Bun's default 3000. */
+const server = {
+  port,
+  fetch: app.fetch,
+};
+
+export default server;
+
 if (import.meta.main) {
-  Bun.serve({
-    fetch: app.fetch,
-    port,
-  });
+  Bun.serve(server);
   console.log(`Oryxa API running on http://localhost:${port}`);
 }

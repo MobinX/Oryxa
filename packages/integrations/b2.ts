@@ -1,11 +1,14 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
 
 let _client: S3Client | null = null;
 let _uploadOverride: ((command: PutObjectCommand) => Promise<unknown>) | null = null;
+let _signedUrlOverride: ((key: string) => Promise<string>) | null = null;
 
 /** @internal Test helper */
 export function setB2UploadOverrideForTests(
@@ -13,6 +16,11 @@ export function setB2UploadOverrideForTests(
 ) {
   _uploadOverride = fn;
   _client = null;
+}
+
+/** @internal Test helper */
+export function setB2SignedUrlOverrideForTests(fn: ((key: string) => Promise<string>) | null) {
+  _signedUrlOverride = fn;
 }
 
 function getB2Client(): S3Client {
@@ -43,17 +51,47 @@ function getBucketName(): string {
   return bucket;
 }
 
+function getSignedUrlTtlSeconds(): number {
+  const raw = process.env.B2_SIGNED_URL_TTL_SECONDS;
+  if (!raw) return DEFAULT_SIGNED_URL_TTL_SECONDS;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SIGNED_URL_TTL_SECONDS;
+}
+
 function sanitizeFilename(name: string): string {
   return name.replace(/[^\w.-]/g, '_').slice(0, 120);
 }
 
-export function getB2PublicUrl(key: string): string {
-  const publicBase = process.env.B2_PUBLIC_URL?.replace(/\/$/, '');
-  if (publicBase) return `${publicBase}/${key}`;
+export function isB2ObjectKey(value: string): boolean {
+  return !value.startsWith('http://') && !value.startsWith('https://');
+}
 
-  const endpoint = process.env.B2_ENDPOINT!.replace(/^https?:\/\//, '');
-  const bucket = getBucketName();
-  return `https://${endpoint}/${bucket}/${key}`;
+export function assertB2KeyForBusiness(key: string, businessId: string): void {
+  const prefix = `businesses/${businessId}/`;
+  if (!key.startsWith(prefix)) {
+    throw new Error('Invalid image key for this business');
+  }
+}
+
+export async function getSignedB2Url(key: string, expiresInSeconds = getSignedUrlTtlSeconds()): Promise<string> {
+  if (_signedUrlOverride) {
+    return _signedUrlOverride(key);
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: getBucketName(),
+    Key: key,
+  });
+
+  return getSignedUrl(getB2Client(), command, { expiresIn: expiresInSeconds });
+}
+
+export async function resolveStoredImageUrl(
+  stored: string | null | undefined,
+): Promise<string | undefined> {
+  if (!stored) return undefined;
+  if (!isB2ObjectKey(stored)) return stored;
+  return getSignedB2Url(stored);
 }
 
 export async function uploadImageToB2(params: {
@@ -61,7 +99,7 @@ export async function uploadImageToB2(params: {
   buffer: Buffer;
   contentType: string;
   originalName: string;
-}): Promise<{ url: string; key: string }> {
+}): Promise<{ key: string; url: string }> {
   if (!ALLOWED_IMAGE_TYPES.has(params.contentType)) {
     throw new Error('Only JPEG, PNG, WebP, and GIF images are allowed');
   }
@@ -84,5 +122,6 @@ export async function uploadImageToB2(params: {
     await getB2Client().send(command);
   }
 
-  return { key, url: getB2PublicUrl(key) };
+  const url = await getSignedB2Url(key);
+  return { key, url };
 }

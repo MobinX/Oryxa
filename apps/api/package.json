@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --hot src/index.ts",
+    "dev": "bun --env-file=../../.env run --hot src/index.ts",
     "build": "echo 'api built via vercel'",
-    "start": "bun run src/index.ts"
+    "start": "bun --env-file=../../.env run src/index.ts"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.0",

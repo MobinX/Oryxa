@@ -41,11 +41,11 @@ bun run db:push
 # Terminal 1 — API (port 3001)
 bun run dev:api
 
-# Terminal 2 — Web (port 3000)
+# Terminal 2 — Web (port 3400)
 bun run dev:web
 ```
 
-Open http://localhost:3000
+Open http://localhost:3400
 
 ### 5. Meta webhook (after deploy)
 
@@ -105,4 +105,4 @@ Set all env vars from `.env.example` on both projects. `AGENT_RUNNER_URL` should
 2. **Firebase:** Enable Google provider → add web app credentials → create service account for API
 3. **Meta:** Create app → add Messenger → connect test Page → set OAuth redirect to `/api/v1/auth/facebook/callback`
 4. **Gemini:** https://aistudio.google.com/apikey → `GEMINI_API_KEY`
-5. **Backblaze B2:** Create bucket → create Application Key with read/write → set `B2_*` env vars. For public images, enable bucket/file public access or set `B2_PUBLIC_URL` to your friendly/CDN URL ([B2 S3 API docs](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api))
+5. **Backblaze B2:** Create private bucket → application key → set `B2_*` env vars. Images use **presigned URLs** (no public bucket needed). See [B2 S3 API docs](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api)

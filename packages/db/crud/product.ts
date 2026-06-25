@@ -3,6 +3,14 @@ import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema } from '@repo/shared';
 import { slugify } from '@repo/utils';
+import { resolveStoredImageUrl } from '@repo/integrations/b2';
+
+async function mapVariantWithSignedImage<T extends { imageUrl: string | null }>(variant: T) {
+  return {
+    ...variant,
+    imageUrl: await resolveStoredImageUrl(variant.imageUrl),
+  };
+}
 
 export async function createProduct(input: unknown) {
   const parsed = createProductInputSchema.parse(input);
@@ -65,17 +73,24 @@ export async function getProductById(businessId: string, productId: string) {
   });
   if (!product) return null;
 
+  const mappedVariants = await Promise.all(
+    product.variants.map(async (v) => {
+      const withImage = await mapVariantWithSignedImage(v);
+      return {
+        ...withImage,
+        price: v.price ? parseFloat(v.price) : undefined,
+        rating: v.rating ? parseFloat(v.rating) : undefined,
+      };
+    }),
+  );
+
   return {
     ...product,
     price: parseFloat(product.price),
     category: product.category
       ? { id: product.category.id, name: product.category.name }
       : null,
-    variants: product.variants.map((v) => ({
-      ...v,
-      price: v.price ? parseFloat(v.price) : undefined,
-      rating: v.rating ? parseFloat(v.rating) : undefined,
-    })),
+    variants: mappedVariants,
   };
 }
 
