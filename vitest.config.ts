@@ -11,7 +11,7 @@ export default defineConfig({
     fileParallelism: false,
     server: {
       deps: {
-        inline: ['@neondatabase/serverless'],
+        inline: ['@neondatabase/serverless', '@aws-sdk/client-s3'],
       },
     },
     coverage: {

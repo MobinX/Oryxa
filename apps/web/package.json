@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",
-    "@uploadthing/react": "^7.3.0",
-    "@uploadthing/shared": "^7.1.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^11.3.0",
@@ -19,8 +17,7 @@
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.1",
-    "uploadthing": "^7.5.2"
+    "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.6",

@@ -7,6 +7,7 @@ import { productsRouter } from '@api/routes/products';
 import { ordersRouter } from '@api/routes/orders';
 import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
 import { conversationsRouter } from '@api/routes/conversations';
+import { uploadsRouter } from '@api/routes/uploads';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 
@@ -32,6 +33,7 @@ app.route('/api/v1', productsRouter);
 app.route('/api/v1', ordersRouter);
 app.route('/api/v1', channelsRouter);
 app.route('/api/v1', conversationsRouter);
+app.route('/api/v1', uploadsRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 

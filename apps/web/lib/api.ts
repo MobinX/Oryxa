@@ -69,6 +69,24 @@ export const listCategories = (token: string, businessId: string) =>
     { token },
   );
 
+export async function uploadVariantImage(token: string, businessId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${API_URL}/api/v1/${businessId}/uploads/image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(err.error ?? 'Upload failed', res.status);
+  }
+
+  return res.json() as Promise<{ url: string; key: string }>;
+}
+
 // Channels & Agents
 export const listChannels = (token: string, businessId: string) =>
   apiFetch<Array<{ id: string; platform: string; platformChannelId: string; agentId: string | null }>>(

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { UploadButton } from '@/lib/uploadthing';
+import { ImageUpload } from '@/components/image-upload';
 
 type Variant = {
   name: string;
@@ -134,14 +134,13 @@ export default function ProductsPage({
                         setVariants(next);
                       }}
                     />
-                    <UploadButton
-                      endpoint="variantImage"
-                      onClientUploadComplete={(res) => {
-                        if (res?.[0]?.ufsUrl) {
-                          const next = [...variants];
-                          next[i] = { ...next[i], imageUrl: res[0].ufsUrl };
-                          setVariants(next);
-                        }
+                    <ImageUpload
+                      token={token!}
+                      businessId={businessId}
+                      onUploaded={(url) => {
+                        const next = [...variants];
+                        next[i] = { ...next[i], imageUrl: url };
+                        setVariants(next);
                       }}
                     />
                     {v.imageUrl && <span className="text-xs text-green-600">Image uploaded</span>}

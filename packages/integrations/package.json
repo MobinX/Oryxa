@@ -5,7 +5,11 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./facebook": "./facebook.ts"
+    "./facebook": "./facebook.ts",
+    "./b2": "./b2.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.750.0"
   },
   "scripts": {
     "build": "echo 'integrations package - no build step'"

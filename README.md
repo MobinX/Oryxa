@@ -8,7 +8,7 @@ Multi-channel AI auto-reply SaaS for e-commerce. MVP: Facebook Messenger + Gemin
 - **API:** Hono + OpenAPI + Drizzle + Postgres
 - **Web:** Next.js 15 + Tailwind + Firebase Auth (Google)
 - **AI:** LangChain + Google Gemini 2.5 Flash-Lite
-- **Files:** UploadThing
+- **Files:** Backblaze B2 (S3-compatible API)
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ Multi-channel AI auto-reply SaaS for e-commerce. MVP: Facebook Messenger + Gemin
 - Firebase project with Google sign-in
 - Meta Developer app (Messenger)
 - Google AI Studio API key (Gemini)
-- UploadThing account
+- Backblaze B2 bucket + application key (S3-compatible)
 
 ### 2. Environment
 
@@ -105,4 +105,4 @@ Set all env vars from `.env.example` on both projects. `AGENT_RUNNER_URL` should
 2. **Firebase:** Enable Google provider → add web app credentials → create service account for API
 3. **Meta:** Create app → add Messenger → connect test Page → set OAuth redirect to `/api/v1/auth/facebook/callback`
 4. **Gemini:** https://aistudio.google.com/apikey → `GEMINI_API_KEY`
-5. **UploadThing:** Create app → `UPLOADTHING_TOKEN`
+5. **Backblaze B2:** Create bucket → create Application Key with read/write → set `B2_*` env vars. For public images, enable bucket/file public access or set `B2_PUBLIC_URL` to your friendly/CDN URL ([B2 S3 API docs](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api))
