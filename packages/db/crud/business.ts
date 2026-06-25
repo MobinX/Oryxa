@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../client';
-import { businesses } from '../schema';
+import { db } from '@db/client';
+import { businesses } from '@db/schema';
 import { createBusinessInputSchema, updateBusinessInputSchema } from '@repo/shared';
 
 export async function createBusiness(userId: string, input: unknown) {

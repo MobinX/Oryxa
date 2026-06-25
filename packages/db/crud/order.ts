@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
-import { db } from '../client';
-import { orders, products, variants } from '../schema';
+import { db } from '@db/client';
+import { orders, products, variants } from '@db/schema';
 import { createOrderInputSchema, updateOrderStateInputSchema } from '@repo/shared';
 
 export async function createOrder(input: unknown) {

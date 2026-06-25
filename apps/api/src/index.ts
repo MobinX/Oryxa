@@ -1,14 +1,14 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { cors } from 'hono/cors';
-import { usersRouter } from './routes/users';
-import { businessesRouter } from './routes/businesses';
-import { productsRouter } from './routes/products';
-import { ordersRouter } from './routes/orders';
-import { channelsRouter, facebookCallbackRouter } from './routes/channels';
-import { conversationsRouter } from './routes/conversations';
-import { fbWebhookRouter } from './webhooks/facebook';
-import { internalRouter } from './routes/internal/run';
+import { usersRouter } from '@api/routes/users';
+import { businessesRouter } from '@api/routes/businesses';
+import { productsRouter } from '@api/routes/products';
+import { ordersRouter } from '@api/routes/orders';
+import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
+import { conversationsRouter } from '@api/routes/conversations';
+import { fbWebhookRouter } from '@api/webhooks/facebook';
+import { internalRouter } from '@api/routes/internal/run';
 
 const app = new OpenAPIHono();
 

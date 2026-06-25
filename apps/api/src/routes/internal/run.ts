@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { internalRunInputSchema } from '@repo/shared';
-import { runAgentForConversation } from '../../lib/agent-runner';
+import { runAgentForConversation } from '@api/lib/agent-runner';
 
 export const internalRouter = new Hono();
 

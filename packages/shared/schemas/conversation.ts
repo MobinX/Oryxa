@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { messageFromSchema, messageStateSchema, timestampSchema, uuidSchema } from './base';
+import { messageFromSchema, messageStateSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const listConversationsQuerySchema = z.object({
   state: messageStateSchema.optional(),

@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, ilike, or } from 'drizzle-orm';
-import { db } from '../client';
-import { users } from '../schema';
+import { db } from '@db/client';
+import { users } from '@db/schema';
 import { syncUserInputSchema, type z } from '@repo/shared';
 
 export async function syncUser(input: z.infer<typeof syncUserInputSchema>) {

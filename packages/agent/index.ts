@@ -1,2 +1,2 @@
-export { Agent } from './Agent';
-export type { AgentConfig } from './Agent';
+export { Agent } from '@agent/Agent';
+export type { AgentConfig } from '@agent/Agent';

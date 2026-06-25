@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { timestampSchema, uuidSchema } from './base';
+import { timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const baseProductSchema = z.object({
   businessId: uuidSchema,

@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { platformSchema, timestampSchema, uuidSchema } from './base';
+import { platformSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const createAgentInputSchema = z.object({
   name: z.string().min(1).max(255),

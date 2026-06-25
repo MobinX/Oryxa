@@ -8,8 +8,8 @@ import {
   updateOrderStateOutputSchema,
 } from '@repo/shared';
 import { createOrder, listOrders, updateOrderState } from '@repo/db/crud/order';
-import { authMiddleware } from '../middleware/auth';
-import { businessAccessMiddleware } from '../middleware/business';
+import { authMiddleware } from '@api/middleware/auth';
+import { businessAccessMiddleware } from '@api/middleware/business';
 
 export const ordersRouter = new OpenAPIHono();
 

@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { syncUserInputSchema, selectUserSchema, userMeOutputSchema } from '@repo/shared';
 import { syncUser } from '@repo/db/crud/user';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware } from '@api/middleware/auth';
 
 export const usersRouter = new OpenAPIHono();
 

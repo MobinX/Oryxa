@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { productsRouter } from '../../apps/api/src/routes/products';
+import { productsRouter } from '@api/routes/products';
 
 vi.mock('@repo/db/crud/product', () => ({
   createProduct: vi.fn(),
@@ -11,11 +11,11 @@ vi.mock('@repo/db/crud/product', () => ({
   deleteProduct: vi.fn(),
 }));
 
-vi.mock('../../apps/api/src/middleware/auth', () => ({
+vi.mock('@api/middleware/auth', () => ({
   authMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../apps/api/src/middleware/business', () => ({
+vi.mock('@api/middleware/business', () => ({
   businessAccessMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 

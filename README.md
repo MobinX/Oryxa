@@ -62,6 +62,22 @@ packages/agent/    LangChain + Gemini tools
 packages/integrations/  Facebook OAuth + Send API
 ```
 
+### Internal path aliases
+
+Each package defines its own TypeScript `paths` so you avoid `../../` imports:
+
+| Package | Alias | Example |
+|---------|-------|---------|
+| `packages/db` | `@db/*` | `import { db } from '@db/client'` |
+| `packages/shared` | `@shared/*` | `import { uuidSchema } from '@shared/schemas/base'` |
+| `packages/agent` | `@agent/*` | `import { Agent } from '@agent/Agent'` |
+| `apps/api` | `@api/*` | `import { authMiddleware } from '@api/middleware/auth'` |
+| `apps/web` | `@/*` | `import { Button } from '@/components/ui/button'` |
+
+Cross-package imports still use workspace names: `@repo/db`, `@repo/shared`, etc.
+
+Aliases are configured in each package's `tsconfig.json`. Bun resolves them at runtime; Vitest uses matching aliases in `vitest.config.ts`.
+
 ## Scripts
 
 | Command | Description |

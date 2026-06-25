@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm';
-import { db } from '../client';
-import { agents, channels } from '../schema';
+import { db } from '@db/client';
+import { agents, channels } from '@db/schema';
 import { createAgentInputSchema, createChannelInputSchema } from '@repo/shared';
 
 export async function createAgent(businessId: string, input: unknown) {

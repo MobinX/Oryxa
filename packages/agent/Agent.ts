@@ -1,7 +1,7 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { createAgentTools } from './tools';
+import { createAgentTools } from '@agent/tools';
 
 export interface AgentConfig {
   systemPrompt: string;

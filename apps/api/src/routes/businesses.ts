@@ -6,8 +6,8 @@ import {
   updateBusinessOutputSchema,
 } from '@repo/shared';
 import { createBusiness, getBusinessById, updateBusiness } from '@repo/db/crud/business';
-import { authMiddleware } from '../middleware/auth';
-import { businessAccessMiddleware } from '../middleware/business';
+import { authMiddleware } from '@api/middleware/auth';
+import { businessAccessMiddleware } from '@api/middleware/business';
 
 export const businessesRouter = new OpenAPIHono();
 

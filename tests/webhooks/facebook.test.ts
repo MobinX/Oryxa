@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fbWebhookRouter } from '../../apps/api/src/webhooks/facebook';
+import { fbWebhookRouter } from '@api/webhooks/facebook';
 
 vi.mock('@repo/db/crud/channel', () => ({
   getChannelByPageId: vi.fn(),
@@ -9,13 +9,13 @@ vi.mock('@repo/db/crud/conversation', () => ({
   processInboundMessage: vi.fn(),
 }));
 
-vi.mock('../../apps/api/src/lib/agent-runner', () => ({
+vi.mock('@api/lib/agent-runner', () => ({
   triggerAgentRun: vi.fn(),
 }));
 
 import { getChannelByPageId } from '@repo/db/crud/channel';
 import { processInboundMessage } from '@repo/db/crud/conversation';
-import { triggerAgentRun } from '../../apps/api/src/lib/agent-runner';
+import { triggerAgentRun } from '@api/lib/agent-runner';
 
 describe('Facebook Webhook Handler', () => {
   beforeEach(() => {

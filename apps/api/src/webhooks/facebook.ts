@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
 import { processInboundMessage } from '@repo/db/crud/conversation';
-import { triggerAgentRun } from '../lib/agent-runner';
+import { triggerAgentRun } from '@api/lib/agent-runner';
 
 export const fbWebhookRouter = new Hono();
 

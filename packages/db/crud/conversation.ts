@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
-import { db } from '../client';
-import { conversations, messages } from '../schema';
+import { db } from '@db/client';
+import { conversations, messages } from '@db/schema';
 
 export async function getOrCreateConversation(
   businessId: string,

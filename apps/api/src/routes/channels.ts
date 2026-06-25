@@ -15,8 +15,8 @@ import {
   updateChannelAgent,
 } from '@repo/db/crud/channel';
 import { getFacebookOAuthUrl, exchangeCodeForToken, getUserPages } from '@repo/integrations/facebook';
-import { authMiddleware } from '../middleware/auth';
-import { businessAccessMiddleware } from '../middleware/business';
+import { authMiddleware } from '@api/middleware/auth';
+import { businessAccessMiddleware } from '@api/middleware/business';
 
 export const channelsRouter = new OpenAPIHono();
 

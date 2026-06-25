@@ -3,11 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@db/*": ["./*"]
+      "@agent/*": ["./*"]
     },
     "outDir": "./dist",
     "rootDir": "."
   },
-  "include": ["./**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["./**/*.ts"]
 }

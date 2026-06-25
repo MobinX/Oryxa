@@ -18,6 +18,10 @@ export default defineConfig({
       '@repo/agent': path.resolve(__dirname, './packages/agent'),
       '@repo/integrations': path.resolve(__dirname, './packages/integrations'),
       '@repo/utils': path.resolve(__dirname, './packages/utils'),
+      '@db': path.resolve(__dirname, './packages/db'),
+      '@shared': path.resolve(__dirname, './packages/shared'),
+      '@agent': path.resolve(__dirname, './packages/agent'),
+      '@api': path.resolve(__dirname, './apps/api/src'),
     },
   },
 });

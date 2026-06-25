@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, or, ilike } from 'drizzle-orm';
-import { db } from '../client';
-import { products, variants, categories } from '../schema';
+import { db } from '@db/client';
+import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema } from '@repo/shared';
 import { slugify } from '@repo/utils';
 
