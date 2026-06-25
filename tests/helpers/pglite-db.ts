@@ -18,7 +18,7 @@ export async function setupPgliteDatabase(): Promise<Database> {
   pgliteClient = new PGlite();
   testDb = drizzle(pgliteClient, { schema });
   await migrate(testDb, { migrationsFolder: MIGRATIONS_FOLDER });
-  setTestDatabase(testDb);
+  setTestDatabase(testDb as unknown as Database);
   return testDb;
 }
 

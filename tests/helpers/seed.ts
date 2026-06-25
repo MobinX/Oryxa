@@ -19,6 +19,7 @@ export type TestSeed = {
 };
 
 export async function seedTestWorld(): Promise<TestSeed> {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const user = await syncUser({
     firebaseUid: TEST_FIREBASE_UID,
     name: 'Test User',
@@ -27,7 +28,7 @@ export async function seedTestWorld(): Promise<TestSeed> {
   });
 
   const business = await createBusiness(user.id, {
-    name: 'Test Store',
+    name: `Test Store ${suffix}`,
     description: 'A test e-commerce store',
     hasTradeLicense: false,
     hasTaxLicense: false,
@@ -37,7 +38,7 @@ export async function seedTestWorld(): Promise<TestSeed> {
     businessId: business.id,
     name: 'Test T-Shirt',
     price: 29.99,
-    sku: 'TS-001',
+    sku: `TS-${suffix}`,
     description: 'A comfortable cotton t-shirt',
     categoryName: 'Apparel',
     variants: [{ name: 'Red M', stock: 10, isAvailable: true, price: 29.99 }],

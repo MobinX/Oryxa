@@ -156,39 +156,37 @@ export async function processInboundMessage(
   senderId: string,
   text: string,
 ) {
-  return db.transaction(async (tx) => {
-    let conv = await tx.query.conversations.findFirst({
-      where: and(
-        eq(conversations.channelId, channel.id),
-        eq(conversations.customerPlatformId, senderId),
-      ),
-    });
-
-    if (!conv) {
-      const [created] = await tx
-        .insert(conversations)
-        .values({
-          businessId: channel.businessId,
-          channelId: channel.id,
-          customerPlatformId: senderId,
-        })
-        .returning();
-      conv = created;
-    }
-
-    await tx.insert(messages).values({
-      conversationId: conv.id,
-      from: 'customer',
-      content: text,
-      state: 'pending',
-    });
-
-    const priorStatus = conv.lastMessageState;
-    await tx
-      .update(conversations)
-      .set({ lastMessageState: 'pending' })
-      .where(eq(conversations.id, conv.id));
-
-    return { conversationId: conv.id, priorStatus };
+  let conv = await db.query.conversations.findFirst({
+    where: and(
+      eq(conversations.channelId, channel.id),
+      eq(conversations.customerPlatformId, senderId),
+    ),
   });
+
+  if (!conv) {
+    const [created] = await db
+      .insert(conversations)
+      .values({
+        businessId: channel.businessId,
+        channelId: channel.id,
+        customerPlatformId: senderId,
+      })
+      .returning();
+    conv = created;
+  }
+
+  await db.insert(messages).values({
+    conversationId: conv.id,
+    from: 'customer',
+    content: text,
+    state: 'pending',
+  });
+
+  const priorStatus = conv.lastMessageState;
+  await db
+    .update(conversations)
+    .set({ lastMessageState: 'pending' })
+    .where(eq(conversations.id, conv.id));
+
+  return { conversationId: conv.id, priorStatus };
 }

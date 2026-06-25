@@ -15,10 +15,10 @@
     "build": "echo 'db package - no build step'"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
     "@repo/shared": "workspace:*",
     "@repo/utils": "workspace:*",
-    "drizzle-orm": "^0.39.1",
-    "postgres": "^3.4.5"
+    "drizzle-orm": "^0.39.1"
   },
   "devDependencies": {
     "drizzle-kit": "^0.30.2"

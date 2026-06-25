@@ -1,8 +1,8 @@
-import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { neon } from '@neondatabase/serverless';
+import { drizzle, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from '@db/schema';
 
-export type Database = PostgresJsDatabase<typeof schema>;
+export type Database = NeonHttpDatabase<typeof schema>;
 
 let _db: Database | null = null;
 let _testOverride: Database | null = null;
@@ -20,8 +20,8 @@ function getDb(): Database {
     throw new Error('DATABASE_URL is not set');
   }
 
-  const client = postgres(connectionString, { prepare: false, max: 10 });
-  _db = drizzle(client, { schema });
+  const sql = neon(connectionString);
+  _db = drizzle(sql, { schema });
   return _db;
 }
 

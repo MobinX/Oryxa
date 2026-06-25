@@ -88,7 +88,8 @@ Aliases are configured in each package's `tsconfig.json`. Bun resolves them at r
 | `bun run db:studio` | Open Drizzle Studio |
 | `bun test` | Run Vitest suite (PGlite in-memory DB) |
 | `bun run test:coverage` | Run tests with coverage report |
-| `bun run test:neon` | Optional: run against real Neon DB (`NEON_DATABASE_URL` required) |
+| `bun run test:neon` | Optional: run all Neon integration tests (`DATABASE_URL` or `NEON_DATABASE_URL` with a Neon URL) |
+| `bun run test:neon:crud` | Optional: run only Neon CRUD tests (36 tests across all entities) |
 | `bun run gen:api` | Generate React Query client from OpenAPI |
 
 ## Deploy (Vercel)
