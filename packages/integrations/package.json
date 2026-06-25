@@ -1,0 +1,13 @@
+{
+  "name": "@repo/integrations",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./facebook": "./facebook.ts"
+  },
+  "scripts": {
+    "build": "echo 'integrations package - no build step'"
+  }
+}

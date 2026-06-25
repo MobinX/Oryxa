@@ -1,0 +1,23 @@
+{
+  "name": "oryxa",
+  "private": true,
+  "packageManager": "bun@1.2.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "bun --filter api dev",
+    "dev:web": "bun --filter web dev",
+    "build": "bun run --filter '*' build",
+    "db:push": "bun --filter @repo/db db:push",
+    "db:studio": "bun --filter @repo/db db:studio",
+    "gen:api": "bun --filter web gen:api",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.0.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.39.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

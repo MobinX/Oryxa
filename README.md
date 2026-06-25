@@ -1,0 +1,89 @@
+# Oryxa
+
+Multi-channel AI auto-reply SaaS for e-commerce. MVP: Facebook Messenger + Gemini agent + product catalog + orders.
+
+## Stack
+
+- **Monorepo:** Bun workspaces
+- **API:** Hono + OpenAPI + Drizzle + Postgres
+- **Web:** Next.js 15 + Tailwind + Firebase Auth (Google)
+- **AI:** LangChain + Google Gemini 2.5 Flash-Lite
+- **Files:** UploadThing
+
+## Quick Start
+
+### 1. Prerequisites
+
+- [Bun](https://bun.sh) 1.2+
+- Postgres ([Neon](https://neon.tech) recommended)
+- Firebase project with Google sign-in
+- Meta Developer app (Messenger)
+- Google AI Studio API key (Gemini)
+- UploadThing account
+
+### 2. Environment
+
+```bash
+cp .env.example .env
+# Fill in all values
+```
+
+### 3. Install & database
+
+```bash
+bun install
+bun run db:push
+```
+
+### 4. Run locally
+
+```bash
+# Terminal 1 — API (port 3001)
+bun run dev:api
+
+# Terminal 2 — Web (port 3000)
+bun run dev:web
+```
+
+Open http://localhost:3000
+
+### 5. Meta webhook (after deploy)
+
+Set webhook URL to `https://your-api.vercel.app/webhooks/facebook` with verify token from `META_VERIFY_TOKEN`.
+
+## Project structure
+
+```
+apps/api/          Hono API, webhooks, internal agent runner
+apps/web/          Next.js dashboard
+packages/db/       Drizzle schema + CRUD
+packages/shared/   Zod schemas (single source of truth)
+packages/agent/    LangChain + Gemini tools
+packages/integrations/  Facebook OAuth + Send API
+```
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `bun run dev:api` | Start API server |
+| `bun run dev:web` | Start Next.js app |
+| `bun run db:push` | Push schema to Postgres |
+| `bun run db:studio` | Open Drizzle Studio |
+| `bun test` | Run Vitest suite |
+| `bun run gen:api` | Generate React Query client from OpenAPI |
+
+## Deploy (Vercel)
+
+- **oryxa-api** → root `apps/api`
+- **oryxa-web** → root `apps/web`
+
+Set all env vars from `.env.example` on both projects. `AGENT_RUNNER_URL` should point to your API URL.
+
+## External setup guides
+
+1. **Neon:** Create project → copy pooled connection string → `DATABASE_URL`
+2. **Firebase:** Enable Google provider → add web app credentials → create service account for API
+3. **Meta:** Create app → add Messenger → connect test Page → set OAuth redirect to `/api/v1/auth/facebook/callback`
+4. **Gemini:** https://aistudio.google.com/apikey → `GEMINI_API_KEY`
+5. **UploadThing:** Create app → `UPLOADTHING_TOKEN`

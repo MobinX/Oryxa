@@ -1,0 +1,26 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./client": "./client.ts",
+    "./schema": "./schema.ts",
+    "./crud/*": "./crud/*.ts"
+  },
+  "scripts": {
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "build": "echo 'db package - no build step'"
+  },
+  "dependencies": {
+    "@repo/shared": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "drizzle-orm": "^0.39.1",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.2"
+  }
+}

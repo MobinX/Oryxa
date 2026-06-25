@@ -1,0 +1,22 @@
+{
+  "name": "@repo/agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./Agent": "./Agent.ts"
+  },
+  "scripts": {
+    "build": "echo 'agent package - no build step'"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.37",
+    "@langchain/google-genai": "^0.1.8",
+    "@langchain/langgraph": "^0.2.62",
+    "@repo/db": "workspace:*",
+    "@repo/integrations": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}
