@@ -85,6 +85,86 @@ describe('Agent Runner', () => {
     vi.unstubAllGlobals();
   }, 30_000);
 
+  it('runAgentForConversation does not double-send when the agent used send_message', async () => {
+    // #8: when the agent called send_message (sentTexts populated), the tool is
+    // the source of truth — the runner must NOT send or save a fallback reply.
+    const seed = await seedTestWorld();
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
+      this.sentTexts = ['reply via tool'];
+      return 'final summary that must not be sent';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    expect(sendMessageMock).not.toHaveBeenCalled();
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
+    expect(selfContents).not.toContain('final summary that must not be sent');
+
+    runSpy.mockRestore();
+  }, 30_000);
+
+  it('runAgentForConversation falls back to send+save when the agent did not use send_message', async () => {
+    // #8 fallback path: agent produced a reply but never called send_message,
+    // so the runner sends and persists that reply itself.
+    const seed = await seedTestWorld();
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
+      this.sentTexts = [];
+      return 'fallback reply';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.any(String),
+      seed.conversation.customerPlatformId,
+      'fallback reply',
+    );
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
+    expect(selfContents).toContain('fallback reply');
+
+    runSpy.mockRestore();
+  }, 30_000);
+
+  it('runAgentForConversation drains a burst of pending messages in one run', async () => {
+    // #1/#2: a burst larger than the 10-message history cap must be fully loaded
+    // into the agent's history (in order) and fully marked done in one run,
+    // rather than the newest 10 first and the older ones in a later run.
+    const seed = await seedTestWorld();
+    const { createMessage } = await import('@repo/db/crud/conversation');
+    for (let i = 0; i < 12; i++) {
+      await createMessage({ conversationId: seed.conversation.id, from: 'customer', content: `burst ${i}` });
+    }
+
+    const { Agent } = await import('@repo/agent');
+    let capturedHistory: Array<{ from: string; content: string }> = [];
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
+      capturedHistory = [...(this as { config: { history: Array<{ from: string; content: string }> } }).config.history];
+      (this as { sentTexts: string[] }).sentTexts = ['reply'];
+      return 'done';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    const burstIndices = capturedHistory
+      .filter((m) => m.content.startsWith('burst '))
+      .map((m) => Number(m.content.replace('burst ', '')))
+      .sort((a, b) => a - b);
+    expect(burstIndices).toEqual(Array.from({ length: 12 }, (_, i) => i));
+
+    const msgs = await listMessages(seed.conversation.id, seed.business.id);
+    const stillPending = msgs?.filter((m) => m.from === 'customer' && m.state === 'pending');
+    expect(stillPending?.length).toBe(0);
+
+    runSpy.mockRestore();
+  }, 30_000);
+
   it('triggerAgentRun fires fetch to internal endpoint', async () => {
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);

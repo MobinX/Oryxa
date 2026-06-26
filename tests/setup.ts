@@ -4,6 +4,7 @@ import 'dotenv/config';
 process.env.NODE_ENV = 'test';
 process.env.INTERNAL_KEY = 'test-internal-key';
 process.env.META_VERIFY_TOKEN = 'test-token';
+process.env.META_APP_SECRET = process.env.META_APP_SECRET ?? 'test-app-secret';
 process.env.WEB_URL = 'http://localhost:3400';
 process.env.AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 

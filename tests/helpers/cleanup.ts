@@ -15,12 +15,11 @@ import {
 /**
  * Hard-deletes ALL data from every application table.
  *
- * Used by the Neon integration test harness to guarantee the test database is
- * left empty after a run — no soft-deleted rows, no orphans. Order matters:
- * children first, then parents, to respect FK constraints.
- *
- * PGlite tests don't need this (the in-memory DB is destroyed on teardown), but
- * the function is safe to call against PGlite too.
+ * WARNING: this wipes pre-existing data too — only use against a throwaway
+ * database. Order matters: children first, then parents, to respect FK
+ * constraints. PGlite tests don't need this (the in-memory DB is destroyed
+ * on teardown), and Neon tests use {@link ./tracking-db} root-tracking
+ * cleanup instead, which only removes data the run created.
  */
 export async function hardDeleteAllData(): Promise<void> {
   await db.delete(messages);

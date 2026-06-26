@@ -18,6 +18,9 @@ export interface AgentConfig {
 }
 
 export class Agent {
+  /** Texts the agent actually sent via the send_message tool during `run()`. */
+  sentTexts: string[] = [];
+
   constructor(private config: AgentConfig) {}
 
   async run(): Promise<string> {
@@ -29,13 +32,17 @@ export class Agent {
         temperature: 0.3,
       });
 
-    const tools = createAgentTools({
-      businessId: this.config.business.id,
-      conversationId: this.config.conversationId,
-      pageToken: this.config.pageToken,
-      customerPlatformId: this.config.customerPlatformId,
-      customerName: this.config.customerName,
-    });
+    const sentTexts = this.sentTexts;
+    const tools = createAgentTools(
+      {
+        businessId: this.config.business.id,
+        conversationId: this.config.conversationId,
+        pageToken: this.config.pageToken,
+        customerPlatformId: this.config.customerPlatformId,
+        customerName: this.config.customerName,
+      },
+      (text) => sentTexts.push(text),
+    );
 
     const agent = createReactAgent({ llm, tools });
 
@@ -44,6 +51,7 @@ export class Agent {
       `You are a sales rep for ${this.config.business.name}.`,
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
+      'The customer may have sent several messages while you were away. Read all of them and reply once, addressing everything they asked. Do not reply message-by-message.',
       'Always use send_message to reply to the customer. Be helpful and concise.',
     ]
       .filter(Boolean)

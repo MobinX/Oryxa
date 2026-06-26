@@ -137,9 +137,12 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
   time: timestamp('time').defaultNow().notNull(),
   state: messageStateEnum('state').default('pending').notNull(),
+  /** Meta platform message id (messaging.message.mid) for webhook dedup. Null for non-platform messages. */
+  externalId: varchar('external_id', { length: 100 }),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('messages_conversation_time_idx').on(t.conversationId, t.time),
+  uniq: uniqueIndex('messages_external_id_idx').on(t.externalId),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({

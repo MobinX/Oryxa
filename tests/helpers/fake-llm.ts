@@ -2,25 +2,19 @@ import { AIMessage } from '@langchain/core/messages';
 import { FakeStreamingChatModel } from '@langchain/core/utils/testing';
 
 /**
- * Builds a fake LLM that first calls send_message, matching the agent's expected tool flow.
+ * Builds a fake LLM whose final reply is `replyText`.
+ *
+ * Note: `FakeStreamingChatModel` drops tool-call chunks after `bindTools`, so it
+ * can't actually drive `send_message` through the agent loop. We instead return
+ * a plain final reply, which exercises the runner's fallback path (send + save
+ * the reply when the agent didn't call `send_message`). The `send_message`
+ * tool's own send + persist behavior is covered directly in `tools.test.ts`,
+ * and the "tool was used → no fallback" branch in `agent-runner.test.ts`.
  */
 export function createSendMessageFakeLlm(replyText = 'Thanks for your message!') {
   return new FakeStreamingChatModel({
     toolStyle: 'google',
-    responses: [
-      new AIMessage({
-        content: '',
-        tool_calls: [
-          {
-            name: 'send_message',
-            args: { text: replyText },
-            id: 'call_send_1',
-            type: 'tool_call',
-          },
-        ],
-      }),
-      new AIMessage(replyText),
-    ],
+    responses: [new AIMessage(replyText)],
   });
 }
 

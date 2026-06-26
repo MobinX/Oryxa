@@ -75,6 +75,8 @@ export const listProductsOutputSchema = z.object({
 
 export const updateVariantInputSchema = variantInputSchema.extend({
   id: uuidSchema.optional(),
+  /** When true, clears any existing variant image (overrides imageUrl). */
+  clearImage: z.boolean().optional(),
 });
 
 export const updateProductInputSchema = z.object({

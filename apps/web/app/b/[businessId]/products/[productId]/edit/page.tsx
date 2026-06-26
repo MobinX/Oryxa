@@ -79,7 +79,7 @@ export default async function EditProductPage({
             </div>
           </div>
 
-          <VariantEditor initial={variantInitial} />
+          <VariantEditor initial={variantInitial} businessId={businessId} />
 
           <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
             <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">

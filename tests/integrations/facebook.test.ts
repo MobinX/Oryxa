@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { signMetaWebhook } from '../helpers/meta-sign';
 
 describe('Facebook Integration', () => {
   const originalFetch = globalThis.fetch;
+  const originalAppSecret = process.env.META_APP_SECRET;
 
   beforeEach(() => {
     process.env.META_APP_ID = 'app-id';
@@ -12,6 +14,7 @@ describe('Facebook Integration', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    process.env.META_APP_SECRET = originalAppSecret;
   });
 
   it('getFacebookOAuthUrl builds correct URL', async () => {
@@ -64,14 +67,18 @@ describe('Facebook Integration', () => {
   it('verifyWebhookSignature returns false without signature or secret', async () => {
     delete process.env.META_APP_SECRET;
     const { verifyWebhookSignature } = await import('@repo/integrations/facebook');
-    expect(verifyWebhookSignature('payload', undefined)).toBe(false);
-    expect(verifyWebhookSignature('payload', 'sha256=abc')).toBe(false);
+    expect(await verifyWebhookSignature('payload', undefined)).toBe(false);
+    expect(await verifyWebhookSignature('payload', 'sha256=abc')).toBe(false);
   });
 
-  it('verifyWebhookSignature returns true when signature and secret exist', async () => {
+  it('verifyWebhookSignature accepts a valid HMAC and rejects a bad one', async () => {
     process.env.META_APP_SECRET = 'secret';
     const { verifyWebhookSignature } = await import('@repo/integrations/facebook');
-    expect(verifyWebhookSignature('payload', 'sha256=abc')).toBe(true);
+    const good = await signMetaWebhook('payload');
+    expect(await verifyWebhookSignature('payload', good)).toBe(true);
+    expect(await verifyWebhookSignature('payload', 'sha256=deadbeef')).toBe(false);
+    // Signature over a different body must not validate.
+    expect(await verifyWebhookSignature('tampered', good)).toBe(false);
   });
 
   it('getUserPages returns page list', async () => {

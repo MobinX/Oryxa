@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 
@@ -98,6 +98,24 @@ export async function checkPendingMessages(conversationId: string) {
   return !!pending;
 }
 
+/**
+ * Returns every still-pending customer message in a conversation, oldest first,
+ * with no limit. Used by the agent runner to drain a whole backlog in one run
+ * (so a burst of >10 messages is replied to in order instead of the newest 10
+ * first and the older ones in a later, out-of-order follow-up).
+ */
+export async function listPendingCustomerMessages(conversationId: string) {
+  return db.query.messages.findMany({
+    where: and(
+      eq(messages.conversationId, conversationId),
+      eq(messages.from, 'customer'),
+      eq(messages.state, 'pending'),
+      isNull(messages.deletedAt),
+    ),
+    orderBy: [asc(messages.time)],
+  });
+}
+
 export async function markCustomerMessagesDone(conversationId: string) {
   await db
     .update(messages)
@@ -109,6 +127,45 @@ export async function markCustomerMessagesDone(conversationId: string) {
         eq(messages.state, 'pending'),
       ),
     );
+}
+
+/**
+ * Marks specific customer messages as done (by id). Used after an agent run to
+ * clear only the messages the agent actually replied to, leaving any messages
+ * that arrived during the run pending so the tail re-trigger can handle them.
+ */
+export async function markMessagesDoneByIds(conversationId: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(messages)
+    .set({ state: 'done' })
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        inArray(messages.id, ids),
+      ),
+    );
+}
+
+/**
+ * Atomically transitions a conversation from idle ('done' or 'pending') to
+ * 'working'. Returns true if this caller won the claim — i.e. this caller
+ * should run the agent. Concurrent callers (or a state already 'working') get
+ * false and must not run, which prevents duplicate agent runs when Meta
+ * delivers overlapping webhooks or the tail re-trigger races with a new inbound.
+ */
+export async function claimConversationForAgentRun(conversationId: string): Promise<boolean> {
+  const claimed = await db
+    .update(conversations)
+    .set({ lastMessageState: 'working' })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        inArray(conversations.lastMessageState, ['done', 'pending']),
+      ),
+    )
+    .returning({ id: conversations.id });
+  return claimed.length > 0;
 }
 
 export async function listConversations(
@@ -180,7 +237,8 @@ export async function processInboundMessage(
   channel: { id: string; businessId: string },
   senderId: string,
   text: string,
-) {
+  externalId?: string,
+): Promise<{ conversationId: string; priorStatus: string; inserted: boolean }> {
   let conv = await db.query.conversations.findFirst({
     where: and(
       eq(conversations.channelId, channel.id),
@@ -201,18 +259,40 @@ export async function processInboundMessage(
     conv = created;
   }
 
-  await db.insert(messages).values({
-    conversationId: conv.id,
-    from: 'customer',
-    content: text,
-    state: 'pending',
-  });
-
   const priorStatus = conv.lastMessageState;
+
+  if (externalId) {
+    const inserted = await db
+      .insert(messages)
+      .values({
+        conversationId: conv.id,
+        from: 'customer',
+        content: text,
+        state: 'pending',
+        externalId,
+      })
+      .onConflictDoNothing({ target: messages.externalId })
+      .returning();
+
+    if (inserted.length === 0) {
+      return { conversationId: conv.id, priorStatus, inserted: false };
+    }
+  } else {
+    await db.insert(messages).values({
+      conversationId: conv.id,
+      from: 'customer',
+      content: text,
+      state: 'pending',
+    });
+  }
+
+  // Mark the conversation as needing attention, but only if it was idle — never
+  // downgrade an in-progress ('working') run, which would confuse the agent
+  // state machine and the UI.
   await db
     .update(conversations)
     .set({ lastMessageState: 'pending' })
-    .where(eq(conversations.id, conv.id));
+    .where(and(eq(conversations.id, conv.id), eq(conversations.lastMessageState, 'done')));
 
-  return { conversationId: conv.id, priorStatus };
+  return { conversationId: conv.id, priorStatus, inserted: true };
 }
