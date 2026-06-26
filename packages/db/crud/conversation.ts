@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 
@@ -12,6 +12,7 @@ export async function getOrCreateConversation(
     where: and(
       eq(conversations.channelId, channelId),
       eq(conversations.customerPlatformId, customerPlatformId),
+      isNull(conversations.deletedAt),
     ),
   });
 
@@ -32,9 +33,10 @@ export async function getOrCreateConversation(
 
 export async function getConversationWithHistory(conversationId: string) {
   return db.query.conversations.findFirst({
-    where: eq(conversations.id, conversationId),
+    where: and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)),
     with: {
       messages: {
+        where: isNull(messages.deletedAt),
         orderBy: [desc(messages.time)],
         limit: 10,
       },
@@ -90,6 +92,7 @@ export async function checkPendingMessages(conversationId: string) {
       eq(messages.conversationId, conversationId),
       eq(messages.from, 'customer'),
       eq(messages.state, 'pending'),
+      isNull(messages.deletedAt),
     ),
   });
   return !!pending;
@@ -113,7 +116,7 @@ export async function listConversations(
   options: { state?: string; limit?: number } = {},
 ) {
   const { state, limit = 20 } = options;
-  const conditions = [eq(conversations.businessId, businessId)];
+  const conditions = [eq(conversations.businessId, businessId), isNull(conversations.deletedAt)];
   if (state) conditions.push(eq(conversations.lastMessageState, state as 'pending'));
 
   return db.query.conversations.findMany({
@@ -125,12 +128,12 @@ export async function listConversations(
 
 export async function listMessages(conversationId: string, businessId: string, limit = 50) {
   const conv = await db.query.conversations.findFirst({
-    where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId)),
+    where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
   });
   if (!conv) return null;
 
   const msgs = await db.query.messages.findMany({
-    where: eq(messages.conversationId, conversationId),
+    where: and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)),
     orderBy: [messages.time],
     limit,
   });
@@ -146,9 +149,31 @@ export async function listMessages(conversationId: string, businessId: string, l
 
 export async function getConversationForBusiness(conversationId: string, businessId: string) {
   return db.query.conversations.findFirst({
-    where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId)),
+    where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
     with: { channel: true },
   });
+}
+
+export async function deleteConversation(businessId: string, conversationId: string) {
+  const conv = await getConversationForBusiness(conversationId, businessId);
+  if (!conv) return null;
+  await db
+    .update(conversations)
+    .set({ deletedAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+  return { deleted: true };
+}
+
+export async function deleteMessage(conversationId: string, messageId: string) {
+  const msg = await db.query.messages.findFirst({
+    where: and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), isNull(messages.deletedAt)),
+  });
+  if (!msg) return null;
+  await db
+    .update(messages)
+    .set({ deletedAt: new Date() })
+    .where(eq(messages.id, messageId));
+  return { deleted: true };
 }
 
 export async function processInboundMessage(
@@ -160,6 +185,7 @@ export async function processInboundMessage(
     where: and(
       eq(conversations.channelId, channel.id),
       eq(conversations.customerPlatformId, senderId),
+      isNull(conversations.deletedAt),
     ),
   });
 

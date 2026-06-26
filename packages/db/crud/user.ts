@@ -1,13 +1,13 @@
-import { eq, and, desc, sql, ilike, or } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { users } from '@db/schema';
-import { syncUserInputSchema, type z } from '@repo/shared';
+import { syncUserInputSchema, updateUserInputSchema, type z } from '@repo/shared';
 
 export async function syncUser(input: z.infer<typeof syncUserInputSchema>) {
   const parsed = syncUserInputSchema.parse(input);
 
   const existing = await db.query.users.findFirst({
-    where: eq(users.firebaseUid, parsed.firebaseUid),
+    where: and(eq(users.firebaseUid, parsed.firebaseUid), isNull(users.deletedAt)),
   });
 
   if (existing) {
@@ -38,12 +38,36 @@ export async function syncUser(input: z.infer<typeof syncUserInputSchema>) {
 
 export async function getUserByFirebaseUid(firebaseUid: string) {
   return db.query.users.findFirst({
-    where: eq(users.firebaseUid, firebaseUid),
+    where: and(eq(users.firebaseUid, firebaseUid), isNull(users.deletedAt)),
   });
 }
 
 export async function getUserById(id: string) {
   return db.query.users.findFirst({
-    where: eq(users.id, id),
+    where: and(eq(users.id, id), isNull(users.deletedAt)),
   });
+}
+
+export async function updateUser(id: string, input: unknown) {
+  const parsed = updateUserInputSchema.parse(input);
+  const [updated] = await db
+    .update(users)
+    .set(parsed)
+    .where(and(eq(users.id, id), isNull(users.deletedAt)))
+    .returning();
+  return updated ?? null;
+}
+
+export async function deleteUser(id: string) {
+  const [updated] = await db
+    .update(users)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(users.id, id), isNull(users.deletedAt)))
+    .returning();
+  return updated ? { deleted: true } : null;
+}
+
+// Internal helpers (not exported through @repo/shared) — used by test cleanup
+export async function hardDeleteUser(id: string) {
+  await db.delete(users).where(eq(users.id, id));
 }

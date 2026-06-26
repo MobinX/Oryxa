@@ -1,7 +1,7 @@
-import { eq, and, desc, sql, or, ilike } from 'drizzle-orm';
+import { eq, and, desc, sql, or, ilike, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
-import { createProductInputSchema, updateProductInputSchema } from '@repo/shared';
+import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema } from '@repo/shared';
 import { slugify } from '@repo/utils';
 import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
 
@@ -65,10 +65,12 @@ export async function createProduct(input: unknown) {
 
 export async function getProductById(businessId: string, productId: string) {
   const product = await db.query.products.findFirst({
-    where: and(eq(products.id, productId), eq(products.businessId, businessId)),
+    where: and(eq(products.id, productId), eq(products.businessId, businessId), isNull(products.deletedAt)),
     with: {
       category: true,
-      variants: true,
+      variants: {
+        where: isNull(variants.deletedAt),
+      },
     },
   });
   if (!product) return null;
@@ -100,7 +102,7 @@ export async function listProducts(
   options: { categoryId?: string; limit?: number; offset?: number } = {},
 ) {
   const { categoryId, limit = 20, offset = 0 } = options;
-  const conditions = [eq(products.businessId, businessId)];
+  const conditions = [eq(products.businessId, businessId), isNull(products.deletedAt)];
   if (categoryId) conditions.push(eq(products.categoryId, categoryId));
 
   const items = await db.query.products.findMany({
@@ -152,7 +154,7 @@ export async function listProducts(
 export async function updateProduct(businessId: string, productId: string, input: unknown) {
   const parsed = updateProductInputSchema.parse(input);
   const product = await db.query.products.findFirst({
-    where: and(eq(products.id, productId), eq(products.businessId, businessId)),
+    where: and(eq(products.id, productId), eq(products.businessId, businessId), isNull(products.deletedAt)),
   });
   if (!product) return null;
 
@@ -185,7 +187,10 @@ export async function updateProduct(businessId: string, productId: string, input
 
     for (const existingVariant of existing) {
       if (!incomingIds.has(existingVariant.id)) {
-        await db.delete(variants).where(eq(variants.id, existingVariant.id));
+        await db
+          .update(variants)
+          .set({ deletedAt: new Date() })
+          .where(eq(variants.id, existingVariant.id));
       }
     }
 
@@ -229,11 +234,14 @@ export async function updateProduct(businessId: string, productId: string, input
 
 export async function deleteProduct(businessId: string, productId: string) {
   const product = await db.query.products.findFirst({
-    where: and(eq(products.id, productId), eq(products.businessId, businessId)),
+    where: and(eq(products.id, productId), eq(products.businessId, businessId), isNull(products.deletedAt)),
   });
   if (!product) return null;
 
-  await db.delete(products).where(eq(products.id, productId));
+  await db
+    .update(products)
+    .set({ deletedAt: new Date() })
+    .where(eq(products.id, productId));
   return { deleted: true };
 }
 
@@ -245,9 +253,36 @@ export async function createCategory(businessId: string, name: string) {
   return cat;
 }
 
+export async function getCategoryById(businessId: string, categoryId: string) {
+  return db.query.categories.findFirst({
+    where: and(eq(categories.id, categoryId), eq(categories.businessId, businessId), isNull(categories.deletedAt)),
+  });
+}
+
+export async function updateCategory(businessId: string, categoryId: string, input: unknown) {
+  const parsed = updateCategoryInputSchema.parse(input);
+  const cat = await getCategoryById(businessId, categoryId);
+  if (!cat) return null;
+  await db
+    .update(categories)
+    .set({ ...parsed, slug: parsed.name ? slugify(parsed.name) : undefined })
+    .where(eq(categories.id, categoryId));
+  return { updated: true };
+}
+
+export async function deleteCategory(businessId: string, categoryId: string) {
+  const cat = await getCategoryById(businessId, categoryId);
+  if (!cat) return null;
+  await db
+    .update(categories)
+    .set({ deletedAt: new Date() })
+    .where(eq(categories.id, categoryId));
+  return { deleted: true };
+}
+
 export async function listCategories(businessId: string) {
   return db.query.categories.findMany({
-    where: eq(categories.businessId, businessId),
+    where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt)),
   });
 }
 
@@ -255,12 +290,13 @@ export async function searchProducts(businessId: string, query: string, limit = 
   return db.query.products.findMany({
     where: and(
       eq(products.businessId, businessId),
+      isNull(products.deletedAt),
       or(
         ilike(products.name, `%${query}%`),
         ilike(products.sku, `%${query}%`),
       ),
     ),
     limit,
-    with: { variants: true },
+    with: { variants: { where: isNull(variants.deletedAt) } },
   });
 }

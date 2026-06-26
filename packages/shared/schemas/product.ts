@@ -92,8 +92,14 @@ export const createCategoryInputSchema = z.object({
   name: z.string().min(1).max(255),
 });
 
+export const updateCategoryInputSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+});
+
 export const selectCategorySchema = z.object({
   id: uuidSchema,
   name: z.string(),
   slug: z.string(),
 });
+
+export const deleteCategoryOutputSchema = z.object({ deleted: z.boolean() });

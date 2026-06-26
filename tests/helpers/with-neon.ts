@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from '@db/schema';
 import { setTestDatabase, type Database } from '@db/client';
+import { hardDeleteAllData } from './cleanup';
 
 export function getNeonDatabaseUrl(): string | undefined {
   return process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -28,6 +29,10 @@ export function withNeon(hooks?: { before?: () => Promise<void>; after?: () => P
   });
 
   afterAll(async () => {
+    // Hard-delete every row created during the test run. Neon tests run against
+    // a dedicated test database, so a full wipe guarantees no soft-deleted or
+    // orphaned test data leaks between runs.
+    await hardDeleteAllData();
     await hooks?.after?.();
     setTestDatabase(null);
   });

@@ -32,3 +32,5 @@ export const selectBusinessSchema = z.object({
 export const updateBusinessOutputSchema = z.object({
   success: z.boolean(),
 });
+
+export const deleteBusinessOutputSchema = z.object({ deleted: z.boolean() });

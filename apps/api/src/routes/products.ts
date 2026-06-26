@@ -9,7 +9,9 @@ import {
   updateProductOutputSchema,
   deleteProductOutputSchema,
   createCategoryInputSchema,
+  updateCategoryInputSchema,
   selectCategorySchema,
+  deleteCategoryOutputSchema,
 } from '@repo/shared';
 import {
   createProduct,
@@ -18,6 +20,8 @@ import {
   updateProduct,
   deleteProduct,
   createCategory,
+  updateCategory,
+  deleteCategory,
   listCategories,
 } from '@repo/db/crud/product';
 import { authMiddleware } from '@api/middleware/auth';
@@ -184,5 +188,51 @@ productsRouter.openapi(deleteProductRoute, async (c) => {
   const productId = c.req.param('productId');
   const result = await deleteProduct(businessId, productId);
   if (!result) return c.json({ error: 'Product entity missing' }, 404);
+  return c.json(result);
+});
+
+const updateCategoryRoute = createRoute({
+  method: 'put',
+  path: '/{businessId}/categories/{categoryId}',
+  tags: ['Catalog'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), categoryId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: updateCategoryInputSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: z.object({ updated: z.boolean() }) } }, description: 'Updated' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+productsRouter.openapi(updateCategoryRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const categoryId = c.req.param('categoryId');
+  const { name } = c.req.valid('json');
+  const result = await updateCategory(businessId, categoryId, { name });
+  if (!result) return c.json({ error: 'Category not found' }, 404);
+  return c.json(result);
+});
+
+const deleteCategoryRoute = createRoute({
+  method: 'delete',
+  path: '/{businessId}/categories/{categoryId}',
+  tags: ['Catalog'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), categoryId: z.string().uuid() }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteCategoryOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+productsRouter.openapi(deleteCategoryRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const categoryId = c.req.param('categoryId');
+  const result = await deleteCategory(businessId, categoryId);
+  if (!result) return c.json({ error: 'Category not found' }, 404);
   return c.json(result);
 });

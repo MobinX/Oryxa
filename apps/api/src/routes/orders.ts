@@ -6,8 +6,19 @@ import {
   orderListItemSchema,
   updateOrderStateInputSchema,
   updateOrderStateOutputSchema,
+  updateOrderInputSchema,
+  updateOrderOutputSchema,
+  deleteOrderOutputSchema,
+  getOrderOutputSchema,
 } from '@repo/shared';
-import { createOrder, listOrders, updateOrderState } from '@repo/db/crud/order';
+import {
+  createOrder,
+  getOrderById,
+  listOrders,
+  updateOrderState,
+  updateOrder,
+  deleteOrder,
+} from '@repo/db/crud/order';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -80,6 +91,77 @@ ordersRouter.openapi(updateOrderStateRoute, async (c) => {
   const orderId = c.req.param('orderId');
   const data = c.req.valid('json');
   const result = await updateOrderState(businessId, orderId, data);
+  if (!result) return c.json({ error: 'Order not found' }, 404);
+  return c.json(result);
+});
+
+const getOrderRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/orders/{orderId}',
+  tags: ['Orders'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), orderId: z.string().uuid() }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: getOrderOutputSchema } }, description: 'Order' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+ordersRouter.openapi(getOrderRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const orderId = c.req.param('orderId');
+  const order = await getOrderById(businessId, orderId);
+  if (!order) return c.json({ error: 'Order not found' }, 404);
+  return c.json({
+    ...order,
+    createdAt: order.createdAt.toISOString(),
+  });
+});
+
+const updateOrderRoute = createRoute({
+  method: 'patch',
+  path: '/{businessId}/orders/{orderId}',
+  tags: ['Orders'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), orderId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: updateOrderInputSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: updateOrderOutputSchema } }, description: 'Updated' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+ordersRouter.openapi(updateOrderRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const orderId = c.req.param('orderId');
+  const data = c.req.valid('json');
+  const result = await updateOrder(businessId, orderId, data);
+  if (!result) return c.json({ error: 'Order not found' }, 404);
+  return c.json(result);
+});
+
+const deleteOrderRoute = createRoute({
+  method: 'delete',
+  path: '/{businessId}/orders/{orderId}',
+  tags: ['Orders'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), orderId: z.string().uuid() }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteOrderOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+ordersRouter.openapi(deleteOrderRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const orderId = c.req.param('orderId');
+  const result = await deleteOrder(businessId, orderId);
   if (!result) return c.json({ error: 'Order not found' }, 404);
   return c.json(result);
 });
