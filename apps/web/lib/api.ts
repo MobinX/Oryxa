@@ -273,6 +273,7 @@ export type Channel = {
   id: string;
   platform: string;
   platformChannelId: string;
+  pageName?: string | null;
   agentId: string | null;
 };
 
@@ -306,6 +307,32 @@ export const deleteChannel = (token: string, businessId: string, channelId: stri
 
 export const getFacebookAuthUrl = (token: string, businessId: string) =>
   apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth`, { token });
+
+export type FacebookPendingPage = {
+  id: string;
+  name: string;
+  connected: boolean;
+};
+
+export const listFacebookPendingPages = (
+  token: string,
+  businessId: string,
+  selectionToken: string,
+) =>
+  apiFetch<FacebookPendingPage[]>(
+    `/api/v1/${businessId}/channels/facebook/pending?token=${encodeURIComponent(selectionToken)}`,
+    { token },
+  );
+
+export const connectFacebookPages = (
+  token: string,
+  businessId: string,
+  data: { token: string; pageIds: string[] },
+) =>
+  apiFetch<{ connected: Array<{ id: string; pageId: string; pageName: string }>; skipped: string[] }>(
+    `/api/v1/${businessId}/channels/facebook/connect`,
+    { method: 'POST', token, body: JSON.stringify(data) },
+  );
 
 export const createAgent = (
   token: string,

@@ -10,6 +10,8 @@ import {
   updateChannelAgent,
   deleteChannel,
   getFacebookAuthUrl,
+  listFacebookPendingPages,
+  connectFacebookPages,
 } from '@/lib/api';
 
 export async function createAgentAction(businessId: string, formData: FormData) {
@@ -88,4 +90,20 @@ export async function connectFacebookAction(businessId: string) {
   const token = await requireAuth();
   const { url } = await getFacebookAuthUrl(token, businessId);
   redirect(url);
+}
+
+export async function connectSelectedFacebookPagesAction(
+  businessId: string,
+  selectionToken: string,
+  formData: FormData,
+) {
+  const token = await requireAuth();
+  const pageIds = formData.getAll('pageIds').map(String).filter(Boolean);
+  if (pageIds.length === 0) {
+    redirect(`/b/${businessId}/channels/connect-facebook?token=${encodeURIComponent(selectionToken)}&error=no-selection`);
+  }
+
+  await connectFacebookPages(token, businessId, { token: selectionToken, pageIds });
+  revalidatePath(`/b/${businessId}/channels`);
+  redirect(`/b/${businessId}/channels?connected=facebook`);
 }

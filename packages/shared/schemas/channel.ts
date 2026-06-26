@@ -54,3 +54,23 @@ export const deleteChannelOutputSchema = z.object({ deleted: z.boolean() });
 export const updateChannelAgentSchema = z.object({
   agentId: uuidSchema.nullable(),
 });
+
+export const facebookPendingPagesQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
+export const facebookPendingPageSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  connected: z.boolean(),
+});
+
+export const facebookConnectPagesInputSchema = z.object({
+  token: z.string().min(1),
+  pageIds: z.array(z.string().min(1)).min(1),
+});
+
+export const facebookConnectPagesOutputSchema = z.object({
+  connected: z.array(z.object({ id: uuidSchema, pageId: z.string(), pageName: z.string() })),
+  skipped: z.array(z.string()),
+});

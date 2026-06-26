@@ -224,3 +224,89 @@ export async function verifyOAuthState(
   if (!timingSafeEqual(sig, expected)) return null;
   return { businessId, userId };
 }
+
+export type FacebookPageOption = {
+  id: string;
+  name: string;
+  access_token: string;
+};
+
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(encoded: string): Uint8Array {
+  const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+  const bin = atob(b64 + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * After OAuth, holds the user's Facebook pages (with page access tokens) in a
+ * short-lived signed token so the web app can show a page picker without
+ * storing tokens in the session DB. Format: `<base64url(payload)>.<sig>`.
+ */
+export async function createFacebookPagesSelectionToken(
+  payload: { businessId: string; userId: string; pages: FacebookPageOption[] },
+  ttlSeconds = 600,
+): Promise<string> {
+  const secret = process.env.INTERNAL_KEY;
+  if (!secret) throw new Error('INTERNAL_KEY is required for Facebook page selection');
+  const exp = Date.now() + ttlSeconds * 1000;
+  const body = toBase64Url(
+    encoder.encode(
+      JSON.stringify({
+        businessId: payload.businessId,
+        userId: payload.userId,
+        exp,
+        pages: payload.pages,
+      }),
+    ),
+  );
+  const sig = await hmacHex(secret, body);
+  return `${body}.${sig}`;
+}
+
+/** Verifies a page-selection token from the OAuth callback redirect. */
+export async function verifyFacebookPagesSelectionToken(
+  token: string | undefined,
+): Promise<{ businessId: string; userId: string; pages: FacebookPageOption[] } | null> {
+  const secret = process.env.INTERNAL_KEY;
+  if (!secret || !token) return null;
+  const dot = token.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = await hmacHex(secret, body);
+  if (!timingSafeEqual(sig, expected)) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(fromBase64Url(body))) as {
+      businessId?: string;
+      userId?: string;
+      exp?: number;
+      pages?: FacebookPageOption[];
+    };
+    if (
+      !parsed.businessId ||
+      !parsed.userId ||
+      !Number.isFinite(parsed.exp) ||
+      parsed.exp! < Date.now() ||
+      !Array.isArray(parsed.pages) ||
+      parsed.pages.length === 0
+    ) {
+      return null;
+    }
+    return {
+      businessId: parsed.businessId,
+      userId: parsed.userId,
+      pages: parsed.pages,
+    };
+  } catch {
+    return null;
+  }
+}

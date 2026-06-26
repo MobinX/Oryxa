@@ -72,6 +72,21 @@ export async function getChannelByPageId(pageId: string) {
   });
 }
 
+export async function getChannelByBusinessPlatformChannelId(
+  businessId: string,
+  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platformChannelId: string,
+) {
+  return db.query.channels.findFirst({
+    where: and(
+      eq(channels.businessId, businessId),
+      eq(channels.platform, platform),
+      eq(channels.platformChannelId, platformChannelId),
+      isNull(channels.deletedAt),
+    ),
+  });
+}
+
 export async function getChannelById(channelId: string) {
   return db.query.channels.findFirst({
     where: and(eq(channels.id, channelId), isNull(channels.deletedAt)),

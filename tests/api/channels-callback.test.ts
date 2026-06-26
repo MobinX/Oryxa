@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
-import { seedTestWorld } from '../helpers/seed';
+import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { app } from '@api/app';
 import { listChannels } from '@repo/db/crud/channel';
-import { createOAuthState } from '@repo/integrations/facebook';
+import { createOAuthState, createFacebookPagesSelectionToken } from '@repo/integrations/facebook';
 
 const exchangeCodeForTokenMock = vi.fn();
 const getUserPagesMock = vi.fn();
@@ -50,7 +50,7 @@ describe('Facebook OAuth callback', () => {
     expect(await res.text()).toContain('Invalid or expired state');
   });
 
-  it('redirects after successful OAuth and creates channel', async () => {
+  it('redirects to page picker after OAuth (does not auto-connect)', async () => {
     const { user, business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockResolvedValue('user-token');
     getUserPagesMock.mockResolvedValue([
@@ -62,13 +62,11 @@ describe('Facebook OAuth callback', () => {
       { redirect: 'manual' },
     );
     expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(
-      `http://localhost:3400/b/${business.id}/channels?connected=facebook`,
-    );
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain(`http://localhost:3400/b/${business.id}/channels/connect-facebook?token=`);
 
     const channels = await listChannels(business.id);
-    const oauthChannel = channels.find((c) => c.platformChannelId === 'OAUTH_PAGE_1');
-    expect(oauthChannel?.apiToken).toBe('oauth-page-token');
+    expect(channels.find((c) => c.platformChannelId === 'OAUTH_PAGE_1')).toBeUndefined();
   });
 
   it('returns 400 when user has no Facebook pages', async () => {
@@ -92,5 +90,54 @@ describe('Facebook OAuth callback', () => {
     );
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('OAuth failed');
+  });
+});
+
+describe('Facebook page selection API', () => {
+  withPglite();
+
+  it('lists pending pages from a selection token', async () => {
+    const { user, business } = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [
+        { id: 'PAGE_A', name: 'Page A', access_token: 'tok-a' },
+        { id: 'PAGE_B', name: 'Page B', access_token: 'tok-b' },
+      ],
+    });
+
+    const res = await app.request(
+      `/api/v1/${business.id}/channels/facebook/pending?token=${encodeURIComponent(token)}`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{ id: string; name: string; connected: boolean }>;
+    expect(body).toHaveLength(2);
+    expect(body.find((p) => p.id === 'PAGE_A')?.connected).toBe(false);
+  });
+
+  it('connects selected pages from a selection token', async () => {
+    const { user, business } = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [
+        { id: 'SEL_PAGE_1', name: 'Selected One', access_token: 'sel-tok-1' },
+        { id: 'SEL_PAGE_2', name: 'Selected Two', access_token: 'sel-tok-2' },
+      ],
+    });
+
+    const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: ['SEL_PAGE_1', 'SEL_PAGE_2'] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { connected: Array<{ pageId: string }> };
+    expect(body.connected.map((c) => c.pageId).sort()).toEqual(['SEL_PAGE_1', 'SEL_PAGE_2']);
+
+    const channels = await listChannels(business.id);
+    expect(channels.some((c) => c.platformChannelId === 'SEL_PAGE_1')).toBe(true);
   });
 });

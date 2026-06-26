@@ -12,6 +12,10 @@ import {
   updateChannelInputSchema,
   updateChannelOutputSchema,
   deleteChannelOutputSchema,
+  facebookPendingPagesQuerySchema,
+  facebookPendingPageSchema,
+  facebookConnectPagesInputSchema,
+  facebookConnectPagesOutputSchema,
 } from '@repo/shared';
 import {
   createAgent,
@@ -24,8 +28,17 @@ import {
   updateChannelAgent,
   updateChannel,
   deleteChannel,
+  getChannelByBusinessPlatformChannelId,
 } from '@repo/db/crud/channel';
-import { getFacebookOAuthUrl, exchangeCodeForToken, getUserPages, createOAuthState, verifyOAuthState } from '@repo/integrations/facebook';
+import {
+  getFacebookOAuthUrl,
+  exchangeCodeForToken,
+  getUserPages,
+  createOAuthState,
+  verifyOAuthState,
+  createFacebookPagesSelectionToken,
+  verifyFacebookPagesSelectionToken,
+} from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -188,6 +201,7 @@ const listChannelsRoute = createRoute({
               id: z.string().uuid(),
               platform: z.string(),
               platformChannelId: z.string(),
+              pageName: z.string().nullable().optional(),
               agentId: z.string().uuid().nullable(),
             }),
           ),
@@ -202,12 +216,24 @@ channelsRouter.openapi(listChannelsRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const channels = await listChannels(businessId);
   return c.json(
-    channels.map((ch) => ({
-      id: ch.id,
-      platform: ch.platform,
-      platformChannelId: ch.platformChannelId,
-      agentId: ch.agentId,
-    })),
+    channels.map((ch) => {
+      let pageName: string | null = null;
+      if (ch.extraInfo) {
+        try {
+          const info = JSON.parse(ch.extraInfo) as { pageName?: string };
+          pageName = info.pageName ?? null;
+        } catch {
+          pageName = null;
+        }
+      }
+      return {
+        id: ch.id,
+        platform: ch.platform,
+        platformChannelId: ch.platformChannelId,
+        pageName,
+        agentId: ch.agentId,
+      };
+    }),
   );
 });
 
@@ -301,6 +327,107 @@ channelsRouter.openapi(fbAuthRoute, async (c) => {
   return c.json({ url });
 });
 
+const fbPendingPagesRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/channels/facebook/pending',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: facebookPendingPagesQuerySchema,
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.array(facebookPendingPageSchema) } },
+      description: 'Facebook pages available to connect after OAuth',
+    },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid token' },
+  },
+});
+
+channelsRouter.openapi(fbPendingPagesRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const user = c.get('user');
+  const { token } = c.req.valid('query');
+  const verified = await verifyFacebookPagesSelectionToken(token);
+  if (!verified || verified.businessId !== businessId || verified.userId !== user.id) {
+    return c.json({ error: 'Invalid or expired page selection token' }, 400);
+  }
+
+  const pages = await Promise.all(
+    verified.pages.map(async (page) => {
+      const existing = await getChannelByBusinessPlatformChannelId(
+        businessId,
+        'facebook',
+        page.id,
+      );
+      return { id: page.id, name: page.name, connected: !!existing };
+    }),
+  );
+  return c.json(pages);
+});
+
+const fbConnectPagesRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/channels/facebook/connect',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: facebookConnectPagesInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: facebookConnectPagesOutputSchema } },
+      description: 'Selected pages linked',
+    },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid request' },
+  },
+});
+
+channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const user = c.get('user');
+  const { token, pageIds } = c.req.valid('json');
+  const verified = await verifyFacebookPagesSelectionToken(token);
+  if (!verified || verified.businessId !== businessId || verified.userId !== user.id) {
+    return c.json({ error: 'Invalid or expired page selection token' }, 400);
+  }
+
+  const pageById = new Map(verified.pages.map((p) => [p.id, p]));
+  const connected: Array<{ id: string; pageId: string; pageName: string }> = [];
+  const skipped: string[] = [];
+
+  for (const pageId of pageIds) {
+    const page = pageById.get(pageId);
+    if (!page) {
+      skipped.push(pageId);
+      continue;
+    }
+
+    const existing = await getChannelByBusinessPlatformChannelId(businessId, 'facebook', page.id);
+    if (existing) {
+      // Re-auth may refresh the page token — update it in place.
+      await updateChannel(businessId, existing.id, {
+        apiToken: page.access_token,
+        extraInfo: JSON.stringify({ pageName: page.name }),
+      });
+      connected.push({ id: existing.id, pageId: page.id, pageName: page.name });
+      continue;
+    }
+
+    const channel = await createChannel(businessId, {
+      platform: 'facebook',
+      apiToken: page.access_token,
+      platformChannelId: page.id,
+      extraInfo: JSON.stringify({ pageName: page.name }),
+    });
+    connected.push({ id: channel.id, pageId: page.id, pageName: page.name });
+  }
+
+  return c.json({ connected, skipped });
+});
+
 export const facebookCallbackRouter = new OpenAPIHono();
 
 facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
@@ -318,16 +445,16 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
     const pages = await getUserPages(userToken);
     if (pages.length === 0) return c.text('No pages found', 400);
 
-    const page = pages[0];
-    await createChannel(verified.businessId, {
-      platform: 'facebook',
-      apiToken: page.access_token,
-      platformChannelId: page.id,
-      extraInfo: JSON.stringify({ pageName: page.name }),
+    const pagesToken = await createFacebookPagesSelectionToken({
+      businessId: verified.businessId,
+      userId: verified.userId,
+      pages,
     });
 
     const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
-    return c.redirect(`${webUrl}/b/${verified.businessId}/channels?connected=facebook`);
+    return c.redirect(
+      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?token=${encodeURIComponent(pagesToken)}`,
+    );
   } catch (err) {
     console.error('Facebook OAuth error:', err);
     return c.text('OAuth failed', 500);

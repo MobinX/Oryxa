@@ -674,7 +674,7 @@ OAuth completes in `facebookCallbackRouter` (`apps/api/src/routes/channels.ts`):
 - `channels.platform_channel_id` — the page id (used by `getChannelByPageId` to route inbound webhooks to the right business).
 - `channels.extra_info` — `{ pageName }`.
 
-Inbound routing is therefore multi-page capable (the page id in `entry.id` maps to the channel); the remaining multi-page limitation is that OAuth currently connects only `pages[0]` per callback — connecting all of a user's pages is on the follow-up list.
+Inbound routing is therefore multi-page capable (the page id in `entry.id` maps to the channel). After OAuth, the web app shows a **page picker** (`/b/{businessId}/channels/connect-facebook`) so the user chooses which Facebook pages to connect — multiple pages per business are supported.
 
 > **Note on token rotation:** page access tokens from `/me/accounts` are long-lived (~60 days) and currently stored as-is. Token refresh, 24-hour messaging-window handling, and at-rest encryption of `api_token` are tracked as follow-up hardening items, not part of this batch.
 

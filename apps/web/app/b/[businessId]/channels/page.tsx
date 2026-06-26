@@ -22,8 +22,9 @@ const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
 
 const channelHeaders: DataTableHeader[] = [
-  { key: 'platform', header: 'Platform', className: 'w-full min-w-[120px]' },
-  { key: 'platformChannelId', header: 'Page/Channel ID' },
+  { key: 'platform', header: 'Platform', className: 'min-w-[100px]' },
+  { key: 'pageName', header: 'Page name', className: 'w-full min-w-[140px]' },
+  { key: 'platformChannelId', header: 'Page ID', className: 'hidden sm:table-cell' },
   { key: 'agentId', header: 'Agent' },
 ];
 
@@ -35,10 +36,13 @@ const agentHeaders: DataTableHeader[] = [
 
 export default async function ChannelsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ connected?: string }>;
 }) {
   const { businessId } = await params;
+  const { connected } = await searchParams;
   const token = await requireAuth();
   const [channels, agents] = await Promise.all([
     listChannels(token, businessId),
@@ -50,6 +54,9 @@ export default async function ChannelsPage({
     cells: [
       <span key="platform" className="font-medium capitalize">
         {channel.platform}
+      </span>,
+      <span key="pageName" className="font-medium">
+        {channel.pageName ?? '—'}
       </span>,
       <span key="platformChannelId" className="text-[var(--muted-foreground)]">
         {channel.platformChannelId}
@@ -131,6 +138,12 @@ export default async function ChannelsPage({
           Connect messaging platforms and bind AI agents.
         </p>
       </div>
+
+      {connected === 'facebook' && (
+        <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+          Facebook page(s) connected successfully.
+        </Card>
+      )}
 
       <Card>
         <h2 className="text-lg font-semibold">Connect Facebook Messenger</h2>
