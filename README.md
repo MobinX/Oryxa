@@ -202,20 +202,132 @@ Set `NEXT_PUBLIC_API_URL` to the API Vercel URL. Other `NEXT_PUBLIC_FIREBASE_*` 
 4. **Gemini:** https://aistudio.google.com/apikey → `GEMINI_API_KEY`
 5. **Backblaze B2:** Create private bucket → application key → set `B2_*` env vars. Images use **presigned URLs** (no public bucket needed). See [B2 S3 API docs](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api)
 
-   **B2 bucket CORS (required for direct browser uploads):** variant images are uploaded straight from the browser to B2 via a presigned `PUT` URL (see `apps/web/lib/uploads-client.ts`). For the `PUT` to succeed from the web app's origin, add a CORS rule to the bucket (B2 dashboard → Bucket Settings → CORS):
+   ### B2 bucket CORS (required for direct browser uploads)
+
+   Variant images are uploaded **straight from the browser to B2** via a presigned `PUT` URL (see `apps/web/lib/uploads-client.ts`), and displayed via presigned `GET` URLs. Both are cross-origin requests from the web app, so the bucket must have CORS rules that explicitly allow them. Without a `PUT` rule the browser blocks the upload with a generic `TypeError: Failed to fetch` (the sign step succeeds, but the PUT is rejected at the CORS preflight).
+
+   B2 CORS rules map S3-style operations to B2 operations. The operations this app needs:
+
+   | Operation        | Used for                                              |
+   |------------------|-------------------------------------------------------|
+   | `s3_get`         | Browser fetches presigned GET URLs to display images |
+   | `s3_head`        | Browser HEAD checks on presigned GET URLs            |
+   | `s3_put`         | Browser PUTs bytes to the presigned upload URL       |
+   | `b2_download_file_by_id`, `b2_download_file_by_name` | Native B2 downloads (optional, kept for compatibility) |
+
+   #### Rules needed
+
+   **Download from any origin** (`s3_get` + `s3_head` from `*`):
 
    ```json
    {
-     "corsRules": [
-       {
-         "allowedOrigins": ["https://your-web-domain"],
-         "allowedMethods": ["PUT"],
-         "allowedHeaders": ["Content-Type"],
-         "exposeHeaders": ["ETag"],
-         "maxAgeSeconds": 3600
-       }
-     ]
+     "corsRuleName": "s3DownloadFromAnyOrigin",
+     "allowedOrigins": ["*"],
+     "allowedOperations": ["s3_get", "s3_head"],
+     "allowedHeaders": ["authorization", "range"],
+     "exposeHeaders": [],
+     "maxAgeSeconds": 3600
    }
    ```
 
-   For local dev include `http://localhost:3400` in `allowedOrigins`. Without this rule, image signing succeeds but the browser `PUT` fails with a CORS error and the variant editor shows "Image upload failed: Upload to B2 failed: …". The presigned URL's signature binds the `Content-Type` header, so a client cannot lie about the MIME type — B2 rejects mismatched PUTs.
+   **PUT from any origin** (`s3_put` from `*` — required for direct browser uploads):
+
+   ```json
+   {
+     "corsRuleName": "s3PutFromAnyOrigin",
+     "allowedOrigins": ["*"],
+     "allowedOperations": ["s3_put"],
+     "allowedHeaders": ["content-type", "x-amz-content-sha256", "x-amz-date", "authorization"],
+     "exposeHeaders": ["etag", "x-amz-request-id"],
+     "maxAgeSeconds": 3600
+   }
+   ```
+
+   > **Production hardening:** replace `"*"` in `allowedOrigins` with your exact web origin(s) (e.g. `https://oryxa-web.vercel.app`, plus `http://localhost:3400` for local dev). Using `*` is convenient for GitHub Codespaces (whose `*.app.github.dev` URLs change per session) but allows any site to issue authenticated PUTs against presigned URLs — presigned URLs are short-lived (5 min) and content-type-bound, so the risk is limited, but locking the origin is best practice.
+
+   #### How to update CORS
+
+   You can set CORS either from the **B2 web dashboard** or with the **B2 native API** via curl. The API approach is scriptable and is what was used to configure this project's bucket.
+
+   ##### Option A — B2 web dashboard
+
+   1. Sign in to https://secure.backblazeb2.com → **B2 Cloud Storage** → find your bucket (`B2_BUCKET_NAME`).
+   2. Open the bucket → **Bucket Settings** → **CORS Rules** → **Edit**.
+   3. Paste the rules from above (as a JSON array under `corsRules`) and save.
+
+   ##### Option B — B2 native API (curl)
+
+   The credentials come from your `.env` (`B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`). The flow is: `b2_authorize_account` → `b2_list_buckets` (to get the `bucketId`) → `b2_update_bucket` (to set the full `corsRules` array).
+
+   ```bash
+   set -a && . .env && set +a
+
+   # 1. Authorize — get apiUrl, authorizationToken, accountId
+   AUTH=$(curl -s -u "$B2_KEY_ID:$B2_APPLICATION_KEY" \
+     https://api.backblazeb2.com/b2api/v3/b2_authorize_account)
+   API_URL=$(echo "$AUTH" | python3 -c "import sys,json;print(json.load(sys.stdin)['apiInfo']['storageApi']['apiUrl'])")
+   TOKEN=$(echo "$AUTH"   | python3 -c "import sys,json;print(json.load(sys.stdin)['authorizationToken'])")
+   ACCT=$(echo "$AUTH"    | python3 -c "import sys,json;print(json.load(sys.stdin)['accountId'])")
+
+   # 2. Look up the bucketId for B2_BUCKET_NAME
+   BUCKET_ID=$(curl -s -X POST "$API_URL/b2api/v3/b2_list_buckets" \
+     -H "Authorization: $TOKEN" \
+     -d "{\"accountId\":\"$ACCT\",\"bucketName\":\"$B2_BUCKET_NAME\"}" \
+     | python3 -c "import sys,json;print(json.load(sys.stdin)['buckets'][0]['bucketId'])")
+
+   # 3. Update CORS — send the COMPLETE corsRules array (this replaces all rules)
+   curl -s -X POST "$API_URL/b2api/v3/b2_update_bucket" \
+     -H "Authorization: $TOKEN" \
+     -d '{
+       "accountId": "'"$ACCT"'",
+       "bucketId": "'"$BUCKET_ID"'",
+       "bucketType": "allPrivate",
+       "corsRules": [
+         {
+           "corsRuleName": "downloadFromAnyOrigin",
+           "allowedOrigins": ["*"],
+           "allowedOperations": ["b2_download_file_by_id", "b2_download_file_by_name"],
+           "allowedHeaders": ["authorization", "range"],
+           "exposeHeaders": null,
+           "maxAgeSeconds": 3600
+         },
+         {
+           "corsRuleName": "s3DownloadFromAnyOrigin",
+           "allowedOrigins": ["*"],
+           "allowedOperations": ["s3_get", "s3_head"],
+           "allowedHeaders": ["authorization", "range"],
+           "exposeHeaders": null,
+           "maxAgeSeconds": 3600
+         },
+         {
+           "corsRuleName": "s3PutFromAnyOrigin",
+           "allowedOrigins": ["*"],
+           "allowedOperations": ["s3_put"],
+           "allowedHeaders": ["content-type", "x-amz-content-sha256", "x-amz-date", "authorization"],
+           "exposeHeaders": ["etag", "x-amz-request-id"],
+           "maxAgeSeconds": 3600
+         }
+       ]
+     }' | python3 -m json.tool
+   ```
+
+   ##### Verify the current CORS rules
+
+   ```bash
+   set -a && . .env && set +a
+   AUTH=$(curl -s -u "$B2_KEY_ID:$B2_APPLICATION_KEY" https://api.backblazeb2.com/b2api/v3/b2_authorize_account)
+   API_URL=$(echo "$AUTH" | python3 -c "import sys,json;print(json.load(sys.stdin)['apiInfo']['storageApi']['apiUrl'])")
+   TOKEN=$(echo "$AUTH" | python3 -c "import sys,json;print(json.load(sys.stdin)['authorizationToken'])")
+   ACCT=$(echo "$AUTH" | python3 -c "import sys,json;print(json.load(sys.stdin)['accountId'])")
+   curl -s -X POST "$API_URL/b2api/v3/b2_list_buckets" \
+     -H "Authorization: $TOKEN" \
+     -d "{\"accountId\":\"$ACCT\",\"bucketName\":\"$B2_BUCKET_NAME\"}" \
+     | python3 -c "import sys,json;b=json.load(sys.stdin)['buckets'][0];print(json.dumps(b.get('corsRules',[]),indent=2))"
+   ```
+
+   #### Notes
+
+   - `b2_update_bucket` **replaces the entire `corsRules` array** — always send the full set of rules you want, including the existing download rules, or you will remove them.
+   - `b2_update_bucket` requires `accountId`, `bucketId`, and `bucketType` (use `allPrivate` for a private bucket).
+   - The presigned PUT URL's signature binds the `Content-Type` header, so a client cannot lie about the MIME type — B2 rejects mismatched PUTs with 403.
+   - After changing CORS, browsers may cache the preflight result for up to `maxAgeSeconds`; if a PUT still fails right after a rule change, do a hard refresh or wait for the cache to expire.
