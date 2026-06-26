@@ -1,0 +1,9 @@
+{
+  "installCommand": "cd ../.. && bun install",
+  "buildCommand": "cd ../.. && bun install && bun --filter api build",
+  "devCommand": null,
+  "framework": null,
+  "bunVersion": "1.x",
+  "builds": [{ "src": "public/index.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/(.*)", "dest": "public/index.js" }]
+}

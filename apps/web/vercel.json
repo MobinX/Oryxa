@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && bun install && bun --filter web build",
+  "installCommand": "cd ../.. && bun install"
+}

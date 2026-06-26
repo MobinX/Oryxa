@@ -1,0 +1,49 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+
+# =========================
+# Build output
+# =========================
+.next/
+dist/
+
+# API build artifacts
+apps/api/api/index.js
+apps/api/api/index.js.map
+apps/api/src/**/*.js
+apps/api/src/**/*.js.map
+
+# Ignore generated public files but keep .gitkeep
+apps/api/public/**/*
+!apps/api/public/.gitkeep
+apps/api/public/index.js.map
+
+# =========================
+# Environment variables
+# =========================
+.env*
+**/.env*
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Test coverage
+# =========================
+coverage/
+
+# =========================
+# Deployment / Build cache
+# =========================
+.vercel
+.turbo
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db

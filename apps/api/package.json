@@ -1,0 +1,31 @@
+{
+  "name": "api",
+  "version": "dev",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "dev": "bun --env-file=../../.env run --hot src/bunServe.ts",
+    "build": "rm -f api/index.js api/index.js.map src/index.js src/index.js.map && bun run build:bundle",
+    "build:bundle": "mkdir -p public/server && bun build ./api/index.ts --outfile ./public/index.js --target node --minify --sourcemap=linked && bun build ./src/bunServe.ts --outfile ./public/server/index.js --target bun --minify --sourcemap=linked",
+    "start": "bun --env-file=../../.env public/server/index.js"
+  },
+  "dependencies": {
+    "@hono/swagger-ui": "^0.5.0",
+    "@hono/zod-openapi": "^0.18.4",
+    "@repo/agent": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/integrations": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "firebase-admin": "^13.0.2",
+    "hono": "^4.7.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
