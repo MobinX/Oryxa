@@ -67,6 +67,21 @@ bun run start:api   # API on API_PORT (default 3001)
 bun run start:web   # Next.js on WEB_PORT (default 3400)
 ```
 
+### API via Vercel CLI (local serverless simulation)
+
+From repo root (requires [Vercel CLI](https://vercel.com/docs/cli)):
+
+```bash
+# One-time: symlink env into apps/api (gitignored)
+ln -sf ../../.env apps/api/.env.local
+
+bun run dev:api:vercel
+```
+
+Runs on http://localhost:3001 using `apps/api/api/index.ts` (Hono + `vercel dev`). For Bun hot reload locally use `bun run dev:api` (`src/bunServe.ts`).
+
+If install fails with `Unsupported package manager specification`, ensure root `package.json` has **no** `packageManager` field — Vercel detects Bun from `bun.lock` instead.
+
 ### 5. Meta webhook (after deploy)
 
 Set webhook URL to `https://your-api.vercel.app/webhooks/facebook` with verify token from `META_VERIFY_TOKEN`.
@@ -123,11 +138,16 @@ Two separate Vercel projects from the same Git repo.
 | **Root Directory** | `apps/api` |
 | **Framework Preset** | Other |
 | **Install Command** | `cd ../.. && bun install` |
-| **Build Command** | `echo 'API ready'` *(or leave default — no Next.js build)* |
-| **Output Directory** | *(leave empty)* |
+| **Build Command** | `cd ../.. && bun install && bun --filter api build` |
+| **Output Directory** | *(leave empty — Vercel handler is `public/index.js`)* |
 | **Node.js Version** | 20.x |
 
-The serverless entry is `apps/api/api/index.ts` (Hono `handle()`). All routes are rewritten to it via `apps/api/vercel.json`.
+The serverless entry re-exports `src/index.ts` (`export default handle(app)`). Local dev uses `src/bunServe.ts`. `bun run build:api` bundles TypeScript to:
+
+- `apps/api/public/index.js` — Vercel serverless handler (`handle(app)`)
+- `apps/api/public/server/index.js` — standalone Bun server (`bun run start:api`)
+
+Source for the Vercel bundle is `api/index.ts` (re-exports `src/index.ts`). No copy step — deploy uses `public/index.js` directly.
 
 **Production URLs to set in env:**
 

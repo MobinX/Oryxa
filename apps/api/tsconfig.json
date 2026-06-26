@@ -6,8 +6,8 @@
       "@api/*": ["./src/*"]
     },
     "types": ["bun"],
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "rootDir": ".",
+    "outDir": "./public"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "api/**/*.ts"]
 }

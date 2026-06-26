@@ -1,6 +1,13 @@
 node_modules/
 .next/
 dist/
+apps/api/public/**/*
+!apps/api/public/.gitkeep
+apps/api/public/index.js.map
+apps/api/api/index.js
+apps/api/api/index.js.map
+apps/api/src/**/*.js
+apps/api/src/**/*.js.map
 .env
 .env.local
 *.log
@@ -8,3 +15,4 @@ dist/
 coverage/
 .vercel
 .turbo
+.env*

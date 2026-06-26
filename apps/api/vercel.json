@@ -1,6 +1,9 @@
 {
   "installCommand": "cd ../.. && bun install",
-  "buildCommand": "echo 'API: no compile step — Vercel bundles api/index.ts'",
+  "buildCommand": "cd ../.. && bun install && bun --filter api build",
+  "devCommand": null,
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "bunVersion": "1.x",
+  "builds": [{ "src": "public/index.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/(.*)", "dest": "public/index.js" }]
 }

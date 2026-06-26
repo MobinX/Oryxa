@@ -1,12 +1,13 @@
 {
   "name": "api",
-  "version": "0.0.1",
+  "version": "dev",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --env-file=../../.env run --hot src/index.ts",
-    "build": "echo 'api built via vercel'",
-    "start": "bun --env-file=../../.env run src/index.ts"
+    "dev": "bun --env-file=../../.env run --hot src/bunServe.ts",
+    "build": "rm -f api/index.js api/index.js.map src/index.js src/index.js.map && bun run build:bundle",
+    "build:bundle": "mkdir -p public/server && bun build ./api/index.ts --outfile ./public/index.js --target node --minify --sourcemap=linked && bun build ./src/bunServe.ts --outfile ./public/server/index.js --target bun --minify --sourcemap=linked",
+    "start": "bun --env-file=../../.env public/server/index.js"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.0",
