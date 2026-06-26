@@ -1,23 +1,16 @@
-'use client';
-
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { headers } from 'next/headers';
 import {
   LayoutDashboard,
   Package,
   MessageSquare,
   ShoppingCart,
   Radio,
-  LogOut,
   Building2,
   ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { logout } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/components/auth-provider';
-import { getBusiness } from '@/lib/api';
+import { SignOutForm } from '@/components/sign-out-button';
 
 const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,16 +20,15 @@ const nav = [
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
 ];
 
-export function Sidebar({ businessId }: { businessId: string }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { token } = useAuth();
-
-  const { data: business } = useQuery({
-    queryKey: ['business', businessId],
-    queryFn: () => getBusiness(token!, businessId),
-    enabled: !!token,
-  });
+export async function Sidebar({
+  businessId,
+  businessName,
+}: {
+  businessId: string;
+  businessName: string;
+}) {
+  const h = await headers();
+  const pathname = h.get('x-pathname') ?? '';
 
   return (
     <aside className="flex w-64 flex-col border-r border-[var(--border)] bg-white">
@@ -48,9 +40,7 @@ export function Sidebar({ businessId }: { businessId: string }) {
           <ChevronLeft className="h-3 w-3" />
           All businesses
         </Link>
-        <h1 className="truncate text-lg font-bold text-[var(--primary)]">
-          {business?.name ?? 'Oryxa'}
-        </h1>
+        <h1 className="truncate text-lg font-bold text-[var(--primary)]">{businessName}</h1>
         <p className="text-xs text-[var(--muted-foreground)]">Business workspace</p>
       </div>
       <nav className="flex-1 space-y-1 p-4">
@@ -82,16 +72,9 @@ export function Sidebar({ businessId }: { businessId: string }) {
           <Building2 className="h-4 w-4" />
           Switch business
         </Link>
-        <button
-          onClick={async () => {
-            await logout();
-            router.push('/login');
-          }}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
-        >
-          <LogOut className="h-4 w-4" />
+        <SignOutForm className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
           Sign out
-        </button>
+        </SignOutForm>
       </div>
     </aside>
   );

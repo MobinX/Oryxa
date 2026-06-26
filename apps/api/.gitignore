@@ -1,2 +1,4 @@
 .vercel
 .env*
+src/index.js
+src/index.js.map

@@ -1,50 +1,36 @@
-'use client';
-
-import { use, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/components/auth-provider';
-import { listConversations, listMessages, sendMessage } from '@/lib/api';
+import Link from 'next/link';
+import { requireAuth } from '@/lib/auth';
+import { listConversations, listMessages } from '@/lib/api';
+import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/card';
+import { sendMessageAction } from '@/app/actions/inbox';
 import { cn } from '@/lib/utils';
 
-export default function InboxPage({
+export default async function InboxPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ c?: string }>;
 }) {
-  const { businessId } = use(params);
-  const { token } = useAuth();
-  const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reply, setReply] = useState('');
-
-  const { data: conversations } = useQuery({
-    queryKey: ['conversations', businessId],
-    queryFn: () => listConversations(token!, businessId),
-    enabled: !!token,
-    refetchInterval: 5000,
-  });
-
-  const { data: messages } = useQuery({
-    queryKey: ['messages', businessId, selectedId],
-    queryFn: () => listMessages(token!, businessId, selectedId!),
-    enabled: !!token && !!selectedId,
-    refetchInterval: 3000,
-  });
+  const { businessId } = await params;
+  const { c: selectedId } = await searchParams;
+  const token = await requireAuth();
+  const conversations = await listConversations(token, businessId);
+  const messages = selectedId ? await listMessages(token, businessId, selectedId) : null;
 
   return (
     <div>
       <h1 className="text-2xl font-bold">Inbox</h1>
       <div className="mt-6 flex h-[calc(100vh-12rem)] overflow-hidden rounded-xl border border-[var(--border)] bg-white">
         <div className="w-80 overflow-y-auto border-r border-[var(--border)]">
-          {conversations?.map((conv) => (
-            <button
+          {conversations.map((conv) => (
+            <Link
               key={conv.id}
-              onClick={() => setSelectedId(conv.id)}
+              href={`/b/${businessId}/inbox?c=${conv.id}`}
               className={cn(
-                'w-full border-b border-[var(--border)] p-4 text-left hover:bg-[var(--muted)]',
+                'block w-full border-b border-[var(--border)] p-4 text-left hover:bg-[var(--muted)]',
                 selectedId === conv.id && 'bg-[var(--primary)]/5',
               )}
             >
@@ -54,18 +40,18 @@ export default function InboxPage({
                   {conv.lastMessageState}
                 </Badge>
               </div>
-            </button>
+            </Link>
           ))}
-          {conversations?.length === 0 && (
+          {conversations.length === 0 && (
             <p className="p-4 text-sm text-[var(--muted-foreground)]">No conversations yet.</p>
           )}
         </div>
 
         <div className="flex flex-1 flex-col">
-          {selectedId ? (
+          {selectedId && messages ? (
             <>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                {messages?.map((m) => (
+                {messages.map((m) => (
                   <div
                     key={m.id}
                     className={cn(
@@ -83,20 +69,10 @@ export default function InboxPage({
                 ))}
               </div>
               <form
+                action={sendMessageAction.bind(null, businessId, selectedId)}
                 className="flex gap-2 border-t border-[var(--border)] p-4"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!reply.trim()) return;
-                  await sendMessage(token!, businessId, selectedId, reply);
-                  setReply('');
-                  queryClient.invalidateQueries({ queryKey: ['messages', businessId, selectedId] });
-                }}
               >
-                <Input
-                  placeholder="Type a reply (bypasses AI)..."
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                />
+                <Input name="content" placeholder="Type a reply (bypasses AI)…" required />
                 <Button type="submit">Send</Button>
               </form>
             </>

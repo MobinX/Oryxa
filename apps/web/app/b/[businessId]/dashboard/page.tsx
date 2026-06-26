@@ -1,11 +1,13 @@
-'use client';
-
-import { use } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { Package, MessageSquare, ShoppingCart, Radio } from 'lucide-react';
-import { useAuth } from '@/components/auth-provider';
-import { getBusiness, listProducts, listOrders, listChannels, listConversations } from '@/lib/api';
+import { requireAuth } from '@/lib/auth';
+import {
+  getBusiness,
+  listProducts,
+  listOrders,
+  listChannels,
+  listConversations,
+} from '@/lib/api';
 import { Card } from '@/components/ui/card';
 
 const sections = [
@@ -39,57 +41,33 @@ const sections = [
   },
 ];
 
-export default function DashboardPage({
+export default async function DashboardPage({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
-  const { businessId } = use(params);
-  const { token } = useAuth();
+  const { businessId } = await params;
+  const token = await requireAuth();
 
-  const { data: business } = useQuery({
-    queryKey: ['business', businessId],
-    queryFn: () => getBusiness(token!, businessId),
-    enabled: !!token,
-  });
-
-  const { data: productsData } = useQuery({
-    queryKey: ['products', businessId, 'count'],
-    queryFn: () => listProducts(token!, businessId, { limit: 1 }),
-    enabled: !!token,
-  });
-
-  const { data: orders } = useQuery({
-    queryKey: ['orders', businessId, 'count'],
-    queryFn: () => listOrders(token!, businessId),
-    enabled: !!token,
-  });
-
-  const { data: channels } = useQuery({
-    queryKey: ['channels', businessId, 'count'],
-    queryFn: () => listChannels(token!, businessId),
-    enabled: !!token,
-  });
-
-  const { data: conversations } = useQuery({
-    queryKey: ['conversations', businessId, 'count'],
-    queryFn: () => listConversations(token!, businessId),
-    enabled: !!token,
-  });
+  const [business, productsData, orders, channels, conversations] = await Promise.all([
+    getBusiness(token, businessId),
+    listProducts(token, businessId, { limit: 1 }),
+    listOrders(token, businessId),
+    listChannels(token, businessId),
+    listConversations(token, businessId),
+  ]);
 
   const counts = {
-    products: productsData?.totalCount ?? 0,
-    orders: orders?.length ?? 0,
-    channels: channels?.length ?? 0,
-    conversations: conversations?.length ?? 0,
+    products: productsData.totalCount,
+    orders: orders.length,
+    channels: channels.length,
+    conversations: conversations.length,
   };
 
   return (
     <div>
       <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="text-[var(--muted-foreground)]">
-        {business?.name ? `Welcome to ${business.name}` : 'Welcome back'}
-      </p>
+      <p className="text-[var(--muted-foreground)]">Welcome to {business.name}</p>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         {sections.map(({ href, label, description, icon: Icon, countKey }) => (
