@@ -1,3 +1,4 @@
+import { Check, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { listChannels, listAgents, type Channel, type Agent } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -21,13 +22,13 @@ const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
 
 const channelHeaders: DataTableHeader[] = [
-  { key: 'platform', header: 'Platform' },
+  { key: 'platform', header: 'Platform', className: 'w-full min-w-[120px]' },
   { key: 'platformChannelId', header: 'Page/Channel ID' },
   { key: 'agentId', header: 'Agent' },
 ];
 
 const agentHeaders: DataTableHeader[] = [
-  { key: 'name', header: 'Name' },
+  { key: 'name', header: 'Name', className: 'w-full min-w-[120px]' },
   { key: 'platformType', header: 'Platform', className: 'capitalize' },
   { key: 'systemPrompt', header: 'Prompt', className: 'hidden md:table-cell' },
 ];
@@ -73,8 +74,12 @@ export default async function ChannelsPage({
     ],
     actions: (
       <form action={deleteChannelAction.bind(null, businessId, channel.id)}>
-        <button type="submit" className="text-sm text-red-600 hover:underline">
-          Delete
+        <button
+          type="submit"
+          className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline font-semibold"
+          title="Delete"
+        >
+          <Trash2 className="h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
         </button>
       </form>
     ),
@@ -95,13 +100,23 @@ export default async function ChannelsPage({
       <>
         <form action={updateAgentAction.bind(null, businessId, agent.id)} className="flex items-center gap-2">
           <Input name="name" defaultValue={agent.name} className="h-8 w-28 text-sm" />
-          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
-            Save
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center text-sm text-[var(--primary)] hover:underline font-semibold"
+            title="Save"
+          >
+            <Check className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline">Save</span>
           </button>
         </form>
         <form action={deleteAgentAction.bind(null, businessId, agent.id)}>
-          <button type="submit" className="text-sm text-red-600 hover:underline">
-            Delete
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center text-sm text-red-600 hover:underline font-semibold"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline">Delete</span>
           </button>
         </form>
       </>

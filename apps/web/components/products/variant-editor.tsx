@@ -1,6 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useId, useRef } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Plus, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   uploadVariantImageDirect,
   ImageUploadError,
@@ -135,34 +139,34 @@ export function VariantEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium">Variants</label>
+      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+        <label className="text-sm font-semibold font-geist text-foreground">Variants</label>
         <button
           type="button"
           onClick={addRow}
-          className="text-sm text-[var(--primary)] hover:underline"
+          className="text-sm font-semibold text-primary hover:underline inline-flex items-center gap-1"
         >
-          + Add variant
+          <Plus className="h-4 w-4" /> Add variant
         </button>
       </div>
-      <p className="text-xs text-[var(--muted-foreground)]">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         Add as many variants as you need. Leave the name empty to skip a row. If all rows are empty, a default variant is created automatically. Images upload directly to storage as you pick them.
       </p>
 
       {rows.map((row) => {
         const i = row._idx;
         return (
-          <div key={i} className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+          <div key={i} className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-[var(--muted-foreground)]">
+              <span className="text-xs font-semibold text-muted-foreground">
                 Variant #{i + 1}
               </span>
               <button
                 type="button"
                 onClick={() => removeRow(i)}
-                className="text-xs text-red-600 hover:underline"
+                className="text-xs font-semibold text-red-500 hover:text-red-600 inline-flex items-center gap-1"
               >
-                Remove
+                <Trash2 className="h-3.5 w-3.5" /> Remove
               </button>
             </div>
             {row.id && <input type="hidden" name={`variant_${i}_id`} value={row.id} />}
@@ -173,30 +177,32 @@ export function VariantEditor({
               <input type="hidden" name={`variant_${i}_clearImage`} value="1" />
             )}
             <div className="grid gap-2 sm:grid-cols-2">
-              <input
+              <Input
                 name={`variant_${i}_name`}
                 placeholder="Variant name"
                 defaultValue={row.name}
-                className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
               />
-              <input
+              <Input
                 name={`variant_${i}_stock`}
                 type="number"
                 min="0"
                 placeholder="Stock"
                 defaultValue={String(row.stock ?? 0)}
-                className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
               />
-              <input
+              <Input
                 name={`variant_${i}_price`}
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="Price override"
                 defaultValue={row.price != null ? String(row.price) : ''}
-                className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
               />
-              <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)] px-3 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]/70 disabled:cursor-not-allowed disabled:opacity-50">
+              <label
+                className={cn(
+                  'inline-flex h-10 cursor-pointer items-center justify-center rounded-element border border-dashed border-border bg-muted/50 px-3 text-sm text-muted-foreground hover:bg-muted transition-colors',
+                  row.uploading && 'opacity-50 cursor-not-allowed',
+                )}
+              >
                 <span className="truncate">
                   {row.uploading
                     ? 'Uploading…'
@@ -226,7 +232,7 @@ export function VariantEditor({
                 <img
                   src={row.imagePreviewUrl}
                   alt={row.name}
-                  className="h-16 w-16 rounded-lg object-cover"
+                  className="h-16 w-16 rounded-xl object-cover border border-border"
                 />
                 <button
                   type="button"
@@ -242,13 +248,14 @@ export function VariantEditor({
         );
       })}
 
-      <button
+      <Button
         type="button"
+        variant="outline"
         onClick={addRow}
-        className="w-full rounded-lg border border-dashed border-[var(--border)] py-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+        className="w-full border-dashed border-border text-muted-foreground hover:text-foreground"
       >
         + Add another variant
-      </button>
+      </Button>
     </div>
   );
 }

@@ -49,6 +49,7 @@ export default async function NewOrderPage({
       </Link>
       <Card className="mt-4 sm:mt-6">
         <h1 className="text-xl font-bold">New order</h1>
+        <form id="productPicker" method="get" className="hidden" />
         <form action={createOrderAction.bind(null, businessId)} className="mt-6 space-y-4">
           {/* Product selection submits to the same page via GET so variants load server-side. */}
           <div>
@@ -72,8 +73,6 @@ export default async function NewOrderPage({
               </Button>
             </div>
           </div>
-
-          <form id="productPicker" method="get" className="hidden" />
 
           <div>
             <label className="mb-1 block text-sm font-medium">Variant</label>
@@ -107,14 +106,13 @@ export default async function NewOrderPage({
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-            <Link
-              href={`/b/${businessId}/orders`}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              Cancel
+          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+            <Link href={`/b/${businessId}/orders`} className="w-full sm:w-auto">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
             </Link>
-            <Button type="submit">Create order</Button>
+            <Button type="submit" className="w-full sm:w-auto">Create order</Button>
           </div>
         </form>
       </Card>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Eye, CheckCircle2, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import {
   listOrders,
@@ -30,7 +31,7 @@ const nextState: Record<string, string> = {
 };
 
 const headers: DataTableHeader[] = [
-  { key: 'customerName', header: 'Customer' },
+  { key: 'customerName', header: 'Customer', className: 'w-full min-w-[150px]' },
   { key: 'totalPrice', header: 'Total' },
   { key: 'state', header: 'State' },
   { key: 'createdAt', header: 'Date' },
@@ -41,22 +42,31 @@ function orderRowActions(businessId: string, order: OrderListItem) {
     <>
       <Link
         href={`/b/${businessId}/orders/${order.id}`}
-        className="text-sm text-[var(--primary)] hover:underline"
+        className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline font-semibold"
+        title="View"
       >
-        View
+        <Eye className="h-4 w-4" /> <span className="hidden sm:inline">View</span>
       </Link>
       {nextState[order.state] && (
         <form
           action={advanceOrderStateAction.bind(null, businessId, order.id, nextState[order.state])}
         >
-          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
-            Mark {nextState[order.state]}
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline font-semibold"
+            title={`Mark ${nextState[order.state]}`}
+          >
+            <CheckCircle2 className="h-4 w-4" /> <span className="hidden sm:inline">Mark {nextState[order.state]}</span>
           </button>
         </form>
       )}
       <form action={deleteOrderAction.bind(null, businessId, order.id)}>
-        <button type="submit" className="text-sm text-red-600 hover:underline">
-          Delete
+        <button
+          type="submit"
+          className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline font-semibold"
+          title="Delete"
+        >
+          <Trash2 className="h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
         </button>
       </form>
     </>

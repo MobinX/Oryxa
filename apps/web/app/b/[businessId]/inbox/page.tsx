@@ -25,10 +25,10 @@ export default async function InboxPage({
   return (
     <div className="flex min-h-0 flex-col">
       <h1 className="text-xl font-bold sm:text-2xl">Inbox</h1>
-      <div className="mt-4 flex min-h-[min(70vh,600px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
+      <div className="mt-4 flex min-h-[min(70vh,600px)] flex-col overflow-hidden rounded-card border border-border/80 bg-card shadow-card lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
         <div
           className={cn(
-            'border-b border-[var(--border)] lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r',
+            'border-b border-border/40 lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r',
             selectedId ? 'hidden lg:block' : '',
           )}
         >
@@ -43,15 +43,15 @@ export default async function InboxPage({
         <div className="flex min-h-0 flex-1 flex-col">
           {selectedId && messages ? (
             <>
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3 lg:hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-border/40 p-3 lg:hidden">
                 <Link
                   href={`/b/${businessId}/inbox`}
-                  className="text-sm text-[var(--primary)] hover:underline"
+                  className="text-sm text-primary hover:underline"
                 >
                   ← Conversations
                 </Link>
               </div>
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3">
+              <div className="flex items-center justify-between gap-2 border-b border-border/40 p-3">
                 <span className="text-sm font-medium">Conversation</span>
                 <form action={deleteConversationAction.bind(null, businessId, selectedId)}>
                   <button
@@ -69,8 +69,8 @@ export default async function InboxPage({
                     className={cn(
                       'max-w-[85%] rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
                       m.from === 'customer'
-                        ? 'bg-[var(--muted)]'
-                        : 'ml-auto bg-[var(--primary)] text-white',
+                        ? 'bg-muted'
+                        : 'ml-auto bg-primary text-white',
                     )}
                   >
                     {m.from === 'self' && (
@@ -82,7 +82,7 @@ export default async function InboxPage({
               </div>
               <form
                 action={sendMessageAction.bind(null, businessId, selectedId)}
-                className="flex flex-col gap-2 border-t border-[var(--border)] p-4 sm:flex-row"
+                className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row"
               >
                 <Input name="content" placeholder="Type a reply (bypasses AI)…" required className="flex-1" />
                 <Button type="submit" className="w-full sm:w-auto">
@@ -91,7 +91,7 @@ export default async function InboxPage({
               </form>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center p-8 text-center text-[var(--muted-foreground)]">
+            <div className="flex flex-1 items-center justify-center p-8 text-center text-muted-foreground">
               Select a conversation
             </div>
           )}

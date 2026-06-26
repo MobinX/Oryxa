@@ -11,8 +11,8 @@ import {
 } from '@/app/actions/business';
 
 const headers: DataTableHeader[] = [
-  { key: 'name', header: 'Business' },
-  { key: 'createdAt', header: 'Created', className: 'hidden sm:table-cell text-[var(--muted-foreground)]' },
+  { key: 'name', header: 'Business', className: 'w-full min-w-[200px]' },
+  { key: 'createdAt', header: 'Created', className: 'hidden sm:table-cell text-muted-foreground' },
 ];
 
 export default async function BusinessesPage() {
@@ -23,13 +23,13 @@ export default async function BusinessesPage() {
     id: business.id,
     cells: [
       <div key="name" className="flex min-w-0 items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Building2 className="h-5 w-5" />
         </div>
         <div className="min-w-0">
           <p className="truncate font-semibold">{business.name}</p>
           {business.description && (
-            <p className="mt-0.5 line-clamp-1 text-sm text-[var(--muted-foreground)]">
+            <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">
               {business.description}
             </p>
           )}
@@ -41,22 +41,25 @@ export default async function BusinessesPage() {
       <>
         <Link
           href={`/b/${business.id}/dashboard`}
-          className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-semibold"
+          title="Open"
         >
-          Open <ArrowRight className="h-3 w-3" />
+          <span className="hidden sm:inline">Open</span> <ArrowRight className="h-4 w-4" />
         </Link>
         <Link
           href={`/businesses/${business.id}/edit`}
-          className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-semibold"
+          title="Edit"
         >
-          <Pencil className="h-3 w-3" /> Edit
+          <Pencil className="h-4 w-4" /> <span className="hidden sm:inline">Edit</span>
         </Link>
         <form action={deleteBusinessAction.bind(null, business.id)}>
           <button
             type="submit"
-            className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline"
+            className="inline-flex items-center gap-1 text-sm text-red-500 hover:text-red-600 hover:underline font-semibold"
+            title="Delete"
           >
-            <Trash2 className="h-3 w-3" /> Delete
+            <Trash2 className="h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
           </button>
         </form>
       </>
@@ -68,7 +71,7 @@ export default async function BusinessesPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">Your businesses</h1>
-          <p className="mt-1 text-[var(--muted-foreground)]">
+          <p className="mt-1 text-muted-foreground">
             Select a business or create a new one.
           </p>
         </div>
@@ -82,9 +85,9 @@ export default async function BusinessesPage() {
 
       {businesses.length === 0 ? (
         <Card className="mt-12 text-center">
-          <Building2 className="mx-auto h-12 w-12 text-[var(--muted-foreground)]" />
+          <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold">No businesses yet</h2>
-          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+          <p className="mt-2 text-sm text-muted-foreground">
             Create your first business to manage products, orders, and channels.
           </p>
           <Link href="/businesses/new" className="mt-6 inline-block">
