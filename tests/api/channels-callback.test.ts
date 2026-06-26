@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
-import { app } from '@api/index';
+import { app } from '@api/app';
 import { listChannels } from '@repo/db/crud/channel';
 
 const exchangeCodeForTokenMock = vi.fn();

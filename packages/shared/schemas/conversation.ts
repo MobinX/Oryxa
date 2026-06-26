@@ -44,6 +44,9 @@ export const updateConversationStateOutputSchema = z.object({
   updatedState: messageStateSchema,
 });
 
+export const deleteConversationOutputSchema = z.object({ deleted: z.boolean() });
+export const deleteMessageOutputSchema = z.object({ deleted: z.boolean() });
+
 export const internalRunInputSchema = z.object({
   conversationId: uuidSchema,
 });

@@ -15,6 +15,7 @@ export const users = pgTable('users', {
   firebaseUid: varchar('firebase_uid', { length: 255 }).unique().notNull(),
   signInMethod: varchar('sign_in_method', { length: 50 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });
 
 export const businesses = pgTable('businesses', {
@@ -30,6 +31,7 @@ export const businesses = pgTable('businesses', {
   facebookPageLink: varchar('facebook_page_link', { length: 500 }),
   phone: varchar('phone', { length: 20 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });
 
 export const categories = pgTable('categories', {
@@ -37,6 +39,8 @@ export const categories = pgTable('categories', {
   businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('categories_business_slug_idx').on(t.businessId, t.slug),
 }));
@@ -51,6 +55,7 @@ export const products = pgTable('products', {
   sku: varchar('sku', { length: 100 }).notNull(),
   description: text('description'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('products_business_slug_idx').on(t.businessId, t.slug),
 }));
@@ -64,6 +69,8 @@ export const variants = pgTable('variants', {
   stock: integer('stock').default(0).notNull(),
   isAvailable: boolean('is_available').default(true).notNull(),
   rating: numeric('rating', { precision: 3, scale: 2 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });
 
 export const orders = pgTable('orders', {
@@ -81,6 +88,7 @@ export const orders = pgTable('orders', {
   totalPrice: numeric('total_price', { precision: 10, scale: 2 }).notNull(),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });
 
 export const agents = pgTable('agents', {
@@ -90,6 +98,7 @@ export const agents = pgTable('agents', {
   systemPrompt: text('system_prompt').notNull(),
   platformType: platformEnum('platform_type').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 });
 
 export const channels = pgTable('channels', {
@@ -101,6 +110,7 @@ export const channels = pgTable('channels', {
   extraInfo: text('extra_info'),
   agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('channels_business_platform_channel_idx').on(t.businessId, t.platform, t.platformChannelId),
 }));
@@ -114,6 +124,7 @@ export const conversations = pgTable('conversations', {
   customerAvatar: varchar('customer_avatar', { length: 500 }),
   lastMessageState: messageStateEnum('last_message_state').default('done').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('conversations_channel_customer_idx').on(t.channelId, t.customerPlatformId),
 }));
@@ -126,6 +137,7 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
   time: timestamp('time').defaultNow().notNull(),
   state: messageStateEnum('state').default('pending').notNull(),
+  deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('messages_conversation_time_idx').on(t.conversationId, t.time),
 }));

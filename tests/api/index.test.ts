@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { app } from '@api/index';
+import { app } from '@api/app';
 
 describe('API root', () => {
   it('GET / returns service info', async () => {

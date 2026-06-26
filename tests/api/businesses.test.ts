@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
-import { app } from '@api/index';
+import { app } from '@api/app';
 
 describe('Businesses API', () => {
   withPglite();
@@ -23,7 +23,7 @@ describe('Businesses API', () => {
     const res = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.name).toBe('Test Store');
+    expect(body.name).toBe(business.name);
   });
 
   it('PUT /api/v1/businesses/:id updates business', async () => {

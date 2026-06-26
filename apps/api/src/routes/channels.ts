@@ -3,16 +3,27 @@ import {
   createAgentInputSchema,
   createAgentOutputSchema,
   selectAgentSchema,
+  updateAgentInputSchema,
+  updateAgentOutputSchema,
+  deleteAgentOutputSchema,
   createChannelInputSchema,
   createChannelOutputSchema,
   updateChannelAgentSchema,
+  updateChannelInputSchema,
+  updateChannelOutputSchema,
+  deleteChannelOutputSchema,
 } from '@repo/shared';
 import {
   createAgent,
+  getAgentById,
   listAgents,
+  updateAgent,
+  deleteAgent,
   createChannel,
   listChannels,
   updateChannelAgent,
+  updateChannel,
+  deleteChannel,
 } from '@repo/db/crud/channel';
 import { getFacebookOAuthUrl, exchangeCodeForToken, getUserPages } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
@@ -69,6 +80,76 @@ channelsRouter.openapi(listAgentsRoute, async (c) => {
       createdAt: a.createdAt.toISOString(),
     })),
   );
+});
+
+const getAgentRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/agents/{agentId}',
+  tags: ['Agents'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid(), agentId: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: selectAgentSchema } }, description: 'Agent' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+channelsRouter.openapi(getAgentRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const agentId = c.req.param('agentId');
+  const agent = await getAgentById(businessId, agentId);
+  if (!agent) return c.json({ error: 'Agent not found' }, 404);
+  return c.json({
+    id: agent.id,
+    name: agent.name,
+    platformType: agent.platformType,
+    systemPrompt: agent.systemPrompt,
+    createdAt: agent.createdAt.toISOString(),
+  });
+});
+
+const updateAgentRoute = createRoute({
+  method: 'put',
+  path: '/{businessId}/agents/{agentId}',
+  tags: ['Agents'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), agentId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: updateAgentInputSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: updateAgentOutputSchema } }, description: 'Updated' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+channelsRouter.openapi(updateAgentRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const agentId = c.req.param('agentId');
+  const data = c.req.valid('json');
+  const result = await updateAgent(businessId, agentId, data);
+  if (!result) return c.json({ error: 'Agent not found' }, 404);
+  return c.json(result);
+});
+
+const deleteAgentRoute = createRoute({
+  method: 'delete',
+  path: '/{businessId}/agents/{agentId}',
+  tags: ['Agents'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid(), agentId: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteAgentOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+channelsRouter.openapi(deleteAgentRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const agentId = c.req.param('agentId');
+  const result = await deleteAgent(businessId, agentId);
+  if (!result) return c.json({ error: 'Agent not found' }, 404);
+  return c.json(result);
 });
 
 const createChannelRoute = createRoute({
@@ -149,6 +230,50 @@ channelsRouter.openapi(updateChannelAgentRoute, async (c) => {
   const channelId = c.req.param('channelId');
   const { agentId } = c.req.valid('json');
   const result = await updateChannelAgent(channelId, businessId, agentId);
+  if (!result) return c.json({ error: 'Channel not found' }, 404);
+  return c.json(result);
+});
+
+const updateChannelRoute = createRoute({
+  method: 'put',
+  path: '/{businessId}/channels/{channelId}',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), channelId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: updateChannelInputSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: updateChannelOutputSchema } }, description: 'Updated' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+channelsRouter.openapi(updateChannelRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const channelId = c.req.param('channelId');
+  const data = c.req.valid('json');
+  const result = await updateChannel(businessId, channelId, data);
+  if (!result) return c.json({ error: 'Channel not found' }, 404);
+  return c.json(result);
+});
+
+const deleteChannelRoute = createRoute({
+  method: 'delete',
+  path: '/{businessId}/channels/{channelId}',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid(), channelId: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteChannelOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+channelsRouter.openapi(deleteChannelRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const channelId = c.req.param('channelId');
+  const result = await deleteChannel(businessId, channelId);
   if (!result) return c.json({ error: 'Channel not found' }, 404);
   return c.json(result);
 });

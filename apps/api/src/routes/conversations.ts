@@ -8,6 +8,7 @@ import {
   createMessageOutputSchema,
   updateConversationStateInputSchema,
   updateConversationStateOutputSchema,
+  deleteConversationOutputSchema,
 } from '@repo/shared';
 import {
   listConversations,
@@ -15,6 +16,7 @@ import {
   createMessage,
   getConversationForBusiness,
   updateConversationState,
+  deleteConversation,
 } from '@repo/db/crud/conversation';
 import { sendMessage } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
@@ -144,4 +146,26 @@ conversationsRouter.openapi(updateStateRoute, async (c) => {
 
   await updateConversationState(conversationId, state);
   return c.json({ id: conversationId, updatedState: state });
+});
+
+const deleteConversationRoute = createRoute({
+  method: 'delete',
+  path: '/{businessId}/conversations/{conversationId}',
+  tags: ['Conversations'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), conversationId: z.string().uuid() }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteConversationOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+conversationsRouter.openapi(deleteConversationRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const conversationId = c.req.param('conversationId');
+  const result = await deleteConversation(businessId, conversationId);
+  if (!result) return c.json({ error: 'Conversation not found' }, 404);
+  return c.json(result);
 });

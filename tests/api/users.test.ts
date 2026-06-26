@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders, TEST_FIREBASE_UID } from '../helpers/seed';
-import { app } from '@api/index';
+import { app } from '@api/app';
 
 describe('Users API', () => {
   withPglite();

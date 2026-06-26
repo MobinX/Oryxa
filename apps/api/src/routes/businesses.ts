@@ -4,14 +4,50 @@ import {
   selectBusinessSchema,
   updateBusinessInputSchema,
   updateBusinessOutputSchema,
+  deleteBusinessOutputSchema,
 } from '@repo/shared';
-import { createBusiness, getBusinessById, updateBusiness } from '@repo/db/crud/business';
+import {
+  createBusiness,
+  getBusinessById,
+  listBusinessesByUserId,
+  updateBusiness,
+  deleteBusiness,
+} from '@repo/db/crud/business';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
 export const businessesRouter = new OpenAPIHono();
 
 businessesRouter.use('/*', authMiddleware);
+
+const listRoute = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({ businesses: z.array(selectBusinessSchema) }),
+        },
+      },
+      description: 'Businesses for the authenticated user',
+    },
+  },
+});
+
+businessesRouter.openapi(listRoute, async (c) => {
+  const user = c.get('user');
+  const rows = await listBusinessesByUserId(user.id);
+  return c.json({
+    businesses: rows.map((b) => ({
+      ...b,
+      createdAt: b.createdAt.toISOString(),
+      foundedDate: b.foundedDate?.toISOString() ?? null,
+    })),
+  });
+});
 
 const createRoute_ = createRoute({
   method: 'post',
@@ -84,6 +120,26 @@ businessesRouter.openapi(updateRoute, async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const result = await updateBusiness(id, user.id, data);
+  if (!result) return c.json({ error: 'Not found' }, 404);
+  return c.json(result);
+});
+
+const deleteRoute = createRoute({
+  method: 'delete',
+  path: '/{id}',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ id: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteBusinessOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+businessesRouter.openapi(deleteRoute, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const result = await deleteBusiness(id, user.id);
   if (!result) return c.json({ error: 'Not found' }, 404);
   return c.json(result);
 });

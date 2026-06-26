@@ -1,75 +1,71 @@
-'use client';
-
-import { use, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/components/auth-provider';
-import { listConversations, listMessages, sendMessage } from '@/lib/api';
+import Link from 'next/link';
+import { requireAuth } from '@/lib/auth';
+import { listConversations, listMessages } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/card';
+import { sendMessageAction, deleteConversationAction, deleteConversationsBulkAction } from '@/app/actions/inbox';
+import { ConversationList } from '@/components/conversation-list';
 import { cn } from '@/lib/utils';
 
-export default function InboxPage({
+export default async function InboxPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ c?: string }>;
 }) {
-  const { businessId } = use(params);
-  const { token } = useAuth();
-  const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reply, setReply] = useState('');
-
-  const { data: conversations } = useQuery({
-    queryKey: ['conversations', businessId],
-    queryFn: () => listConversations(token!, businessId),
-    enabled: !!token,
-    refetchInterval: 5000,
-  });
-
-  const { data: messages } = useQuery({
-    queryKey: ['messages', businessId, selectedId],
-    queryFn: () => listMessages(token!, businessId, selectedId!),
-    enabled: !!token && !!selectedId,
-    refetchInterval: 3000,
-  });
+  const { businessId } = await params;
+  const { c: selectedId } = await searchParams;
+  const token = await requireAuth();
+  const conversations = await listConversations(token, businessId);
+  const messages = selectedId ? await listMessages(token, businessId, selectedId) : null;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Inbox</h1>
-      <div className="mt-6 flex h-[calc(100vh-12rem)] overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-        <div className="w-80 overflow-y-auto border-r border-[var(--border)]">
-          {conversations?.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => setSelectedId(conv.id)}
-              className={cn(
-                'w-full border-b border-[var(--border)] p-4 text-left hover:bg-[var(--muted)]',
-                selectedId === conv.id && 'bg-[var(--primary)]/5',
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{conv.customerName ?? 'Customer'}</span>
-                <Badge variant={conv.lastMessageState === 'pending' ? 'warning' : 'default'}>
-                  {conv.lastMessageState}
-                </Badge>
-              </div>
-            </button>
-          ))}
-          {conversations?.length === 0 && (
-            <p className="p-4 text-sm text-[var(--muted-foreground)]">No conversations yet.</p>
+    <div className="flex min-h-0 flex-col">
+      <h1 className="text-xl font-bold sm:text-2xl">Inbox</h1>
+      <div className="mt-4 flex min-h-[min(70vh,600px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
+        <div
+          className={cn(
+            'border-b border-[var(--border)] lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r',
+            selectedId ? 'hidden lg:block' : '',
           )}
+        >
+          <ConversationList
+            conversations={conversations}
+            businessId={businessId}
+            selectedId={selectedId}
+            bulkDeleteAction={deleteConversationsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
+          />
         </div>
 
-        <div className="flex flex-1 flex-col">
-          {selectedId ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {selectedId && messages ? (
             <>
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3 lg:hidden">
+                <Link
+                  href={`/b/${businessId}/inbox`}
+                  className="text-sm text-[var(--primary)] hover:underline"
+                >
+                  ← Conversations
+                </Link>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3">
+                <span className="text-sm font-medium">Conversation</span>
+                <form action={deleteConversationAction.bind(null, businessId, selectedId)}>
+                  <button
+                    type="submit"
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Delete conversation
+                  </button>
+                </form>
+              </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                {messages?.map((m) => (
+                {messages.map((m) => (
                   <div
                     key={m.id}
                     className={cn(
-                      'max-w-[75%] rounded-2xl px-4 py-2 text-sm',
+                      'max-w-[85%] rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
                       m.from === 'customer'
                         ? 'bg-[var(--muted)]'
                         : 'ml-auto bg-[var(--primary)] text-white',
@@ -83,25 +79,17 @@ export default function InboxPage({
                 ))}
               </div>
               <form
-                className="flex gap-2 border-t border-[var(--border)] p-4"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!reply.trim()) return;
-                  await sendMessage(token!, businessId, selectedId, reply);
-                  setReply('');
-                  queryClient.invalidateQueries({ queryKey: ['messages', businessId, selectedId] });
-                }}
+                action={sendMessageAction.bind(null, businessId, selectedId)}
+                className="flex flex-col gap-2 border-t border-[var(--border)] p-4 sm:flex-row"
               >
-                <Input
-                  placeholder="Type a reply (bypasses AI)..."
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                />
-                <Button type="submit">Send</Button>
+                <Input name="content" placeholder="Type a reply (bypasses AI)…" required className="flex-1" />
+                <Button type="submit" className="w-full sm:w-auto">
+                  Send
+                </Button>
               </form>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[var(--muted-foreground)]">
+            <div className="flex flex-1 items-center justify-center p-8 text-center text-[var(--muted-foreground)]">
               Select a conversation
             </div>
           )}

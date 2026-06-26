@@ -1,14 +1,18 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { orders, products, variants } from '@db/schema';
-import { createOrderInputSchema, updateOrderStateInputSchema } from '@repo/shared';
+import {
+  createOrderInputSchema,
+  updateOrderInputSchema,
+  updateOrderStateInputSchema,
+} from '@repo/shared';
 
 export async function createOrder(input: unknown) {
   const parsed = createOrderInputSchema.parse(input);
 
   const product = await db.query.products.findFirst({
-    where: and(eq(products.id, parsed.productId), eq(products.businessId, parsed.businessId)),
-    with: { variants: true },
+    where: and(eq(products.id, parsed.productId), eq(products.businessId, parsed.businessId), isNull(products.deletedAt)),
+    with: { variants: { where: isNull(variants.deletedAt) } },
   });
   if (!product) throw new Error('Product not found');
 
@@ -45,12 +49,24 @@ export async function createOrder(input: unknown) {
   };
 }
 
+export async function getOrderById(businessId: string, orderId: string) {
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
+  });
+  if (!order) return null;
+  return {
+    ...order,
+    totalPrice: parseFloat(order.totalPrice),
+    variantPrice: parseFloat(order.variantPrice),
+  };
+}
+
 export async function listOrders(
   businessId: string,
   options: { state?: string; limit?: number } = {},
 ) {
   const { state, limit = 20 } = options;
-  const conditions = [eq(orders.businessId, businessId)];
+  const conditions = [eq(orders.businessId, businessId), isNull(orders.deletedAt)];
   if (state) conditions.push(eq(orders.state, state as typeof orders.state.enumValues[number]));
 
   const items = await db.query.orders.findMany({
@@ -71,7 +87,7 @@ export async function listOrders(
 export async function updateOrderState(businessId: string, orderId: string, input: unknown) {
   const parsed = updateOrderStateInputSchema.parse(input);
   const order = await db.query.orders.findFirst({
-    where: and(eq(orders.id, orderId), eq(orders.businessId, businessId)),
+    where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
 
@@ -82,4 +98,38 @@ export async function updateOrderState(businessId: string, orderId: string, inpu
     .returning();
 
   return { id: updated.id, newState: updated.state };
+}
+
+export async function updateOrder(businessId: string, orderId: string, input: unknown) {
+  const parsed = updateOrderInputSchema.parse(input);
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
+  });
+  if (!order) return null;
+
+  const fields: Record<string, unknown> = { ...parsed };
+  if (parsed.count !== undefined) {
+    const variantPrice = parseFloat(order.variantPrice);
+    fields.totalPrice = (variantPrice * parsed.count).toFixed(2);
+  }
+
+  const [updated] = await db
+    .update(orders)
+    .set(fields)
+    .where(eq(orders.id, orderId))
+    .returning();
+
+  return { id: updated.id, updated: true };
+}
+
+export async function deleteOrder(businessId: string, orderId: string) {
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
+  });
+  if (!order) return null;
+  await db
+    .update(orders)
+    .set({ deletedAt: new Date() })
+    .where(eq(orders.id, orderId));
+  return { deleted: true };
 }

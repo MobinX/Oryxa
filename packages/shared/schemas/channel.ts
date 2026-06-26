@@ -7,6 +7,8 @@ export const createAgentInputSchema = z.object({
   platformType: platformSchema,
 });
 
+export const updateAgentInputSchema = createAgentInputSchema.partial();
+
 export const selectAgentSchema = z.object({
   id: uuidSchema,
   name: z.string(),
@@ -20,6 +22,13 @@ export const createAgentOutputSchema = z.object({
   createdAt: timestampSchema,
 });
 
+export const updateAgentOutputSchema = z.object({
+  id: uuidSchema,
+  updated: z.boolean(),
+});
+
+export const deleteAgentOutputSchema = z.object({ deleted: z.boolean() });
+
 export const createChannelInputSchema = z.object({
   platform: platformSchema,
   apiToken: z.string().min(1),
@@ -32,6 +41,15 @@ export const createChannelOutputSchema = z.object({
   id: uuidSchema,
   status: z.literal('linked'),
 });
+
+export const updateChannelInputSchema = createChannelInputSchema.partial();
+
+export const updateChannelOutputSchema = z.object({
+  id: uuidSchema,
+  updated: z.boolean(),
+});
+
+export const deleteChannelOutputSchema = z.object({ deleted: z.boolean() });
 
 export const updateChannelAgentSchema = z.object({
   agentId: uuidSchema.nullable(),

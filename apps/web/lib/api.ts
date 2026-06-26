@@ -40,6 +40,24 @@ export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
 
 // Business
+export type Business = {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string | null;
+  employeeCount?: number | null;
+  type?: string | null;
+  foundedDate?: string | null;
+  hasTradeLicense: boolean;
+  hasTaxLicense: boolean;
+  facebookPageLink?: string | null;
+  phone?: string | null;
+  createdAt: string;
+};
+
+export const listBusinesses = (token: string) =>
+  apiFetch<{ businesses: Business[] }>('/api/v1/businesses', { token });
+
 export const createBusiness = (token: string, data: Record<string, unknown>) =>
   apiFetch<{ id: string; userId: string; name: string }>('/api/v1/businesses', {
     method: 'POST',
@@ -48,7 +66,45 @@ export const createBusiness = (token: string, data: Record<string, unknown>) =>
   });
 
 export const getBusiness = (token: string, id: string) =>
-  apiFetch<Record<string, unknown>>(`/api/v1/businesses/${id}`, { token });
+  apiFetch<Business>(`/api/v1/businesses/${id}`, { token });
+
+export const updateBusiness = (token: string, id: string, data: Record<string, unknown>) =>
+  apiFetch<{ success: boolean }>(`/api/v1/businesses/${id}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(data),
+  });
+
+export const deleteBusiness = (token: string, id: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/businesses/${id}`, { method: 'DELETE', token });
+
+// Categories
+export type Category = { id: string; name: string; slug: string };
+
+export const createCategory = (token: string, businessId: string, name: string) =>
+  apiFetch<Category>(`/api/v1/${businessId}/categories`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ name }),
+  });
+
+export const updateCategory = (
+  token: string,
+  businessId: string,
+  categoryId: string,
+  name: string,
+) =>
+  apiFetch<{ updated: boolean }>(`/api/v1/${businessId}/categories/${categoryId}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify({ name }),
+  });
+
+export const deleteCategory = (token: string, businessId: string, categoryId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/categories/${categoryId}`, {
+    method: 'DELETE',
+    token,
+  });
 
 // Products
 export type ProductListItem = {
@@ -170,12 +226,13 @@ export const deleteProduct = (token: string, businessId: string, productId: stri
   });
 
 export const listCategories = (token: string, businessId: string) =>
-  apiFetch<Array<{ id: string; name: string; slug: string }>>(
-    `/api/v1/${businessId}/categories`,
-    { token },
-  );
+  apiFetch<Category[]>(`/api/v1/${businessId}/categories`, { token });
 
-export async function uploadVariantImage(token: string, businessId: string, file: File) {
+export async function uploadVariantImage(
+  token: string,
+  businessId: string,
+  file: File,
+): Promise<{ url: string; key: string } | null> {
   const form = new FormData();
   form.append('file', file);
 
@@ -186,6 +243,9 @@ export async function uploadVariantImage(token: string, businessId: string, file
   });
 
   if (!res.ok) {
+    // B2 not configured or upload rejected — return null so the product can
+    // still be saved without the image instead of failing the whole request.
+    if (res.status === 503 || res.status === 400) return null;
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(err.error ?? 'Upload failed', res.status);
   }
@@ -194,11 +254,40 @@ export async function uploadVariantImage(token: string, businessId: string, file
 }
 
 // Channels & Agents
+export type Channel = {
+  id: string;
+  platform: string;
+  platformChannelId: string;
+  agentId: string | null;
+};
+
+export type Agent = {
+  id: string;
+  name: string;
+  platformType: string;
+  systemPrompt?: string;
+  createdAt?: string;
+};
+
 export const listChannels = (token: string, businessId: string) =>
-  apiFetch<Array<{ id: string; platform: string; platformChannelId: string; agentId: string | null }>>(
-    `/api/v1/${businessId}/channels`,
-    { token },
+  apiFetch<Channel[]>(`/api/v1/${businessId}/channels`, { token });
+
+export const updateChannel = (
+  token: string,
+  businessId: string,
+  channelId: string,
+  data: { platform?: string; apiToken?: string; platformChannelId?: string; extraInfo?: string },
+) =>
+  apiFetch<{ id: string; updated: boolean }>(
+    `/api/v1/${businessId}/channels/${channelId}`,
+    { method: 'PUT', token, body: JSON.stringify(data) },
   );
+
+export const deleteChannel = (token: string, businessId: string, channelId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/channels/${channelId}`, {
+    method: 'DELETE',
+    token,
+  });
 
 export const getFacebookAuthUrl = (token: string, businessId: string) =>
   apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth`, { token });
@@ -215,10 +304,27 @@ export const createAgent = (
   });
 
 export const listAgents = (token: string, businessId: string) =>
-  apiFetch<Array<{ id: string; name: string; platformType: string; systemPrompt?: string }>>(
-    `/api/v1/${businessId}/agents`,
-    { token },
+  apiFetch<Agent[]>(`/api/v1/${businessId}/agents`, { token });
+
+export const getAgent = (token: string, businessId: string, agentId: string) =>
+  apiFetch<Agent>(`/api/v1/${businessId}/agents/${agentId}`, { token });
+
+export const updateAgent = (
+  token: string,
+  businessId: string,
+  agentId: string,
+  data: { name?: string; systemPrompt?: string; platformType?: string },
+) =>
+  apiFetch<{ id: string; updated: boolean }>(
+    `/api/v1/${businessId}/agents/${agentId}`,
+    { method: 'PUT', token, body: JSON.stringify(data) },
   );
+
+export const deleteAgent = (token: string, businessId: string, agentId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/agents/${agentId}`, {
+    method: 'DELETE',
+    token,
+  });
 
 export const updateChannelAgent = (
   token: string,
@@ -233,10 +339,21 @@ export const updateChannelAgent = (
   });
 
 // Conversations
+export type Conversation = {
+  id: string;
+  customerName: string | null;
+  lastMessageState: string;
+  channelId: string;
+};
+
 export const listConversations = (token: string, businessId: string) =>
-  apiFetch<
-    Array<{ id: string; customerName: string | null; lastMessageState: string; channelId: string }>
-  >(`/api/v1/${businessId}/conversations`, { token });
+  apiFetch<Conversation[]>(`/api/v1/${businessId}/conversations`, { token });
+
+export const deleteConversation = (token: string, businessId: string, conversationId: string) =>
+  apiFetch<{ deleted: boolean }>(
+    `/api/v1/${businessId}/conversations/${conversationId}`,
+    { method: 'DELETE', token },
+  );
 
 export const listMessages = (
   token: string,
@@ -260,10 +377,75 @@ export const sendMessage = (
   );
 
 // Orders
+export type OrderListItem = {
+  id: string;
+  customerName: string;
+  totalPrice: number;
+  state: string;
+  createdAt: string;
+};
+
+export type OrderDetail = {
+  id: string;
+  businessId: string;
+  productId: string | null;
+  variantId: string | null;
+  count: number;
+  variantPrice: number;
+  customerName: string;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  state: string;
+  totalPrice: number;
+  conversationId?: string | null;
+  createdAt: string;
+};
+
 export const listOrders = (token: string, businessId: string) =>
-  apiFetch<
-    Array<{ id: string; customerName: string; totalPrice: number; state: string; createdAt: string }>
-  >(`/api/v1/${businessId}/orders`, { token });
+  apiFetch<OrderListItem[]>(`/api/v1/${businessId}/orders`, { token });
+
+export const getOrder = (token: string, businessId: string, orderId: string) =>
+  apiFetch<OrderDetail>(`/api/v1/${businessId}/orders/${orderId}`, { token });
+
+export const createOrder = (
+  token: string,
+  businessId: string,
+  data: {
+    productId: string;
+    variantId?: string;
+    count: number;
+    customerName: string;
+    customerPhone?: string;
+    customerAddress?: string;
+  },
+) =>
+  apiFetch<{ id: string; totalPrice: number; state: string }>(
+    `/api/v1/${businessId}/orders`,
+    { method: 'POST', token, body: JSON.stringify(data) },
+  );
+
+export const updateOrder = (
+  token: string,
+  businessId: string,
+  orderId: string,
+  data: {
+    count?: number;
+    customerName?: string;
+    customerPhone?: string | null;
+    customerAddress?: string | null;
+    state?: string;
+  },
+) =>
+  apiFetch<{ id: string; updated: boolean }>(
+    `/api/v1/${businessId}/orders/${orderId}`,
+    { method: 'PATCH', token, body: JSON.stringify(data) },
+  );
+
+export const deleteOrder = (token: string, businessId: string, orderId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/orders/${orderId}`, {
+    method: 'DELETE',
+    token,
+  });
 
 export const updateOrderState = (
   token: string,
@@ -275,3 +457,39 @@ export const updateOrderState = (
     `/api/v1/${businessId}/orders/${orderId}/state`,
     { method: 'PATCH', token, body: JSON.stringify({ state }) },
   );
+
+// CSV export helpers (server-side only)
+export function toCsv(rows: Record<string, unknown>[], columns: { key: string; label: string }[]): string {
+  const escape = (val: unknown): string => {
+    const s = val == null ? '' : String(val);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const header = columns.map((c) => escape(c.label)).join(',');
+  const body = rows
+    .map((row) => columns.map((c) => escape(row[c.key])).join(','))
+    .join('\n');
+  return `${header}\n${body}`;
+}
+
+export function csvColumnsForProducts() {
+  return [
+    { key: 'name', label: 'Name' },
+    { key: 'sku', label: 'SKU' },
+    { key: 'price', label: 'Price' },
+    { key: 'categoryName', label: 'Category' },
+    { key: 'variantCount', label: 'Variants' },
+    { key: 'description', label: 'Description' },
+    { key: 'createdAt', label: 'Created At' },
+  ];
+}
+
+export function csvColumnsForOrders() {
+  return [
+    { key: 'id', label: 'Order ID' },
+    { key: 'customerName', label: 'Customer' },
+    { key: 'totalPrice', label: 'Total' },
+    { key: 'state', label: 'State' },
+    { key: 'createdAt', label: 'Created At' },
+  ];
+}

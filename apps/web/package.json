@@ -9,7 +9,6 @@
     "gen:api": "openapi-zod-client http://localhost:3001/doc -o lib/api-generated.ts --export-schemas false 2>/dev/null || echo 'Start API first: bun run dev:api'"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.66.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^11.3.0",

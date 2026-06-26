@@ -1,9 +1,11 @@
 import 'dotenv/config';
 
-// Default test env — PGlite suites override DATABASE_URL via setTestDatabase()
-process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
-process.env.INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'test-internal-key';
-process.env.META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN ?? 'test-token';
+// Test env overrides — .env may set production values that break unit tests
+process.env.NODE_ENV = 'test';
+process.env.INTERNAL_KEY = 'test-internal-key';
+process.env.META_VERIFY_TOKEN = 'test-token';
+process.env.WEB_URL = 'http://localhost:3400';
+process.env.AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 
 // Neon integration tests can use DATABASE_URL when NEON_DATABASE_URL is unset
 if (!process.env.NEON_DATABASE_URL && process.env.DATABASE_URL?.includes('neon.tech')) {

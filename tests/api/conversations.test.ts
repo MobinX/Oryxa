@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
-import { app } from '@api/index';
+import { app } from '@api/app';
 
 const sendMessageMock = vi.fn(async () => undefined);
 vi.mock('@repo/integrations/facebook', () => ({

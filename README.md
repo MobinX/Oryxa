@@ -58,7 +58,7 @@ bun run dev:api2   # http://localhost:3500
 
 If the web app should call **api2** instead of standalone `api`, set `NEXT_PUBLIC_API_URL` and `AGENT_RUNNER_URL` to the api2 URL (e.g. `http://localhost:3500`).
 
-Routes: `/`, `/api/v1/*`, `/doc`, `/ui`, `/webhooks/*`, `/internal/*` — all served from `import { app } from 'api/app'`.
+Routes: `/`, `/api/v1/*`, `/doc`, `/ui`, `/webhooks/*`, `/internal/*` — all served from `import { app } from '@repo/api/app'`.
 
 ### Build
 
@@ -151,7 +151,7 @@ Two separate Vercel projects from the same Git repo.
 | **Root Directory** | `apps/api` |
 | **Framework Preset** | Other |
 | **Install Command** | `cd ../.. && bun install` |
-| **Build Command** | `cd ../.. && bun install && bun --filter api build` |
+| **Build Command** | `cd ../.. && bun install && bun --filter @repo/api build` |
 | **Output Directory** | *(leave empty — Vercel handler is `public/index.js`)* |
 | **Node.js Version** | 20.x |
 
