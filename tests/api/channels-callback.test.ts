@@ -3,17 +3,23 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { app } from '@api/app';
 import { listChannels } from '@repo/db/crud/channel';
+import { createOAuthState } from '@repo/integrations/facebook';
 
 const exchangeCodeForTokenMock = vi.fn();
 const getUserPagesMock = vi.fn();
 
-vi.mock('@repo/integrations/facebook', () => ({
-  getFacebookOAuthUrl: vi.fn(() => 'https://facebook.com/oauth'),
-  exchangeCodeForToken: (...args: unknown[]) => exchangeCodeForTokenMock(...args),
-  getUserPages: (...args: unknown[]) => getUserPagesMock(...args),
-  sendMessage: vi.fn(async () => undefined),
-  verifyWebhookSignature: vi.fn(() => true),
-}));
+vi.mock('@repo/integrations/facebook', async () => {
+  const actual = await vi.importActual<typeof import('@repo/integrations/facebook')>('@repo/integrations/facebook');
+  return {
+    ...actual,
+    exchangeCodeForToken: (...args: unknown[]) => exchangeCodeForTokenMock(...args),
+    getUserPages: (...args: unknown[]) => getUserPagesMock(...args),
+  };
+});
+
+async function stateFor(businessId: string, userId: string) {
+  return createOAuthState({ businessId, userId });
+}
 
 describe('Facebook OAuth callback', () => {
   withPglite();
@@ -29,7 +35,7 @@ describe('Facebook OAuth callback', () => {
     expect(await res.text()).toContain('Missing code or state');
   });
 
-  it('redirects after successful OAuth and creates channel', async () => {
+  it('rejects an unsigned / tampered state', async () => {
     const { business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockResolvedValue('user-token');
     getUserPagesMock.mockResolvedValue([
@@ -38,6 +44,21 @@ describe('Facebook OAuth callback', () => {
 
     const res = await app.request(
       `/api/v1/auth/facebook/callback?code=auth-code&state=${business.id}`,
+      { redirect: 'manual' },
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Invalid or expired state');
+  });
+
+  it('redirects after successful OAuth and creates channel', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([
+      { id: 'OAUTH_PAGE_1', name: 'OAuth Page', access_token: 'oauth-page-token' },
+    ]);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
       { redirect: 'manual' },
     );
     expect(res.status).toBe(302);
@@ -51,23 +72,23 @@ describe('Facebook OAuth callback', () => {
   });
 
   it('returns 400 when user has no Facebook pages', async () => {
-    const { business } = await seedTestWorld();
+    const { user, business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockResolvedValue('user-token');
     getUserPagesMock.mockResolvedValue([]);
 
     const res = await app.request(
-      `/api/v1/auth/facebook/callback?code=auth-code&state=${business.id}`,
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toContain('No pages found');
   });
 
   it('returns 500 when token exchange fails', async () => {
-    const { business } = await seedTestWorld();
+    const { user, business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockRejectedValue(new Error('token exchange failed'));
 
     const res = await app.request(
-      `/api/v1/auth/facebook/callback?code=bad-code&state=${business.id}`,
+      `/api/v1/auth/facebook/callback?code=bad-code&state=${await stateFor(business.id, user.id)}`,
     );
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('OAuth failed');

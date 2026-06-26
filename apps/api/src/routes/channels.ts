@@ -25,7 +25,7 @@ import {
   updateChannel,
   deleteChannel,
 } from '@repo/db/crud/channel';
-import { getFacebookOAuthUrl, exchangeCodeForToken, getUserPages } from '@repo/integrations/facebook';
+import { getFacebookOAuthUrl, exchangeCodeForToken, getUserPages, createOAuthState, verifyOAuthState } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -292,7 +292,12 @@ const fbAuthRoute = createRoute({
 
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const url = getFacebookOAuthUrl(businessId);
+  const user = c.get('user');
+  // state is a signed, short-lived token bound to this user + business, so the
+  // OAuth callback can't be replayed to attach a page to a business the caller
+  // doesn't own.
+  const state = await createOAuthState({ businessId, userId: user.id });
+  const url = getFacebookOAuthUrl(state);
   return c.json({ url });
 });
 
@@ -303,13 +308,18 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   const state = c.req.query('state');
   if (!code || !state) return c.text('Missing code or state', 400);
 
+  // Verify the signed state (issued by the authed fbAuthRoute) before trusting
+  // the businessId it carries.
+  const verified = await verifyOAuthState(state);
+  if (!verified) return c.text('Invalid or expired state', 400);
+
   try {
     const userToken = await exchangeCodeForToken(code);
     const pages = await getUserPages(userToken);
     if (pages.length === 0) return c.text('No pages found', 400);
 
     const page = pages[0];
-    await createChannel(state, {
+    await createChannel(verified.businessId, {
       platform: 'facebook',
       apiToken: page.access_token,
       platformChannelId: page.id,
@@ -317,7 +327,7 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
     });
 
     const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
-    return c.redirect(`${webUrl}/b/${state}/channels?connected=facebook`);
+    return c.redirect(`${webUrl}/b/${verified.businessId}/channels?connected=facebook`);
   } catch (err) {
     console.error('Facebook OAuth error:', err);
     return c.text('OAuth failed', 500);

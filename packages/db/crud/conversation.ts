@@ -180,7 +180,8 @@ export async function processInboundMessage(
   channel: { id: string; businessId: string },
   senderId: string,
   text: string,
-) {
+  externalId?: string,
+): Promise<{ conversationId: string; priorStatus: string; inserted: boolean }> {
   let conv = await db.query.conversations.findFirst({
     where: and(
       eq(conversations.channelId, channel.id),
@@ -201,18 +202,41 @@ export async function processInboundMessage(
     conv = created;
   }
 
-  await db.insert(messages).values({
-    conversationId: conv.id,
-    from: 'customer',
-    content: text,
-    state: 'pending',
-  });
-
   const priorStatus = conv.lastMessageState;
+
+  // Dedup on the platform message id: Meta retries webhooks, and without this a
+  // retried delivery inserts a second row and triggers a second agent reply.
+  // When externalId is present, insert with on-conflict-ignore; if nothing was
+  // inserted it's a duplicate delivery and the caller must not re-trigger.
+  if (externalId) {
+    const inserted = await db
+      .insert(messages)
+      .values({
+        conversationId: conv.id,
+        from: 'customer',
+        content: text,
+        state: 'pending',
+        externalId,
+      })
+      .onConflictDoNothing({ target: messages.externalId })
+      .returning();
+
+    if (inserted.length === 0) {
+      return { conversationId: conv.id, priorStatus, inserted: false };
+    }
+  } else {
+    await db.insert(messages).values({
+      conversationId: conv.id,
+      from: 'customer',
+      content: text,
+      state: 'pending',
+    });
+  }
+
   await db
     .update(conversations)
     .set({ lastMessageState: 'pending' })
     .where(eq(conversations.id, conv.id));
 
-  return { conversationId: conv.id, priorStatus };
+  return { conversationId: conv.id, priorStatus, inserted: true };
 }

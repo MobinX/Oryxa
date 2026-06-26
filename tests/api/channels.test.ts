@@ -3,13 +3,16 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { app } from '@api/app';
 
-vi.mock('@repo/integrations/facebook', () => ({
-  getFacebookOAuthUrl: vi.fn(() => 'https://facebook.com/oauth'),
-  exchangeCodeForToken: vi.fn(async () => 'user-token'),
-  getUserPages: vi.fn(async () => [{ id: 'NEW_PAGE', name: 'Page', access_token: 'page-tok' }]),
-  sendMessage: vi.fn(async () => undefined),
-  verifyWebhookSignature: vi.fn(() => true),
-}));
+vi.mock('@repo/integrations/facebook', async () => {
+  const actual = await vi.importActual<typeof import('@repo/integrations/facebook')>('@repo/integrations/facebook');
+  return {
+    ...actual,
+    getFacebookOAuthUrl: vi.fn(() => 'https://facebook.com/oauth'),
+    exchangeCodeForToken: vi.fn(async () => 'user-token'),
+    getUserPages: vi.fn(async () => [{ id: 'NEW_PAGE', name: 'Page', access_token: 'page-tok' }]),
+    sendMessage: vi.fn(async () => undefined),
+  };
+});
 
 describe('Channels & Agents API', () => {
   withPglite();

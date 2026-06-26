@@ -2,6 +2,22 @@ import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
 import { processInboundMessage } from '@repo/db/crud/conversation';
 import { triggerAgentRun } from '@api/lib/agent-runner';
+import { verifyWebhookSignature } from '@repo/integrations/facebook';
+
+type MessagingEvent = {
+  sender?: { id?: string };
+  message?: { text?: string; mid?: string; is_echo?: boolean };
+};
+
+type WebhookEntry = {
+  id: string;
+  messaging?: MessagingEvent[];
+};
+
+type WebhookBody = {
+  object: string;
+  entry?: WebhookEntry[];
+};
 
 export const fbWebhookRouter = new Hono();
 
@@ -17,35 +33,57 @@ fbWebhookRouter.get('/facebook', (c) => {
 });
 
 fbWebhookRouter.post('/facebook', async (c) => {
-  const body = await c.req.json().catch(() => null);
+  const raw = await c.req.text();
 
-  if (!body || body.object !== 'page' || !body.entry?.[0]) {
+  if (!(await verifyWebhookSignature(raw, c.req.header('x-hub-signature-256') ?? c.req.header('x-hub-signature')))) {
+    return c.text('Invalid signature', 403);
+  }
+
+  let body: WebhookBody;
+  try {
+    body = JSON.parse(raw) as WebhookBody;
+  } catch {
+    return c.text('Malformed JSON', 400);
+  }
+
+  if (body.object !== 'page' || !Array.isArray(body.entry)) {
     return c.text('Unhandled or malformed webhook', 400);
   }
 
-  const entry = body.entry[0];
-  const messaging = entry.messaging?.[0];
-  if (!messaging?.message?.text) {
-    return c.text('EVENT_RECEIVED', 200);
-  }
+  // Meta batches multiple pages (entries) and multiple messaging events per
+  // delivery. Process every entry and every event — indexing only [0] drops
+  // messages and breaks multi-page inbound.
+  for (const entry of body.entry) {
+    const events = entry.messaging ?? [];
+    if (events.length === 0) continue;
 
-  const senderId = messaging.sender.id;
-  const text = messaging.message.text;
-  const pageId = entry.id;
+    // Look up the channel once per page (entry), lazily on the first event.
+    const channel = await getChannelByPageId(entry.id);
+    if (!channel) continue;
 
-  const channel = await getChannelByPageId(pageId);
-  if (!channel) {
-    return c.text('EVENT_RECEIVED', 200);
-  }
+    for (const ev of events) {
+      // Skip echoes (the bot's own sent messages) — otherwise replies get
+      // re-ingested as inbound customer messages and can loop.
+      if (ev.message?.is_echo) continue;
+      // Only text replies are handled today; attachments/postback/delivery/read
+      // are acked without creating a phantom message.
+      const text = ev.message?.text;
+      const senderId = ev.sender?.id;
+      if (!text || !senderId) continue;
 
-  const { conversationId, priorStatus } = await processInboundMessage(
-    { id: channel.id, businessId: channel.businessId },
-    senderId,
-    text,
-  );
+      // Dedup on Meta's message id — Meta retries webhooks and without this a
+      // retried delivery becomes a duplicate message + duplicate agent reply.
+      const { conversationId, priorStatus, inserted } = await processInboundMessage(
+        { id: channel.id, businessId: channel.businessId },
+        senderId,
+        text,
+        ev.message?.mid,
+      );
 
-  if (priorStatus !== 'pending' && priorStatus !== 'working' && channel.agentId) {
-    triggerAgentRun(conversationId);
+      if (inserted && priorStatus !== 'pending' && priorStatus !== 'working' && channel.agentId) {
+        triggerAgentRun(conversationId);
+      }
+    }
   }
 
   return c.text('EVENT_RECEIVED', 200);
