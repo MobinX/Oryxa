@@ -1,17 +1,14 @@
 'use client';
 
-<<<<<<< HEAD
-import { useState, useId } from 'react';
+import { useState, useId, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
-=======
-import { useState, useRef } from 'react';
+import { cn } from '@/lib/utils';
 import {
   uploadVariantImageDirect,
   ImageUploadError,
 } from '@/lib/uploads-client';
->>>>>>> origin/main
 
 type VariantInitial = {
   id?: string;
