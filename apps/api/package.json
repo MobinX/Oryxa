@@ -3,6 +3,10 @@
   "version": "dev",
   "private": true,
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "dev": "bun --env-file=../../.env run --hot src/bunServe.ts",
     "build": "rm -f api/index.js api/index.js.map src/index.js src/index.js.map && bun run build:bundle",

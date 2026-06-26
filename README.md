@@ -47,6 +47,19 @@ bun run dev:web
 
 Open http://localhost:3400
 
+### API via Next.js (`api2`)
+
+Hono’s [Next.js integration](https://hono.dev/docs/getting-started/nextjs) mounts the shared `api` app with `handle()` from `hono/vercel` on App Router route handlers:
+
+```bash
+# apps/api2/.env.local → ../../.env (symlink; same secrets as API)
+bun run dev:api2   # http://localhost:3500
+```
+
+If the web app should call **api2** instead of standalone `api`, set `NEXT_PUBLIC_API_URL` and `AGENT_RUNNER_URL` to the api2 URL (e.g. `http://localhost:3500`).
+
+Routes: `/`, `/api/v1/*`, `/doc`, `/ui`, `/webhooks/*`, `/internal/*` — all served from `import { app } from 'api/app'`.
+
 ### Build
 
 ```bash
