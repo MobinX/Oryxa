@@ -4,6 +4,7 @@ import { seedTestWorld } from '../helpers/seed';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { createMessage, listMessages, listConversations } from '@repo/db/crud/conversation';
 import { webhookHeaders } from '../helpers/meta-sign';
+import { flushBackground } from '@api/lib/background';
 
 // The webhook handler verifies signatures with META_APP_SECRET; pin it here so
 // the tests don't depend on global env ordering or leaks from other suites.
@@ -17,11 +18,15 @@ vi.mock('@api/lib/agent-runner', () => ({
 
 async function postWebhook(payload: unknown) {
   const body = JSON.stringify(payload);
-  return fbWebhookRouter.request('http://localhost/facebook', {
+  const res = await fbWebhookRouter.request('http://localhost/facebook', {
     method: 'POST',
     headers: await webhookHeaders(body),
     body,
   });
+  // The webhook acks immediately and processes entries in the background; flush
+  // so assertions on side effects are deterministic.
+  await flushBackground();
+  return res;
 }
 
 const pageEntry = (pageId: string, events: unknown[]) => ({

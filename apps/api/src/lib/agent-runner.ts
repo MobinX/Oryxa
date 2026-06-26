@@ -18,15 +18,28 @@ export async function runAgentForConversation(conversationId: string): Promise<v
     updateConversationState,
     createMessage,
     checkPendingMessages,
-    markCustomerMessagesDone,
+    claimConversationForAgentRun,
+    markMessagesDoneByIds,
   } = await import('@repo/db/crud/conversation');
   const { Agent } = await import('@repo/agent');
   const { listProducts } = await import('@repo/db/crud/product');
+  const { sendMessage } = await import('@repo/integrations/facebook');
 
   const conv = await getConversationWithHistory(conversationId);
   if (!conv?.channel?.agent) return;
 
-  await updateConversationState(conv.id, 'working');
+  // Atomic claim: only one concurrent caller transitions idle→working and gets
+  // to run the agent. This is the single race-free gate that prevents duplicate
+  // runs when overlapping webhooks or the tail re-trigger fire at the same time.
+  const claimed = await claimConversationForAgentRun(conv.id);
+  if (!claimed) return;
+
+  // Snapshot the pending customer messages present at run start — these are the
+  // ones the agent will reply to. Messages arriving during the run stay pending
+  // so the tail re-trigger can handle them in a follow-up run.
+  const repliedMessageIds = conv.messages
+    .filter((m) => m.from === 'customer' && m.state === 'pending')
+    .map((m) => m.id);
 
   const catalog = await listProducts(conv.businessId, { limit: 10 });
   const catalogSummary = catalog.products
@@ -46,19 +59,31 @@ export async function runAgentForConversation(conversationId: string): Promise<v
 
   try {
     const reply = await agent.run();
-    await createMessage({
-      conversationId: conv.id,
-      from: 'self',
-      content: reply,
-      state: 'done',
-    });
-    await markCustomerMessagesDone(conv.id);
+
+    // #8: the send_message tool is the source of truth — it sends AND persists
+    // the exact text. Only fall back to sending+saving the final LLM message if
+    // the agent never called send_message (so the customer still gets a reply).
+    if (agent.sentTexts.length === 0 && reply) {
+      await sendMessage(conv.channel.apiToken, conv.customerPlatformId, reply);
+      await createMessage({
+        conversationId: conv.id,
+        from: 'self',
+        content: reply,
+        state: 'done',
+      });
+    }
+
+    // Clear only the messages the agent actually replied to; anything that
+    // arrived during the run remains pending and triggers a follow-up run.
+    await markMessagesDoneByIds(conv.id, repliedMessageIds);
     await updateConversationState(conv.id, 'done');
   } catch (err) {
     console.error('Agent run failed:', err);
     await updateConversationState(conv.id, 'done');
   }
 
+  // If new customer messages arrived while we were running (or were left
+  // pending), re-trigger so they're handled too.
   const hasPending = await checkPendingMessages(conv.id);
   if (hasPending) {
     triggerAgentRun(conversationId);

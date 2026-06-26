@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 
@@ -111,6 +111,45 @@ export async function markCustomerMessagesDone(conversationId: string) {
     );
 }
 
+/**
+ * Marks specific customer messages as done (by id). Used after an agent run to
+ * clear only the messages the agent actually replied to, leaving any messages
+ * that arrived during the run pending so the tail re-trigger can handle them.
+ */
+export async function markMessagesDoneByIds(conversationId: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(messages)
+    .set({ state: 'done' })
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        inArray(messages.id, ids),
+      ),
+    );
+}
+
+/**
+ * Atomically transitions a conversation from idle ('done' or 'pending') to
+ * 'working'. Returns true if this caller won the claim — i.e. this caller
+ * should run the agent. Concurrent callers (or a state already 'working') get
+ * false and must not run, which prevents duplicate agent runs when Meta
+ * delivers overlapping webhooks or the tail re-trigger races with a new inbound.
+ */
+export async function claimConversationForAgentRun(conversationId: string): Promise<boolean> {
+  const claimed = await db
+    .update(conversations)
+    .set({ lastMessageState: 'working' })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        inArray(conversations.lastMessageState, ['done', 'pending']),
+      ),
+    )
+    .returning({ id: conversations.id });
+  return claimed.length > 0;
+}
+
 export async function listConversations(
   businessId: string,
   options: { state?: string; limit?: number } = {},
@@ -204,10 +243,6 @@ export async function processInboundMessage(
 
   const priorStatus = conv.lastMessageState;
 
-  // Dedup on the platform message id: Meta retries webhooks, and without this a
-  // retried delivery inserts a second row and triggers a second agent reply.
-  // When externalId is present, insert with on-conflict-ignore; if nothing was
-  // inserted it's a duplicate delivery and the caller must not re-trigger.
   if (externalId) {
     const inserted = await db
       .insert(messages)
@@ -233,10 +268,13 @@ export async function processInboundMessage(
     });
   }
 
+  // Mark the conversation as needing attention, but only if it was idle — never
+  // downgrade an in-progress ('working') run, which would confuse the agent
+  // state machine and the UI.
   await db
     .update(conversations)
     .set({ lastMessageState: 'pending' })
-    .where(eq(conversations.id, conv.id));
+    .where(and(eq(conversations.id, conv.id), eq(conversations.lastMessageState, 'done')));
 
   return { conversationId: conv.id, priorStatus, inserted: true };
 }

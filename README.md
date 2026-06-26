@@ -412,3 +412,38 @@ Inbound routing is therefore multi-page capable (the page id in `entry.id` maps 
 
 > **Note on token rotation:** page access tokens from `/me/accounts` are long-lived (~60 days) and currently stored as-is. Token refresh, 24-hour messaging-window handling, and at-rest encryption of `api_token` are tracked as follow-up hardening items, not part of this batch.
 
+## Meta (Facebook) message reliability
+
+The security batch above proved payloads are authentic and not duplicated. The reliability batch below makes the pipeline actually deliver every message exactly once, under load and concurrency.
+
+### 6. Ack fast, process inbound asynchronously
+
+**What:** `POST /webhooks/facebook` now does only the cheap, synchronous work — signature verification, JSON parse, shape validation — and returns `200 EVENT_RECEIVED` immediately. The per-page/per-event DB work (channel lookup, idempotent insert, agent trigger) runs in the background via `runInBackground` (`apps/api/src/lib/background.ts`), which uses `c.executionCtx.waitUntil` on edge/serverless runtimes and fire-and-forget (with a tracked, flushable queue) on Node/Bun.
+
+**Why:** Meta times out a webhook in a few seconds and then retries. Previously the endpoint awaited every `processInboundMessage` (channel lookup + insert + state update) per event before responding. A large batch, a cold DB connection, or a momentary Neon latency spike could push the whole loop past the timeout — Meta would retry the *entire batch*, re-pressuring the DB and compounding the slowdown. Acking fast breaks that feedback loop. (Retries are still safe because of #3 idempotency: a retried delivery is deduped on `external_id`.)
+
+**How it works:** `runInBackground(c, processEntries(body.entry))` registers the processing promise with the platform's `waitUntil` (Vercel/Workers keep the function alive past the response) or, in non-edge runtimes, tracks it in a module-level `pending` set drained by `flushBackground()` (used by tests for determinism — the webhook test suite awaits `flushBackground()` after each `postWebhook` before asserting side effects).
+
+### 7. Race-free agent triggering
+
+**What:** Three intertwined fixes in `apps/api/src/lib/agent-runner.ts` and `packages/db/crud/conversation.ts`:
+
+1. **Atomic conversation claim.** `claimConversationForAgentRun(id)` does a single conditional `UPDATE conversations SET lastMessageState='working' WHERE id = ? AND lastMessageState IN ('done','pending') RETURNING id`. `runAgentForConversation` only proceeds if its claim returned a row. This is the single race-free gate: no matter how many overlapping webhooks or tail re-triggers fire, only one caller can flip idle→working and run the agent.
+2. **No state downgrade on new inbound.** `processInboundMessage` now sets `pending` only when the conversation was `done` — it never overwrites an in-progress `working` run, so a message arriving mid-run no longer flips the UI/agent state.
+3. **Mark only replied messages; working tail re-trigger.** The runner snapshots the pending customer message ids present at run start, and after the run calls `markMessagesDoneByIds(ids)` (only those), then `checkPendingMessages`. Messages that arrived *during* the run stay pending, so the tail re-trigger handles them in a follow-up run instead of being swept under the run's reply.
+
+**Why:**
+- **Double runs:** the old guard was `priorStatus !== 'pending' && !== 'working'` read non-atomically before the insert, and `triggerAgentRun` was fire-and-forget. Two near-simultaneous webhooks for the same conversation could both read `done`, both trigger, and both run the agent → the customer got two replies and `createOrder` could be invoked twice. The atomic claim makes "should I run?" a single SQL statement, so concurrency is resolved by the database row lock, not by application-layer timing.
+- **Lost messages during a run:** the old `markCustomerMessagesDone(conv.id)` marked *all* pending customer messages done unconditionally, then `checkPendingMessages` was always false — so any message that arrived while the agent was thinking was marked "handled" without ever being replied to, and the tail re-trigger never fired. Snapshotting the replied ids + the now-functional tail re-trigger closes that hole.
+
+**How it works (end-to-end):** inbound → `processInboundMessage` (insert, dedup on `external_id`, set `pending` only if idle) → webhook triggers `runAgentForConversation` only for a genuinely new message on an idle conversation → `runAgentForConversation` claims `idle→working` atomically (loses → returns; another run owns it) → runs the agent → marks only the snapshot ids done → sets `done` → if new pending arrived, re-triggers (next run claims again). Concurrent triggers can't double-run; mid-run messages aren't lost.
+
+### 8. The saved reply matches what was actually sent
+
+**What:** `send_message` is now the single source of truth for outbound replies. The tool (`packages/agent/tools/index.ts`) does, in order: `sendMessage(pageToken, recipient, text)` to Messenger, then `createMessage({ from:'self', content:text, state:'done' })` to the DB, then reports the text back to the runner via an `onSent` callback. `runAgentForConversation` no longer saves a separate self message; it only falls back to `sendMessage` + `createMessage` when the agent produced a final reply but **never** called `send_message` (`agent.sentTexts.length === 0`).
+
+**Why:** The agent is a ReAct loop: it emits a `send_message` tool call (the actual text sent to the customer) and *then* a final assistant message, which is usually a short internal summary like "I helped the customer with their order" — not what was sent. The old runner saved that final summary as the `self` message, so the conversation history in the DB (and shown to a human in the inbox) did **not** match what the customer actually received on Messenger. Worse, with multi-tool flows the final summary could diverge entirely from the sent text.
+
+**How it works:** because the tool both sends and persists the identical `text` string, the DB row and the Messenger delivery are guaranteed to be the same bytes — one send, one save. The runner's fallback only covers the degenerate case where the agent ignored the system prompt and replied without the tool, so the customer still gets *something* rather than silence, and that fallback text is also sent-then-saved (no divergence). The "tool was used → no fallback" branch is covered by a dedicated test (`runAgentForConversation does not double-send when the agent used send_message`).
+
+

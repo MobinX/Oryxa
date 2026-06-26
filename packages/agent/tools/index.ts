@@ -2,15 +2,20 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { searchProducts } from '@repo/db/crud/product';
 import { createOrder } from '@repo/db/crud/order';
+import { createMessage } from '@repo/db/crud/conversation';
 import { sendMessage } from '@repo/integrations/facebook';
 
-export function createAgentTools(context: {
-  businessId: string;
-  conversationId: string;
-  pageToken: string;
-  customerPlatformId: string;
-  customerName?: string | null;
-}) {
+export function createAgentTools(
+  context: {
+    businessId: string;
+    conversationId: string;
+    pageToken: string;
+    customerPlatformId: string;
+    customerName?: string | null;
+  },
+  /** Called when the agent actually sends a reply via send_message. */
+  onSent?: (text: string) => void,
+) {
   const getProductTool = tool(
     async ({ query }) => {
       const products = await searchProducts(context.businessId, query, 5);
@@ -69,7 +74,19 @@ export function createAgentTools(context: {
 
   const sendMessageTool = tool(
     async ({ text }) => {
+      // Send to Messenger, then persist the EXACT text that was sent as the
+      // self message. This is the single source of truth for what the customer
+      // received, so the conversation history in the DB always matches
+      // Messenger (previously the runner saved the LLM's final summary, which
+      // often differed from the tool's text).
       await sendMessage(context.pageToken, context.customerPlatformId, text);
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content: text,
+        state: 'done',
+      });
+      onSent?.(text);
       return 'Message sent to customer.';
     },
     {

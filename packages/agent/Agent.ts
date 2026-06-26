@@ -18,6 +18,9 @@ export interface AgentConfig {
 }
 
 export class Agent {
+  /** Texts the agent actually sent via the send_message tool during `run()`. */
+  sentTexts: string[] = [];
+
   constructor(private config: AgentConfig) {}
 
   async run(): Promise<string> {
@@ -29,13 +32,17 @@ export class Agent {
         temperature: 0.3,
       });
 
-    const tools = createAgentTools({
-      businessId: this.config.business.id,
-      conversationId: this.config.conversationId,
-      pageToken: this.config.pageToken,
-      customerPlatformId: this.config.customerPlatformId,
-      customerName: this.config.customerName,
-    });
+    const sentTexts = this.sentTexts;
+    const tools = createAgentTools(
+      {
+        businessId: this.config.business.id,
+        conversationId: this.config.conversationId,
+        pageToken: this.config.pageToken,
+        customerPlatformId: this.config.customerPlatformId,
+        customerName: this.config.customerName,
+      },
+      (text) => sentTexts.push(text),
+    );
 
     const agent = createReactAgent({ llm, tools });
 

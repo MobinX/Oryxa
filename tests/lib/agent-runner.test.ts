@@ -85,6 +85,52 @@ describe('Agent Runner', () => {
     vi.unstubAllGlobals();
   }, 30_000);
 
+  it('runAgentForConversation does not double-send when the agent used send_message', async () => {
+    // #8: when the agent called send_message (sentTexts populated), the tool is
+    // the source of truth — the runner must NOT send or save a fallback reply.
+    const seed = await seedTestWorld();
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
+      this.sentTexts = ['reply via tool'];
+      return 'final summary that must not be sent';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    expect(sendMessageMock).not.toHaveBeenCalled();
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
+    expect(selfContents).not.toContain('final summary that must not be sent');
+
+    runSpy.mockRestore();
+  }, 30_000);
+
+  it('runAgentForConversation falls back to send+save when the agent did not use send_message', async () => {
+    // #8 fallback path: agent produced a reply but never called send_message,
+    // so the runner sends and persists that reply itself.
+    const seed = await seedTestWorld();
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
+      this.sentTexts = [];
+      return 'fallback reply';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.any(String),
+      seed.conversation.customerPlatformId,
+      'fallback reply',
+    );
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
+    expect(selfContents).toContain('fallback reply');
+
+    runSpy.mockRestore();
+  }, 30_000);
+
   it('triggerAgentRun fires fetch to internal endpoint', async () => {
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);

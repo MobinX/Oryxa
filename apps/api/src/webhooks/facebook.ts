@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
 import { processInboundMessage } from '@repo/db/crud/conversation';
 import { triggerAgentRun } from '@api/lib/agent-runner';
+import { runInBackground } from '@api/lib/background';
 import { verifyWebhookSignature } from '@repo/integrations/facebook';
 
 type MessagingEvent = {
@@ -33,8 +34,8 @@ fbWebhookRouter.get('/facebook', (c) => {
 });
 
 fbWebhookRouter.post('/facebook', async (c) => {
+  // Verify the signature over the raw body before anything else.
   const raw = await c.req.text();
-
   if (!(await verifyWebhookSignature(raw, c.req.header('x-hub-signature-256') ?? c.req.header('x-hub-signature')))) {
     return c.text('Invalid signature', 403);
   }
@@ -50,29 +51,34 @@ fbWebhookRouter.post('/facebook', async (c) => {
     return c.text('Unhandled or malformed webhook', 400);
   }
 
-  // Meta batches multiple pages (entries) and multiple messaging events per
-  // delivery. Process every entry and every event — indexing only [0] drops
-  // messages and breaks multi-page inbound.
-  for (const entry of body.entry) {
+  // Acknowledge immediately so Meta doesn't time out and retry. The actual DB
+  // work (per-page channel lookup, idempotent insert, agent trigger) runs in
+  // the background, kept alive via waitUntil on edge or fire-and-forget on Node.
+  runInBackground(c, processEntries(body.entry));
+  return c.text('EVENT_RECEIVED', 200);
+});
+
+/**
+ * Processes every entry (one per page) and every messaging event in a batched
+ * webhook payload. Looks up the channel once per page, dedups on Meta's message
+ * id, skips echoes and non-text events, and triggers the agent only for a
+ * genuinely new message on an idle conversation.
+ */
+async function processEntries(entries: WebhookEntry[]): Promise<void> {
+  for (const entry of entries) {
     const events = entry.messaging ?? [];
     if (events.length === 0) continue;
 
-    // Look up the channel once per page (entry), lazily on the first event.
     const channel = await getChannelByPageId(entry.id);
     if (!channel) continue;
 
     for (const ev of events) {
-      // Skip echoes (the bot's own sent messages) — otherwise replies get
-      // re-ingested as inbound customer messages and can loop.
+      // Skip echoes (the bot's own sent messages) so replies aren't re-ingested.
       if (ev.message?.is_echo) continue;
-      // Only text replies are handled today; attachments/postback/delivery/read
-      // are acked without creating a phantom message.
       const text = ev.message?.text;
       const senderId = ev.sender?.id;
       if (!text || !senderId) continue;
 
-      // Dedup on Meta's message id — Meta retries webhooks and without this a
-      // retried delivery becomes a duplicate message + duplicate agent reply.
       const { conversationId, priorStatus, inserted } = await processInboundMessage(
         { id: channel.id, businessId: channel.businessId },
         senderId,
@@ -80,11 +86,12 @@ fbWebhookRouter.post('/facebook', async (c) => {
         ev.message?.mid,
       );
 
-      if (inserted && priorStatus !== 'pending' && priorStatus !== 'working' && channel.agentId) {
+      // Only trigger an agent run for a brand-new message on an idle ('done')
+      // conversation. The actual run is gated by an atomic claim in
+      // runAgentForConversation, so concurrent triggers can't double-run.
+      if (inserted && priorStatus === 'done' && channel.agentId) {
         triggerAgentRun(conversationId);
       }
     }
   }
-
-  return c.text('EVENT_RECEIVED', 200);
-});
+}

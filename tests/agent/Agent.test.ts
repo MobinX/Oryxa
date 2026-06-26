@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { Agent } from '@repo/agent';
 import { createSendMessageFakeLlm } from '../helpers/fake-llm';
+
+const sendMessageMock = vi.fn(async () => undefined);
+vi.mock('@repo/integrations/facebook', () => ({
+  sendMessage: (...args: unknown[]) => sendMessageMock(...args),
+}));
 
 describe('Agent', () => {
   withPglite();
