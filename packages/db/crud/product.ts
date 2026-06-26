@@ -195,10 +195,10 @@ export async function updateProduct(businessId: string, productId: string, input
     }
 
     for (const variant of variantUpdates) {
-      const imageUrl =
-        variant.imageUrl && (isB2ObjectKey(variant.imageUrl) || !variant.imageUrl.startsWith('http'))
-          ? variant.imageUrl
-          : undefined;
+      const hasIncomingImage =
+        variant.imageUrl && (isB2ObjectKey(variant.imageUrl) || !variant.imageUrl.startsWith('http'));
+      const imageUrl = hasIncomingImage ? variant.imageUrl : undefined;
+      const clearImage = variant.clearImage === true && !hasIncomingImage;
 
       if (variant.id) {
         const belongsToProduct = existing.some((v) => v.id === variant.id);
@@ -213,6 +213,7 @@ export async function updateProduct(businessId: string, productId: string, input
             price: variant.price?.toFixed(2),
             rating: variant.rating?.toFixed(2),
             ...(imageUrl !== undefined && { imageUrl }),
+            ...(clearImage && { imageUrl: null }),
           })
           .where(and(eq(variants.id, variant.id), eq(variants.productId, productId)));
       } else {

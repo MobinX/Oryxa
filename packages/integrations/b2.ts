@@ -2,13 +2,15 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+export const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
+const DEFAULT_UPLOAD_URL_TTL_SECONDS = 300;
 
 let _client: S3Client | null = null;
 let _uploadOverride: ((command: PutObjectCommand) => Promise<unknown>) | null = null;
 let _signedUrlOverride: ((key: string) => Promise<string>) | null = null;
+let _signedUploadUrlOverride: ((key: string, contentType: string) => Promise<string>) | null = null;
 
 /** @internal Test helper */
 export function setB2UploadOverrideForTests(
@@ -21,6 +23,13 @@ export function setB2UploadOverrideForTests(
 /** @internal Test helper */
 export function setB2SignedUrlOverrideForTests(fn: ((key: string) => Promise<string>) | null) {
   _signedUrlOverride = fn;
+}
+
+/** @internal Test helper — stubs the presigned PUT URL generator. */
+export function setB2SignedUploadUrlOverrideForTests(
+  fn: ((key: string, contentType: string) => Promise<string>) | null,
+) {
+  _signedUploadUrlOverride = fn;
 }
 
 function getB2Client(): S3Client {
@@ -73,6 +82,11 @@ export function assertB2KeyForBusiness(key: string, businessId: string): void {
   }
 }
 
+/** Builds the canonical B2 object key for a variant image. */
+export function buildVariantImageKey(businessId: string, originalName: string): string {
+  return `businesses/${businessId}/images/${randomUUID()}-${sanitizeFilename(originalName)}`;
+}
+
 export async function getSignedB2Url(key: string, expiresInSeconds = getSignedUrlTtlSeconds()): Promise<string> {
   if (_signedUrlOverride) {
     return _signedUrlOverride(key);
@@ -86,6 +100,29 @@ export async function getSignedB2Url(key: string, expiresInSeconds = getSignedUr
   return getSignedUrl(getB2Client(), command, { expiresIn: expiresInSeconds });
 }
 
+/**
+ * Returns a presigned PUT URL the browser can use to upload an object directly
+ * to B2. The `contentType` is bound into the signature — a PUT with a different
+ * Content-Type header will be rejected by B2, preventing MIME spoofing.
+ */
+export async function getSignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = DEFAULT_UPLOAD_URL_TTL_SECONDS,
+): Promise<string> {
+  if (_signedUploadUrlOverride) {
+    return _signedUploadUrlOverride(key, contentType);
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: getBucketName(),
+    Key: key,
+    ContentType: contentType,
+  });
+
+  return getSignedUrl(getB2Client(), command, { expiresIn: expiresInSeconds });
+}
+
 export async function resolveStoredImageUrl(
   stored: string | null | undefined,
 ): Promise<string | undefined> {
@@ -94,20 +131,24 @@ export async function resolveStoredImageUrl(
   return getSignedB2Url(stored);
 }
 
+export function validateImageUpload(contentType: string, sizeBytes: number): void {
+  if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+    throw new Error('Only JPEG, PNG, WebP, and GIF images are allowed');
+  }
+  if (sizeBytes > MAX_IMAGE_BYTES) {
+    throw new Error('Image must be 4MB or smaller');
+  }
+}
+
 export async function uploadImageToB2(params: {
   businessId: string;
   buffer: Buffer;
   contentType: string;
   originalName: string;
 }): Promise<{ key: string; url: string }> {
-  if (!ALLOWED_IMAGE_TYPES.has(params.contentType)) {
-    throw new Error('Only JPEG, PNG, WebP, and GIF images are allowed');
-  }
-  if (params.buffer.byteLength > MAX_IMAGE_BYTES) {
-    throw new Error('Image must be 4MB or smaller');
-  }
+  validateImageUpload(params.contentType, params.buffer.byteLength);
 
-  const key = `businesses/${params.businessId}/images/${randomUUID()}-${sanitizeFilename(params.originalName)}`;
+  const key = buildVariantImageKey(params.businessId, params.originalName);
 
   const command = new PutObjectCommand({
     Bucket: getBucketName(),

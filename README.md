@@ -201,3 +201,21 @@ Set `NEXT_PUBLIC_API_URL` to the API Vercel URL. Other `NEXT_PUBLIC_FIREBASE_*` 
 3. **Meta:** Create app → add Messenger → connect test Page → set OAuth redirect to `/api/v1/auth/facebook/callback`
 4. **Gemini:** https://aistudio.google.com/apikey → `GEMINI_API_KEY`
 5. **Backblaze B2:** Create private bucket → application key → set `B2_*` env vars. Images use **presigned URLs** (no public bucket needed). See [B2 S3 API docs](https://www.backblaze.com/docs/cloud-storage-s3-compatible-api)
+
+   **B2 bucket CORS (required for direct browser uploads):** variant images are uploaded straight from the browser to B2 via a presigned `PUT` URL (see `apps/web/lib/uploads-client.ts`). For the `PUT` to succeed from the web app's origin, add a CORS rule to the bucket (B2 dashboard → Bucket Settings → CORS):
+
+   ```json
+   {
+     "corsRules": [
+       {
+         "allowedOrigins": ["https://your-web-domain"],
+         "allowedMethods": ["PUT"],
+         "allowedHeaders": ["Content-Type"],
+         "exposeHeaders": ["ETag"],
+         "maxAgeSeconds": 3600
+       }
+     ]
+   }
+   ```
+
+   For local dev include `http://localhost:3400` in `allowedOrigins`. Without this rule, image signing succeeds but the browser `PUT` fails with a CORS error and the variant editor shows "Image upload failed: Upload to B2 failed: …". The presigned URL's signature binds the `Content-Type` header, so a client cannot lie about the MIME type — B2 rejects mismatched PUTs.

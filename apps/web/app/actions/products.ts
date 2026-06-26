@@ -20,6 +20,7 @@ type ParsedVariant = {
   price?: number;
   isAvailable?: boolean;
   imageUrl?: string;
+  clearImage?: boolean;
 };
 
 /**
@@ -53,6 +54,7 @@ async function parseVariants(
     const price = priceRaw ? parseFloat(priceRaw) : undefined;
     const id = String(formData.get(`variant_${i}_id`) ?? '').trim() || undefined;
     const keepImageKey = String(formData.get(`variant_${i}_imageKey`) ?? '').trim();
+    const clearImage = formData.get(`variant_${i}_clearImage`) === '1';
 
     let imageUrl = keepImageKey || undefined;
     const file = formData.get(`variant_${i}_image`);
@@ -62,7 +64,15 @@ async function parseVariants(
       // If upload returns null (B2 not configured / rejected), keep going.
     }
 
-    variants.push({ id, name, stock, price, isAvailable: true, imageUrl });
+    variants.push({
+      id,
+      name,
+      stock,
+      price,
+      isAvailable: true,
+      imageUrl,
+      clearImage: clearImage && !imageUrl,
+    });
   }
 
   if (variants.length === 0) {
