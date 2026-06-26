@@ -3,13 +3,18 @@ import { listCategories, type Category } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type DataTableHeader } from '@/components/data-table';
 import {
   createCategoryAction,
   updateCategoryAction,
   deleteCategoryAction,
   deleteCategoriesBulkAction,
 } from '@/app/actions/products';
+
+const headers: DataTableHeader[] = [
+  { key: 'name', header: 'Name' },
+  { key: 'slug', header: 'Slug' },
+];
 
 export default async function CategoriesPage({
   params,
@@ -20,10 +25,32 @@ export default async function CategoriesPage({
   const token = await requireAuth();
   const categories = await listCategories(token, businessId);
 
-  const columns: Column<Category>[] = [
-    { key: 'name', header: 'Name', render: (c) => <span className="font-medium">{c.name}</span> },
-    { key: 'slug', header: 'Slug', render: (c) => <span className="text-[var(--muted-foreground)]">{c.slug}</span> },
-  ];
+  const tableRows = categories.map((category: Category) => ({
+    id: category.id,
+    cells: [
+      <span key="name" className="font-medium">
+        {category.name}
+      </span>,
+      <span key="slug" className="text-[var(--muted-foreground)]">
+        {category.slug}
+      </span>,
+    ],
+    actions: (
+      <>
+        <form action={updateCategoryAction.bind(null, businessId, category.id)} className="flex items-center gap-2">
+          <Input name="name" defaultValue={category.name} className="h-8 w-32 text-sm" required />
+          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
+            Save
+          </button>
+        </form>
+        <form action={deleteCategoryAction.bind(null, businessId, category.id)}>
+          <button type="submit" className="text-sm text-red-600 hover:underline">
+            Delete
+          </button>
+        </form>
+      </>
+    ),
+  }));
 
   return (
     <div className="space-y-6">
@@ -41,37 +68,18 @@ export default async function CategoriesPage({
             <label className="mb-1 block text-sm font-medium">Name</label>
             <Input name="name" placeholder="e.g. Clothing, Electronics" required />
           </div>
-          <Button type="submit" className="w-full sm:w-auto">Create category</Button>
+          <Button type="submit" className="w-full sm:w-auto">
+            Create category
+          </Button>
         </form>
       </Card>
 
       <DataTable
-        rows={categories}
-        getRowId={(c) => c.id}
-        columns={columns}
+        headers={headers}
+        rows={tableRows}
         bulkDeleteAction={deleteCategoriesBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
         bulkDeleteIdField="categoryIds"
         hasRowActions
-        rowActions={(c) => (
-          <>
-            <form action={updateCategoryAction.bind(null, businessId, c.id)} className="flex items-center gap-2">
-              <Input
-                name="name"
-                defaultValue={c.name}
-                className="h-8 w-32 text-sm"
-                required
-              />
-              <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
-                Save
-              </button>
-            </form>
-            <form action={deleteCategoryAction.bind(null, businessId, c.id)}>
-              <button type="submit" className="text-sm text-red-600 hover:underline">
-                Delete
-              </button>
-            </form>
-          </>
-        )}
       />
     </div>
   );

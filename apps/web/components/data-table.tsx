@@ -2,43 +2,42 @@
 
 import { useState, useTransition, ReactNode } from 'react';
 
-export type Column<T> = {
+export type DataTableHeader = {
   key: string;
   header: string;
-  render?: (row: T) => ReactNode;
   className?: string;
 };
 
-type DataTableProps<T> = {
-  rows: T[];
-  getRowId: (row: T) => string;
-  columns: Column<T>[];
+export type DataTableRow = {
+  id: string;
+  cells: ReactNode[];
+  actions?: ReactNode;
+};
+
+type DataTableProps = {
+  headers: DataTableHeader[];
+  rows: DataTableRow[];
   /** Server action invoked with FormData containing `idField` repeated for each selected id. */
   bulkDeleteAction?: (formData: FormData) => Promise<void>;
   bulkDeleteIdField?: string;
   emptyMessage?: string;
-  /** Optional right-aligned per-row actions (Edit/Delete links/forms). */
-  rowActions?: (row: T) => ReactNode;
   /** When true, the last column header gets "Actions" label automatically. */
   hasRowActions?: boolean;
 };
 
 /**
- * Server-data table with optional multi-select bulk delete. The rows and
- * columns are produced on the server and passed in as props; only the
- * checkbox selection state and the bulk-delete submit run on the client.
+ * Server-data table with optional multi-select bulk delete. Row cells and actions
+ * must be rendered on the server; only checkbox selection runs on the client.
  */
-export function DataTable<T>({
+export function DataTable({
+  headers,
   rows,
-  getRowId,
-  columns,
   bulkDeleteAction,
   bulkDeleteIdField = 'ids',
   emptyMessage = 'No records found.',
-  rowActions,
   hasRowActions,
-}: DataTableProps<T>) {
-  const ids = rows.map(getRowId);
+}: DataTableProps) {
+  const ids = rows.map((row) => row.id);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
@@ -123,7 +122,7 @@ export function DataTable<T>({
                     />
                   </th>
                 )}
-                {columns.map((col) => (
+                {headers.map((col) => (
                   <th key={col.key} className={`px-4 py-3 text-left font-medium ${col.className ?? ''}`}>
                     {col.header}
                   </th>
@@ -132,34 +131,34 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
-                const id = getRowId(row);
-                return (
-                  <tr key={id} className="border-b border-[var(--border)] last:border-0">
-                    {bulkDeleteAction && (
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(id)}
-                          onChange={() => toggle(id)}
-                          className="h-4 w-4 rounded border-[var(--border)]"
-                          aria-label="Select row"
-                        />
-                      </td>
-                    )}
-                    {columns.map((col) => (
-                      <td key={col.key} className={`px-4 py-3 ${col.className ?? ''}`}>
-                        {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
-                      </td>
-                    ))}
-                    {hasRowActions && (
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-3">{rowActions?.(row)}</div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-[var(--border)] last:border-0">
+                  {bulkDeleteAction && (
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={() => toggle(row.id)}
+                        className="h-4 w-4 rounded border-[var(--border)]"
+                        aria-label="Select row"
+                      />
+                    </td>
+                  )}
+                  {row.cells.map((cell, index) => (
+                    <td
+                      key={headers[index]?.key ?? index}
+                      className={`px-4 py-3 ${headers[index]?.className ?? ''}`}
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                  {hasRowActions && (
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-3">{row.actions}</div>
+                    </td>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

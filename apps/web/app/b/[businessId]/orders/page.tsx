@@ -8,7 +8,7 @@ import {
 } from '@/lib/api';
 import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { CsvDownloadButton } from '@/components/csv-download-button';
 import {
   advanceOrderStateAction,
@@ -29,6 +29,40 @@ const nextState: Record<string, string> = {
   onDelivery: 'done',
 };
 
+const headers: DataTableHeader[] = [
+  { key: 'customerName', header: 'Customer' },
+  { key: 'totalPrice', header: 'Total' },
+  { key: 'state', header: 'State' },
+  { key: 'createdAt', header: 'Date' },
+];
+
+function orderRowActions(businessId: string, order: OrderListItem) {
+  return (
+    <>
+      <Link
+        href={`/b/${businessId}/orders/${order.id}`}
+        className="text-sm text-[var(--primary)] hover:underline"
+      >
+        View
+      </Link>
+      {nextState[order.state] && (
+        <form
+          action={advanceOrderStateAction.bind(null, businessId, order.id, nextState[order.state])}
+        >
+          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
+            Mark {nextState[order.state]}
+          </button>
+        </form>
+      )}
+      <form action={deleteOrderAction.bind(null, businessId, order.id)}>
+        <button type="submit" className="text-sm text-red-600 hover:underline">
+          Delete
+        </button>
+      </form>
+    </>
+  );
+}
+
 export default async function OrdersPage({
   params,
 }: {
@@ -38,39 +72,26 @@ export default async function OrdersPage({
   const token = await requireAuth();
   const orders = await listOrders(token, businessId);
 
-  const columns: Column<OrderListItem>[] = [
-    {
-      key: 'customerName',
-      header: 'Customer',
-      render: (o) => (
-        <Link
-          href={`/b/${businessId}/orders/${o.id}`}
-          className="font-medium text-[var(--primary)] hover:underline"
-        >
-          {o.customerName}
-        </Link>
-      ),
-    },
-    {
-      key: 'totalPrice',
-      header: 'Total',
-      render: (o) => `$${o.totalPrice.toFixed(2)}`,
-    },
-    {
-      key: 'state',
-      header: 'State',
-      render: (o) => <Badge variant={stateVariant[o.state] ?? 'default'}>{o.state}</Badge>,
-    },
-    {
-      key: 'createdAt',
-      header: 'Date',
-      render: (o) => (
-        <span className="text-[var(--muted-foreground)]">
-          {new Date(o.createdAt).toLocaleDateString()}
-        </span>
-      ),
-    },
-  ];
+  const tableRows = orders.map((order) => ({
+    id: order.id,
+    cells: [
+      <Link
+        key="customer"
+        href={`/b/${businessId}/orders/${order.id}`}
+        className="font-medium text-[var(--primary)] hover:underline"
+      >
+        {order.customerName}
+      </Link>,
+      `$${order.totalPrice.toFixed(2)}`,
+      <Badge key="state" variant={stateVariant[order.state] ?? 'default'}>
+        {order.state}
+      </Badge>,
+      <span key="date" className="text-[var(--muted-foreground)]">
+        {new Date(order.createdAt).toLocaleDateString()}
+      </span>,
+    ],
+    actions: orderRowActions(businessId, order),
+  }));
 
   const csv = toCsv(orders as unknown as Record<string, unknown>[], csvColumnsForOrders());
 
@@ -90,39 +111,11 @@ export default async function OrdersPage({
       </div>
 
       <DataTable
-        rows={orders}
-        getRowId={(o) => o.id}
-        columns={columns}
+        headers={headers}
+        rows={tableRows}
         bulkDeleteAction={deleteOrdersBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
         bulkDeleteIdField="orderIds"
         hasRowActions
-        rowActions={(o) => (
-          <>
-            <Link
-              href={`/b/${businessId}/orders/${o.id}`}
-              className="text-sm text-[var(--primary)] hover:underline"
-            >
-              View
-            </Link>
-            {nextState[o.state] && (
-              <form
-                action={advanceOrderStateAction.bind(null, businessId, o.id, nextState[o.state])}
-              >
-                <button
-                  type="submit"
-                  className="text-sm text-[var(--primary)] hover:underline"
-                >
-                  Mark {nextState[o.state]}
-                </button>
-              </form>
-            )}
-            <form action={deleteOrderAction.bind(null, businessId, o.id)}>
-              <button type="submit" className="text-sm text-red-600 hover:underline">
-                Delete
-              </button>
-            </form>
-          </>
-        )}
       />
     </div>
   );

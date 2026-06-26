@@ -19,7 +19,12 @@ export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps)
     setError(null);
     setUploading(true);
     try {
-      const { key, url } = await uploadVariantImage(token, businessId, file);
+      const result = await uploadVariantImage(token, businessId, file);
+      if (!result) {
+        setError('Image upload unavailable. Save the product without an image or configure B2 storage.');
+        return;
+      }
+      const { key, url } = result;
       onUploaded({ key, previewUrl: url });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');

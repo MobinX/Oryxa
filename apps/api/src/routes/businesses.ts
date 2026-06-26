@@ -13,6 +13,7 @@ import {
   updateBusiness,
   deleteBusiness,
 } from '@repo/db/crud/business';
+import { getBusinessStats } from '@repo/db/crud/stats';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -77,6 +78,35 @@ businessesRouter.openapi(createRoute_, async (c) => {
 });
 
 businessesRouter.use('/:id', businessAccessMiddleware);
+
+const statsRoute = createRoute({
+  method: 'get',
+  path: '/{id}/stats',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ id: z.string().uuid() }) },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            products: z.number().int(),
+            orders: z.number().int(),
+            channels: z.number().int(),
+            conversations: z.number().int(),
+          }),
+        },
+      },
+      description: 'Aggregate counts for dashboard',
+    },
+  },
+});
+
+businessesRouter.openapi(statsRoute, async (c) => {
+  const id = c.req.param('id');
+  const stats = await getBusinessStats(id);
+  return c.json(stats);
+});
 
 const getRoute = createRoute({
   method: 'get',

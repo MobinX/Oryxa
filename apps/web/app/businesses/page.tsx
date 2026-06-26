@@ -4,43 +4,64 @@ import { requireAuth } from '@/lib/auth';
 import { listBusinesses, type Business } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type DataTableHeader } from '@/components/data-table';
 import {
   deleteBusinessAction,
   deleteBusinessesBulkAction,
 } from '@/app/actions/business';
 
+const headers: DataTableHeader[] = [
+  { key: 'name', header: 'Business' },
+  { key: 'createdAt', header: 'Created', className: 'hidden sm:table-cell text-[var(--muted-foreground)]' },
+];
+
 export default async function BusinessesPage() {
   const token = await requireAuth();
   const { businesses } = await listBusinesses(token);
 
-  const columns: Column<Business>[] = [
-    {
-      key: 'name',
-      header: 'Business',
-      render: (b) => (
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-            <Building2 className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{b.name}</p>
-            {b.description && (
-              <p className="mt-0.5 line-clamp-1 text-sm text-[var(--muted-foreground)]">
-                {b.description}
-              </p>
-            )}
-          </div>
+  const tableRows = businesses.map((business: Business) => ({
+    id: business.id,
+    cells: [
+      <div key="name" className="flex min-w-0 items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+          <Building2 className="h-5 w-5" />
         </div>
-      ),
-    },
-    {
-      key: 'createdAt',
-      header: 'Created',
-      className: 'hidden sm:table-cell text-[var(--muted-foreground)]',
-      render: (b) => new Date(b.createdAt).toLocaleDateString(),
-    },
-  ];
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{business.name}</p>
+          {business.description && (
+            <p className="mt-0.5 line-clamp-1 text-sm text-[var(--muted-foreground)]">
+              {business.description}
+            </p>
+          )}
+        </div>
+      </div>,
+      new Date(business.createdAt).toLocaleDateString(),
+    ],
+    actions: (
+      <>
+        <Link
+          href={`/b/${business.id}/dashboard`}
+          className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+        >
+          Open <ArrowRight className="h-3 w-3" />
+        </Link>
+        <Link
+          href={`/businesses/${business.id}/edit`}
+          className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+        >
+          <Pencil className="h-3 w-3" /> Edit
+        </Link>
+        <form action={deleteBusinessAction.bind(null, business.id)}>
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline"
+          >
+            <Trash2 className="h-3 w-3" /> Delete
+          </button>
+        </form>
+      </>
+    ),
+  }));
 
   return (
     <div>
@@ -76,36 +97,11 @@ export default async function BusinessesPage() {
       ) : (
         <div className="mt-8">
           <DataTable
-            rows={businesses}
-            getRowId={(b) => b.id}
-            columns={columns}
+            headers={headers}
+            rows={tableRows}
             bulkDeleteAction={deleteBusinessesBulkAction as unknown as (fd: FormData) => Promise<void>}
             bulkDeleteIdField="businessIds"
             hasRowActions
-            rowActions={(b) => (
-              <>
-                <Link
-                  href={`/b/${b.id}/dashboard`}
-                  className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
-                >
-                  Open <ArrowRight className="h-3 w-3" />
-                </Link>
-                <Link
-                  href={`/businesses/${b.id}/edit`}
-                  className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </Link>
-                <form action={deleteBusinessAction.bind(null, b.id)}>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline"
-                  >
-                    <Trash2 className="h-3 w-3" /> Delete
-                  </button>
-                </form>
-              </>
-            )}
           />
         </div>
       )}

@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export class ApiError extends Error {
@@ -23,6 +25,9 @@ export async function apiFetch<T>(
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    if (res.status === 401) {
+      redirect('/login?clear=true');
+    }
     throw new ApiError(err.error ?? 'Request failed', res.status);
   }
   return res.json() as Promise<T>;
@@ -67,6 +72,16 @@ export const createBusiness = (token: string, data: Record<string, unknown>) =>
 
 export const getBusiness = (token: string, id: string) =>
   apiFetch<Business>(`/api/v1/businesses/${id}`, { token });
+
+export type BusinessStats = {
+  products: number;
+  orders: number;
+  channels: number;
+  conversations: number;
+};
+
+export const getBusinessStats = (token: string, businessId: string) =>
+  apiFetch<BusinessStats>(`/api/v1/businesses/${businessId}/stats`, { token });
 
 export const updateBusiness = (token: string, id: string, data: Record<string, unknown>) =>
   apiFetch<{ success: boolean }>(`/api/v1/businesses/${id}`, {

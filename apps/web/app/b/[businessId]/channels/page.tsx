@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type DataTableHeader } from '@/components/data-table';
 import {
   connectFacebookAction,
   createAgentAction,
@@ -20,6 +20,18 @@ import {
 const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
 
+const channelHeaders: DataTableHeader[] = [
+  { key: 'platform', header: 'Platform' },
+  { key: 'platformChannelId', header: 'Page/Channel ID' },
+  { key: 'agentId', header: 'Agent' },
+];
+
+const agentHeaders: DataTableHeader[] = [
+  { key: 'name', header: 'Name' },
+  { key: 'platformType', header: 'Platform', className: 'capitalize' },
+  { key: 'systemPrompt', header: 'Prompt', className: 'hidden md:table-cell' },
+];
+
 export default async function ChannelsPage({
   params,
 }: {
@@ -32,40 +44,69 @@ export default async function ChannelsPage({
     listAgents(token, businessId),
   ]);
 
-  const channelColumns: Column<Channel>[] = [
-    { key: 'platform', header: 'Platform', render: (c) => <span className="font-medium capitalize">{c.platform}</span> },
-    { key: 'platformChannelId', header: 'Page/Channel ID', render: (c) => <span className="text-[var(--muted-foreground)]">{c.platformChannelId}</span> },
-    {
-      key: 'agentId',
-      header: 'Agent',
-      render: (c) => (
-        <form action={updateChannelAgentAction.bind(null, businessId, c.id)} className="flex items-center gap-2">
-          <Select name="agentId" defaultValue={c.agentId ?? ''} className="h-8 w-40 text-sm">
-            <option value="">Disabled</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </Select>
-          <button type="submit" className="text-xs text-[var(--primary)] hover:underline">
+  const channelRows = channels.map((channel: Channel) => ({
+    id: channel.id,
+    cells: [
+      <span key="platform" className="font-medium capitalize">
+        {channel.platform}
+      </span>,
+      <span key="platformChannelId" className="text-[var(--muted-foreground)]">
+        {channel.platformChannelId}
+      </span>,
+      <form
+        key="agentId"
+        action={updateChannelAgentAction.bind(null, businessId, channel.id)}
+        className="flex items-center gap-2"
+      >
+        <Select name="agentId" defaultValue={channel.agentId ?? ''} className="h-8 w-40 text-sm">
+          <option value="">Disabled</option>
+          {agents.map((agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name}
+            </option>
+          ))}
+        </Select>
+        <button type="submit" className="text-xs text-[var(--primary)] hover:underline">
+          Save
+        </button>
+      </form>,
+    ],
+    actions: (
+      <form action={deleteChannelAction.bind(null, businessId, channel.id)}>
+        <button type="submit" className="text-sm text-red-600 hover:underline">
+          Delete
+        </button>
+      </form>
+    ),
+  }));
+
+  const agentRows = agents.map((agent: Agent) => ({
+    id: agent.id,
+    cells: [
+      <span key="name" className="font-medium">
+        {agent.name}
+      </span>,
+      agent.platformType,
+      <span key="systemPrompt" className="line-clamp-1 max-w-xs text-[var(--muted-foreground)]">
+        {agent.systemPrompt}
+      </span>,
+    ],
+    actions: (
+      <>
+        <form action={updateAgentAction.bind(null, businessId, agent.id)} className="flex items-center gap-2">
+          <Input name="name" defaultValue={agent.name} className="h-8 w-28 text-sm" />
+          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
             Save
           </button>
         </form>
-      ),
-    },
-  ];
-
-  const agentColumns: Column<Agent>[] = [
-    { key: 'name', header: 'Name', render: (a) => <span className="font-medium">{a.name}</span> },
-    { key: 'platformType', header: 'Platform', className: 'capitalize' },
-    {
-      key: 'systemPrompt',
-      header: 'Prompt',
-      className: 'hidden md:table-cell',
-      render: (a) => <span className="line-clamp-1 max-w-xs text-[var(--muted-foreground)]">{a.systemPrompt}</span>,
-    },
-  ];
+        <form action={deleteAgentAction.bind(null, businessId, agent.id)}>
+          <button type="submit" className="text-sm text-red-600 hover:underline">
+            Delete
+          </button>
+        </form>
+      </>
+    ),
+  }));
 
   return (
     <div className="space-y-8">
@@ -76,69 +117,45 @@ export default async function ChannelsPage({
         </p>
       </div>
 
-      {/* Connect new channel */}
       <Card>
         <h2 className="text-lg font-semibold">Connect Facebook Messenger</h2>
         <form action={connectFacebookAction.bind(null, businessId)} className="mt-4">
-          <Button type="submit" className="w-full sm:w-auto">Connect Facebook</Button>
+          <Button type="submit" className="w-full sm:w-auto">
+            Connect Facebook
+          </Button>
         </form>
       </Card>
 
-      {/* Channels table */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Connected channels</h2>
         <DataTable
-          rows={channels}
-          getRowId={(c) => c.id}
-          columns={channelColumns}
+          headers={channelHeaders}
+          rows={channelRows}
           bulkDeleteAction={deleteChannelsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
           bulkDeleteIdField="channelIds"
           hasRowActions
-          rowActions={(c) => (
-            <form action={deleteChannelAction.bind(null, businessId, c.id)}>
-              <button type="submit" className="text-sm text-red-600 hover:underline">
-                Delete
-              </button>
-            </form>
-          )}
         />
       </div>
 
-      {/* Create agent */}
       <Card>
         <h2 className="text-lg font-semibold">Create AI agent</h2>
         <form action={createAgentAction.bind(null, businessId)} className="mt-4 space-y-3">
           <Input name="name" placeholder="Agent name" defaultValue="Sales Agent" />
           <Textarea name="systemPrompt" placeholder="System prompt" rows={5} defaultValue={DEFAULT_PROMPT} />
-          <Button type="submit" className="w-full sm:w-auto">Create agent</Button>
+          <Button type="submit" className="w-full sm:w-auto">
+            Create agent
+          </Button>
         </form>
       </Card>
 
-      {/* Agents table */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">AI Agents</h2>
         <DataTable
-          rows={agents}
-          getRowId={(a) => a.id}
-          columns={agentColumns}
+          headers={agentHeaders}
+          rows={agentRows}
           bulkDeleteAction={deleteAgentsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
           bulkDeleteIdField="agentIds"
           hasRowActions
-          rowActions={(a) => (
-            <>
-              <form action={updateAgentAction.bind(null, businessId, a.id)} className="flex items-center gap-2">
-                <Input name="name" defaultValue={a.name} className="h-8 w-28 text-sm" />
-                <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
-                  Save
-                </button>
-              </form>
-              <form action={deleteAgentAction.bind(null, businessId, a.id)}>
-                <button type="submit" className="text-sm text-red-600 hover:underline">
-                  Delete
-                </button>
-              </form>
-            </>
-          )}
         />
       </div>
     </div>

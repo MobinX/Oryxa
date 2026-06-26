@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { requireAuth } from '@/lib/auth';
-import { getBusiness, listProducts, listOrders, listChannels, listConversations } from '@/lib/api';
+import { getBusinessForRequest, getBusinessStatsForRequest } from '@/lib/server-data';
 import { Card } from '@/components/ui/card';
 import { Package, MessageSquare, ShoppingCart, Radio } from 'lucide-react';
 
@@ -17,22 +16,11 @@ export default async function DashboardPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const token = await requireAuth();
 
-  const [business, productsData, orders, channels, conversations] = await Promise.all([
-    getBusiness(token, businessId),
-    listProducts(token, businessId, { limit: 1 }),
-    listOrders(token, businessId),
-    listChannels(token, businessId),
-    listConversations(token, businessId),
+  const [business, stats] = await Promise.all([
+    getBusinessForRequest(businessId),
+    getBusinessStatsForRequest(businessId),
   ]);
-
-  const counts = {
-    products: productsData.totalCount,
-    orders: orders.length,
-    channels: channels.length,
-    conversations: conversations.length,
-  };
 
   return (
     <div>
@@ -54,7 +42,7 @@ export default async function DashboardPage({
                   </div>
                 </div>
                 <span className="text-xl font-bold text-[var(--muted-foreground)] sm:text-2xl">
-                  {counts[countKey]}
+                  {stats[countKey]}
                 </span>
               </div>
             </Card>

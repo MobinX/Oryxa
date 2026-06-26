@@ -25,10 +25,13 @@ apps/api/public/index.js.map
 # =========================
 .env*
 **/.env*
+env.txt
+**/env.txt
 
 # =========================
-# Logs
+# TypeScript
 # =========================
+*.tsbuildinfo
 *.log
 
 # =========================

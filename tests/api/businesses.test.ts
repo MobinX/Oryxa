@@ -38,6 +38,19 @@ describe('Businesses API', () => {
     expect(body.success).toBe(true);
   });
 
+  it('GET /api/v1/businesses/:id/stats returns aggregate counts', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/businesses/${business.id}/stats`, { headers: authHeaders() });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      products: expect.any(Number),
+      orders: expect.any(Number),
+      channels: expect.any(Number),
+      conversations: expect.any(Number),
+    });
+  });
+
   it('GET /api/v1/businesses/:id returns 403 for other user', async () => {
     const { business } = await seedTestWorld();
     // Sync a different user without access

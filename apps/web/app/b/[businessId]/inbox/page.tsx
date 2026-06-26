@@ -17,8 +17,10 @@ export default async function InboxPage({
   const { businessId } = await params;
   const { c: selectedId } = await searchParams;
   const token = await requireAuth();
-  const conversations = await listConversations(token, businessId);
-  const messages = selectedId ? await listMessages(token, businessId, selectedId) : null;
+  const [conversations, messages] = await Promise.all([
+    listConversations(token, businessId),
+    selectedId ? listMessages(token, businessId, selectedId) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-col">

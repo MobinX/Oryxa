@@ -8,12 +8,19 @@ export function middleware(request: NextRequest) {
 
   const isProtected = pathname.startsWith('/businesses') || pathname.startsWith('/b/');
 
-  if (isProtected && !token) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  if (pathname === '/login') {
+    if (request.nextUrl.searchParams.has('clear')) {
+      const response = NextResponse.next();
+      response.cookies.delete(AUTH_COOKIE);
+      return response;
+    }
+    if (token) {
+      return NextResponse.redirect(new URL('/businesses', request.url));
+    }
   }
 
-  if (pathname === '/login' && token) {
-    return NextResponse.redirect(new URL('/businesses', request.url));
+  if (isProtected && !token) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   const response = NextResponse.next();
@@ -22,5 +29,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/businesses/:path*', '/b/:path*', '/login'],
 };

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -10,11 +11,12 @@ export async function getAuthToken(): Promise<string | null> {
   return store.get(AUTH_COOKIE)?.value ?? null;
 }
 
-export async function requireAuth(): Promise<string> {
+/** Deduped per request — safe to call from layout + page without extra cookie reads. */
+export const requireAuth = cache(async (): Promise<string> => {
   const token = await getAuthToken();
   if (!token) redirect('/login');
   return token;
-}
+});
 
 export async function setAuthCookie(token: string) {
   const store = await cookies();

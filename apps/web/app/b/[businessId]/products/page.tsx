@@ -11,13 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Badge, Card } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { CsvDownloadButton } from '@/components/csv-download-button';
 import { deleteProductAction, deleteProductsBulkAction } from '@/app/actions/products';
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 }
+
+const headers: DataTableHeader[] = [
+  { key: 'name', header: 'Product' },
+  { key: 'sku', header: 'SKU', className: 'hidden md:table-cell text-[var(--muted-foreground)]' },
+  { key: 'categoryName', header: 'Category', className: 'hidden lg:table-cell' },
+  { key: 'price', header: 'Price' },
+  { key: 'variantCount', header: 'Variants', className: 'hidden sm:table-cell' },
+];
 
 export default async function ProductsPage({
   params,
@@ -42,42 +50,51 @@ export default async function ProductsPage({
       )
     : products;
 
-  const columns: Column<ProductListItem>[] = [
-    {
-      key: 'name',
-      header: 'Product',
-      render: (p) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--muted)]">
-            {p.thumbnailUrl ? (
-              <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-xs text-[var(--muted-foreground)]">No img</span>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-medium">{p.name}</p>
-            <p className="truncate text-xs text-[var(--muted-foreground)] md:hidden">{p.sku}</p>
-          </div>
+  const tableRows = filtered.map((product) => ({
+    id: product.id,
+    cells: [
+      <div key="name" className="flex items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--muted)]">
+          {product.thumbnailUrl ? (
+            <img src={product.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-xs text-[var(--muted-foreground)]">No img</span>
+          )}
         </div>
+        <div className="min-w-0">
+          <p className="truncate font-medium">{product.name}</p>
+          <p className="truncate text-xs text-[var(--muted-foreground)] md:hidden">{product.sku}</p>
+        </div>
+      </div>,
+      product.sku,
+      product.categoryName ? (
+        <Badge key="category">{product.categoryName}</Badge>
+      ) : (
+        <span key="category" className="text-[var(--muted-foreground)]">
+          —
+        </span>
       ),
-    },
-    { key: 'sku', header: 'SKU', className: 'hidden md:table-cell text-[var(--muted-foreground)]' },
-    {
-      key: 'categoryName',
-      header: 'Category',
-      className: 'hidden lg:table-cell',
-      render: (p) =>
-        p.categoryName ? <Badge>{p.categoryName}</Badge> : <span className="text-[var(--muted-foreground)]">—</span>,
-    },
-    { key: 'price', header: 'Price', render: (p) => <span className="font-medium">{formatPrice(p.price)}</span> },
-    {
-      key: 'variantCount',
-      header: 'Variants',
-      className: 'hidden sm:table-cell',
-      render: (p) => String(p.variantCount ?? 0),
-    },
-  ];
+      <span key="price" className="font-medium">
+        {formatPrice(product.price)}
+      </span>,
+      String(product.variantCount ?? 0),
+    ],
+    actions: (
+      <>
+        <Link
+          href={`/b/${businessId}/products/${product.id}/edit`}
+          className="text-sm text-[var(--primary)] hover:underline"
+        >
+          Edit
+        </Link>
+        <form action={deleteProductAction.bind(null, businessId, product.id)}>
+          <button type="submit" className="text-sm text-red-600 hover:underline">
+            Delete
+          </button>
+        </form>
+      </>
+    ),
+  }));
 
   const csv = toCsv(filtered as unknown as Record<string, unknown>[], csvColumnsForProducts());
 
@@ -133,27 +150,11 @@ export default async function ProductsPage({
         </Card>
       ) : (
         <DataTable
-          rows={filtered}
-          getRowId={(p) => p.id}
-          columns={columns}
+          headers={headers}
+          rows={tableRows}
           bulkDeleteAction={deleteProductsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
           bulkDeleteIdField="productIds"
           hasRowActions
-          rowActions={(p) => (
-            <>
-              <Link
-                href={`/b/${businessId}/products/${p.id}/edit`}
-                className="text-sm text-[var(--primary)] hover:underline"
-              >
-                Edit
-              </Link>
-              <form action={deleteProductAction.bind(null, businessId, p.id)}>
-                <button type="submit" className="text-sm text-red-600 hover:underline">
-                  Delete
-                </button>
-              </form>
-            </>
-          )}
         />
       )}
     </div>

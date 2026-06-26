@@ -62,25 +62,26 @@ export default async function EditBusinessPage({
               />
             </div>
           </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-between">
-            <form action={deleteBusinessAction.bind(null, businessId)}>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                Delete business
-              </button>
-            </form>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Link
-                href="/businesses"
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
-              >
-                Cancel
-              </Link>
-              <Button type="submit">Save changes</Button>
-            </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
+            <Link
+              href="/businesses"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
+            >
+              Cancel
+            </Link>
+            <Button type="submit">Save changes</Button>
           </div>
+        </form>
+        <form
+          action={deleteBusinessAction.bind(null, businessId)}
+          className="border-t border-[var(--border)] pt-4"
+        >
+          <button
+            type="submit"
+            className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            Delete business
+          </button>
         </form>
       </Card>
     </div>

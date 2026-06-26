@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { requireAuth } from '@/lib/auth';
-import { getBusiness } from '@/lib/api';
+import { getBusinessForRequest } from '@/lib/server-data';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { updateBusinessAction, deleteBusinessAction } from '@/app/actions/business';
@@ -11,8 +10,7 @@ export default async function SettingsPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const token = await requireAuth();
-  const business = await getBusiness(token, businessId);
+  const business = await getBusinessForRequest(businessId);
 
   return (
     <div className="space-y-6">
@@ -72,17 +70,20 @@ export default async function SettingsPage({
               />
             </div>
           </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-between">
-            <form action={deleteBusinessAction.bind(null, businessId)}>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                Delete business
-              </button>
-            </form>
+          <div className="flex justify-end border-t border-[var(--border)] pt-4">
             <Button type="submit">Save changes</Button>
           </div>
+        </form>
+        <form
+          action={deleteBusinessAction.bind(null, businessId)}
+          className="border-t border-[var(--border)] pt-4"
+        >
+          <button
+            type="submit"
+            className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            Delete business
+          </button>
         </form>
       </Card>
 
