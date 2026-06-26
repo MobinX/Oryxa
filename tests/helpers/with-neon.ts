@@ -3,17 +3,19 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from '@db/schema';
 import { setTestDatabase, type Database } from '@db/client';
-import { deleteRowsCreatedSince } from './cleanup';
+import { createTrackingDb, createRootRegistry, deleteTrackedRoots, type RootRegistry } from './tracking-db';
+import { TEST_FIREBASE_UID } from './seed';
 
 export function getNeonDatabaseUrl(): string | undefined {
   return process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
 }
 
 export function withNeon(hooks?: { before?: () => Promise<void>; after?: () => Promise<void> }) {
-  // Marker captured from the DB clock at test start. Rows whose creation
-  // timestamp is >= this are deleted in afterAll, so only data created during
-  // the run is removed — pre-existing data is preserved regardless of DB size.
-  let marker: Date;
+  // Roots (users, businesses) inserted during the run are recorded by the
+  // tracking db. afterAll deletes exactly those ids; the schema's cascade
+  // removes all descendants. Data written by concurrent writers is untouched
+  // because we only ever delete ids we ourselves inserted.
+  let registry: RootRegistry;
 
   beforeAll(async () => {
     const neonUrl = getNeonDatabaseUrl();
@@ -27,24 +29,18 @@ export function withNeon(hooks?: { before?: () => Promise<void>; after?: () => P
     process.env.AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 
     const sql = neon(neonUrl);
-    const db = drizzle(sql, { schema }) as unknown as Database;
-    setTestDatabase(db);
+    const realDb = drizzle(sql, { schema }) as unknown as Database;
+    registry = createRootRegistry();
+    setTestDatabase(createTrackingDb(realDb, registry));
     await sql`SELECT 1`;
-
-    // Capture the DB's current time as the cleanup marker. Using DB-side time
-    // (not `new Date()`) avoids JS/DB clock skew. Taken before the before-hook
-    // so any data it seeds is also cleaned up.
-    const markerRows = await sql`SELECT now() AS ts`;
-    marker = new Date(markerRows[0].ts);
 
     await hooks?.before?.();
   });
 
   afterAll(async () => {
-    // Delete only rows created during this test run (creation timestamp >=
-    // the start marker). Preserves all pre-existing data; scales to tables of
-    // any size without loading IDs into memory.
-    await deleteRowsCreatedSince(marker);
+    // Delete only the roots this run created; preserve the shared scaffold
+    // user (reused across runs). Cascade wipes every descendant.
+    await deleteTrackedRoots(registry, { preserveFirebaseUids: new Set([TEST_FIREBASE_UID]) });
     await hooks?.after?.();
     setTestDatabase(null);
   });
