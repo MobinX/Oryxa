@@ -36,15 +36,20 @@ export default async function EditProductPage({
   const slots = Math.max(3, variantInitial.length);
 
   return (
-    <div>
+    <div className="mx-auto max-w-2xl">
       <Link
         href={`/b/${businessId}/products`}
         className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
       >
         ← Back to products
       </Link>
-      <Card className="mt-6 max-w-2xl">
+      <Card className="mt-4 sm:mt-6">
         <h1 className="text-xl font-bold">Edit product</h1>
+        {product.category && (
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Category: {product.category.name}
+          </p>
+        )}
         <form
           action={updateProductAction.bind(null, businessId, productId)}
           encType="multipart/form-data"
@@ -78,7 +83,7 @@ export default async function EditProductPage({
 
           <VariantFields slots={slots} initial={variantInitial} />
 
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
             <Link
               href={`/b/${businessId}/products`}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"

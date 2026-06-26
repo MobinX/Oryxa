@@ -13,7 +13,7 @@ export default async function BusinessesPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Your businesses</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Your businesses</h1>
           <p className="mt-1 text-[var(--muted-foreground)]">
             Select a business or create a new one.
           </p>

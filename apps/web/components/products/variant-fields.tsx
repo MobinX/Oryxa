@@ -25,12 +25,12 @@ export function VariantFields({
       {Array.from({ length: slots }, (_, i) => {
         const v = initial[i];
         return (
-          <div key={i} className="rounded-lg border border-[var(--border)] p-3 space-y-2">
+          <div key={i} className="space-y-2 rounded-lg border border-[var(--border)] p-3">
             {v?.id && <input type="hidden" name={`variant_${i}_id`} value={v.id} />}
             {v?.imageKey && (
               <input type="hidden" name={`variant_${i}_imageKey`} value={v.imageKey} />
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Input
                 name={`variant_${i}_name`}
                 placeholder="Variant name"
@@ -55,7 +55,7 @@ export function VariantFields({
                 type="file"
                 name={`variant_${i}_image`}
                 accept="image/jpeg,image/png,image/webp,image/gif"
-                className="text-sm"
+                className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-[var(--muted)] file:px-3 file:py-2 file:text-sm"
               />
             </div>
             {v?.imagePreviewUrl && (

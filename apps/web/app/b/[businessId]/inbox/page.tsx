@@ -21,10 +21,15 @@ export default async function InboxPage({
   const messages = selectedId ? await listMessages(token, businessId, selectedId) : null;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Inbox</h1>
-      <div className="mt-6 flex h-[calc(100vh-12rem)] overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-        <div className="w-80 overflow-y-auto border-r border-[var(--border)]">
+    <div className="flex min-h-0 flex-col">
+      <h1 className="text-xl font-bold sm:text-2xl">Inbox</h1>
+      <div className="mt-4 flex min-h-[min(70vh,600px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
+        <div
+          className={cn(
+            'border-b border-[var(--border)] lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r',
+            selectedId ? 'hidden lg:block' : 'max-h-64 overflow-y-auto lg:max-h-none',
+          )}
+        >
           {conversations.map((conv) => (
             <Link
               key={conv.id}
@@ -34,8 +39,8 @@ export default async function InboxPage({
                 selectedId === conv.id && 'bg-[var(--primary)]/5',
               )}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{conv.customerName ?? 'Customer'}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{conv.customerName ?? 'Customer'}</span>
                 <Badge variant={conv.lastMessageState === 'pending' ? 'warning' : 'default'}>
                   {conv.lastMessageState}
                 </Badge>
@@ -47,15 +52,23 @@ export default async function InboxPage({
           )}
         </div>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {selectedId && messages ? (
             <>
+              <div className="flex items-center gap-2 border-b border-[var(--border)] p-3 lg:hidden">
+                <Link
+                  href={`/b/${businessId}/inbox`}
+                  className="text-sm text-[var(--primary)] hover:underline"
+                >
+                  ← Conversations
+                </Link>
+              </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
                 {messages.map((m) => (
                   <div
                     key={m.id}
                     className={cn(
-                      'max-w-[75%] rounded-2xl px-4 py-2 text-sm',
+                      'max-w-[85%] rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
                       m.from === 'customer'
                         ? 'bg-[var(--muted)]'
                         : 'ml-auto bg-[var(--primary)] text-white',
@@ -70,14 +83,16 @@ export default async function InboxPage({
               </div>
               <form
                 action={sendMessageAction.bind(null, businessId, selectedId)}
-                className="flex gap-2 border-t border-[var(--border)] p-4"
+                className="flex flex-col gap-2 border-t border-[var(--border)] p-4 sm:flex-row"
               >
-                <Input name="content" placeholder="Type a reply (bypasses AI)…" required />
-                <Button type="submit">Send</Button>
+                <Input name="content" placeholder="Type a reply (bypasses AI)…" required className="flex-1" />
+                <Button type="submit" className="w-full sm:w-auto">
+                  Send
+                </Button>
               </form>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[var(--muted-foreground)]">
+            <div className="flex flex-1 items-center justify-center p-8 text-center text-[var(--muted-foreground)]">
               Select a conversation
             </div>
           )}

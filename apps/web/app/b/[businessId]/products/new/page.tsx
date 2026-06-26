@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantFields } from '@/components/products/variant-fields';
+import { CategorySelect } from '@/components/products/category-select';
 
 export default async function NewProductPage({
   params,
@@ -18,14 +19,14 @@ export default async function NewProductPage({
   const categories = await listCategories(token, businessId);
 
   return (
-    <div>
+    <div className="mx-auto max-w-2xl">
       <Link
         href={`/b/${businessId}/products`}
         className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
       >
         ← Back to products
       </Link>
-      <Card className="mt-6 max-w-2xl">
+      <Card className="mt-4 sm:mt-6">
         <h1 className="text-xl font-bold">Add product</h1>
         <form
           action={createProductAction.bind(null, businessId)}
@@ -50,19 +51,13 @@ export default async function NewProductPage({
               <Textarea name="description" rows={3} />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium">Category</label>
-              <Input name="categoryName" list="product-categories" placeholder="New or existing" />
-              <datalist id="product-categories">
-                {categories.map((c) => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
+              <CategorySelect categories={categories} />
             </div>
           </div>
 
           <VariantFields slots={3} />
 
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
             <Link
               href={`/b/${businessId}/products`}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"

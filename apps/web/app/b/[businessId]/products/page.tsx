@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { listProducts, listCategories } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Badge, Card } from '@/components/ui/card';
 import { deleteProductAction } from '@/app/actions/products';
 
@@ -40,7 +41,7 @@ export default async function ProductsPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Products</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Products</h1>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
             Manage your catalog — {totalCount} total
           </p>
@@ -50,26 +51,22 @@ export default async function ProductsPage({
         </Link>
       </div>
 
-      <form className="flex flex-col gap-3 sm:flex-row" method="get">
+      <form className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" method="get">
         <Input
           name="q"
           placeholder="Search by name or SKU…"
           defaultValue={q}
-          className="sm:max-w-xs"
+          className="w-full sm:max-w-xs"
         />
-        <select
-          name="categoryId"
-          defaultValue={categoryId}
-          className="h-10 rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
-        >
+        <Select name="categoryId" defaultValue={categoryId} className="w-full sm:w-auto sm:min-w-[180px]">
           <option value="">All categories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-        <Button type="submit" variant="outline">
+        </Select>
+        <Button type="submit" variant="outline" className="w-full sm:w-auto">
           Filter
         </Button>
       </form>
@@ -88,7 +85,7 @@ export default async function ProductsPage({
           )}
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
+        <div className="table-wrap rounded-xl border border-[var(--border)] bg-white">
           <table className="w-full text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]">
               <tr>

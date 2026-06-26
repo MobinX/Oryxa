@@ -28,8 +28,8 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Orders</h1>
-      <div className="mt-8 overflow-hidden rounded-xl border border-[var(--border)] bg-white">
+      <h1 className="text-xl font-bold sm:text-2xl">Orders</h1>
+      <div className="mt-6 table-wrap rounded-xl border border-[var(--border)] bg-white sm:mt-8">
         <table className="w-full text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--muted)]">
             <tr>
