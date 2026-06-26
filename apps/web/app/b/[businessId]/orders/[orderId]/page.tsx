@@ -90,7 +90,11 @@ export default async function OrderDetailPage({
         )}
 
         <h2 className="mt-6 text-lg font-semibold">Edit order</h2>
-        <form action={updateOrderAction.bind(null, businessId, order.id)} className="mt-4 space-y-4">
+        <form
+          id="update-order-form"
+          action={updateOrderAction.bind(null, businessId, order.id)}
+          className="mt-4 space-y-4"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">Quantity</label>
@@ -118,27 +122,29 @@ export default async function OrderDetailPage({
               <Textarea name="customerAddress" rows={2} defaultValue={order.customerAddress ?? ''} />
             </div>
           </div>
-
-          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-between">
-            <form action={deleteOrderAction.bind(null, businessId, order.id)}>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                Delete order
-              </button>
-            </form>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Link
-                href={`/b/${businessId}/orders`}
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
-              >
-                Cancel
-              </Link>
-              <Button type="submit">Save changes</Button>
-            </div>
-          </div>
         </form>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between mt-6">
+          <form action={deleteOrderAction.bind(null, businessId, order.id)} className="w-full sm:w-auto">
+            <Button
+              type="submit"
+              variant="outline"
+              className="text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/20 w-full"
+            >
+              Delete order
+            </Button>
+          </form>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end w-full sm:w-auto">
+            <Link href={`/b/${businessId}/orders`} className="w-full sm:w-auto">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="update-order-form" className="w-full sm:w-auto">
+              Save changes
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
   );

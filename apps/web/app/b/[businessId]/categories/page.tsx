@@ -1,3 +1,4 @@
+import { Check, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { listCategories, type Category } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import {
 } from '@/app/actions/products';
 
 const headers: DataTableHeader[] = [
-  { key: 'name', header: 'Name' },
+  { key: 'name', header: 'Name', className: 'w-full min-w-[150px]' },
   { key: 'slug', header: 'Slug' },
 ];
 
@@ -39,13 +40,23 @@ export default async function CategoriesPage({
       <>
         <form action={updateCategoryAction.bind(null, businessId, category.id)} className="flex items-center gap-2">
           <Input name="name" defaultValue={category.name} className="h-8 w-32 text-sm" required />
-          <button type="submit" className="text-sm text-[var(--primary)] hover:underline">
-            Save
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center text-sm text-[var(--primary)] hover:underline font-semibold"
+            title="Save"
+          >
+            <Check className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline">Save</span>
           </button>
         </form>
         <form action={deleteCategoryAction.bind(null, businessId, category.id)}>
-          <button type="submit" className="text-sm text-red-600 hover:underline">
-            Delete
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center text-sm text-red-600 hover:underline font-semibold"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4 sm:hidden" />
+            <span className="hidden sm:inline">Delete</span>
           </button>
         </form>
       </>

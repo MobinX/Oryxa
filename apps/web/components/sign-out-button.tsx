@@ -1,3 +1,6 @@
+'use client';
+
+import { useTransition } from 'react';
 import { signOutAction } from '@/app/actions/auth';
 
 export function SignOutForm({
@@ -7,11 +10,20 @@ export function SignOutForm({
   className?: string;
   children: React.ReactNode;
 }) {
+  const [isPending, startTransition] = useTransition();
+
   return (
-    <form action={signOutAction}>
-      <button type="submit" className={className}>
-        {children}
-      </button>
-    </form>
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={() => {
+        startTransition(async () => {
+          await signOutAction();
+        });
+      }}
+      className={className}
+    >
+      {children}
+    </button>
   );
 }

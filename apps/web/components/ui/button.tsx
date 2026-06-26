@@ -8,13 +8,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
   <button
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:opacity-50',
-      variant === 'default' && 'bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90',
-      variant === 'outline' && 'border border-[var(--border)] bg-white hover:bg-[var(--muted)]',
-      variant === 'ghost' && 'hover:bg-[var(--muted)]',
-      size === 'sm' && 'h-8 px-3 text-sm',
-      size === 'md' && 'h-10 px-4 text-sm',
-      size === 'lg' && 'h-12 px-6',
+      'inline-flex items-center justify-center font-medium tracking-wide transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]',
+      variant === 'default' && 'bg-primary text-primary-foreground shadow-sm hover:brightness-105 active:brightness-95',
+      variant === 'outline' && 'border border-border bg-card text-foreground hover:bg-muted',
+      variant === 'ghost' && 'text-foreground hover:bg-muted',
+      size === 'sm' && 'h-9 px-4 rounded-xl text-xs',
+      size === 'md' && 'h-10 px-5 rounded-[12px] text-sm',
+      size === 'lg' && 'h-12 px-6 rounded-[14px] text-sm font-semibold',
       className,
     )}
     {...props}

@@ -57,14 +57,13 @@ export default async function NewProductPage({
 
           <VariantEditor />
 
-          <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-            <Link
-              href={`/b/${businessId}/products`}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              Cancel
+          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+            <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
             </Link>
-            <Button type="submit">Create product</Button>
+            <Button type="submit" className="w-full sm:w-auto">Create product</Button>
           </div>
         </form>
       </Card>

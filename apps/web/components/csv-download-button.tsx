@@ -5,6 +5,8 @@
  * server (see lib/api.ts `toCsv`) and passed in as a prop, so no network
  * round-trip happens on click.
  */
+import { Button } from '@/components/ui/button';
+
 export function CsvDownloadButton({
   csv,
   filename,
@@ -27,12 +29,12 @@ export function CsvDownloadButton({
   };
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       onClick={download}
-      className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
     >
       {label}
-    </button>
+    </Button>
   );
 }

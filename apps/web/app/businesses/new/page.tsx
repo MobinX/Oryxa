@@ -33,14 +33,13 @@ export default function NewBusinessPage() {
               rows={3}
             />
           </div>
-          <div className="flex gap-2">
-            <Link
-              href="/businesses"
-              className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-sm font-medium hover:bg-[var(--muted)]"
-            >
-              Cancel
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t border-border">
+            <Link href="/businesses" className="w-full sm:w-auto">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
             </Link>
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="w-full sm:w-auto">
               Create business
             </Button>
           </div>

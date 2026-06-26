@@ -55,8 +55,8 @@ export function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3">
-        <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 p-3 bg-muted/20">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
             checked={allSelected}
@@ -65,7 +65,7 @@ export function ConversationList({
             }}
             onChange={toggleAll}
             disabled={ids.length === 0}
-            className="h-4 w-4 rounded border-[var(--border)]"
+            className="h-4 w-4 rounded border-border bg-card text-primary outline-none focus:ring-2 focus:ring-primary/20"
           />
           {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
         </label>
@@ -74,7 +74,7 @@ export function ConversationList({
             type="button"
             onClick={submitBulk}
             disabled={pending}
-            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+            className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
           >
             {pending ? 'Working…' : `Delete (${selected.size})`}
           </button>
@@ -85,22 +85,22 @@ export function ConversationList({
           <div
             key={conv.id}
             className={cn(
-              'flex items-center gap-2 border-b border-[var(--border)] p-3 hover:bg-[var(--muted)]',
-              selectedId === conv.id && 'bg-[var(--primary)]/5',
+              'flex items-center gap-2 border-b border-border/40 p-3 transition-colors hover:bg-muted/40',
+              selectedId === conv.id && 'bg-primary/10',
             )}
           >
             <input
               type="checkbox"
               checked={selected.has(conv.id)}
               onChange={() => toggle(conv.id)}
-              className="h-4 w-4 shrink-0 rounded border-[var(--border)]"
+              className="h-4 w-4 shrink-0 rounded border-border bg-card text-primary outline-none focus:ring-2 focus:ring-primary/20"
               aria-label="Select conversation"
             />
             <Link
               href={`/b/${businessId}/inbox?c=${conv.id}`}
               className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
             >
-              <span className="truncate font-medium">{conv.customerName ?? 'Customer'}</span>
+              <span className={cn('truncate font-medium text-sm', selectedId === conv.id ? 'text-primary font-semibold' : 'text-foreground/90')}>{conv.customerName ?? 'Customer'}</span>
               <Badge variant={conv.lastMessageState === 'pending' ? 'warning' : 'default'}>
                 {conv.lastMessageState}
               </Badge>
@@ -108,7 +108,7 @@ export function ConversationList({
           </div>
         ))}
         {conversations.length === 0 && (
-          <p className="p-4 text-sm text-[var(--muted-foreground)]">No conversations yet.</p>
+          <p className="p-5 text-sm text-muted-foreground text-center">No conversations yet.</p>
         )}
       </div>
     </div>

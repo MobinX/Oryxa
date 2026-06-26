@@ -65,20 +65,20 @@ export default async function EditBusinessPage({
           <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
             <Link
               href="/businesses"
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)] w-full sm:w-auto"
             >
               Cancel
             </Link>
-            <Button type="submit">Save changes</Button>
+            <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
           </div>
         </form>
         <form
           action={deleteBusinessAction.bind(null, businessId)}
-          className="border-t border-[var(--border)] pt-4"
+          className="border-t border-[var(--border)] pt-4 mt-4"
         >
           <button
             type="submit"
-            className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-red-500/20 text-red-600 hover:bg-red-50 px-4 text-sm font-medium w-full sm:w-auto"
           >
             Delete business
           </button>

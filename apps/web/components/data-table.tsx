@@ -100,16 +100,16 @@ export function DataTable({
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-[var(--border)] bg-white p-8 text-center text-[var(--muted-foreground)]">
+        <div className="rounded-card border border-border/80 bg-card p-12 text-center text-muted-foreground shadow-card">
           {emptyMessage}
         </div>
       ) : (
-        <div className="table-wrap overflow-x-auto rounded-xl border border-[var(--border)] bg-white">
+        <div className="table-wrap overflow-x-auto rounded-card border border-border/80 bg-card shadow-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--muted)]">
+            <thead className="border-b border-border bg-muted/50">
               <tr>
                 {bulkDeleteAction && (
-                  <th className="w-10 px-4 py-3 text-left font-medium">
+                  <th className="w-10 px-5 py-4 text-left font-medium">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -117,29 +117,29 @@ export function DataTable({
                         if (el) el.indeterminate = someSelected;
                       }}
                       onChange={toggleAll}
-                      className="h-4 w-4 rounded border-[var(--border)]"
+                      className="h-4 w-4 rounded border-border text-primary bg-card outline-none focus:ring-2 focus:ring-primary/20"
                       aria-label="Select all"
                     />
                   </th>
                 )}
                 {headers.map((col) => (
-                  <th key={col.key} className={`px-4 py-3 text-left font-medium ${col.className ?? ''}`}>
+                  <th key={col.key} className={`px-5 py-4 text-left font-semibold text-foreground tracking-wide font-geist text-xs uppercase max-w-0 ${col.className ?? ''}`}>
                     {col.header}
                   </th>
                 ))}
-                {hasRowActions && <th className="px-4 py-3 text-right font-medium">Actions</th>}
+                {hasRowActions && <th className="w-1 px-5 py-4 text-right font-semibold text-foreground tracking-wide font-geist text-xs uppercase whitespace-nowrap">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-[var(--border)] last:border-0">
+                <tr key={row.id} className="border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30">
                   {bulkDeleteAction && (
-                    <td className="px-4 py-3">
+                    <td className="px-5 py-4">
                       <input
                         type="checkbox"
                         checked={selected.has(row.id)}
                         onChange={() => toggle(row.id)}
-                        className="h-4 w-4 rounded border-[var(--border)]"
+                        className="h-4 w-4 rounded border-border text-primary bg-card outline-none focus:ring-2 focus:ring-primary/20"
                         aria-label="Select row"
                       />
                     </td>
@@ -147,14 +147,14 @@ export function DataTable({
                   {row.cells.map((cell, index) => (
                     <td
                       key={headers[index]?.key ?? index}
-                      className={`px-4 py-3 ${headers[index]?.className ?? ''}`}
+                      className={`px-5 py-4 text-foreground/90 font-medium ${headers[index]?.className ?? ''}`}
                     >
                       {cell}
                     </td>
                   ))}
                   {hasRowActions && (
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-3">{row.actions}</div>
+                    <td className="w-1 px-5 py-4 whitespace-nowrap text-right">
+                      <div className="flex justify-end gap-2.5">{row.actions}</div>
                     </td>
                   )}
                 </tr>

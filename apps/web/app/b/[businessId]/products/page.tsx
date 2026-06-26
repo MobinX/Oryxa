@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Pencil, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import {
   listProducts,
@@ -20,7 +21,7 @@ function formatPrice(value: number) {
 }
 
 const headers: DataTableHeader[] = [
-  { key: 'name', header: 'Product' },
+  { key: 'name', header: 'Product', className: 'w-full min-w-[180px]' },
   { key: 'sku', header: 'SKU', className: 'hidden md:table-cell text-[var(--muted-foreground)]' },
   { key: 'categoryName', header: 'Category', className: 'hidden lg:table-cell' },
   { key: 'price', header: 'Price' },
@@ -83,13 +84,18 @@ export default async function ProductsPage({
       <>
         <Link
           href={`/b/${businessId}/products/${product.id}/edit`}
-          className="text-sm text-[var(--primary)] hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline font-semibold"
+          title="Edit"
         >
-          Edit
+          <Pencil className="h-4 w-4" /> <span className="hidden sm:inline">Edit</span>
         </Link>
         <form action={deleteProductAction.bind(null, businessId, product.id)}>
-          <button type="submit" className="text-sm text-red-600 hover:underline">
-            Delete
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline font-semibold"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
           </button>
         </form>
       </>
