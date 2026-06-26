@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { VariantFields } from '@/components/products/variant-fields';
+import { VariantEditor } from '@/components/products/variant-editor';
 import { CategorySelect } from '@/components/products/category-select';
 
 export default async function NewProductPage({
@@ -55,7 +55,7 @@ export default async function NewProductPage({
             </div>
           </div>
 
-          <VariantFields slots={3} />
+          <VariantEditor />
 
           <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
             <Link

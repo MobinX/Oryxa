@@ -1,11 +1,19 @@
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth';
-import { listProducts, listCategories } from '@/lib/api';
+import {
+  listProducts,
+  listCategories,
+  toCsv,
+  csvColumnsForProducts,
+  type ProductListItem,
+} from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Badge, Card } from '@/components/ui/card';
-import { deleteProductAction } from '@/app/actions/products';
+import { DataTable, type Column } from '@/components/data-table';
+import { CsvDownloadButton } from '@/components/csv-download-button';
+import { deleteProductAction, deleteProductsBulkAction } from '@/app/actions/products';
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -23,19 +31,55 @@ export default async function ProductsPage({
   const token = await requireAuth();
 
   const [{ products, totalCount }, categories] = await Promise.all([
-    listProducts(token, businessId, {
-      categoryId: categoryId || undefined,
-      limit: 100,
-    }),
+    listProducts(token, businessId, { categoryId: categoryId || undefined, limit: 100 }),
     listCategories(token, businessId),
   ]);
 
   const query = q.trim().toLowerCase();
-  const filtered = query
+  const filtered: ProductListItem[] = query
     ? products.filter(
         (p) => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query),
       )
     : products;
+
+  const columns: Column<ProductListItem>[] = [
+    {
+      key: 'name',
+      header: 'Product',
+      render: (p) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--muted)]">
+            {p.thumbnailUrl ? (
+              <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xs text-[var(--muted-foreground)]">No img</span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{p.name}</p>
+            <p className="truncate text-xs text-[var(--muted-foreground)] md:hidden">{p.sku}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'sku', header: 'SKU', className: 'hidden md:table-cell text-[var(--muted-foreground)]' },
+    {
+      key: 'categoryName',
+      header: 'Category',
+      className: 'hidden lg:table-cell',
+      render: (p) =>
+        p.categoryName ? <Badge>{p.categoryName}</Badge> : <span className="text-[var(--muted-foreground)]">—</span>,
+    },
+    { key: 'price', header: 'Price', render: (p) => <span className="font-medium">{formatPrice(p.price)}</span> },
+    {
+      key: 'variantCount',
+      header: 'Variants',
+      className: 'hidden sm:table-cell',
+      render: (p) => String(p.variantCount ?? 0),
+    },
+  ];
+
+  const csv = toCsv(filtered as unknown as Record<string, unknown>[], csvColumnsForProducts());
 
   return (
     <div className="space-y-6">
@@ -46,9 +90,12 @@ export default async function ProductsPage({
             Manage your catalog — {totalCount} total
           </p>
         </div>
-        <Link href={`/b/${businessId}/products/new`}>
-          <Button>Add product</Button>
-        </Link>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <CsvDownloadButton csv={csv} filename={`products-${businessId}.csv`} />
+          <Link href={`/b/${businessId}/products/new`}>
+            <Button>Add product</Button>
+          </Link>
+        </div>
       </div>
 
       <form className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" method="get">
@@ -85,77 +132,29 @@ export default async function ProductsPage({
           )}
         </Card>
       ) : (
-        <div className="table-wrap rounded-xl border border-[var(--border)] bg-white">
-          <table className="w-full text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--muted)]">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Product</th>
-                <th className="hidden px-4 py-3 text-left font-medium md:table-cell">SKU</th>
-                <th className="hidden px-4 py-3 text-left font-medium lg:table-cell">Category</th>
-                <th className="px-4 py-3 text-left font-medium">Price</th>
-                <th className="hidden px-4 py-3 text-left font-medium sm:table-cell">Variants</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((product) => (
-                <tr key={product.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--muted)]">
-                        {product.thumbnailUrl ? (
-                          <img
-                            src={product.thumbnailUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-xs text-[var(--muted-foreground)]">No img</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{product.name}</p>
-                        <p className="truncate text-xs text-[var(--muted-foreground)] md:hidden">
-                          {product.sku}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="hidden px-4 py-3 text-[var(--muted-foreground)] md:table-cell">
-                    {product.sku}
-                  </td>
-                  <td className="hidden px-4 py-3 lg:table-cell">
-                    {product.categoryName ? (
-                      <Badge>{product.categoryName}</Badge>
-                    ) : (
-                      <span className="text-[var(--muted-foreground)]">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-medium">{formatPrice(product.price)}</td>
-                  <td className="hidden px-4 py-3 sm:table-cell">{product.variantCount ?? 0}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Link
-                        href={`/b/${businessId}/products/${product.id}/edit`}
-                        className="text-sm text-[var(--primary)] hover:underline"
-                      >
-                        Edit
-                      </Link>
-                      <form action={deleteProductAction.bind(null, businessId, product.id)}>
-                        <button
-                          type="submit"
-                          className="text-sm text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={filtered}
+          getRowId={(p) => p.id}
+          columns={columns}
+          bulkDeleteAction={deleteProductsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
+          bulkDeleteIdField="productIds"
+          hasRowActions
+          rowActions={(p) => (
+            <>
+              <Link
+                href={`/b/${businessId}/products/${p.id}/edit`}
+                className="text-sm text-[var(--primary)] hover:underline"
+              >
+                Edit
+              </Link>
+              <form action={deleteProductAction.bind(null, businessId, p.id)}>
+                <button type="submit" className="text-sm text-red-600 hover:underline">
+                  Delete
+                </button>
+              </form>
+            </>
+          )}
+        />
       )}
     </div>
   );

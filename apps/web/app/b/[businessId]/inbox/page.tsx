@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth';
 import { listConversations, listMessages } from '@/lib/api';
-import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { sendMessageAction } from '@/app/actions/inbox';
+import { sendMessageAction, deleteConversationAction, deleteConversationsBulkAction } from '@/app/actions/inbox';
+import { ConversationList } from '@/components/conversation-list';
 import { cn } from '@/lib/utils';
 
 export default async function InboxPage({
@@ -27,41 +27,38 @@ export default async function InboxPage({
         <div
           className={cn(
             'border-b border-[var(--border)] lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r',
-            selectedId ? 'hidden lg:block' : 'max-h-64 overflow-y-auto lg:max-h-none',
+            selectedId ? 'hidden lg:block' : '',
           )}
         >
-          {conversations.map((conv) => (
-            <Link
-              key={conv.id}
-              href={`/b/${businessId}/inbox?c=${conv.id}`}
-              className={cn(
-                'block w-full border-b border-[var(--border)] p-4 text-left hover:bg-[var(--muted)]',
-                selectedId === conv.id && 'bg-[var(--primary)]/5',
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">{conv.customerName ?? 'Customer'}</span>
-                <Badge variant={conv.lastMessageState === 'pending' ? 'warning' : 'default'}>
-                  {conv.lastMessageState}
-                </Badge>
-              </div>
-            </Link>
-          ))}
-          {conversations.length === 0 && (
-            <p className="p-4 text-sm text-[var(--muted-foreground)]">No conversations yet.</p>
-          )}
+          <ConversationList
+            conversations={conversations}
+            businessId={businessId}
+            selectedId={selectedId}
+            bulkDeleteAction={deleteConversationsBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
+          />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
           {selectedId && messages ? (
             <>
-              <div className="flex items-center gap-2 border-b border-[var(--border)] p-3 lg:hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3 lg:hidden">
                 <Link
                   href={`/b/${businessId}/inbox`}
                   className="text-sm text-[var(--primary)] hover:underline"
                 >
                   ← Conversations
                 </Link>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] p-3">
+                <span className="text-sm font-medium">Conversation</span>
+                <form action={deleteConversationAction.bind(null, businessId, selectedId)}>
+                  <button
+                    type="submit"
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Delete conversation
+                  </button>
+                </form>
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
                 {messages.map((m) => (

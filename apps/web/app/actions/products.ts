@@ -8,34 +8,43 @@ import {
   updateProduct,
   deleteProduct,
   uploadVariantImage,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 } from '@/lib/api';
 
-const MAX_VARIANTS = 8;
+type ParsedVariant = {
+  id?: string;
+  name: string;
+  stock: number;
+  price?: number;
+  isAvailable?: boolean;
+  imageUrl?: string;
+};
 
+/**
+ * Parses an arbitrary number of variant rows from FormData.
+ * Each variant is identified by a numeric index suffix on its field names:
+ *   variant_<i>_name, variant_<i>_stock, variant_<i>_price,
+ *   variant_<i>_image, variant_<i>_imageKey, variant_<i>_id
+ * Rows with an empty name are skipped. Image upload failures are tolerated
+ * (the variant is still saved without an image) instead of failing the whole
+ * product create/update.
+ */
 async function parseVariants(
   token: string,
   businessId: string,
   formData: FormData,
-): Promise<
-  Array<{
-    id?: string;
-    name: string;
-    stock: number;
-    price?: number;
-    isAvailable?: boolean;
-    imageUrl?: string;
-  }>
-> {
-  const variants: Array<{
-    id?: string;
-    name: string;
-    stock: number;
-    price?: number;
-    isAvailable?: boolean;
-    imageUrl?: string;
-  }> = [];
+): Promise<ParsedVariant[]> {
+  const indices = new Set<number>();
+  for (const key of formData.keys()) {
+    const match = key.match(/^variant_(\d+)_/);
+    if (match) indices.add(Number(match[1]));
+  }
 
-  for (let i = 0; i < MAX_VARIANTS; i++) {
+  const variants: ParsedVariant[] = [];
+
+  for (const i of [...indices].sort((a, b) => a - b)) {
     const name = String(formData.get(`variant_${i}_name`) ?? '').trim();
     if (!name) continue;
 
@@ -49,17 +58,11 @@ async function parseVariants(
     const file = formData.get(`variant_${i}_image`);
     if (file instanceof File && file.size > 0) {
       const uploaded = await uploadVariantImage(token, businessId, file);
-      imageUrl = uploaded.key;
+      if (uploaded) imageUrl = uploaded.key;
+      // If upload returns null (B2 not configured / rejected), keep going.
     }
 
-    variants.push({
-      id,
-      name,
-      stock,
-      price,
-      isAvailable: true,
-      imageUrl,
-    });
+    variants.push({ id, name, stock, price, isAvailable: true, imageUrl });
   }
 
   if (variants.length === 0) {
@@ -127,4 +130,58 @@ export async function deleteProductAction(businessId: string, productId: string)
   const token = await requireAuth();
   await deleteProduct(token, businessId, productId);
   revalidatePath(`/b/${businessId}/products`);
+}
+
+export async function deleteProductsBulkAction(
+  businessId: string,
+  formData: FormData,
+) {
+  const token = await requireAuth();
+  const ids = formData.getAll('productIds') as string[];
+  await Promise.all(
+    ids.map((id) => deleteProduct(token, businessId, id).catch(() => null)),
+  );
+  revalidatePath(`/b/${businessId}/products`);
+}
+
+export async function createCategoryAction(businessId: string, formData: FormData) {
+  const token = await requireAuth();
+  const name = String(formData.get('name') ?? '').trim();
+  if (!name) return;
+  await createCategory(token, businessId, name);
+  revalidatePath(`/b/${businessId}/products`);
+  revalidatePath(`/b/${businessId}/categories`);
+}
+
+export async function updateCategoryAction(
+  businessId: string,
+  categoryId: string,
+  formData: FormData,
+) {
+  const token = await requireAuth();
+  const name = String(formData.get('name') ?? '').trim();
+  if (!name) return;
+  await updateCategory(token, businessId, categoryId, name);
+  revalidatePath(`/b/${businessId}/products`);
+  revalidatePath(`/b/${businessId}/categories`);
+}
+
+export async function deleteCategoryAction(businessId: string, categoryId: string) {
+  const token = await requireAuth();
+  await deleteCategory(token, businessId, categoryId);
+  revalidatePath(`/b/${businessId}/products`);
+  revalidatePath(`/b/${businessId}/categories`);
+}
+
+export async function deleteCategoriesBulkAction(
+  businessId: string,
+  formData: FormData,
+) {
+  const token = await requireAuth();
+  const ids = formData.getAll('categoryIds') as string[];
+  await Promise.all(
+    ids.map((id) => deleteCategory(token, businessId, id).catch(() => null)),
+  );
+  revalidatePath(`/b/${businessId}/products`);
+  revalidatePath(`/b/${businessId}/categories`);
 }

@@ -1,13 +1,46 @@
 import Link from 'next/link';
-import { Building2, Plus, ArrowRight } from 'lucide-react';
+import { Building2, Plus, ArrowRight, Pencil, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import { listBusinesses } from '@/lib/api';
+import { listBusinesses, type Business } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DataTable, type Column } from '@/components/data-table';
+import {
+  deleteBusinessAction,
+  deleteBusinessesBulkAction,
+} from '@/app/actions/business';
 
 export default async function BusinessesPage() {
   const token = await requireAuth();
   const { businesses } = await listBusinesses(token);
+
+  const columns: Column<Business>[] = [
+    {
+      key: 'name',
+      header: 'Business',
+      render: (b) => (
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{b.name}</p>
+            {b.description && (
+              <p className="mt-0.5 line-clamp-1 text-sm text-[var(--muted-foreground)]">
+                {b.description}
+              </p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      className: 'hidden sm:table-cell text-[var(--muted-foreground)]',
+      render: (b) => new Date(b.createdAt).toLocaleDateString(),
+    },
+  ];
 
   return (
     <div>
@@ -41,34 +74,39 @@ export default async function BusinessesPage() {
           </Link>
         </Card>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {businesses.map((business) => (
-            <Link key={business.id} href={`/b/${business.id}/dashboard`}>
-              <Card className="group h-full transition-shadow hover:shadow-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="truncate font-semibold group-hover:text-[var(--primary)]">
-                        {business.name}
-                      </h2>
-                      {business.description && (
-                        <p className="mt-1 line-clamp-2 text-sm text-[var(--muted-foreground)]">
-                          {business.description}
-                        </p>
-                      )}
-                      <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                        Created {new Date(business.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <ArrowRight className="h-5 w-5 shrink-0 text-[var(--muted-foreground)] opacity-0 transition-opacity group-hover:opacity-100" />
-                </div>
-              </Card>
-            </Link>
-          ))}
+        <div className="mt-8">
+          <DataTable
+            rows={businesses}
+            getRowId={(b) => b.id}
+            columns={columns}
+            bulkDeleteAction={deleteBusinessesBulkAction as unknown as (fd: FormData) => Promise<void>}
+            bulkDeleteIdField="businessIds"
+            hasRowActions
+            rowActions={(b) => (
+              <>
+                <Link
+                  href={`/b/${b.id}/dashboard`}
+                  className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+                >
+                  Open <ArrowRight className="h-3 w-3" />
+                </Link>
+                <Link
+                  href={`/businesses/${b.id}/edit`}
+                  className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </Link>
+                <form action={deleteBusinessAction.bind(null, b.id)}>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-1 text-sm text-red-600 hover:underline"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete
+                  </button>
+                </form>
+              </>
+            )}
+          />
         </div>
       )}
     </div>

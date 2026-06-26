@@ -1,0 +1,38 @@
+'use client';
+
+/**
+ * Triggers a client-side CSV file download. The CSV string is produced on the
+ * server (see lib/api.ts `toCsv`) and passed in as a prop, so no network
+ * round-trip happens on click.
+ */
+export function CsvDownloadButton({
+  csv,
+  filename,
+  label = 'Download CSV',
+}: {
+  csv: string;
+  filename: string;
+  label?: string;
+}) {
+  const download = () => {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={download}
+      className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-medium hover:bg-[var(--muted)]"
+    >
+      {label}
+    </button>
+  );
+}

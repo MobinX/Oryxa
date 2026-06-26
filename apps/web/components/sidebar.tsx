@@ -8,6 +8,8 @@ import {
   Radio,
   Building2,
   ChevronLeft,
+  FolderTree,
+  Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,8 +19,10 @@ const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: 'products', label: 'Products', icon: Package },
   { href: 'orders', label: 'Orders', icon: ShoppingCart },
+  { href: 'categories', label: 'Categories', icon: FolderTree },
   { href: 'channels', label: 'Channels', icon: Radio },
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
+  { href: 'settings', label: 'Settings', icon: Settings },
 ];
 
 function NavLink({

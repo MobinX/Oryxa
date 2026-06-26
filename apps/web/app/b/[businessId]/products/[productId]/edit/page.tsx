@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { VariantFields } from '@/components/products/variant-fields';
+import { VariantEditor } from '@/components/products/variant-editor';
 
 export default async function EditProductPage({
   params,
@@ -32,8 +32,6 @@ export default async function EditProductPage({
     imageKey: v.imageKey,
     imagePreviewUrl: v.imageUrl,
   }));
-
-  const slots = Math.max(3, variantInitial.length);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -81,7 +79,7 @@ export default async function EditProductPage({
             </div>
           </div>
 
-          <VariantFields slots={slots} initial={variantInitial} />
+          <VariantEditor initial={variantInitial} />
 
           <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
             <Link
