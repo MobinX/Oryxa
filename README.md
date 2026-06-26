@@ -332,6 +332,272 @@ Set `NEXT_PUBLIC_API_URL` to the API Vercel URL. Other `NEXT_PUBLIC_FIREBASE_*` 
    - The presigned PUT URL's signature binds the `Content-Type` header, so a client cannot lie about the MIME type — B2 rejects mismatched PUTs with 403.
    - After changing CORS, browsers may cache the preflight result for up to `maxAgeSeconds`; if a PUT still fails right after a rule change, do a hard refresh or wait for the cache to expire.
 
+## Architecture: Messenger messages & Facebook comments
+
+Oryxa handles two **separate inbound domains** on the same Facebook Page channel. They share the webhook endpoint, security gates, background processing, channel/agent lookup, and the LangChain `Agent` class — but they use different tables, runners, outbound tools, and concurrency rules.
+
+```
+                         ┌─────────────────────────────────────────┐
+                         │           Meta (Facebook)               │
+                         │  Messenger DMs  │  Page feed comments   │
+                         └────────┬───────────────┬────────────────┘
+                                  │               │
+                                  ▼               ▼
+                    POST /webhooks/facebook  (same endpoint)
+                    ├─ HMAC verify (META_APP_SECRET)
+                    ├─ JSON parse + validate object=page
+                    └─ 200 EVENT_RECEIVED immediately
+                              │
+                              ▼ runInBackground(processEntries)
+                    ┌─────────────────────────────────────┐
+                    │  For each entry.id (= page id):     │
+                    │  getChannelByPageId → channel row   │
+                    └──────────────┬──────────────────────┘
+                                   │
+              ┌────────────────────┴────────────────────┐
+              ▼                                         ▼
+    entry.messaging[]                          entry.changes[]
+    (DM events)                                (feed / comments)
+              │                                         │
+              ▼                                         ▼
+    conversations + messages                   comment_threads + comments
+              │                                         │
+              ▼                                         ▼
+    POST /internal/run                         POST /internal/run-comment
+              │                                         │
+              ▼                                         ▼
+    runAgentForConversation                    runAgentForCommentThread
+              │                                         │
+              ▼                                         ▼
+    send_message tool → Messenger API          reply_comment tool → Graph /replies
+```
+
+### Data model
+
+Both domains hang off the same `channels` row (one Facebook Page = one channel with `api_token` + `platform_channel_id` + optional `agent_id`).
+
+| Domain | Container table | Key | Child table | Dedup key |
+|--------|-----------------|-----|-------------|-----------|
+| **Messenger** | `conversations` | `(channel_id, customer_platform_id)` — one DM thread per customer | `messages` | `messages.external_id` = Meta `mid` |
+| **Comments** | `comment_threads` | `(channel_id, platform_item_id, commenter_platform_id)` — one thread per commenter per post | `comments` | `comments.external_id` = Meta `comment_id` |
+
+**State machine** (both domains use the same enum: `pending` → `working` → `done`):
+
+- Container: `conversations.last_message_state` / `comment_threads.last_comment_state`
+- Child row: `messages.state` / `comments.state` (customer rows start `pending`; self rows start `done`)
+
+**Profile & context columns:**
+
+| Domain | Name | Avatar | Extra context |
+|--------|------|--------|---------------|
+| Messenger | `conversations.customer_name` | `conversations.customer_avatar` | — |
+| Comments | `comment_threads.commenter_name` (from webhook) | `comment_threads.commenter_avatar` (Graph API) | `comment_threads.post_context` (post caption/attachment, cached once) |
+
+### Shared webhook entry (`apps/api/src/webhooks/facebook.ts`)
+
+Every inbound delivery — DM or comment — follows the same front door:
+
+1. **`GET /webhooks/facebook`** — one-time subscription handshake (`hub.verify_token` must match `META_VERIFY_TOKEN`).
+2. **`POST /webhooks/facebook`** — read **raw body** → verify `X-Hub-Signature-256` with `META_APP_SECRET` → parse JSON → require `object === 'page'` and `entry[]`.
+3. **Ack fast** — return `200 EVENT_RECEIVED` immediately; call `runInBackground(c, processEntries(entry))` so Meta doesn't time out and retry the whole batch (see reliability #6).
+4. **`processEntries`** — for each `entry`:
+   - Look up `channel = getChannelByPageId(entry.id)` (the page id Meta sends). Unknown page → skip silently.
+   - If `entry.messaging` → `processMessagingEvents(channel, …)`
+   - If `entry.changes` → `processCommentChanges(channel, entry.id, …)`
+   - A single batched POST can contain both; both branches run for the same page.
+
+---
+
+### Flow A: Messenger message (DM) — end to end
+
+**Trigger:** customer sends a text message to the Page on Messenger.
+
+**Webhook payload shape:**
+```json
+{
+  "object": "page",
+  "entry": [{
+    "id": "<PAGE_ID>",
+    "messaging": [{
+      "sender": { "id": "<PSID>" },
+      "message": { "mid": "<MID>", "text": "Do you have t-shirts?" }
+    }]
+  }]
+}
+```
+
+**Step-by-step (background, after ack):**
+
+| Step | Where | What happens |
+|------|-------|--------------|
+| 1 | `processMessagingEvents` | Skip if `message.is_echo` (bot's own reply echoed back). Skip if no `message.text` (attachments, read receipts, postbacks). |
+| 2 | `processInboundMessage` | **Get-or-create** `conversations` row for `(channel_id, sender.id)`. Insert `messages` row: `from=customer`, `state=pending`, `external_id=mid` with **`ON CONFLICT DO NOTHING`** on `external_id`. Returns `{ conversationId, priorStatus, inserted, needsProfile }`. |
+| 3 | Idempotency | If `inserted=false` (Meta retry of same `mid`) → stop; no agent trigger. |
+| 4 | State update | If insert succeeded and conversation was `done` → set `last_message_state=pending`. If already `working`, **do not downgrade** (agent is mid-run). |
+| 5 | Profile enrichment | If `needsProfile` (name or avatar still null): `getFacebookUserProfile(pageToken, psid)` → `setConversationProfileIfMissing` (writes each column only when NULL). Best-effort; retries on next inbound if Graph fails. |
+| 6 | Trigger gate | If `inserted && priorStatus === 'done' && channel.agentId` → `triggerAgentRun(conversationId)` — fire-and-forget `POST /internal/run`. Messages arriving while conversation is already `pending`/`working` do **not** re-trigger here; the runner's tail re-trigger handles them. |
+| 7 | `POST /internal/run` | Auth: `x-internal-key === INTERNAL_KEY`. Validates `{ conversationId }` (Zod). `runInBackground(runAgentForConversation(id))` → `202 accepted`. |
+| 8 | **Atomic claim** | `claimConversationForAgentRun(id)`: `UPDATE … SET last_message_state='working' WHERE state IN ('done','pending') RETURNING id`. Only one concurrent caller wins; others return immediately. |
+| 9 | **Load backlog** | `listPendingCustomerMessages` — **all** pending customer messages, oldest first, **no limit**. Snapshot their ids (`repliedMessageIds`). Merge with last 10 messages from `getConversationWithHistory` (includes recent bot replies), dedupe by id, sort chronologically → agent `history`. |
+| 10 | **Agent run** | `Agent` with default tools: `get_product`, `create_order`, `send_message`. System prompt includes catalog preview + *"Read all pending messages and reply once addressing everything."* |
+| 11 | **Outbound + persist** | **`send_message` tool** (source of truth): `sendMessage(pageToken, psid, text)` → Messenger API, then `createMessage(from=self, content=text, state=done)`. Runner fallback only if agent never called the tool but returned text. |
+| 12 | **Mark done** | `markMessagesDoneByIds(repliedMessageIds)` — only the snapshot from step 9. Messages that arrived **during** the run stay `pending`. Set conversation `done`. |
+| 13 | **Tail re-trigger** | `checkPendingMessages` — if any customer message still pending → `triggerAgentRun` again. Next run claims atomically and handles the new backlog. |
+
+**Burst behavior:** if a customer sends 12 messages while the bot is away, one agent run loads all 12 into history and replies once (consolidated). This is intentional for DMs — conversational, private, one reply addressing the whole burst.
+
+**Concurrency:** two webhooks for the same conversation at the same time → both may call `triggerAgentRun`, but only one `claimConversationForAgentRun` succeeds → exactly one agent run.
+
+```mermaid
+sequenceDiagram
+  participant Meta as Meta Messenger
+  participant WH as POST /webhooks/facebook
+  participant BG as processMessagingEvents
+  participant DB as Postgres
+  participant IR as POST /internal/run
+  participant AR as runAgentForConversation
+  participant Agent as LangChain Agent
+  participant FB as Graph sendMessage
+
+  Meta->>WH: messaging webhook
+  WH->>WH: verify signature
+  WH-->>Meta: 200 EVENT_RECEIVED
+  WH->>BG: runInBackground
+  BG->>DB: processInboundMessage (dedup mid)
+  BG->>DB: setConversationProfileIfMissing
+  BG->>IR: triggerAgentRun (if idle + inserted)
+  IR->>AR: runInBackground
+  AR->>DB: claimConversationForAgentRun
+  AR->>DB: listPendingCustomerMessages
+  AR->>Agent: run(history, send_message tool)
+  Agent->>FB: sendMessage
+  Agent->>DB: createMessage (self)
+  AR->>DB: markMessagesDoneByIds + done
+  AR->>IR: tail re-trigger if pending left
+```
+
+---
+
+### Flow B: Facebook Page comment — end to end
+
+**Trigger:** someone comments on a Page post (feed webhook).
+
+**Webhook payload shape:**
+```json
+{
+  "object": "page",
+  "entry": [{
+    "id": "<PAGE_ID>",
+    "changes": [{
+      "field": "feed",
+      "value": {
+        "item": "comment",
+        "verb": "add",
+        "comment_id": "<COMMENT_ID>",
+        "post_id": "<POST_ID>",
+        "message": "Do you have this in red?",
+        "from": { "id": "<USER_ID>", "name": "Alice" }
+      }
+    }]
+  }]
+}
+```
+
+**Step-by-step (background, after ack):**
+
+| Step | Where | What happens |
+|------|-------|--------------|
+| 1 | `processCommentChanges` | Require `field=feed`, `item=comment`, `verb=add`. Skip edits/removes. Skip if no `comment_id`, `message` text, or `from.id`. Skip if `from.id === pageId` (page's own comment / bot reply echo). |
+| 2 | `processInboundComment` | **Get-or-create** `comment_threads` for `(channel_id, post_id, commenter_id)`. Insert `comments` row: `from=customer`, `state=pending`, `external_id=comment_id` with **`ON CONFLICT DO NOTHING`**. Returns `{ threadId, priorStatus, inserted, needsProfile }`. |
+| 3 | Idempotency | Same as Messenger — Meta retry of same `comment_id` → `inserted=false`, no trigger. |
+| 4 | State update | If insert succeeded and thread was `done` → `last_comment_state=pending`. Never downgrade `working`. |
+| 5 | Profile enrichment | Name from webhook payload at thread creation. If avatar missing: `getFacebookUserProfile` → `setCommentThreadProfileIfMissing`. |
+| 6 | Trigger gate | If `inserted && priorStatus === 'done' && channel.agentId` → `triggerCommentRun(threadId)` → `POST /internal/run-comment`. |
+| 7 | `POST /internal/run-comment` | Auth + Zod `{ commentThreadId }`. `runInBackground(runAgentForCommentThread(id))` → `202`. |
+| 8 | **Atomic claim** | `claimCommentThreadForRun(threadId)` — same pattern as conversations. **Different threads (different commenters/posts) claim independently → parallel processing.** |
+| 9 | **Pick ONE comment** | `getOldestPendingComment` — single oldest pending customer comment. Newer pending comments in the same thread are **excluded** from this run's history. |
+| 10 | **Post context** | If `comment_threads.post_context` is null → `getFacebookPostContext(pageToken, post_id)` (caption, attachment, permalink) → cache on thread. Prepended to system prompt: `Post being commented on: …`. |
+| 11 | **History** | `listDoneCommentHistory` (prior done comments + bot replies on this post from this commenter) + the one comment being handled → agent `history`. |
+| 12 | **Agent run** | Custom tools via `createCommentAgentTools`: `get_product`, `create_order`, **`reply_comment`**. Reply guidance: only reply if directed at the page; stay silent for user-to-user chatter. **No fallback send** — silence is valid. |
+| 13 | **Outbound + persist** | If agent calls **`reply_comment`**: `replyToFacebookComment(pageToken, parentCommentId, text)` → Graph `POST /{comment-id}/replies`, then `createComment(from=self, externalId=<new id>, parentExternalId, state=done)`. |
+| 14 | **Mark done** | Always `markCommentDone(currentCommentId)` — even if agent stayed silent or errored (prevents duplicate public replies on retry). Set thread `done`. |
+| 15 | **Tail re-trigger** | `checkPendingComments` — if this commenter left more pending comments on this post → `triggerCommentRun` → next run handles comment #2, then #3, etc. |
+
+**Within-thread queue:** Alice comments three times on Post X → three separate agent runs, oldest first, each with clean history (prior done + one current comment). **Across threads:** Alice on Post X and Bob on Post X run in parallel (different `comment_threads` rows, independent claims).
+
+```mermaid
+sequenceDiagram
+  participant Meta as Meta Page Feed
+  participant WH as POST /webhooks/facebook
+  participant BG as processCommentChanges
+  participant DB as Postgres
+  participant IR as POST /internal/run-comment
+  participant CR as runAgentForCommentThread
+  participant Agent as LangChain Agent
+  participant FB as Graph replyToComment
+
+  Meta->>WH: feed comment webhook
+  WH->>WH: verify signature
+  WH-->>Meta: 200 EVENT_RECEIVED
+  WH->>BG: runInBackground
+  BG->>DB: processInboundComment (dedup comment_id)
+  BG->>DB: setCommentThreadProfileIfMissing
+  BG->>IR: triggerCommentRun (if idle + inserted)
+  IR->>CR: runInBackground
+  CR->>DB: claimCommentThreadForRun
+  CR->>DB: getOldestPendingComment
+  CR->>DB: getFacebookPostContext (cache post_context)
+  CR->>Agent: run(history, reply_comment tool)
+  alt directed at page
+    Agent->>FB: replyToFacebookComment
+    Agent->>DB: createComment (self)
+  else user-to-user / not for page
+    Agent-->>CR: silence (no tool call)
+  end
+  CR->>DB: markCommentDone + done
+  CR->>IR: tail re-trigger if more pending
+```
+
+---
+
+### Messenger vs comments — design comparison
+
+| Aspect | Messenger (`conversations`/`messages`) | Comments (`comment_threads`/`comments`) |
+|--------|----------------------------------------|----------------------------------------|
+| **Thread key** | One per customer per channel | One per commenter per post per channel |
+| **Parallelism** | One conversation = one queue | Many threads per page run in parallel |
+| **Per-run scope** | **All** pending messages (burst drain) | **One** oldest pending comment |
+| **Reply style** | Single consolidated reply to whole burst | Individual public reply per comment |
+| **Outbound tool** | `send_message` → Messenger Send API | `reply_comment` → Graph `/{id}/replies` |
+| **Fallback send** | Yes — if agent skips tool but returns text | **No** — silence is valid (trust agent) |
+| **Reply gating** | Always reply (DMs expect a response) | Agent decides (page-directed vs user-to-user) |
+| **Post context** | N/A | Cached `post_context` on thread |
+| **Internal route** | `POST /internal/run` | `POST /internal/run-comment` |
+| **Runner** | `apps/api/src/lib/agent-runner.ts` | `apps/api/src/lib/comment-runner.ts` |
+| **Dedup column** | `messages.external_id` = `mid` | `comments.external_id` = `comment_id` |
+| **Echo filter** | `message.is_echo` | `from.id === pageId` |
+
+Both runners share: atomic claim, tail re-trigger, ack-fast webhook, HMAC verification, idempotent insert, profile enrichment from Graph API, same `Agent` class + catalog tools (`get_product`, `create_order`).
+
+### Key source files
+
+| File | Role |
+|------|------|
+| `apps/api/src/webhooks/facebook.ts` | Single webhook; branches messaging vs feed changes |
+| `apps/api/src/lib/background.ts` | `runInBackground` / `flushBackground` (tests) |
+| `apps/api/src/lib/agent-runner.ts` | Messenger agent orchestration |
+| `apps/api/src/lib/comment-runner.ts` | Comment agent orchestration |
+| `apps/api/src/routes/internal/run.ts` | `/internal/run` + `/internal/run-comment` |
+| `packages/db/crud/conversation.ts` | DM CRUD, claim, pending backlog, profile |
+| `packages/db/crud/comment.ts` | Comment CRUD, claim, oldest pending, post context |
+| `packages/agent/Agent.ts` | Shared LangChain ReAct agent (custom tools + guidance) |
+| `packages/agent/tools/index.ts` | Messenger tools (`send_message`) |
+| `packages/agent/tools/comment.ts` | Comment tools (`reply_comment`) |
+| `packages/integrations/facebook.ts` | OAuth, sendMessage, replyToComment, profile, post context, webhook verify |
+| `packages/shared/schemas/conversation.ts` | `internalRunInputSchema`, `internalRunCommentInputSchema` |
+
+Messenger security (#1–#5) and reliability (#6–#9) are documented in the sections below. Comment-specific OAuth scopes (`pages_manage_engagement`, `pages_read_engagement`) and schema migrations (`0003`, `0004`) are in the Comments section at the end.
+
 ## Meta (Facebook) message security
 
 The Messenger receive/send path was hardened for production. This section documents what was fixed, **why** each fix was needed, and **how** each mechanism actually works. Relevant env vars:
