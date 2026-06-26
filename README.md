@@ -331,3 +331,84 @@ Set `NEXT_PUBLIC_API_URL` to the API Vercel URL. Other `NEXT_PUBLIC_FIREBASE_*` 
    - `b2_update_bucket` requires `accountId`, `bucketId`, and `bucketType` (use `allPrivate` for a private bucket).
    - The presigned PUT URL's signature binds the `Content-Type` header, so a client cannot lie about the MIME type — B2 rejects mismatched PUTs with 403.
    - After changing CORS, browsers may cache the preflight result for up to `maxAgeSeconds`; if a PUT still fails right after a rule change, do a hard refresh or wait for the cache to expire.
+
+## Meta (Facebook) message security
+
+The Messenger receive/send path was hardened for production. This section documents what was fixed, **why** each fix was needed, and **how** each mechanism actually works. Relevant env vars:
+
+| Variable | Used for |
+|----------|----------|
+| `META_VERIFY_TOKEN` | One-time webhook subscription handshake (`GET /webhooks/facebook`) |
+| `META_APP_SECRET` | HMAC-SHA256 verification of every inbound webhook payload |
+| `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI` | OAuth flow that yields page access tokens |
+| `INTERNAL_KEY` | Signs + verifies the OAuth `state` token (and authorizes `/internal/run`) |
+
+### 1. Webhook signature verification
+
+**What:** `POST /webhooks/facebook` now verifies the `X-Hub-Signature-256` header against an HMAC-SHA256 of the raw request body before doing anything else. `verifyWebhookSignature` in `packages/integrations/facebook.ts` computes `HMAC_SHA256(META_APP_SECRET, rawBody)`, hex-encodes it, and constant-time-compares it against the header value (`sha256=<hex>`). If `META_APP_SECRET` is missing or the signature is absent/invalid it returns `403` — fail closed.
+
+**Why:** Previously `verifyWebhookSignature` was a stub that returned `true` and was never even called. That meant anyone could `POST` a forged payload to `/webhooks/facebook` and inject fake customer messages, trigger agent runs, or make the bot DM arbitrary recipient IDs. Meta signs every webhook delivery with your app secret so you can prove a payload really came from Meta — not verifying that signature leaves the inbound endpoint fully unauthenticated.
+
+**How it works:**
+
+1. The handler reads the **raw** body once with `c.req.text()` (it must not parse JSON first, because the signature is over the exact bytes Meta sent — `JSON.parse` + re-serialize would change whitespace and break the hash).
+2. `verifyWebhookSignature(raw, x-hub-signature-256)` imports `META_APP_SECRET` as an HMAC-SHA256 key via Web Crypto (`crypto.subtle`), signs the raw body, and compares the resulting hex with the header using a constant-time compare (avoids a timing side-channel that could let an attacker forge signatures byte-by-byte).
+3. Only if it matches does the handler `JSON.parse` and process. Otherwise: `403 Invalid signature`.
+
+The same Web Crypto path works on both Node and edge runtimes, so it's safe behind Vercel's edge/serverless handler.
+
+### 2. Signed, expiring OAuth `state`
+
+**What:** The `GET /{businessId}/channels/facebook/auth` route now issues a **signed, short-lived `state` token** bound to the authenticated user and business (`createOAuthState`). The OAuth callback (`/auth/facebook/callback`) verifies it with `verifyOAuthState` before trusting the business id it carries.
+
+**Why:** The old code put the raw `businessId` directly into OAuth `state`, and the callback had no auth middleware. An attacker could start Facebook OAuth with `state=<victimBusinessId>`, complete it with their own Facebook account, and connect their page to a **business they don't own** — hijacking that business's channel. OAuth `state` is meant to be an opaque, unforgeable, one-time token that ties the callback back to the user who started the flow; using the raw business id defeats that entirely.
+
+**How it works:**
+
+1. The auth route runs after `authMiddleware` + `businessAccessMiddleware`, so `c.get('user')` is the verified owner of `businessId`. It calls `createOAuthState({ businessId, userId })`, which builds:
+   ```
+   state = "<businessId>.<userId>.<exp>.<sig>"
+   ```
+   where `exp = Date.now() + 10min` and `sig = HMAC_SHA256(INTERNAL_KEY, "<businessId>.<userId>.<exp>")` (UUIDs contain no `.`, so the format is unambiguous).
+2. This string goes to Meta as the `state` query param and Meta echoes it back unchanged on the redirect.
+3. The callback splits the returned `state`, recomputes the HMAC with `INTERNAL_KEY`, and constant-time-compares it. It also checks `exp > now`. If anything is wrong (bad signature, expired, malformed) → `400 Invalid or expired state` and no channel is created.
+4. Only then does it exchange the code for a user token, list the user's pages, and create a channel for `verified.businessId`.
+
+Result: an attacker can't mint a `state` for a business they don't own (no `INTERNAL_KEY`), and a stolen `state` is useless after 10 minutes.
+
+### 3. Inbound idempotency (dedup on Meta `mid`)
+
+**What:** Added `messages.external_id` (nullable, unique) via migration `0002`. `processInboundMessage` now accepts the Meta message id (`messaging.message.mid`) and inserts with `onConflictDoNothing({ target: messages.externalId })`. It returns `inserted: boolean` so the webhook knows whether to trigger the agent.
+
+**Why:** Meta **retries** webhook deliveries if your endpoint doesn't ack fast enough or on any transient failure. Without dedup, a retried delivery inserted a second `messages` row for the same customer message and triggered a second agent run — so the customer received the **same reply twice** (or more). The unique index on `external_id` (NULLs allowed, so non-platform messages coexist) makes the insert idempotent at the database level.
+
+**How it works:**
+
+1. For each inbound text event the webhook passes `ev.message.mid` to `processInboundMessage`.
+2. The insert uses `onConflictDoNothing` + `.returning()`. If a row comes back, it's a genuine new message → `inserted: true`. If `returning()` is empty, that `mid` was already stored (a retry) → `inserted: false`.
+3. The webhook only calls `triggerAgentRun` when `inserted` is true, so retries never produce duplicate replies. (The unique constraint is on `external_id` alone because Meta `mid`s are globally unique.)
+
+### 4. Process every entry and every messaging event
+
+**What:** The webhook now loops over **all** `body.entry` (one per page) and, within each, **all** `entry.messaging` events. The channel is looked up once per page (`getChannelByPageId(entry.id)`).
+
+**Why:** Meta batches deliveries: a single `POST` can contain multiple pages' worth of events and multiple messaging events per page. The old code read only `body.entry[0]` and `entry.messaging[0]`, silently dropping everything after the first. This single bug both **broke multi-page inbound** and **lost messages under load**.
+
+### 5. Echo + non-text filtering
+
+**What:** Events with `message.is_echo === true` (the bot's own sent messages) are skipped, as are events without a `message.text` (attachments, `delivery`, `read`, `postback`). They still ack `200 EVENT_RECEIVED`.
+
+**Why:** Messenger echoes the page's own sent messages back to the webhook. Without filtering, the bot's reply would be re-ingested as an inbound customer message — churning conversation state and risking self-trigger loops. Non-text events have no text to store, so creating a phantom `messages` row for them would corrupt history.
+
+### Where page tokens + page ids are stored
+
+OAuth completes in `facebookCallbackRouter` (`apps/api/src/routes/channels.ts`): `exchangeCodeForToken(code)` → user token → `getUserPages(userToken)` → for each page, `createChannel` stores:
+
+- `channels.api_token` — the page access token (used by `sendMessage` and the agent's `send_message` tool).
+- `channels.platform_channel_id` — the page id (used by `getChannelByPageId` to route inbound webhooks to the right business).
+- `channels.extra_info` — `{ pageName }`.
+
+Inbound routing is therefore multi-page capable (the page id in `entry.id` maps to the channel); the remaining multi-page limitation is that OAuth currently connects only `pages[0]` per callback — connecting all of a user's pages is on the follow-up list.
+
+> **Note on token rotation:** page access tokens from `/me/accounts` are long-lived (~60 days) and currently stored as-is. Token refresh, 24-hour messaging-window handling, and at-rest encryption of `api_token` are tracked as follow-up hardening items, not part of this batch.
+
