@@ -51,6 +51,7 @@ export class Agent {
       `You are a sales rep for ${this.config.business.name}.`,
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
+      'The customer may have sent several messages while you were away. Read all of them and reply once, addressing everything they asked. Do not reply message-by-message.',
       'Always use send_message to reply to the customer. Be helpful and concise.',
     ]
       .filter(Boolean)

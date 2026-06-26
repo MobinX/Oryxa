@@ -131,6 +131,40 @@ describe('Agent Runner', () => {
     runSpy.mockRestore();
   }, 30_000);
 
+  it('runAgentForConversation drains a burst of pending messages in one run', async () => {
+    // #1/#2: a burst larger than the 10-message history cap must be fully loaded
+    // into the agent's history (in order) and fully marked done in one run,
+    // rather than the newest 10 first and the older ones in a later run.
+    const seed = await seedTestWorld();
+    const { createMessage } = await import('@repo/db/crud/conversation');
+    for (let i = 0; i < 12; i++) {
+      await createMessage({ conversationId: seed.conversation.id, from: 'customer', content: `burst ${i}` });
+    }
+
+    const { Agent } = await import('@repo/agent');
+    let capturedHistory: Array<{ from: string; content: string }> = [];
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
+      capturedHistory = [...(this as { config: { history: Array<{ from: string; content: string }> } }).config.history];
+      (this as { sentTexts: string[] }).sentTexts = ['reply'];
+      return 'done';
+    });
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+
+    const burstIndices = capturedHistory
+      .filter((m) => m.content.startsWith('burst '))
+      .map((m) => Number(m.content.replace('burst ', '')))
+      .sort((a, b) => a - b);
+    expect(burstIndices).toEqual(Array.from({ length: 12 }, (_, i) => i));
+
+    const msgs = await listMessages(seed.conversation.id, seed.business.id);
+    const stillPending = msgs?.filter((m) => m.from === 'customer' && m.state === 'pending');
+    expect(stillPending?.length).toBe(0);
+
+    runSpy.mockRestore();
+  }, 30_000);
+
   it('triggerAgentRun fires fetch to internal endpoint', async () => {
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);

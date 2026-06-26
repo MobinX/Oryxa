@@ -446,4 +446,17 @@ The security batch above proved payloads are authentic and not duplicated. The r
 
 **How it works:** because the tool both sends and persists the identical `text` string, the DB row and the Messenger delivery are guaranteed to be the same bytes — one send, one save. The runner's fallback only covers the degenerate case where the agent ignored the system prompt and replied without the tool, so the customer still gets *something* rather than silence, and that fallback text is also sent-then-saved (no divergence). The "tool was used → no fallback" branch is covered by a dedicated test (`runAgentForConversation does not double-send when the agent used send_message`).
 
+### 9. Drain a whole burst in one run, in order
+
+**What:** `runAgentForConversation` now drains the **entire** pending backlog in a single run instead of only the most recent 10 messages:
+
+- A new `listPendingCustomerMessages(conversationId)` query returns every still-pending customer message, **oldest first, no limit**.
+- The runner snapshots all of those ids and builds the agent's history by merging them with the recent context from `getConversationWithHistory` (last 10, which carries the bot's recent replies), deduped by id and sorted oldest→newest. So even a burst larger than 10 is presented to the agent in full, in chronological order.
+- After the reply, `markMessagesDoneByIds` clears the **whole** snapshot, so there are no leftover older pending messages to be handled in a later, out-of-order run.
+- The system prompt now explicitly instructs the model: *"The customer may have sent several messages while you were away. Read all of them and reply once, addressing everything they asked. Do not reply message-by-message."*
+
+**Why:** The previous runner snapshotted only the pending messages that fit in `getConversationWithHistory`'s `limit: 10` window. If a customer sent more than 10 messages in a burst, the agent only saw the newest 10, replied to those, and the older ones were deferred to a follow-up run — so replies arrived **newest batch first, older batch later**, reversed relative to how the customer typed them. On top of that, even when the agent saw all 10, nothing told it to address each one, so it would frequently reply to only the last message and ignore the rest.
+
+**How it works:** the backlog query is uncapped, so a 12-message burst is fully loaded into history (verified by `runAgentForConversation drains a burst of pending messages in one run`, which inserts 12 messages and asserts the agent received all 12 and all 12 were marked done). The tail re-trigger now fires only for messages that genuinely arrived *after* this run started, so each run owns a contiguous, in-order slice and the conversation drains chronologically. The "reply once to the whole burst" instruction makes the model consolidate a single addressing reply instead of fragmenting.
+
 

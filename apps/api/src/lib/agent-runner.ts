@@ -20,6 +20,7 @@ export async function runAgentForConversation(conversationId: string): Promise<v
     checkPendingMessages,
     claimConversationForAgentRun,
     markMessagesDoneByIds,
+    listPendingCustomerMessages,
   } = await import('@repo/db/crud/conversation');
   const { Agent } = await import('@repo/agent');
   const { listProducts } = await import('@repo/db/crud/product');
@@ -34,12 +35,22 @@ export async function runAgentForConversation(conversationId: string): Promise<v
   const claimed = await claimConversationForAgentRun(conv.id);
   if (!claimed) return;
 
-  // Snapshot the pending customer messages present at run start — these are the
-  // ones the agent will reply to. Messages arriving during the run stay pending
-  // so the tail re-trigger can handle them in a follow-up run.
-  const repliedMessageIds = conv.messages
-    .filter((m) => m.from === 'customer' && m.state === 'pending')
-    .map((m) => m.id);
+  // Drain the ENTIRE backlog in this run: snapshot every pending customer
+  // message (oldest first, no cap) so the agent replies to all of them in order
+  // instead of only the most recent 10 and leaving older ones for a later,
+  // out-of-order follow-up run.
+  const pendingMsgs = await listPendingCustomerMessages(conv.id);
+  const repliedMessageIds = pendingMsgs.map((m) => m.id);
+
+  // Build the agent's history: all pending customer messages (the backlog,
+  // chronological) merged with the recent context from the last 10 loaded
+  // messages (which carries the bot's recent replies), deduped by id and
+  // sorted oldest→newest.
+  const historyById = new Map(conv.messages.map((m) => [m.id, m]));
+  for (const m of pendingMsgs) historyById.set(m.id, m);
+  const history = [...historyById.values()]
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+    .map((m) => ({ from: m.from, content: m.content }));
 
   const catalog = await listProducts(conv.businessId, { limit: 10 });
   const catalogSummary = catalog.products
@@ -49,7 +60,7 @@ export async function runAgentForConversation(conversationId: string): Promise<v
   const agent = new Agent({
     systemPrompt: conv.channel.agent.systemPrompt,
     business: conv.business ?? { id: conv.businessId, name: 'Store' },
-    history: conv.messages.map((m) => ({ from: m.from, content: m.content })),
+    history,
     conversationId: conv.id,
     pageToken: conv.channel.apiToken,
     customerPlatformId: conv.customerPlatformId,

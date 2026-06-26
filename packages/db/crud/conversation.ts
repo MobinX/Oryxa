@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, inArray } from 'drizzle-orm';
+import { eq, and, desc, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 
@@ -96,6 +96,24 @@ export async function checkPendingMessages(conversationId: string) {
     ),
   });
   return !!pending;
+}
+
+/**
+ * Returns every still-pending customer message in a conversation, oldest first,
+ * with no limit. Used by the agent runner to drain a whole backlog in one run
+ * (so a burst of >10 messages is replied to in order instead of the newest 10
+ * first and the older ones in a later, out-of-order follow-up).
+ */
+export async function listPendingCustomerMessages(conversationId: string) {
+  return db.query.messages.findMany({
+    where: and(
+      eq(messages.conversationId, conversationId),
+      eq(messages.from, 'customer'),
+      eq(messages.state, 'pending'),
+      isNull(messages.deletedAt),
+    ),
+    orderBy: [asc(messages.time)],
+  });
 }
 
 export async function markCustomerMessagesDone(conversationId: string) {
