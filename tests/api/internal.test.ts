@@ -11,7 +11,16 @@ vi.mock('@api/lib/agent-runner', async (importOriginal) => {
   };
 });
 
+vi.mock('@api/lib/comment-runner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@api/lib/comment-runner')>();
+  return {
+    ...actual,
+    runAgentForCommentThread: vi.fn(async () => undefined),
+  };
+});
+
 import { runAgentForConversation } from '@api/lib/agent-runner';
+import { runAgentForCommentThread } from '@api/lib/comment-runner';
 
 describe('Internal Agent Runner API', () => {
   withPglite();
@@ -51,5 +60,49 @@ describe('Internal Agent Runner API', () => {
     // Allow async agent run to settle
     await new Promise((r) => setTimeout(r, 100));
     expect(runAgentForConversation).toHaveBeenCalled();
+  });
+
+  it('POST /internal/run-comment returns 401 without key', async () => {
+    const res = await app.request('/internal/run-comment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commentThreadId: '00000000-0000-0000-0000-000000000000' }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /internal/run-comment returns 400 for invalid payload', async () => {
+    const res = await app.request('/internal/run-comment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': 'test-internal-key',
+      },
+      body: JSON.stringify({ bad: 'data' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /internal/run-comment accepts a comment thread and returns 202', async () => {
+    const { getOrCreateCommentThread } = await import('@repo/db/crud/comment');
+    const seed = await seedTestWorld();
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_R',
+      'COMMENTER_R',
+      'R',
+    );
+    const res = await app.request('/internal/run-comment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': 'test-internal-key',
+      },
+      body: JSON.stringify({ commentThreadId: thread.id }),
+    });
+    expect(res.status).toBe(202);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(runAgentForCommentThread).toHaveBeenCalledWith(thread.id);
   });
 });

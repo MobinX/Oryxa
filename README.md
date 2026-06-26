@@ -459,4 +459,50 @@ The security batch above proved payloads are authentic and not duplicated. The r
 
 **How it works:** the backlog query is uncapped, so a 12-message burst is fully loaded into history (verified by `runAgentForConversation drains a burst of pending messages in one run`, which inserts 12 messages and asserts the agent received all 12 and all 12 were marked done). The tail re-trigger now fires only for messages that genuinely arrived *after* this run started, so each run owns a contiguous, in-order slice and the conversation drains chronologically. The "reply once to the whole burst" instruction makes the model consolidate a single addressing reply instead of fragmenting.
 
+## Comments (Facebook Page comments, extensible to IG/Twitter)
+
+Comments are a **separate domain** from Messenger DMs: they live on their own tables, run on their own runner, and reply through a comment-specific tool. The Messenger tables (`conversations`/`messages`) are unchanged. Both are platform-typed via the `platform` enum on `channels`, so the same channel (a Facebook Page) serves DMs and comments, and the design extends to Instagram/Twitter comments later by adding platform branches.
+
+### Schema (`packages/db/schema.ts`, migration `0003_add_comments.sql`)
+
+- `comment_threads` — one row per **(channel, post, commenter)**. Unique on `(channel_id, platform_item_id, commenter_platform_id)`. `platform_item_id` is the FB post id (IG media id / tweet id later). Carries `commenter_name` and a `last_comment_state` machine (`pending`/`working`/`done`) mirroring conversations.
+- `comments` — one row per comment (customer or self), with `external_id` (platform comment id, unique, for webhook dedup), `parent_external_id` (the comment a self reply answers), `from`, `content`, `time`, `state` (`pending`/`working`/`done`). Cascades from its thread.
+
+The migration was generated with `drizzle-kit generate` and **applied to the Neon database** (split on `--> statement-breakpoint`, run statement-by-statement). PGlite tests pick it up automatically from the migrations folder.
+
+### Threading model (the design you approved)
+
+- **Parallel across commenters/posts.** A thread = one commenter on one post. Different threads have independent `last_comment_state` and independent atomic claims, so comments from different users (or the same user on different posts) are processed in parallel.
+- **One comment per run, oldest first, within a thread.** `runAgentForCommentThread` loads the single oldest pending customer comment (`getOldestPendingComment`) and builds history from the **prior done** back-and-forth with that commenter on that post (`listDoneCommentHistory`) + the one comment being handled. Newer pending comments are **excluded** from history so the reply context stays clean. After the run, that one comment is marked done and the tail re-trigger (`triggerCommentRun`) drains the next one in a follow-up run. This avoids the burst-reordering problem on purpose: comments reply to one specific comment, not a consolidated burst.
+
+### Trust the agent for reply gating (no heuristic pre-filter)
+
+The agent is instructed to reply **only if the comment is directed at the page/business** (a question, request, or @mention). For user-to-user chatter it stays silent. There is **no fallback send** for comments — silence is a valid outcome, unlike DMs where the runner falls back to sending the final LLM message. The handled comment is marked done after exactly one attempt regardless, so a partial send is never re-sent on retry (no duplicate public replies); other pending comments in the thread are still drained by the tail re-trigger.
+
+### `reply_comment` tool — single source of truth for the public reply
+
+`packages/agent/tools/comment.ts` exposes `createCommentAgentTools`, which reuses the shared catalog tools (`get_product`, `create_order`) and adds `reply_comment`. The tool, in one step: `replyToFacebookComment(pageToken, parentCommentId, text)` (posts to `/{comment-id}/replies`), then `createComment({ from:'self', content:text, externalId: <id Meta returned>, parentExternalId, state:'done' })`. So the DB row and the public reply are the same bytes with the real platform id — the same "send + persist the exact text" rule as `send_message`.
+
+### OAuth scopes
+
+`getFacebookOAuthUrl` now also requests `pages_manage_engagement` (to post comment replies) and `pages_read_engagement` (to receive comment webhooks). **Existing pages must re-authorize** to grant the new scopes — reconnect the page in the dashboard to get a token that can reply to comments.
+
+### Webhook wiring (`apps/api/src/webhooks/facebook.ts`)
+
+The same `POST /webhooks/facebook` now branches per entry: `entry.messaging` → DMs (unchanged), `entry.changes` (field `feed`, value `item=comment`, `verb=add`) → `processInboundComment`. The page's own comments (`from.id === page id`) are skipped (the echo equivalent for comments), and `verb=add` only is handled (edits/removes ignored). Ack-fast + background processing + signature verification are shared with the DM path. Each new comment on an idle thread fires `triggerCommentRun` → `POST /internal/run-comment` → `runAgentForCommentThread` (background, `runInBackground`).
+
+### Runner (`apps/api/src/lib/comment-runner.ts`)
+
+`runAgentForCommentThread(threadId)`: load thread + channel + agent → atomic `claimCommentThreadForRun` (idle→working; loses → another run owns it) → `getOldestPendingComment` (none → release and return) → **fetch + cache post context** (see below) → build clean history + comment tools targeting that comment's `externalId` → `agent.run()` → (no fallback) → `markCommentDone` → set thread `done` → `checkPendingComments` → re-trigger if more. The `Agent` class was generalized to accept a custom `tools` array and `replyGuidance`, so the Messenger and comment runners share one agent implementation.
+
+### Names, avatars, and post context (retrieved from Facebook, cached in the API)
+
+The Messenger webhook payload only contains `sender.id` — no name or picture. The comment webhook payload has `from.name` but no avatar, and neither tells the agent what the comment is about. So the API now resolves and caches these from the Graph API:
+
+- **Messenger conversations** (`customerName`, `customerAvatar`): on each new inbound, if either is still null the webhook calls `getFacebookUserProfile(pageToken, senderId)` (`GET /{psid}?fields=name,first_name,last_name,profile_pic`) and stores the result via `setConversationProfileIfMissing`, which writes each field **only when its column is NULL** (so a cached value is never overwritten by a re-fetch). The lookup is best-effort — a failure just leaves the field empty and retries on the next inbound.
+- **Comment threads** (`commenterName`, `commenterAvatar`): the name is taken from the webhook payload at thread creation; the avatar is resolved the same way (`getFacebookUserProfile`) and cached with `setCommentThreadProfileIfMissing` (same null-only write).
+- **Post context** (`postContext` on `comment_threads`, migration `0004`): the runner fetches the post the comment is on (`getFacebookPostContext(pageToken, postId)` → `GET /{post-id}?fields=message,attachments{media_type,title,url},permalink_url`) **once per thread**, caches it on the thread, and prepends it to the agent's system prompt as `Post being commented on: …`. This is how the comment agent knows what the comment is about. Cached so repeated comments on the same post don't re-hit the Graph API.
+
+These were added as columns in migration `0004_add_comment_profile_and_post_context.sql` (`commenter_avatar`, `post_context` on `comment_threads`), applied to Neon. `conversations.customerName`/`customerAvatar` already existed.
+
 

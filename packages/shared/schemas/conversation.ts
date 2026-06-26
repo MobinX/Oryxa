@@ -50,3 +50,7 @@ export const deleteMessageOutputSchema = z.object({ deleted: z.boolean() });
 export const internalRunInputSchema = z.object({
   conversationId: uuidSchema,
 });
+
+export const internalRunCommentInputSchema = z.object({
+  commentThreadId: uuidSchema,
+});

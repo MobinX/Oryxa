@@ -31,7 +31,13 @@ function timingSafeEqual(a: string, b: string): boolean {
 export function getFacebookOAuthUrl(state: string): string {
   const appId = process.env.META_APP_ID;
   const redirectUri = process.env.META_REDIRECT_URI;
-  const scopes = ['pages_messaging', 'pages_show_list', 'pages_manage_metadata'].join(',');
+  const scopes = [
+    'pages_messaging',
+    'pages_show_list',
+    'pages_manage_metadata',
+    'pages_manage_engagement', // reply to comments
+    'pages_read_engagement',   // receive comment webhooks
+  ].join(',');
   return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes}&state=${encodeURIComponent(state)}`;
 }
 
@@ -75,6 +81,96 @@ export async function sendMessage(
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Facebook send message failed: ${err}`);
+  }
+}
+
+/**
+ * Posts a public reply to a specific Facebook Page comment and returns the
+ * platform id of the newly created reply comment (used to persist the bot's
+ * `self` comment row with the exact id Meta assigned).
+ */
+export async function replyToFacebookComment(
+  pageToken: string,
+  commentId: string,
+  text: string,
+): Promise<string> {
+  const res = await fetch(`${GRAPH_API}/${commentId}/replies?access_token=${pageToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Facebook reply to comment failed: ${err}`);
+  }
+
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
+/**
+ * Best-effort fetch of a user's display name + profile picture from the Graph
+ * API. For Messenger the id is a page-scoped id (PSID) and a page token can
+ * resolve first/last name + profile_pic. For comment senders the id is a user
+ * id and the picture may be a default silhouette depending on privacy settings.
+ * Never throws — returns whatever it could resolve (callers treat gaps as
+ * "not enriched yet" and retry on the next inbound).
+ */
+export async function getFacebookUserProfile(
+  pageToken: string,
+  userId: string,
+): Promise<{ name?: string; avatar?: string }> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${userId}?fields=name,first_name,last_name,profile_pic&access_token=${pageToken}`,
+    );
+    if (!res.ok) return {};
+    const d = (await res.json()) as {
+      name?: string;
+      first_name?: string;
+      last_name?: string;
+      profile_pic?: string;
+    };
+    const combined = [d.first_name, d.last_name].filter(Boolean).join(' ');
+    const name = d.name ?? combined;
+    return { name: name || undefined, avatar: d.profile_pic };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Best-effort fetch of a Page post's caption, primary attachment, and permalink
+ * so the comment agent has the context of what the comment is about. Returns
+ * null if the post can't be read (deleted, privacy, API hiccup). Never throws.
+ */
+export async function getFacebookPostContext(
+  pageToken: string,
+  postId: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${postId}?fields=message,attachments{media_type,title,url},permalink_url&access_token=${pageToken}`,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as {
+      message?: string;
+      permalink_url?: string;
+      attachments?: { data: Array<{ media_type?: string; title?: string; url?: string }> };
+    };
+    const parts: string[] = [];
+    if (d.message) parts.push(`Post caption: ${d.message}`);
+    const att = d.attachments?.data?.[0];
+    if (att) {
+      parts.push(
+        `Attachment: ${att.media_type ?? 'unknown'}${att.title ? ` - ${att.title}` : ''}${att.url ? ` (${att.url})` : ''}`,
+      );
+    }
+    if (d.permalink_url) parts.push(`Permalink: ${d.permalink_url}`);
+    return parts.length ? parts.join('\n') : null;
+  } catch {
+    return null;
   }
 }
 

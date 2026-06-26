@@ -238,7 +238,7 @@ export async function processInboundMessage(
   senderId: string,
   text: string,
   externalId?: string,
-): Promise<{ conversationId: string; priorStatus: string; inserted: boolean }> {
+): Promise<{ conversationId: string; priorStatus: string; inserted: boolean; needsProfile: boolean }> {
   let conv = await db.query.conversations.findFirst({
     where: and(
       eq(conversations.channelId, channel.id),
@@ -275,7 +275,7 @@ export async function processInboundMessage(
       .returning();
 
     if (inserted.length === 0) {
-      return { conversationId: conv.id, priorStatus, inserted: false };
+      return { conversationId: conv.id, priorStatus, inserted: false, needsProfile: false };
     }
   } else {
     await db.insert(messages).values({
@@ -294,5 +294,32 @@ export async function processInboundMessage(
     .set({ lastMessageState: 'pending' })
     .where(and(eq(conversations.id, conv.id), eq(conversations.lastMessageState, 'done')));
 
-  return { conversationId: conv.id, priorStatus, inserted: true };
+  // Name/avatar aren't in the Messenger webhook payload — they must be looked up
+  // from the Graph API. Signal the webhook to do that once, only while missing.
+  const needsProfile = !conv.customerName || !conv.customerAvatar;
+
+  return { conversationId: conv.id, priorStatus, inserted: true, needsProfile };
+}
+
+/**
+ * Fills in MISSING name/avatar on a conversation only — each field is written
+ * solely when its column is NULL, so a cached value is never overwritten by a
+ * re-fetch. Called after a best-effort Graph profile lookup.
+ */
+export async function setConversationProfileIfMissing(
+  conversationId: string,
+  profile: { name?: string; avatar?: string },
+): Promise<void> {
+  if (profile.name !== undefined) {
+    await db
+      .update(conversations)
+      .set({ customerName: profile.name })
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.customerName)));
+  }
+  if (profile.avatar !== undefined) {
+    await db
+      .update(conversations)
+      .set({ customerAvatar: profile.avatar })
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.customerAvatar)));
+  }
 }

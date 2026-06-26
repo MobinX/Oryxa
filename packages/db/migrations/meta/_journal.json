@@ -22,6 +22,20 @@
       "when": 1782499731538,
       "tag": "0002_add_message_external_id",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782506365489,
+      "tag": "0003_add_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782507655308,
+      "tag": "0004_add_comment_profile_and_post_context",
+      "breakpoints": true
     }
   ]
 }

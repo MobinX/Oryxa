@@ -156,6 +156,7 @@ export const businessRelations = relations(businesses, ({ one, many }) => ({
   channels: many(channels),
   agents: many(agents),
   conversations: many(conversations),
+  commentThreads: many(commentThreads),
   categories: many(categories),
 }));
 
@@ -190,6 +191,7 @@ export const channelRelations = relations(channels, ({ one, many }) => ({
   business: one(businesses, { fields: [channels.businessId], references: [businesses.id] }),
   agent: one(agents, { fields: [channels.agentId], references: [agents.id] }),
   conversations: many(conversations),
+  commentThreads: many(commentThreads),
 }));
 
 export const conversationRelations = relations(conversations, ({ one, many }) => ({
@@ -200,4 +202,50 @@ export const conversationRelations = relations(conversations, ({ one, many }) =>
 
 export const messageRelations = relations(messages, ({ one }) => ({
   conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),
+}));
+
+export const commentThreads = pgTable('comment_threads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
+  /** The post/media/tweet the comments live on (FB post id, IG media id, tweet id). */
+  platformItemId: varchar('platform_item_id', { length: 255 }).notNull(),
+  commenterPlatformId: varchar('commenter_platform_id', { length: 255 }).notNull(),
+  commenterName: varchar('commenter_name', { length: 255 }),
+  commenterAvatar: varchar('commenter_avatar', { length: 500 }),
+  /** Cached post caption/attachment/permalink so the agent has post context. */
+  postContext: text('post_context'),
+  lastCommentState: messageStateEnum('last_comment_state').default('done').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  uniq: uniqueIndex('comment_threads_channel_item_commenter_idx').on(t.channelId, t.platformItemId, t.commenterPlatformId),
+}));
+
+export const comments = pgTable('comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  commentThreadId: uuid('comment_thread_id').references(() => commentThreads.id, { onDelete: 'cascade' }).notNull(),
+  from: messageFromEnum('from').notNull(),
+  contentType: varchar('content_type', { length: 20 }).default('text').notNull(),
+  content: text('content').notNull(),
+  time: timestamp('time').defaultNow().notNull(),
+  state: messageStateEnum('state').default('pending').notNull(),
+  /** Platform comment id for webhook dedup; also the id of the bot's reply comment. */
+  externalId: varchar('external_id', { length: 100 }),
+  /** The platform comment id this row replies to (bot reply → the customer comment it answered). */
+  parentExternalId: varchar('parent_external_id', { length: 100 }),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  idx: index('comments_thread_time_idx').on(t.commentThreadId, t.time),
+  uniq: uniqueIndex('comments_external_id_idx').on(t.externalId),
+}));
+
+export const commentThreadRelations = relations(commentThreads, ({ one, many }) => ({
+  business: one(businesses, { fields: [commentThreads.businessId], references: [businesses.id] }),
+  channel: one(channels, { fields: [commentThreads.channelId], references: [channels.id] }),
+  comments: many(comments),
+}));
+
+export const commentRelations = relations(comments, ({ one }) => ({
+  commentThread: one(commentThreads, { fields: [comments.commentThreadId], references: [commentThreads.id] }),
 }));

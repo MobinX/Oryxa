@@ -16,6 +16,15 @@ vi.mock('@api/lib/agent-runner', () => ({
   runAgentForConversation: vi.fn(),
 }));
 
+vi.mock('@repo/integrations/facebook', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@repo/integrations/facebook')>();
+  return {
+    ...actual,
+    getFacebookUserProfile: vi.fn(async () => ({ name: 'FB Sender', avatar: 'https://fb/img.png' })),
+    getFacebookPostContext: vi.fn(async () => null),
+  };
+});
+
 async function postWebhook(payload: unknown) {
   const body = JSON.stringify(payload);
   const res = await fbWebhookRouter.request('http://localhost/facebook', {
@@ -201,5 +210,22 @@ describe('Facebook Webhook', () => {
     const msgs = await listMessages(retryConv!.id, seed.business.id);
     const customerMsgs = msgs?.filter((m) => m.content === 'hello') ?? [];
     expect(customerMsgs.length).toBe(1);
+  });
+
+  it('enriches the conversation name + avatar from Facebook when missing', async () => {
+    const seed = await seedTestWorld();
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(seed.pageChannelId, [textEvent('PROFILE_USER', 'hi', 'mid-prof')])],
+    });
+
+    const { getOrCreateConversation } = await import('@repo/db/crud/conversation');
+    const conv = await getOrCreateConversation(
+      seed.business.id,
+      seed.channel.id,
+      'PROFILE_USER',
+    );
+    expect(conv?.customerName).toBe('FB Sender');
+    expect(conv?.customerAvatar).toBe('https://fb/img.png');
   });
 });

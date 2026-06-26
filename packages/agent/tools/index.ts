@@ -5,17 +5,13 @@ import { createOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
 import { sendMessage } from '@repo/integrations/facebook';
 
-export function createAgentTools(
-  context: {
-    businessId: string;
-    conversationId: string;
-    pageToken: string;
-    customerPlatformId: string;
-    customerName?: string | null;
-  },
-  /** Called when the agent actually sends a reply via send_message. */
-  onSent?: (text: string) => void,
-) {
+/** Catalog tools shared by every transport (Messenger, comments, future ones). */
+export function createCatalogTools(context: {
+  businessId: string;
+  /** Optional: links an order to the originating Messenger conversation. */
+  conversationId?: string;
+  customerName?: string | null;
+}) {
   const getProductTool = tool(
     async ({ query }) => {
       const products = await searchProducts(context.businessId, query, 5);
@@ -72,6 +68,20 @@ export function createAgentTools(
     },
   );
 
+  return [getProductTool, createOrderTool];
+}
+
+export function createAgentTools(
+  context: {
+    businessId: string;
+    conversationId: string;
+    pageToken: string;
+    customerPlatformId: string;
+    customerName?: string | null;
+  },
+  /** Called when the agent actually sends a reply via send_message. */
+  onSent?: (text: string) => void,
+) {
   const sendMessageTool = tool(
     async ({ text }) => {
       // Send to Messenger, then persist the EXACT text that was sent as the
@@ -98,5 +108,5 @@ export function createAgentTools(
     },
   );
 
-  return [getProductTool, createOrderTool, sendMessageTool];
+  return [...createCatalogTools(context), sendMessageTool];
 }
