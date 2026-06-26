@@ -1,5 +1,5 @@
 {
-  "name": "api",
+  "name": "@repo/api",
   "version": "dev",
   "private": true,
   "type": "module",

@@ -14,7 +14,7 @@ const monorepoAliases: Record<string, string> = {
 
 const nextConfig: NextConfig = {
   transpilePackages: [
-    'api',
+    '@repo/api',
     '@repo/db',
     '@repo/shared',
     '@repo/agent',

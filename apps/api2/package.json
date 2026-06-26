@@ -8,7 +8,7 @@
     "start": "next start -p ${API2_PORT:-3500}"
   },
   "dependencies": {
-    "api": "workspace:*",
+    "@repo/api": "workspace:*",
     "hono": "^4.7.2",
     "next": "^15.1.6",
     "react": "^19.0.0",

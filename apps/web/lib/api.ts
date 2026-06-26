@@ -40,6 +40,24 @@ export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
 
 // Business
+export type Business = {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string | null;
+  employeeCount?: number | null;
+  type?: string | null;
+  foundedDate?: string | null;
+  hasTradeLicense: boolean;
+  hasTaxLicense: boolean;
+  facebookPageLink?: string | null;
+  phone?: string | null;
+  createdAt: string;
+};
+
+export const listBusinesses = (token: string) =>
+  apiFetch<{ businesses: Business[] }>('/api/v1/businesses', { token });
+
 export const createBusiness = (token: string, data: Record<string, unknown>) =>
   apiFetch<{ id: string; userId: string; name: string }>('/api/v1/businesses', {
     method: 'POST',
@@ -48,7 +66,7 @@ export const createBusiness = (token: string, data: Record<string, unknown>) =>
   });
 
 export const getBusiness = (token: string, id: string) =>
-  apiFetch<Record<string, unknown>>(`/api/v1/businesses/${id}`, { token });
+  apiFetch<Business>(`/api/v1/businesses/${id}`, { token });
 
 // Products
 export type ProductListItem = {

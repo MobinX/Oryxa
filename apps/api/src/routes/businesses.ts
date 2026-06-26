@@ -5,13 +5,47 @@ import {
   updateBusinessInputSchema,
   updateBusinessOutputSchema,
 } from '@repo/shared';
-import { createBusiness, getBusinessById, updateBusiness } from '@repo/db/crud/business';
+import {
+  createBusiness,
+  getBusinessById,
+  listBusinessesByUserId,
+  updateBusiness,
+} from '@repo/db/crud/business';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
 export const businessesRouter = new OpenAPIHono();
 
 businessesRouter.use('/*', authMiddleware);
+
+const listRoute = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({ businesses: z.array(selectBusinessSchema) }),
+        },
+      },
+      description: 'Businesses for the authenticated user',
+    },
+  },
+});
+
+businessesRouter.openapi(listRoute, async (c) => {
+  const user = c.get('user');
+  const rows = await listBusinessesByUserId(user.id);
+  return c.json({
+    businesses: rows.map((b) => ({
+      ...b,
+      createdAt: b.createdAt.toISOString(),
+      foundedDate: b.foundedDate?.toISOString() ?? null,
+    })),
+  });
+});
 
 const createRoute_ = createRoute({
   method: 'post',

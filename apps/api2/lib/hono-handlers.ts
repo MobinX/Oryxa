@@ -1,5 +1,5 @@
 import { handle } from 'hono/vercel';
-import { app } from 'api/app';
+import { app } from '@repo/api/app';
 import type { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
