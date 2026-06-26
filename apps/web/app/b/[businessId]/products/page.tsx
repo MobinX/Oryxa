@@ -11,6 +11,7 @@ import {
   deleteProduct,
   listCategories,
   type ProductListItem,
+  type ProductVariant,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -84,10 +85,23 @@ export default function ProductsPage({
     sku: string;
     description: string;
     categoryName?: string;
-    variants: Array<{ name: string; imageUrl?: string; stock: number; price?: number }>;
+    variants: ProductVariant[];
   }) {
     setSubmitting(true);
-    await createProduct(token!, businessId, values);
+    await createProduct(token!, businessId, {
+      name: values.name,
+      price: values.price,
+      sku: values.sku,
+      description: values.description,
+      categoryName: values.categoryName,
+      variants: values.variants.map((v) => ({
+        name: v.name,
+        stock: v.stock,
+        price: v.price,
+        isAvailable: v.isAvailable,
+        imageUrl: v.imageKey ?? v.imageUrl ?? undefined,
+      })),
+    });
     await queryClient.invalidateQueries({ queryKey: ['products', businessId] });
     await queryClient.invalidateQueries({ queryKey: ['categories', businessId] });
     closeModal();
@@ -98,14 +112,7 @@ export default function ProductsPage({
     price: number;
     sku: string;
     description: string;
-    variants: Array<{
-      id?: string;
-      name: string;
-      imageUrl?: string;
-      stock: number;
-      price?: number;
-      isAvailable?: boolean;
-    }>;
+    variants: ProductVariant[];
   }) {
     if (modal?.type !== 'edit') return;
     setSubmitting(true);
@@ -120,7 +127,7 @@ export default function ProductsPage({
         stock: v.stock,
         price: v.price,
         isAvailable: v.isAvailable ?? true,
-        imageUrl: v.imageUrl,
+        imageUrl: v.imageKey ?? v.imageUrl ?? undefined,
       })),
     });
     await queryClient.invalidateQueries({ queryKey: ['products', businessId] });

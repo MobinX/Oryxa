@@ -47,6 +47,26 @@ bun run dev:web
 
 Open http://localhost:3400
 
+### Build
+
+```bash
+# API only
+bun run build:api
+
+# Web only (Next.js production build)
+bun run build:web
+
+# Both apps
+bun run build
+```
+
+Production start (after build):
+
+```bash
+bun run start:api   # API on API_PORT (default 3001)
+bun run start:web   # Next.js on WEB_PORT (default 3400)
+```
+
 ### 5. Meta webhook (after deploy)
 
 Set webhook URL to `https://your-api.vercel.app/webhooks/facebook` with verify token from `META_VERIFY_TOKEN`.
@@ -94,10 +114,52 @@ Aliases are configured in each package's `tsconfig.json`. Bun resolves them at r
 
 ## Deploy (Vercel)
 
-- **oryxa-api** → root `apps/api`
-- **oryxa-web** → root `apps/web`
+Two separate Vercel projects from the same Git repo.
 
-Set all env vars from `.env.example` on both projects. `AGENT_RUNNER_URL` should point to your API URL.
+### API project (`oryxa-api`)
+
+| Setting | Value |
+|---------|--------|
+| **Root Directory** | `apps/api` |
+| **Framework Preset** | Other |
+| **Install Command** | `cd ../.. && bun install` |
+| **Build Command** | `echo 'API ready'` *(or leave default — no Next.js build)* |
+| **Output Directory** | *(leave empty)* |
+| **Node.js Version** | 20.x |
+
+The serverless entry is `apps/api/api/index.ts` (Hono `handle()`). All routes are rewritten to it via `apps/api/vercel.json`.
+
+**Production URLs to set in env:**
+
+- `WEB_URL` → your web app URL (e.g. `https://oryxa-web.vercel.app`)
+- `AGENT_RUNNER_URL` → this API URL (e.g. `https://oryxa-api.vercel.app`)
+- `META_REDIRECT_URI` → `https://oryxa-api.vercel.app/api/v1/auth/facebook/callback`
+
+Copy every other variable from `.env.example` into the Vercel project **Environment Variables** (Production + Preview).
+
+For `FIREBASE_PRIVATE_KEY`, paste the key with real newlines, or use `\n` escapes — Vercel accepts both if the API reads it correctly.
+
+**Meta webhook:** `https://oryxa-api.vercel.app/webhooks/facebook`
+
+**Smoke test after deploy:**
+
+```bash
+curl https://your-api.vercel.app/
+curl https://your-api.vercel.app/doc
+```
+
+### Web project (`oryxa-web`)
+
+| Setting | Value |
+|---------|--------|
+| **Root Directory** | `apps/web` |
+| **Framework Preset** | Next.js |
+| **Install Command** | `cd ../.. && bun install` |
+| **Build Command** | `cd ../.. && bun --filter web build` |
+
+Set `NEXT_PUBLIC_API_URL` to the API Vercel URL. Other `NEXT_PUBLIC_FIREBASE_*` vars from Firebase console.
+
+`apps/web/vercel.json` already mirrors these commands.
 
 ## External setup guides
 
