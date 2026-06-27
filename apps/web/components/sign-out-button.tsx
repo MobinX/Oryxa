@@ -6,9 +6,11 @@ import { signOutAction } from '@/app/actions/auth';
 export function SignOutForm({
   className,
   children,
+  title,
 }: {
   className?: string;
   children: React.ReactNode;
+  title?: string;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -22,6 +24,7 @@ export function SignOutForm({
         });
       }}
       className={className}
+      title={title}
     >
       {children}
     </button>

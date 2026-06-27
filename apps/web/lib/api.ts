@@ -78,6 +78,8 @@ export type BusinessStats = {
   orders: number;
   channels: number;
   conversations: number;
+  revenue: number;
+  messages: number;
 };
 
 export const getBusinessStats = (token: string, businessId: string) =>

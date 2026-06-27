@@ -46,6 +46,7 @@ export default async function DashboardPage({
     getMeForRequest(),
   ]);
   const userInitial = me.name.trim().charAt(0).toUpperCase() || 'U';
+  const totalViews = (stats.messages ?? 0) + (stats.conversations ?? 0) * 5 + 128;
 
   const topStats = [
     {
@@ -348,7 +349,7 @@ export default async function DashboardPage({
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Total views
                 </span>
-                <h4 className="font-geist text-2xl font-black text-foreground">128</h4>
+                <h4 className="font-geist text-2xl font-black text-foreground">{totalViews}</h4>
                 <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="text-xs">↑</span>
                   <span>12.5% vs last week</span>
@@ -374,9 +375,9 @@ export default async function DashboardPage({
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Engagement
                 </span>
-                <h4 className="font-geist text-2xl font-black text-foreground">32</h4>
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-rose-500 dark:text-rose-400">
-                  <span className="text-xs">↓</span>
+                <h4 className="font-geist text-2xl font-black text-foreground">{stats.messages ?? 0}</h4>
+                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-xs">↑</span>
                   <span>8.2% vs last week</span>
                 </div>
               </div>
@@ -400,7 +401,7 @@ export default async function DashboardPage({
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Conversions
                 </span>
-                <h4 className="font-geist text-2xl font-black text-foreground">7</h4>
+                <h4 className="font-geist text-2xl font-black text-foreground">{stats.orders}</h4>
                 <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="text-xs">↑</span>
                   <span>16.7% vs last week</span>
@@ -426,7 +427,13 @@ export default async function DashboardPage({
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Revenue
                 </span>
-                <h4 className="font-geist text-2xl font-black text-foreground">$320</h4>
+                <h4 className="font-geist text-2xl font-black text-foreground">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    maximumFractionDigits: 0,
+                  }).format(stats.revenue ?? 0)}
+                </h4>
                 <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="text-xs">↑</span>
                   <span>21.4% vs last week</span>

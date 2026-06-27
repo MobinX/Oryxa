@@ -17,6 +17,7 @@ import {
   BarChart3,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -220,8 +221,8 @@ export function Sidebar({
                   <p className="text-[10px] text-muted-foreground">Admin</p>
                 </div>
               </div>
-              <SignOutForm className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <Settings className="h-4 w-4" />
+              <SignOutForm className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Sign out">
+                <LogOut className="h-4 w-4" />
               </SignOutForm>
             </div>
           </aside>
@@ -313,8 +314,8 @@ export function Sidebar({
               <p className="text-xs text-muted-foreground">Admin</p>
             </div>
           </div>
-          <SignOutForm className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-            <Settings className="h-4 w-4" />
+          <SignOutForm className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Sign out">
+            <LogOut className="h-4 w-4" />
           </SignOutForm>
         </div>
       </aside>

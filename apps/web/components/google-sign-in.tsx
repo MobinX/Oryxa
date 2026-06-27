@@ -35,7 +35,11 @@ export function GoogleSignInButton() {
             // Silently ignore user-cancelled or duplicated popup requests
             return;
           }
-          alert('Login failed. Check Firebase configuration.');
+          if (e?.code === 'auth/unauthorized-domain') {
+            alert(`Login failed: This domain (${window.location.hostname}) is not authorized in your Firebase project. Please add it to the "Authorized domains" list under Firebase Console -> Authentication -> Settings.`);
+          } else {
+            alert(`Login failed: ${e?.message || e}. Check Firebase configuration.`);
+          }
         } finally {
           setLoading(false);
         }

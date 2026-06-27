@@ -94,6 +94,8 @@ const statsRoute = createRoute({
             orders: z.number().int(),
             channels: z.number().int(),
             conversations: z.number().int(),
+            revenue: z.number(),
+            messages: z.number().int(),
           }),
         },
       },
