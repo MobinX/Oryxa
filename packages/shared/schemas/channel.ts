@@ -73,4 +73,5 @@ export const facebookConnectPagesInputSchema = z.object({
 export const facebookConnectPagesOutputSchema = z.object({
   connected: z.array(z.object({ id: uuidSchema, pageId: z.string(), pageName: z.string() })),
   skipped: z.array(z.string()),
+  failed: z.array(z.object({ pageId: z.string(), error: z.string() })),
 });

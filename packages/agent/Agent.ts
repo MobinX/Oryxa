@@ -37,7 +37,7 @@ export class Agent {
     const llm =
       this.config.llm ??
       new ChatGoogleGenerativeAI({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-flash-lite-latest',
         apiKey: process.env.GEMINI_API_KEY,
         temperature: 0.3,
       });

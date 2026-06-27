@@ -92,4 +92,30 @@ describe('Facebook Integration', () => {
     const pages = await getUserPages('user-token');
     expect(pages[0].id).toBe('p1');
   });
+
+  it('subscribeFacebookPageToWebhooks posts subscribed_fields to Graph API', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
+    ) as typeof fetch;
+
+    const { subscribeFacebookPageToWebhooks, FACEBOOK_PAGE_WEBHOOK_FIELDS } =
+      await import('@repo/integrations/facebook');
+    await subscribeFacebookPageToWebhooks('page-123', 'page-token');
+
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[0]).toContain('/page-123/subscribed_apps');
+    expect(call[0]).toContain('messages');
+    expect(call[0]).toContain('messaging_postbacks');
+    expect(call[0]).toContain('feed');
+    expect(FACEBOOK_PAGE_WEBHOOK_FIELDS).toContain('messaging_postbacks');
+    expect((call[1] as RequestInit).method).toBe('POST');
+  });
+
+  it('subscribeFacebookPageToWebhooks throws on API error', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    const { subscribeFacebookPageToWebhooks } = await import('@repo/integrations/facebook');
+    await expect(subscribeFacebookPageToWebhooks('page-123', 'bad-token')).rejects.toThrow(
+      'Facebook page webhook subscription failed',
+    );
+  });
 });

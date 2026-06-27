@@ -449,7 +449,7 @@ The frontend will leverage:
  * **shadcn/ui** for accessible, headless components (DataTables, Modals, Forms).
  * **TanStack React Query** for data fetching.
 **API Hook Generation:**
-Run bun --filter web gen:api in your terminal. This triggers openapi-zod-client to ingest the generated http://localhost:3000/doc JSON from Hono and automatically emit perfectly typed React Query hooks in apps/web/lib/api.ts.
+Run bun --filter web gen:api in your terminal. This triggers openapi-zod-client to ingest the generated https://web.oryxa.us/doc JSON from Hono and automatically emit perfectly typed React Query hooks in apps/web/lib/api.ts.
 *(e.g., const { data: product } = useGetProductById(id) will instantly know the exact variant and category shape based on the backend Drizzle Schema).*
 
 

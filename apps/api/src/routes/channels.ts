@@ -29,6 +29,8 @@ import {
   updateChannel,
   deleteChannel,
   getChannelByBusinessPlatformChannelId,
+  findChannelByBusinessPlatformChannelId,
+  reactivateChannel,
 } from '@repo/db/crud/channel';
 import {
   getFacebookOAuthUrl,
@@ -38,6 +40,7 @@ import {
   verifyOAuthState,
   createFacebookPagesSelectionToken,
   verifyFacebookPagesSelectionToken,
+  subscribeFacebookPageToWebhooks,
 } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
@@ -397,6 +400,7 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
   const pageById = new Map(verified.pages.map((p) => [p.id, p]));
   const connected: Array<{ id: string; pageId: string; pageName: string }> = [];
   const skipped: string[] = [];
+  const failed: Array<{ pageId: string; error: string }> = [];
 
   for (const pageId of pageIds) {
     const page = pageById.get(pageId);
@@ -405,27 +409,70 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
       continue;
     }
 
-    const existing = await getChannelByBusinessPlatformChannelId(businessId, 'facebook', page.id);
-    if (existing) {
-      // Re-auth may refresh the page token — update it in place.
-      await updateChannel(businessId, existing.id, {
-        apiToken: page.access_token,
-        extraInfo: JSON.stringify({ pageName: page.name }),
-      });
-      connected.push({ id: existing.id, pageId: page.id, pageName: page.name });
-      continue;
-    }
-
-    const channel = await createChannel(businessId, {
-      platform: 'facebook',
+    const channelPayload = {
       apiToken: page.access_token,
-      platformChannelId: page.id,
       extraInfo: JSON.stringify({ pageName: page.name }),
-    });
-    connected.push({ id: channel.id, pageId: page.id, pageName: page.name });
+    };
+
+    try {
+      const existing = await findChannelByBusinessPlatformChannelId(businessId, 'facebook', page.id);
+      let channelId: string;
+
+      if (existing) {
+        if (existing.deletedAt) {
+          const restored = await reactivateChannel(businessId, existing.id, channelPayload);
+          if (!restored) throw new Error('Failed to restore channel');
+          channelId = restored.id;
+        } else {
+          const updated = await updateChannel(businessId, existing.id, channelPayload);
+          if (!updated) throw new Error('Failed to update channel');
+          channelId = updated.id;
+        }
+      } else {
+        const created = await createChannel(businessId, {
+          platform: 'facebook',
+          ...channelPayload,
+          platformChannelId: page.id,
+        });
+        channelId = created.id;
+      }
+
+      try {
+        console.log('[fb-connect] subscribing page to webhooks', {
+          businessId,
+          pageId: page.id,
+          pageName: page.name,
+        });
+        await subscribeFacebookPageToWebhooks(page.id, page.access_token);
+        console.log('[fb-connect] page subscribed', {
+          businessId,
+          pageId: page.id,
+          channelId,
+        });
+      } catch (err) {
+        console.error('[fb-connect] webhook subscription failed', {
+          businessId,
+          pageId: page.id,
+          channelId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        failed.push({
+          pageId: page.id,
+          error: err instanceof Error ? err.message : 'Webhook subscription failed',
+        });
+      }
+
+      connected.push({ id: channelId, pageId: page.id, pageName: page.name });
+    } catch (err) {
+      console.error(`Facebook connect failed for page ${page.id}:`, err);
+      failed.push({
+        pageId: page.id,
+        error: err instanceof Error ? err.message : 'Connect failed',
+      });
+    }
   }
 
-  return c.json({ connected, skipped });
+  return c.json({ connected, skipped, failed });
 });
 
 export const facebookCallbackRouter = new OpenAPIHono();

@@ -48,6 +48,11 @@ const textEvent = (senderId: string, text: string, mid?: string) => ({
   message: mid ? { text, mid } : { text },
 });
 
+const postbackEvent = (senderId: string, payload: string, title?: string, mid?: string) => ({
+  sender: { id: senderId },
+  postback: { payload, title, mid },
+});
+
 describe('Facebook Webhook', () => {
   withPglite();
   beforeEach(() => {
@@ -121,6 +126,26 @@ describe('Facebook Webhook', () => {
     });
     expect(res.status).toBe(200);
     expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a postback and triggers the agent', async () => {
+    const seed = await seedTestWorld();
+    const res = await postWebhook({
+      object: 'page',
+      entry: [
+        pageEntry(seed.pageChannelId, [
+          postbackEvent('POSTBACK_USER', 'GET_STARTED', 'Get Started', 'pb-1'),
+        ]),
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
+
+    const convs = await listConversations(seed.business.id);
+    const conv = convs.find((c) => c.customerPlatformId === 'POSTBACK_USER');
+    expect(conv).toBeDefined();
+    const msgs = await listMessages(conv!.id, seed.business.id);
+    expect(msgs?.some((m) => m.content === 'Get Started')).toBe(true);
   });
 
   it('does not trigger the agent when the conversation is already working', async () => {

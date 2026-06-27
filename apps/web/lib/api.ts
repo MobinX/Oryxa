@@ -329,7 +329,11 @@ export const connectFacebookPages = (
   businessId: string,
   data: { token: string; pageIds: string[] },
 ) =>
-  apiFetch<{ connected: Array<{ id: string; pageId: string; pageName: string }>; skipped: string[] }>(
+  apiFetch<{
+    connected: Array<{ id: string; pageId: string; pageName: string }>;
+    skipped: string[];
+    failed?: Array<{ pageId: string; error: string }>;
+  }>(
     `/api/v1/${businessId}/channels/facebook/connect`,
     { method: 'POST', token, body: JSON.stringify(data) },
   );

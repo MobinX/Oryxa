@@ -39,10 +39,16 @@ export default async function ChannelsPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ connected?: string }>;
+  searchParams: Promise<{
+    connected?: string;
+    error?: string;
+    detail?: string;
+    subscribeFailed?: string;
+    subscribeDetail?: string;
+  }>;
 }) {
   const { businessId } = await params;
-  const { connected } = await searchParams;
+  const { connected, error, detail, subscribeFailed, subscribeDetail } = await searchParams;
   const token = await requireAuth();
   const [channels, agents] = await Promise.all([
     listChannels(token, businessId),
@@ -142,6 +148,22 @@ export default async function ChannelsPage({
       {connected === 'facebook' && (
         <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
           Facebook page(s) connected successfully.
+          {subscribeFailed && (
+            <span className="mt-1 block text-amber-800 dark:text-amber-200">
+              {subscribeFailed} page(s) could not be subscribed for webhooks — check Meta app webhook settings and
+              `pages_manage_metadata` permission.
+              {subscribeDetail && (
+                <span className="mt-1 block text-xs opacity-90">{decodeURIComponent(subscribeDetail)}</span>
+              )}
+            </span>
+          )}
+        </Card>
+      )}
+
+      {error === 'facebook-subscribe' && (
+        <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+          Facebook connect failed.
+          {detail && <span className="mt-1 block text-xs opacity-90">{decodeURIComponent(detail)}</span>}
         </Card>
       )}
 

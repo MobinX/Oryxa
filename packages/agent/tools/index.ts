@@ -61,7 +61,7 @@ export function createCatalogTools(context: {
       schema: z.object({
         productId: z.string().uuid(),
         variantId: z.string().uuid().optional(),
-        count: z.number().int().positive().optional(),
+        count: z.number().int().min(1).optional(),
         customerAddress: z.string().optional(),
         customerPhone: z.string().optional(),
       }),

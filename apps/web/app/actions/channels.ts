@@ -12,6 +12,7 @@ import {
   getFacebookAuthUrl,
   listFacebookPendingPages,
   connectFacebookPages,
+  ApiError,
 } from '@/lib/api';
 
 export async function createAgentAction(businessId: string, formData: FormData) {
@@ -103,7 +104,35 @@ export async function connectSelectedFacebookPagesAction(
     redirect(`/b/${businessId}/channels/connect-facebook?token=${encodeURIComponent(selectionToken)}&error=no-selection`);
   }
 
-  await connectFacebookPages(token, businessId, { token: selectionToken, pageIds });
+  let result;
+  try {
+    result = await connectFacebookPages(token, businessId, { token: selectionToken, pageIds });
+  } catch (err) {
+    const message =
+      err instanceof ApiError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : 'Connect failed';
+    redirect(
+      `/b/${businessId}/channels?error=facebook-subscribe&detail=${encodeURIComponent(message)}`,
+    );
+  }
+
   revalidatePath(`/b/${businessId}/channels`);
+  const failed = result.failed ?? [];
+
+  if (result.connected.length === 0 && failed.length > 0) {
+    const detail = encodeURIComponent(failed[0]?.error ?? 'Connect failed');
+    redirect(`/b/${businessId}/channels?error=facebook-subscribe&detail=${detail}`);
+  }
+
+  if (failed.length > 0) {
+    const subscribeDetail = encodeURIComponent(failed[0]?.error ?? '');
+    redirect(
+      `/b/${businessId}/channels?connected=facebook&subscribeFailed=${failed.length}&subscribeDetail=${subscribeDetail}`,
+    );
+  }
+
   redirect(`/b/${businessId}/channels?connected=facebook`);
 }

@@ -87,6 +87,21 @@ export async function getChannelByBusinessPlatformChannelId(
   });
 }
 
+/** Includes soft-deleted rows — used to restore a previously removed channel on reconnect. */
+export async function findChannelByBusinessPlatformChannelId(
+  businessId: string,
+  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platformChannelId: string,
+) {
+  return db.query.channels.findFirst({
+    where: and(
+      eq(channels.businessId, businessId),
+      eq(channels.platform, platform),
+      eq(channels.platformChannelId, platformChannelId),
+    ),
+  });
+}
+
 export async function getChannelById(channelId: string) {
   return db.query.channels.findFirst({
     where: and(eq(channels.id, channelId), isNull(channels.deletedAt)),
@@ -120,6 +135,21 @@ export async function updateChannel(businessId: string, channelId: string, input
   const [updated] = await db
     .update(channels)
     .set(parsed)
+    .where(eq(channels.id, channelId))
+    .returning();
+  return { id: updated.id, updated: true };
+}
+
+/** Restores a soft-deleted channel and refreshes its credentials/metadata. */
+export async function reactivateChannel(businessId: string, channelId: string, input: unknown) {
+  const parsed = updateChannelInputSchema.parse(input);
+  const channel = await db.query.channels.findFirst({
+    where: and(eq(channels.id, channelId), eq(channels.businessId, businessId)),
+  });
+  if (!channel) return null;
+  const [updated] = await db
+    .update(channels)
+    .set({ ...parsed, deletedAt: null })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };

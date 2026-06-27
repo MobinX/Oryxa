@@ -35,8 +35,9 @@ export function getFacebookOAuthUrl(state: string): string {
     'pages_messaging',
     'pages_show_list',
     'pages_manage_metadata',
+    'pages_read_user_content', // dependency of pages_manage_engagement; read comments on posts
+    'pages_read_engagement',   // receive comment webhooks, post context
     'pages_manage_engagement', // reply to comments
-    'pages_read_engagement',   // receive comment webhooks
   ].join(',');
   return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes}&state=${encodeURIComponent(state)}`;
 }
@@ -62,6 +63,53 @@ export async function getUserPages(userToken: string) {
     data: Array<{ id: string; name: string; access_token: string }>;
   };
   return data.data;
+}
+
+/** Webhook fields subscribed when a Facebook Page is connected in Oryxa. */
+export const FACEBOOK_PAGE_WEBHOOK_FIELDS = [
+  'messages',
+  'messaging_postbacks',
+  'feed', // Page comment webhooks
+] as const;
+
+/**
+ * Subscribes a Page to this app's webhooks so Meta delivers Messenger DMs,
+ * postbacks, and feed (comment) events to `/webhooks/facebook`.
+ */
+export async function subscribeFacebookPageToWebhooks(
+  pageId: string,
+  pageToken: string,
+): Promise<void> {
+  const fields = FACEBOOK_PAGE_WEBHOOK_FIELDS.join(',');
+  const url = `${GRAPH_API}/${pageId}/subscribed_apps?subscribed_fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(pageToken)}`;
+  console.log('[fb-subscribe] subscribing page', {
+    pageId,
+    fields,
+    graphApiVersion: GRAPH_API,
+  });
+
+  const res = await fetch(url, { method: 'POST' });
+  const rawBody = await res.text();
+  console.log('[fb-subscribe] response', {
+    pageId,
+    status: res.status,
+    ok: res.ok,
+    body: rawBody,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Facebook page webhook subscription failed: ${rawBody}`);
+  }
+  let data: { success?: boolean } = {};
+  try {
+    data = JSON.parse(rawBody) as { success?: boolean };
+  } catch {
+    // Some success responses have an empty body — treat as success.
+  }
+  if (data.success === false) {
+    throw new Error('Facebook page webhook subscription failed: success=false');
+  }
+  console.log('[fb-subscribe] success', { pageId, success: data.success ?? true });
 }
 
 export async function sendMessage(

@@ -7,6 +7,7 @@ import { createOAuthState, createFacebookPagesSelectionToken } from '@repo/integ
 
 const exchangeCodeForTokenMock = vi.fn();
 const getUserPagesMock = vi.fn();
+const subscribeFacebookPageToWebhooksMock = vi.fn();
 
 vi.mock('@repo/integrations/facebook', async () => {
   const actual = await vi.importActual<typeof import('@repo/integrations/facebook')>('@repo/integrations/facebook');
@@ -14,6 +15,8 @@ vi.mock('@repo/integrations/facebook', async () => {
     ...actual,
     exchangeCodeForToken: (...args: unknown[]) => exchangeCodeForTokenMock(...args),
     getUserPages: (...args: unknown[]) => getUserPagesMock(...args),
+    subscribeFacebookPageToWebhooks: (...args: unknown[]) =>
+      subscribeFacebookPageToWebhooksMock(...args),
   };
 });
 
@@ -96,6 +99,11 @@ describe('Facebook OAuth callback', () => {
 describe('Facebook page selection API', () => {
   withPglite();
 
+  beforeEach(() => {
+    subscribeFacebookPageToWebhooksMock.mockReset();
+    subscribeFacebookPageToWebhooksMock.mockResolvedValue(undefined);
+  });
+
   it('lists pending pages from a selection token', async () => {
     const { user, business } = await seedTestWorld();
     const token = await createFacebookPagesSelectionToken({
@@ -139,5 +147,68 @@ describe('Facebook page selection API', () => {
 
     const channels = await listChannels(business.id);
     expect(channels.some((c) => c.platformChannelId === 'SEL_PAGE_1')).toBe(true);
+    expect(subscribeFacebookPageToWebhooksMock).toHaveBeenCalledTimes(2);
+    expect(subscribeFacebookPageToWebhooksMock).toHaveBeenCalledWith('SEL_PAGE_1', 'sel-tok-1');
+    expect(subscribeFacebookPageToWebhooksMock).toHaveBeenCalledWith('SEL_PAGE_2', 'sel-tok-2');
+  });
+
+  it('still connects the page when webhook subscription fails', async () => {
+    const { user, business } = await seedTestWorld();
+    subscribeFacebookPageToWebhooksMock.mockRejectedValue(new Error('subscription denied'));
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [{ id: 'FAIL_PAGE', name: 'Fail Page', access_token: 'fail-tok' }],
+    });
+
+    const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: ['FAIL_PAGE'] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      connected: Array<{ pageId: string }>;
+      failed: Array<{ pageId: string; error: string }>;
+    };
+    expect(body.connected).toHaveLength(1);
+    expect(body.connected[0]?.pageId).toBe('FAIL_PAGE');
+    expect(body.failed).toEqual([{ pageId: 'FAIL_PAGE', error: 'subscription denied' }]);
+
+    const channels = await listChannels(business.id);
+    expect(channels.some((c) => c.platformChannelId === 'FAIL_PAGE')).toBe(true);
+  });
+
+  it('reactivates a soft-deleted channel instead of inserting a duplicate', async () => {
+    const { user, business } = await seedTestWorld();
+    const { deleteChannel } = await import('@repo/db/crud/channel');
+    const existing = (await listChannels(business.id)).find((c) => c.platform === 'facebook');
+    expect(existing).toBeDefined();
+    await deleteChannel(business.id, existing!.id);
+
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [
+        {
+          id: existing!.platformChannelId,
+          name: 'Restored Page',
+          access_token: 'restored-tok',
+        },
+      ],
+    });
+
+    const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: [existing!.platformChannelId] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { connected: Array<{ id: string; pageId: string }> };
+    expect(body.connected).toHaveLength(1);
+    expect(body.connected[0]?.id).toBe(existing!.id);
+
+    const channels = await listChannels(business.id);
+    expect(channels.some((c) => c.id === existing!.id)).toBe(true);
   });
 });
