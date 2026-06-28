@@ -11,6 +11,8 @@ export const conversationListItemSchema = z.object({
   customerName: z.string().nullable(),
   lastMessageState: messageStateSchema,
   channelId: uuidSchema,
+  customerPlatformId: z.string(),
+  createdAt: timestampSchema,
 });
 
 export const messageSchema = z.object({

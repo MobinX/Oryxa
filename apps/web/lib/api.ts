@@ -287,6 +287,17 @@ export type Agent = {
   createdAt?: string;
 };
 
+export const createChannel = (
+  token: string,
+  businessId: string,
+  data: { platform: string; apiToken: string; platformChannelId: string; agentId?: string; extraInfo?: string },
+) =>
+  apiFetch<{ id: string; status: 'linked' }>(`/api/v1/${businessId}/channels`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
 export const listChannels = (token: string, businessId: string) =>
   apiFetch<Channel[]>(`/api/v1/${businessId}/channels`, { token });
 
@@ -392,6 +403,8 @@ export type Conversation = {
   customerName: string | null;
   lastMessageState: string;
   channelId: string;
+  customerPlatformId: string;
+  createdAt: string;
 };
 
 export const listConversations = (token: string, businessId: string) =>

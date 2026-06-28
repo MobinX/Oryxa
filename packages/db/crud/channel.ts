@@ -58,6 +58,29 @@ export async function deleteAgent(businessId: string, agentId: string) {
 
 export async function createChannel(businessId: string, input: unknown) {
   const parsed = createChannelInputSchema.parse(input);
+
+  // Check if a channel (active or soft-deleted) already exists for this business/platform channel
+  const existing = await findChannelByBusinessPlatformChannelId(
+    businessId,
+    parsed.platform,
+    parsed.platformChannelId,
+  );
+
+  if (existing) {
+    // Reactivate and update the existing channel row
+    const [updated] = await db
+      .update(channels)
+      .set({
+        deletedAt: null,
+        apiToken: parsed.apiToken,
+        agentId: parsed.agentId ?? null,
+        extraInfo: parsed.extraInfo ?? null,
+      })
+      .where(eq(channels.id, existing.id))
+      .returning();
+    return { id: updated.id, status: 'linked' as const };
+  }
+
   const [channel] = await db
     .insert(channels)
     .values({ ...parsed, businessId })

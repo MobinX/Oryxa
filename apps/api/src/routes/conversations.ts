@@ -53,6 +53,8 @@ conversationsRouter.openapi(listConversationsRoute, async (c) => {
       customerName: conv.customerName,
       lastMessageState: conv.lastMessageState,
       channelId: conv.channelId,
+      customerPlatformId: conv.customerPlatformId,
+      createdAt: conv.createdAt.toISOString(),
     })),
   );
 });
