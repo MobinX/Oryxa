@@ -23,10 +23,11 @@ export async function POST(req: NextRequest) {
   }
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const cleanBaseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
   const internalKey = process.env.INTERNAL_KEY || 'change-me-to-random-secret';
 
   // Fetch the agent test-run stream from the Hono API
-  const apiRes = await fetch(`${apiBaseUrl}/internal/test-run`, {
+  const apiRes = await fetch(`${cleanBaseUrl}/internal/test-run`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -22,7 +22,9 @@ export async function apiFetch<T>(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const res = await fetch(`${baseUrl}${cleanPath}`, { ...init, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     if (res.status === 401) {
