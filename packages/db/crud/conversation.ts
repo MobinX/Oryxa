@@ -38,7 +38,7 @@ export async function getConversationWithHistory(conversationId: string) {
       messages: {
         where: isNull(messages.deletedAt),
         orderBy: [desc(messages.time)],
-        limit: 10,
+        limit: 40,
       },
       channel: {
         with: { agent: true, business: true },
@@ -215,8 +215,7 @@ export async function deleteConversation(businessId: string, conversationId: str
   const conv = await getConversationForBusiness(conversationId, businessId);
   if (!conv) return null;
   await db
-    .update(conversations)
-    .set({ deletedAt: new Date() })
+    .delete(conversations)
     .where(eq(conversations.id, conversationId));
   return { deleted: true };
 }

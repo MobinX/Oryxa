@@ -24,7 +24,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:neon": "vitest run tests/neon",
-    "test:neon:crud": "vitest run tests/neon/crud.test.ts"
+    "test:neon:crud": "vitest run tests/neon/crud.test.ts",
+    "test:behaviour": "vitest run tests/agent/behaviour",
+    "test:behaviour:watch": "vitest tests/agent/behaviour"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.3",

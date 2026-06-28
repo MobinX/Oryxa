@@ -3,6 +3,7 @@ import { internalRunInputSchema, internalRunCommentInputSchema } from '@repo/sha
 import { runAgentForConversation } from '@api/lib/agent-runner';
 import { runAgentForCommentThread } from '@api/lib/comment-runner';
 import { runInBackground } from '@api/lib/background';
+import { testRunRouter } from '@api/routes/internal/test-run';
 
 export const internalRouter = new Hono();
 
@@ -39,3 +40,6 @@ internalRouter.post('/run-comment', async (c) => {
   runInBackground(c, runAgentForCommentThread(parsed.data.commentThreadId));
   return c.text('accepted', 202);
 });
+
+// Mount SSE test endpoint — same auth, different response mode
+internalRouter.route('/', testRunRouter);

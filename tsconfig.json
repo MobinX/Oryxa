@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@repo/db": ["packages/db"],
+      "@repo/db/*": ["packages/db/*"],
+      "@repo/shared": ["packages/shared"],
+      "@repo/shared/*": ["packages/shared/*"],
+      "@repo/agent": ["packages/agent"],
+      "@repo/agent/*": ["packages/agent/*"],
+      "@repo/integrations": ["packages/integrations"],
+      "@repo/integrations/*": ["packages/integrations/*"],
+      "@repo/utils": ["packages/utils"],
+      "@repo/utils/*": ["packages/utils/*"],
+      "@db/*": ["packages/db/*"],
+      "@shared/*": ["packages/shared/*"],
+      "@agent/*": ["packages/agent/*"],
+      "@api/*": ["apps/api/src/*"]
+    }
+  }
+}

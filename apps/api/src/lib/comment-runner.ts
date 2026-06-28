@@ -13,8 +13,9 @@ export function triggerCommentRun(commentThreadId: string): void {
 }
 
 const COMMENT_REPLY_GUIDANCE = [
-  'You are replying to a public comment on the business\u2019s social media post. The history shows this commenter\u2019s prior comments and your prior replies on the same post.',
-  'Only reply if THIS comment is directed at the page/business \u2014 a question, a request, or an @mention of the page. If the commenter is talking to another user (user-to-user conversation), do NOT call reply_comment; stay silent.',
+  'You are replying to a public comment on the business’s social media post. The history shows this commenter’s prior comments and your prior replies on the same post.',
+  'Only reply if THIS comment is directed at the page/business — a question, a request, or an @mention of the page. If the commenter is talking to another user (user-to-user conversation), do NOT call reply_comment; stay silent.',
+  'If you decide to stay silent, do NOT call any tools and output exactly the word "SILENT" as your final response.',
   'When you should reply, use reply_comment to post a single, short, public-appropriate reply to this one comment.',
 ].join('\n');
 
@@ -45,11 +46,12 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     updateCommentThreadState,
     checkPendingComments,
     setCommentThreadPostContext,
+    createComment,
   } = await import('@repo/db/crud/comment');
   const { Agent } = await import('@repo/agent');
   const { createCommentAgentTools } = await import('@agent/tools/comment');
   const { listProducts } = await import('@repo/db/crud/product');
-  const { getFacebookPostContext } = await import('@repo/integrations/facebook');
+  const { getFacebookPostContext, replyToFacebookComment } = await import('@repo/integrations/facebook');
 
   const thread = await getCommentThreadWithChannel(commentThreadId);
   if (!thread?.channel?.agent) return;
@@ -91,13 +93,17 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
     .join('\n');
 
-  const tools = createCommentAgentTools({
-    businessId: thread.businessId,
-    commentThreadId: thread.id,
-    pageToken: thread.channel.apiToken,
-    parentCommentExternalId: current.externalId!,
-    customerName: thread.commenterName,
-  });
+  const sentCommentTexts: string[] = [];
+  const tools = createCommentAgentTools(
+    {
+      businessId: thread.businessId,
+      commentThreadId: thread.id,
+      pageToken: thread.channel.apiToken,
+      parentCommentExternalId: current.externalId!,
+      customerName: thread.commenterName,
+    },
+    (text) => sentCommentTexts.push(text),
+  );
 
   const agent = new Agent({
     systemPrompt: postContext
@@ -115,10 +121,25 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   });
 
   try {
-    await agent.run();
-    // No fallback send: silence is valid (the comment was user-to-user, or the
-    // agent judged it not for the page). The reply_comment tool already sent +
-    // persisted if the agent chose to reply.
+    const reply = await agent.run();
+
+    // Fallback: if the agent did not call reply_comment, but returned a non-silent reply, send it directly.
+    if (sentCommentTexts.length === 0 && reply && reply.trim() !== 'SILENT') {
+      console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
+      const newCommentId = await replyToFacebookComment(
+        thread.channel.apiToken,
+        current.externalId!,
+        reply,
+      );
+      await createComment({
+        commentThreadId: thread.id,
+        from: 'self',
+        content: reply,
+        externalId: newCommentId,
+        parentExternalId: current.externalId!,
+        state: 'done',
+      });
+    }
   } catch (err) {
     console.error('Comment agent run failed:', err);
     // Mark this comment done so a partial send is never re-sent on retry (no

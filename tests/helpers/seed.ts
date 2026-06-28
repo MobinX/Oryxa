@@ -75,3 +75,58 @@ export async function seedTestWorld(): Promise<TestSeed> {
 export function authHeaders(token = TEST_AUTH_TOKEN) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
+
+export type MinimalSeed = {
+  user: Awaited<ReturnType<typeof syncUser>>;
+  business: Awaited<ReturnType<typeof createBusiness>>;
+  agent: Awaited<ReturnType<typeof createAgent>>;
+  channel: Awaited<ReturnType<typeof createChannel>>;
+  pageChannelId: string;
+};
+
+/**
+ * Seeds the minimum world required by agent behaviour tests:
+ *   user → business → agent → channel (with agent assigned)
+ *
+ * No product, no conversation — the behaviour tests create those
+ * themselves so they control exact names/SKUs/IDs.
+ */
+export async function seedMinimalWorld(opts: {
+  systemPrompt?: string;
+  businessName?: string;
+} = {}): Promise<MinimalSeed> {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const user = await syncUser({
+    firebaseUid: `${TEST_FIREBASE_UID}-${suffix}`,
+    name: 'Behaviour Test User',
+    email: `behaviour-${suffix}@oryxa.dev`,
+    signInMethod: 'google',
+  });
+
+  const business = await createBusiness(user.id, {
+    name: opts.businessName ?? `Behaviour Store ${suffix}`,
+    description: 'A behaviour test store with known products',
+    hasTradeLicense: false,
+    hasTaxLicense: false,
+  });
+
+  const agent = await createAgent(business.id, {
+    name: 'Behaviour Sales Bot',
+    systemPrompt:
+      opts.systemPrompt ??
+      'You are a helpful sales assistant. Help customers find products and place orders. Stay on topic.',
+    platformType: 'facebook',
+  });
+
+  const pageChannelId = `TEST_PAGE_${crypto.randomUUID()}`;
+
+  const channel = await createChannel(business.id, {
+    platform: 'facebook',
+    apiToken: 'test-page-token',
+    platformChannelId: pageChannelId,
+    agentId: agent.id,
+  });
+
+  return { user, business, agent, channel, pageChannelId };
+}
+

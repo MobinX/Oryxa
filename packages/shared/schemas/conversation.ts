@@ -54,3 +54,18 @@ export const internalRunInputSchema = z.object({
 export const internalRunCommentInputSchema = z.object({
   commentThreadId: uuidSchema,
 });
+
+export const testRunInputSchema = z.object({
+  /** The channel UUID to simulate the inbound message on. Must have an agent assigned. */
+  channelId: uuidSchema,
+  /** The business UUID that owns the channel. */
+  businessId: uuidSchema,
+  /** The user message to inject as the customer's inbound text. */
+  userMessage: z.string().min(1).max(2000),
+  /**
+   * Optional stable test-user platform ID. Defaults to `test-user-{channelId}`.
+   * Re-using the same ID across calls continues the same conversation thread —
+   * mirrors how real Facebook DMs work (same PSID = same conversation).
+   */
+  testUserId: z.string().optional(),
+});
