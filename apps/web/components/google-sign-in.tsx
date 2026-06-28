@@ -27,6 +27,9 @@ export function GoogleSignInButton() {
             email: cred.user.email ?? undefined,
           });
         } catch (e: any) {
+          if (e?.message === 'NEXT_REDIRECT' || String(e).includes('NEXT_REDIRECT')) {
+            throw e;
+          }
           console.error(e);
           if (
             e?.code === 'auth/cancelled-popup-request' ||

@@ -16,7 +16,7 @@ export const app = new OpenAPIHono();
 app.use(
   '*',
   cors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3400',
+    origin: (origin) => origin || '*',
     allowHeaders: ['Content-Type', 'Authorization', 'x-internal-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
