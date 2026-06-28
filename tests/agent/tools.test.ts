@@ -13,12 +13,13 @@ describe('Agent Tools', () => {
 
   it('get_product tool searches catalog', async () => {
     const seed = await seedTestWorld();
-    const [getProductTool] = createAgentTools({
+    const tools = createAgentTools({
       businessId: seed.business.id,
       conversationId: seed.conversation.id,
       pageToken: 'tok',
       customerPlatformId: 'cust',
     });
+    const getProductTool = tools.find((t) => t.name === 'get_product')!;
 
     const result = await getProductTool.invoke({ query: 'T-Shirt' });
     expect(result).toContain('Test T-Shirt');
@@ -26,13 +27,14 @@ describe('Agent Tools', () => {
 
   it('create_order tool writes to database', async () => {
     const seed = await seedTestWorld();
-    const [, createOrderTool] = createAgentTools({
+    const tools = createAgentTools({
       businessId: seed.business.id,
       conversationId: seed.conversation.id,
       pageToken: 'tok',
       customerPlatformId: 'cust',
       customerName: 'Tool Buyer',
     });
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
 
     const result = await createOrderTool.invoke({
       productId: seed.productDetail.id,
@@ -46,12 +48,13 @@ describe('Agent Tools', () => {
   it('send_message tool calls Facebook API', async () => {
     const seed = await seedTestWorld();
     sendMessageMock.mockClear();
-    const [, , sendMessageTool] = createAgentTools({
+    const tools = createAgentTools({
       businessId: seed.business.id,
       conversationId: seed.conversation.id,
       pageToken: 'page-tok',
       customerPlatformId: 'fb-user-1',
     });
+    const sendMessageTool = tools.find((t) => t.name === 'send_message')!;
 
     const result = await sendMessageTool.invoke({ text: 'Hello from tool' });
     expect(result).toContain('sent');
