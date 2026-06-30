@@ -1,4 +1,5 @@
 import { runAgentCore } from '@api/lib/agent-runner-core';
+import { TRIGGER_TIMEOUT_MS } from './config';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
@@ -13,7 +14,7 @@ export async function triggerAgentRun(conversationId: string): Promise<void> {
     body: JSON.stringify({ conversationId }),
   }).catch((err) => console.error('Failed to trigger agent run:', err));
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await new Promise((resolve) => setTimeout(resolve, TRIGGER_TIMEOUT_MS));
 }
 
 /** Production entry-point: no SSE, no overrides, real Facebook send. */
