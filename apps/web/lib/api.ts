@@ -573,6 +573,7 @@ export type Post = {
   channelId: string;
   productId?: string | null;
   content: string;
+  mediaUrls?: string[] | null;
   postState: PostState;
   platformPostId?: string | null;
   scheduledAt?: string | null;

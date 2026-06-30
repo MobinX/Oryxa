@@ -34,6 +34,7 @@ export const postListItemSchema = z.object({
   channelId: uuidSchema,
   productId: uuidSchema.nullable().optional(),
   content: z.string(),
+  mediaUrls: z.array(z.string().url()).nullable().optional(),
   postState: postStateSchema,
   platformPostId: z.string().nullable().optional(),
   scheduledAt: timestampSchema.nullable().optional(),

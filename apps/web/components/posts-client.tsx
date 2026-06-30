@@ -55,6 +55,7 @@ export function PostsClient({
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPostDetail, setSelectedPostDetail] = useState<PostDetail | null>(null);
   const [filterPlatform, setFilterPlatform] = useState<'all' | 'facebook' | 'instagram'>('all');
+  const [updatingChannel, setUpdatingChannel] = useState(false);
 
   // Loading states
   const [creating, setCreating] = useState(false);
@@ -182,7 +183,7 @@ export function PostsClient({
       });
 
       // Update posts list
-      setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, content, postState: computedState, scheduledAt: scheduleDate } : p)));
+      setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, content, mediaUrls, postState: computedState, scheduledAt: scheduleDate } : p)));
       
       // Update local detail
       if (selectedPostDetail) {
@@ -527,36 +528,43 @@ export function PostsClient({
                           ({activeChannel?.platform})
                         </span>
                       ) : (
-                        <Select
-                          value={selectedPostDetail.channelId}
-                          onChange={async (e) => {
-                            const newChannelId = e.target.value;
-                            try {
-                              const updated = await updatePost(token, businessId, selectedPostDetail.id, {
-                                channelId: newChannelId,
-                              });
-                              setPosts(posts.map((p) => p.id === selectedPostDetail.id ? { ...p, channelId: newChannelId } : p));
-                              setSelectedPostDetail({
-                                ...selectedPostDetail,
-                                channelId: newChannelId,
-                              });
-                              setSuccessMsg('Target channel updated.');
-                            } catch (err) {
-                              setErrorMsg(err instanceof Error ? err.message : 'Failed to update channel');
-                            }
-                          }}
-                          className="h-9 py-1 text-xs w-56 bg-card font-semibold"
-                        >
-                          {channels.map((chan) => {
-                            const info = chan.extraInfo ? JSON.parse(chan.extraInfo) : null;
-                            const label = info?.name || `${chan.platform} (${chan.platformChannelId})`;
-                            return (
-                              <option key={chan.id} value={chan.id}>
-                                {label} ({chan.platform})
-                              </option>
-                            );
-                          })}
-                        </Select>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={selectedPostDetail.channelId}
+                            disabled={updatingChannel}
+                            onChange={async (e) => {
+                              const newChannelId = e.target.value;
+                              setUpdatingChannel(true);
+                              try {
+                                await updatePost(token, businessId, selectedPostDetail.id, {
+                                  channelId: newChannelId,
+                                });
+                                setPosts(posts.map((p) => p.id === selectedPostDetail.id ? { ...p, channelId: newChannelId } : p));
+                                setSelectedPostDetail({
+                                  ...selectedPostDetail,
+                                  channelId: newChannelId,
+                                });
+                                setSuccessMsg('Target channel updated.');
+                              } catch (err) {
+                                setErrorMsg(err instanceof Error ? err.message : 'Failed to update channel');
+                              } finally {
+                                setUpdatingChannel(false);
+                              }
+                            }}
+                            className="h-9 py-1 text-xs w-56 bg-card font-semibold"
+                          >
+                            {channels.map((chan) => {
+                              const info = chan.extraInfo ? JSON.parse(chan.extraInfo) : null;
+                              const label = info?.name || `${chan.platform} (${chan.platformChannelId})`;
+                              return (
+                                <option key={chan.id} value={chan.id}>
+                                  {label} ({chan.platform})
+                                </option>
+                              );
+                            })}
+                          </Select>
+                          {updatingChannel && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                        </div>
                       )}
                     </div>
                   </div>
