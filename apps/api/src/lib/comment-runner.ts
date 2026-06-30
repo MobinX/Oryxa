@@ -1,7 +1,7 @@
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
 
-export function triggerCommentRun(commentThreadId: string): void {
+export async function triggerCommentRun(commentThreadId: string): Promise<void> {
   fetch(`${AGENT_RUNNER_URL}/internal/run-comment`, {
     method: 'POST',
     headers: {
@@ -10,6 +10,8 @@ export function triggerCommentRun(commentThreadId: string): void {
     },
     body: JSON.stringify({ commentThreadId }),
   }).catch((err) => console.error('Failed to trigger comment run:', err));
+
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 }
 
 const COMMENT_REPLY_GUIDANCE = [
@@ -152,6 +154,6 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   // Drain the rest of this commenter's queue, one per follow-up run.
   const hasPending = await checkPendingComments(thread.id);
   if (hasPending) {
-    triggerCommentRun(commentThreadId);
+    await triggerCommentRun(commentThreadId);
   }
 }

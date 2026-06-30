@@ -146,6 +146,6 @@ export async function runAgentCore(
     // (background on Bun, waitUntil on Vercel). Import lazily to keep this
     // module free of circular deps.
     const { triggerAgentRun } = await import('@api/lib/agent-runner');
-    triggerAgentRun(conversationId);
+    await triggerAgentRun(conversationId);
   }
 }

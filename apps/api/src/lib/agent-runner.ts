@@ -3,7 +3,7 @@ import { runAgentCore } from '@api/lib/agent-runner-core';
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
 
-export function triggerAgentRun(conversationId: string): void {
+export async function triggerAgentRun(conversationId: string): Promise<void> {
   fetch(`${AGENT_RUNNER_URL}/internal/run`, {
     method: 'POST',
     headers: {
@@ -12,6 +12,8 @@ export function triggerAgentRun(conversationId: string): void {
     },
     body: JSON.stringify({ conversationId }),
   }).catch((err) => console.error('Failed to trigger agent run:', err));
+
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 }
 
 /** Production entry-point: no SSE, no overrides, real Facebook send. */

@@ -309,7 +309,7 @@ async function processMessagingEvents(
 
     if (inserted && priorStatus === 'done' && channel.agentId) {
       fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
-      triggerAgentRun(conversationId);
+      await triggerAgentRun(conversationId);
     } else {
       fbLog('processMessagingEvents no agent trigger', {
         index,
@@ -408,7 +408,7 @@ async function processCommentChanges(
 
     if (inserted && priorStatus === 'done' && channel.agentId) {
       fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
-      triggerCommentRun(threadId);
+      await triggerCommentRun(threadId);
     } else {
       fbLog('processCommentChanges no agent trigger', {
         index,
