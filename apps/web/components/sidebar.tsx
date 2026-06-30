@@ -19,6 +19,7 @@ import {
   X,
   LogOut,
   Terminal,
+  LayoutList,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ const nav = [
   { href: 'orders', label: 'Orders', icon: ShoppingCart },
   { href: 'categories', label: 'Categories', icon: FolderTree },
   { href: 'channels', label: 'Channels', icon: Radio },
+  { href: 'posts', label: 'Posts', icon: LayoutList },
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
   { href: 'playground', label: 'Playground', icon: Terminal },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },

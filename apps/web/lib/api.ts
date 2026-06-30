@@ -556,3 +556,132 @@ export function csvColumnsForOrders() {
     { key: 'createdAt', label: 'Created At' },
   ];
 }
+
+// Posts
+export type PostState = 'draft' | 'scheduled' | 'published' | 'failed';
+
+export type PostSync = {
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  reachCount: number;
+  syncedAt: string;
+};
+
+export type Post = {
+  id: string;
+  channelId: string;
+  productId?: string | null;
+  content: string;
+  postState: PostState;
+  platformPostId?: string | null;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+  createdAt: string;
+};
+
+export type PostDetail = Post & {
+  aiPrompt?: string | null;
+  latestSync?: PostSync | null;
+};
+
+export const listPosts = (
+  token: string,
+  businessId: string,
+  opts?: { channelId?: string; state?: PostState },
+) => {
+  const params = new URLSearchParams();
+  if (opts?.channelId) params.append('channelId', opts.channelId);
+  if (opts?.state) params.append('state', opts.state);
+  const q = params.toString() ? `?${params.toString()}` : '';
+  return apiFetch<Post[]>(`/api/v1/${businessId}/posts${q}`, { token });
+};
+
+export const getPost = (token: string, businessId: string, postId: string) =>
+  apiFetch<PostDetail>(`/api/v1/${businessId}/posts/${postId}`, { token });
+
+export const createPost = (
+  token: string,
+  businessId: string,
+  data: {
+    channelId: string;
+    content: string;
+    mediaUrls?: string[];
+    scheduledAt?: string | null;
+    productId?: string | null;
+  },
+) =>
+  apiFetch<Post>(`/api/v1/${businessId}/posts`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
+export const updatePost = (
+  token: string,
+  businessId: string,
+  postId: string,
+  data: {
+    channelId?: string;
+    content?: string;
+    mediaUrls?: string[];
+    scheduledAt?: string | null;
+    postState?: PostState;
+    platformPostId?: string;
+    aiPrompt?: string;
+  },
+) =>
+  apiFetch<Post>(`/api/v1/${businessId}/posts/${postId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+  });
+
+export const deletePost = (token: string, businessId: string, postId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/posts/${postId}`, {
+    method: 'DELETE',
+    token,
+  });
+
+export const publishPost = (token: string, businessId: string, postId: string) =>
+  apiFetch<{ platformPostId: string; publishedAt: string }>(
+    `/api/v1/${businessId}/posts/${postId}/publish`,
+    {
+      method: 'POST',
+      token,
+    },
+  );
+
+export const syncPost = (token: string, businessId: string, postId: string) =>
+  apiFetch<PostSync>(`/api/v1/${businessId}/posts/${postId}/sync`, {
+    method: 'POST',
+    token,
+  });
+
+export const generatePost = (
+  token: string,
+  businessId: string,
+  data: {
+    channelId: string;
+    productId: string;
+    tone?: string;
+  },
+) =>
+  apiFetch<Post>(`/api/v1/${businessId}/posts/generate`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
+export const tunePost = (
+  token: string,
+  businessId: string,
+  postId: string,
+  instruction: string,
+) =>
+  apiFetch<Post>(`/api/v1/${businessId}/posts/${postId}/tune`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ instruction }),
+  });
+

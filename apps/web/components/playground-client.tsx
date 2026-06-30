@@ -10,6 +10,7 @@ import {
   listConversations,
   listMessages,
   deleteConversation,
+  updateChannelAgent,
 } from '@/lib/api';
 import {
   Terminal as TerminalIcon,
@@ -226,13 +227,7 @@ export function PlaygroundClient({
       // Link the active channel to this agent dynamically so the test run uses this agent configuration
       if (activeChannel) {
         try {
-          await createChannel(token, businessId, {
-            platform: activeChannel.platform,
-            apiToken: 'mock-test-token',
-            platformChannelId: activeChannel.platformChannelId,
-            agentId: agent.id,
-            extraInfo: JSON.stringify({ pageName: activeChannel.pageName || 'Sandbox Testing Page' }),
-          });
+          await updateChannelAgent(token, businessId, activeChannel.id, agent.id);
           const updated = await listChannels(token, businessId);
           setChannels(updated);
           const currentFb = updated.find((c) => c.platform === 'facebook');
@@ -282,15 +277,8 @@ export function PlaygroundClient({
       setNewAgentName('');
       setNewAgentPrompt('');
 
-      // Auto-link newly created agent to channel
       if (activeChannel) {
-        await createChannel(token, businessId, {
-          platform: activeChannel.platform,
-          apiToken: 'mock-test-token',
-          platformChannelId: activeChannel.platformChannelId,
-          agentId: res.id,
-          extraInfo: JSON.stringify({ pageName: activeChannel.pageName || 'Sandbox Testing Page' }),
-        });
+        await updateChannelAgent(token, businessId, activeChannel.id, res.id);
         const updatedChannels = await listChannels(token, businessId);
         setChannels(updatedChannels);
         const currentFb = updatedChannels.find((c) => c.platform === 'facebook');

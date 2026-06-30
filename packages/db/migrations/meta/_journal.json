@@ -36,6 +36,13 @@
       "when": 1782507655308,
       "tag": "0004_add_comment_profile_and_post_context",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782829906654,
+      "tag": "0005_material_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

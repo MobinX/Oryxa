@@ -1,3 +1,5 @@
+import { PostPublisher, registerPublisher } from './publisher';
+
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const encoder = new TextEncoder();
 
@@ -38,6 +40,7 @@ export function getFacebookOAuthUrl(state: string): string {
     'pages_read_user_content', // dependency of pages_manage_engagement; read comments on posts
     'pages_read_engagement',   // receive comment webhooks, post context
     'pages_manage_engagement', // reply to comments
+    'pages_manage_posts',
   ].join(',');
   return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes}&state=${encodeURIComponent(state)}`;
 }
@@ -358,3 +361,87 @@ export async function verifyFacebookPagesSelectionToken(
     return null;
   }
 }
+
+export async function publishFacebookPost(
+  pageToken: string,
+  pageId: string,
+  message: string,
+  mediaUrls?: string[],
+): Promise<string> {
+  const hasMedia = mediaUrls && mediaUrls.length > 0;
+  const endpoint = hasMedia
+    ? `${GRAPH_API}/${pageId}/photos`
+    : `${GRAPH_API}/${pageId}/feed`;
+
+  // Include access_token in the body (not query string) for reliability.
+  // The older /feed and /photos endpoints require form-urlencoded, not JSON.
+  const params = new URLSearchParams();
+  params.append('access_token', pageToken);
+  if (hasMedia) {
+    params.append('url', mediaUrls[0]);
+    params.append('caption', message);
+  } else {
+    params.append('message', message);
+  }
+
+  const tokenPreview = `${pageToken.slice(0, 6)}…${pageToken.slice(-4)}`;
+  console.log(`[fb-publish] POST ${endpoint} | tokenPreview=${tokenPreview} | hasMedia=${hasMedia}`);
+  const t0 = Date.now();
+
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      body: params,
+    });
+  } catch (networkErr: any) {
+    console.error(`[fb-publish] Network error after ${Date.now() - t0}ms:`, networkErr?.message, networkErr?.cause);
+    throw new Error(`Facebook publish network error: ${networkErr?.message ?? networkErr}`);
+  }
+
+  console.log(`[fb-publish] response status=${res.status} in ${Date.now() - t0}ms`);
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[fb-publish] HTTP ${res.status} error body:`, err);
+    throw new Error(`Facebook publish failed (HTTP ${res.status}): ${err}`);
+  }
+
+  const data = (await res.json()) as { id: string; post_id?: string };
+  console.log(`[fb-publish] published OK — returned id=${data.id} post_id=${data.post_id}`);
+  return data.post_id || data.id;
+}
+
+export async function fetchFacebookPostStats(
+  pageToken: string,
+  postId: string,
+): Promise<{ likeCount: number; commentCount: number; shareCount: number; reachCount: number }> {
+  const fields = 'likes.summary(true).limit(0),comments.summary(true).limit(0),shares';
+  const res = await fetch(`${GRAPH_API}/${postId}?fields=${fields}&access_token=${pageToken}`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Facebook fetch post stats failed: ${err}`);
+  }
+
+  const data = (await res.json()) as {
+    likes?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+    shares?: { count?: number };
+  };
+
+  return {
+    likeCount: data.likes?.summary?.total_count ?? 0,
+    commentCount: data.comments?.summary?.total_count ?? 0,
+    shareCount: data.shares?.count ?? 0,
+    reachCount: 0,
+  };
+}
+
+export const facebookPublisher: PostPublisher = {
+  publish: (channel, content, mediaUrls) =>
+    publishFacebookPost(channel.apiToken, channel.platformChannelId, content, mediaUrls),
+  syncStats: (channel, platformPostId) =>
+    fetchFacebookPostStats(channel.apiToken, platformPostId),
+};
+
+registerPublisher('facebook', facebookPublisher);

@@ -5,6 +5,7 @@ export const orderStateEnum = pgEnum('order_state', ['pending', 'acknowledged', 
 export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter']);
 export const messageFromEnum = pgEnum('message_from', ['self', 'customer']);
 export const messageStateEnum = pgEnum('message_state', ['pending', 'working', 'done']);
+export const postStateEnum = pgEnum('post_state', ['draft', 'scheduled', 'published', 'failed']);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -158,6 +159,7 @@ export const businessRelations = relations(businesses, ({ one, many }) => ({
   conversations: many(conversations),
   commentThreads: many(commentThreads),
   categories: many(categories),
+  posts: many(posts),
 }));
 
 export const categoryRelations = relations(categories, ({ one, many }) => ({
@@ -192,6 +194,7 @@ export const channelRelations = relations(channels, ({ one, many }) => ({
   agent: one(agents, { fields: [channels.agentId], references: [agents.id] }),
   conversations: many(conversations),
   commentThreads: many(commentThreads),
+  posts: many(posts),
 }));
 
 export const conversationRelations = relations(conversations, ({ one, many }) => ({
@@ -248,4 +251,43 @@ export const commentThreadRelations = relations(commentThreads, ({ one, many }) 
 
 export const commentRelations = relations(comments, ({ one }) => ({
   commentThread: one(commentThreads, { fields: [comments.commentThreadId], references: [commentThreads.id] }),
+}));
+
+export const posts = pgTable('posts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+  content: text('content').notNull().default(''),
+  mediaUrls: text('media_urls').array(),
+  postState: postStateEnum('post_state').default('draft').notNull(),
+  scheduledAt: timestamp('scheduled_at'),
+  publishedAt: timestamp('published_at'),
+  platformPostId: varchar('platform_post_id', { length: 255 }),
+  aiPrompt: text('ai_prompt'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  idx: index('posts_business_channel_idx').on(t.businessId, t.channelId),
+}));
+
+export const postSyncs = pgTable('post_syncs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }).notNull(),
+  likeCount: integer('like_count').default(0).notNull(),
+  commentCount: integer('comment_count').default(0).notNull(),
+  shareCount: integer('share_count').default(0).notNull(),
+  reachCount: integer('reach_count').default(0).notNull(),
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+});
+
+export const postRelations = relations(posts, ({ one, many }) => ({
+  business: one(businesses, { fields: [posts.businessId], references: [businesses.id] }),
+  channel: one(channels, { fields: [posts.channelId], references: [channels.id] }),
+  product: one(products, { fields: [posts.productId], references: [products.id] }),
+  syncs: many(postSyncs),
+}));
+
+export const postSyncRelations = relations(postSyncs, ({ one }) => ({
+  post: one(posts, { fields: [postSyncs.postId], references: [posts.id] }),
 }));
