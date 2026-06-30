@@ -70,9 +70,56 @@ type WebhookBody = {
   entry?: WebhookEntry[];
 };
 
+async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
+  if (process.env.TESTING !== 'true') {
+    fbLog('[TESTING] Testing mode not enabled');
+    return null;
+  }
+
+  const targetUrl = 'https://api.oryxa.us/webhooks/facebook';
+  const queryStr = c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : '';
+  const forwardUrl = `${targetUrl}${queryStr}`;
+
+  fbLog(`[TESTING] Forwarding webhook ${method} request to: ${forwardUrl}`);
+
+  if (method === 'GET') {
+    try {
+      const res = await fetch(forwardUrl);
+      const text = await res.text();
+      return c.text(text, res.status as any);
+    } catch (err) {
+      console.error('[TESTING] Failed to forward GET verification:', err);
+      return c.text('Error forwarding', 500);
+    }
+  }
+
+  // POST request: read text, copy all non-host headers, and execute async fetch
+  const rawBody = await c.req.text();
+  const headers: Record<string, string> = {};
+  c.req.header().forEach((value, key) => {
+    if (key.toLowerCase() !== 'host') {
+      headers[key] = value;
+    }
+  });
+
+  fetch(forwardUrl, {
+    method: 'POST',
+    headers,
+    body: rawBody,
+  }).catch((err) => {
+    console.error('[TESTING] Failed to forward POST webhook in background:', err);
+  });
+
+  fbLog('[TESTING] Forwarded POST asynchronously (fire and forget) — acknowledging 200 OK');
+  return c.text('EVENT_RECEIVED', 200);
+}
+
 export const fbWebhookRouter = new Hono();
 
-fbWebhookRouter.get('/facebook', (c) => {
+fbWebhookRouter.get('/facebook', async (c) => {
+  const forwardRes = await handleTestingForward(c, 'GET');
+  if (forwardRes) return forwardRes;
+
   const url = new URL(c.req.url);
   const mode = c.req.query('hub.mode') ?? url.searchParams.get('hub.mode');
   const token = c.req.query('hub.verify_token') ?? url.searchParams.get('hub.verify_token');
@@ -87,8 +134,6 @@ fbWebhookRouter.get('/facebook', (c) => {
     challengeLength: challenge?.length ?? 0,
   });
 
-
-
   if (verified) {
     fbLog('GET /facebook verify OK — returning challenge');
     return c.text(challenge ?? '');
@@ -99,6 +144,9 @@ fbWebhookRouter.get('/facebook', (c) => {
 });
 
 fbWebhookRouter.post('/facebook', async (c) => {
+  const forwardRes = await handleTestingForward(c, 'POST');
+  if (forwardRes) return forwardRes;
+
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
 

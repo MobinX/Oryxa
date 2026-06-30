@@ -3,7 +3,7 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { app } from '@api/app';
 
-vi.mock('@api/lib/agent-runner', async (importOriginal) => {
+vi.mock('@api/lib/agent-runner', async ({ importOriginal }) => {
   const actual = await importOriginal<typeof import('@api/lib/agent-runner')>();
   return {
     ...actual,
@@ -11,7 +11,7 @@ vi.mock('@api/lib/agent-runner', async (importOriginal) => {
   };
 });
 
-vi.mock('@api/lib/comment-runner', async (importOriginal) => {
+vi.mock('@api/lib/comment-runner', async ({ importOriginal }) => {
   const actual = await importOriginal<typeof import('@api/lib/comment-runner')>();
   return {
     ...actual,

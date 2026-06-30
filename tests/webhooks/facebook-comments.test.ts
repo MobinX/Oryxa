@@ -20,14 +20,14 @@ vi.mock('@api/lib/agent-runner', () => ({
 }));
 
 // Stub the Graph profile/post lookups so comment webhook tests never hit the network.
-vi.mock('@repo/integrations/facebook', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@repo/integrations/facebook')>();
-  return {
-    ...actual,
-    getFacebookUserProfile: vi.fn(async () => ({ name: 'Alice', avatar: 'https://img/alice.png' })),
-    getFacebookPostContext: vi.fn(async () => null),
-  };
-});
+vi.mock('@repo/integrations/facebook', () => ({
+  verifyWebhookSignature: vi.fn(async () => true),
+  getFacebookUserProfile: vi.fn(async () => ({ name: 'Alice', avatar: 'https://img/alice.png' })),
+  getFacebookPostContext: vi.fn(async () => null),
+  replyToFacebookComment: vi.fn(async () => 'MOCK_REPLY_ID'),
+  publishFacebookPost: vi.fn(async () => 'MOCK_POST_ID'),
+  sendMessage: vi.fn(async () => 'MOCK_MSG_ID'),
+}));
 
 async function postWebhook(payload: unknown) {
   const body = JSON.stringify(payload);

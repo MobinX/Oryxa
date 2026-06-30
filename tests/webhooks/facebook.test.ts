@@ -16,14 +16,32 @@ vi.mock('@api/lib/agent-runner', () => ({
   runAgentForConversation: vi.fn(),
 }));
 
-vi.mock('@repo/integrations/facebook', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@repo/integrations/facebook')>();
-  return {
-    ...actual,
-    getFacebookUserProfile: vi.fn(async () => ({ name: 'FB Sender', avatar: 'https://fb/img.png' })),
-    getFacebookPostContext: vi.fn(async () => null),
-  };
-});
+vi.mock('@repo/integrations/facebook', () => ({
+  verifyWebhookSignature: vi.fn(async (payload, signature) => {
+    if (!signature) return false;
+    const enc = new TextEncoder();
+    const secret = process.env.META_APP_SECRET || 'test-app-secret';
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+    const bytes = new Uint8Array(sig);
+    let expectedHex = '';
+    for (let i = 0; i < bytes.length; i++) expectedHex += bytes[i].toString(16).padStart(2, '0');
+    const expected = `sha256=${expectedHex}`;
+    const received = signature.startsWith('sha256=') ? signature : `sha256=${signature}`;
+    return received.toLowerCase() === expected.toLowerCase();
+  }),
+  getFacebookUserProfile: vi.fn(async () => ({ name: 'FB Sender', avatar: 'https://fb/img.png' })),
+  getFacebookPostContext: vi.fn(async () => null),
+  replyToFacebookComment: vi.fn(async () => 'MOCK_REPLY_ID'),
+  publishFacebookPost: vi.fn(async () => 'MOCK_POST_ID'),
+  sendMessage: vi.fn(async () => 'MOCK_MSG_ID'),
+}));
 
 async function postWebhook(payload: unknown) {
   const body = JSON.stringify(payload);
@@ -57,6 +75,7 @@ describe('Facebook Webhook', () => {
   withPglite();
   beforeEach(() => {
     process.env.META_APP_SECRET = 'test-app-secret';
+    process.env.META_VERIFY_TOKEN = 'test-token';
     triggerAgentRunMock.mockClear();
   });
 
