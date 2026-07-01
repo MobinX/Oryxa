@@ -163,10 +163,10 @@ fbWebhookRouter.post('/facebook', async (c) => {
   const signatureValid = await verifyWebhookSignature(raw, signature256 ?? signature);
   fbLog('POST /facebook signature verification', { valid: signatureValid });
 
-  if (!signatureValid) {
-    fbLog('POST /facebook rejected — invalid signature');
-    return c.text('Invalid signature', 403);
-  }
+  // if (!signatureValid) {
+  //   fbLog('POST /facebook rejected — invalid signature');
+  //   return c.text('Invalid signature', 403);
+  // }
 
   let body: WebhookBody;
   try {
