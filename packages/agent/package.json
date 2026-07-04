@@ -11,9 +11,9 @@
     "build": "echo 'agent package - no build step'"
   },
   "dependencies": {
-    "@langchain/core": "^0.3.37",
-    "@langchain/google-genai": "^0.1.8",
-    "@langchain/langgraph": "^0.2.62",
+    "@langchain/core": "^0.3.80",
+    "@langchain/google-genai": "^0.1.12",
+    "@langchain/langgraph": "^0.2.74",
     "@langchain/openai": "^1.5.3",
     "@repo/db": "workspace:*",
     "@repo/integrations": "workspace:*",
