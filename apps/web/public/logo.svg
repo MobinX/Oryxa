@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Primary Gradient (Indigo-Violet) -->
+    <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+    
+    <!-- Secondary Gradient (Blue-Cyan) -->
+    <linearGradient id="secondary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+
+    <!-- Shadow filter for premium 3D overlap effect -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="6" stdDeviation="8" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Scaled Oryxa Logo Path (Interlocking Orbital Loop) -->
+  <path
+    d="M256 128C192 128 128 184 128 256s64 128 128 128c48 0 80-24 104-56L400 288c-32 40-80 64-144 64-96 0-176-72-176-160S128 32 256 32c64 0 112 24 144 64l-40 40C336 104 304 128 256 128zm0 256c64 0 128-56 128-128s-64-128-128-128c-48 0-80 24-104 56L176 224c32-40 80-64 144-64 96 0 176 72 176 160s-80 160-176 160c-64 0-112-24-144-64l40-40c24 32 56 56 104 56z"
+    fill="url(#primary-grad)"
+    filter="url(#shadow)"
+  />
+</svg>
