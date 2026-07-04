@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Mail, Lock, Eye, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function PrivacyPage() {
@@ -23,9 +23,14 @@ export default function PrivacyPage() {
                 fill="url(#logo-grad-priv)"
               />
             </svg>
-            <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity">
-              Oryxa
-            </span>
+            <div className="flex flex-col">
+              <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
+                Oryxa
+              </span>
+              <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
+                by RR Computer
+              </span>
+            </div>
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -40,35 +45,131 @@ export default function PrivacyPage() {
       </header>
 
       {/* Main Content */}
-      <main className="relative min-h-[calc(100vh-8rem)] flex-1 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-primary/5 blur-[120px] pointer-events-none -z-10" />
+      <main className="relative min-h-[calc(100vh-8rem)] flex-1 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none -z-10" />
         
-        <div className="max-w-md bg-card border border-border/50 rounded-card shadow-card p-8 sm:p-10 relative z-10 flex flex-col items-center gap-6">
-          <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center animate-pulse">
-            <ShieldCheck className="h-7 w-7 stroke-[1.75]" />
-          </div>
+        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-card shadow-card p-6 sm:p-10 relative z-10 space-y-8">
           
-          <div className="space-y-2">
-            <h1 className="font-geist font-black text-3xl tracking-tight text-foreground">
-              Privacy Policy
-            </h1>
-            <p className="font-inter text-sm text-muted-foreground leading-relaxed">
-              We value your data privacy. Our complete compliance policy, detailing data protection standards under GDPR, is currently being finalized.
-            </p>
+          {/* Header section */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 border-b border-border/40 pb-6">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
+              <ShieldCheck className="h-6 w-6 stroke-[2]" />
+            </div>
+            <div className="text-center sm:text-left">
+              <h1 className="font-geist font-black text-3xl tracking-tight text-foreground">
+                Privacy Policy
+              </h1>
+              <p className="text-xs text-muted-foreground mt-1">
+                Last Updated: July 4, 2026 • Oryxa is a product of RR Computer
+              </p>
+            </div>
           </div>
 
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-element border border-border bg-card hover:bg-muted text-foreground font-geist font-bold text-sm tracking-wide transition-all shadow-sm hover:shadow active:scale-95 mt-2"
-          >
-            <ArrowLeft className="h-4.5 w-4.5 stroke-[2.5]" /> Back to Home
-          </Link>
+          {/* Privacy Text */}
+          <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
+            <p>
+              At Oryxa, we are committed to protecting your privacy. This Privacy Policy explains how Oryxa (referred to as "we," "us," or "our"), a specialized product of <strong>RR Computer</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
+            </p>
+
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                <Eye className="h-4.5 w-4.5 text-primary" />
+                <h2>1. Information We Collect</h2>
+              </div>
+              <p>
+                To provide our AI auto-reply and sales agent features, we collect information from both merchants and end-customers:
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li><strong>Merchant Account Data:</strong> Registration and authentication information, including name, email address, password hashes (managed securely via Firebase Auth), and billing details.</li>
+                <li><strong>Social Platform Access Tokens:</strong> When you connect a social platform (e.g., Facebook Messenger, Instagram, WhatsApp), we securely store the Page Access Tokens required to read messages and post replies.</li>
+                <li><strong>Conversation Logs:</strong> We store communication transcripts, including user messages, AI agent responses, product inquiries, cart statuses, and order details, to process auto-replies and show performance analytics.</li>
+              </ul>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                <Lock className="h-4.5 w-4.5 text-primary" />
+                <h2>2. How We Use and Process Data</h2>
+              </div>
+              <p>
+                We use the collected information for the following business operations:
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li>Providing the LangGraph & Gemini AI-driven automated chat sales services.</li>
+                <li>Creating and managing product carts, checking stock availability, and creating merchant orders directly from conversation streams.</li>
+                <li>Displaying performance metrics, response speed analytics, and message counts in the merchant dashboard.</li>
+                <li>Ensuring security, debugging system issues, and preventing fraudulent usage.</li>
+              </ul>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                <FileText className="h-4.5 w-4.5 text-primary" />
+                <h2>3. Data Sharing and Third-Party API Integrations</h2>
+              </div>
+              <p>
+                We do not sell merchant or customer data. To deliver Oryxa's core functionality, data is processed through the following secure third-party systems:
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li><strong>Meta APIs (Facebook & Instagram):</strong> We fetch messages and dispatch AI replies via the Meta Graph Send API.</li>
+                <li><strong>Google Gemini API:</strong> Message payloads are processed through Gemini LLM services to generate smart customer responses.</li>
+                <li><strong>Firebase Admin SDK:</strong> Used for secure auth session verification.</li>
+                <li><strong>Cloud Storage (Backblaze B2):</strong> To securely cache and serve product catalog and variant images.</li>
+              </ul>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                <Mail className="h-4.5 w-4.5 text-primary" />
+                <h2>4. Data Deletion and Deactivation</h2>
+              </div>
+              <p>
+                Merchants retain full control over their integrations. When you disconnect a Facebook Page or delete a channel from Oryxa:
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li>We automatically call Meta APIs to unsubscribe our webhook from your Page events.</li>
+                <li>Associated social access tokens and credentials are deleted or deactivated within our database.</li>
+                <li>Merchants may request a complete hard delete of their business workspace, product lists, and historical conversation histories by contacting support.</li>
+              </ul>
+            </section>
+
+            <section className="space-y-3 border-t border-border/40 pt-6">
+              <h2 className="text-foreground font-geist font-bold text-base">5. Contact Support</h2>
+              <p>
+                If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, please contact us at:
+              </p>
+              <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs">
+                <p><strong>RR Computer - Software Division</strong></p>
+                <p>Email: support@rrcomputer.com</p>
+                <p>Address: Dhaka, Bangladesh</p>
+              </div>
+            </section>
+          </div>
+
+          {/* Action Footer */}
+          <div className="flex items-center justify-between border-t border-border/40 pt-6 mt-4">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-element border border-border bg-card hover:bg-muted text-foreground font-geist font-bold text-xs tracking-wide transition-all shadow-sm active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4 stroke-[2.5]" /> Back to Home
+            </Link>
+            
+            <Link
+              href="/terms"
+              className="text-xs text-primary hover:underline font-semibold"
+            >
+              Read Terms & Conditions
+            </Link>
+          </div>
+
         </div>
       </main>
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 Oryxa. All rights reserved.
+        © 2026 Oryxa. A product of RR Computer. All rights reserved.
       </footer>
     </div>
   );
