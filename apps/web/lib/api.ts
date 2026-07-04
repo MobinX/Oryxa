@@ -275,9 +275,9 @@ export async function uploadVariantImage(
   });
 
   if (!res.ok) {
-    // B2 not configured or upload rejected — return null so the product can
+    // B2 not configured — return null so the product can
     // still be saved without the image instead of failing the whole request.
-    if (res.status === 503 || res.status === 400) return null;
+    if (res.status === 503) return null;
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(err.error ?? 'Upload failed', res.status);
   }

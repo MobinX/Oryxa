@@ -23,6 +23,8 @@ vi.mock('@repo/integrations', () => ({
     publish: publishMock,
     syncStats: syncStatsMock,
   }),
+  extractB2Key: (val: string) => val,
+  resolveStoredImageUrl: async (val: string) => val,
 }));
 
 describe('Posts API', () => {

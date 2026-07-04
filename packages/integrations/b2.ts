@@ -75,6 +75,24 @@ export function isB2ObjectKey(value: string): boolean {
   return !value.startsWith('http://') && !value.startsWith('https://');
 }
 
+export function extractB2Key(value: string): string {
+  if (isB2ObjectKey(value)) return value;
+
+  try {
+    const url = new URL(value);
+    const bucketName = process.env.B2_BUCKET_NAME || 'OryxaAft';
+    let path = url.pathname;
+    if (path.startsWith(`/${bucketName}/`)) {
+      path = path.slice(bucketName.length + 2);
+    } else if (path.startsWith('/')) {
+      path = path.slice(1);
+    }
+    return path;
+  } catch {
+    return value;
+  }
+}
+
 export function assertB2KeyForBusiness(key: string, businessId: string): void {
   const prefix = `businesses/${businessId}/`;
   if (!key.startsWith(prefix)) {

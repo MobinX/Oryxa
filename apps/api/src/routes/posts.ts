@@ -20,7 +20,7 @@ import {
 } from '@repo/db/crud/post';
 import { getProductById } from '@repo/db/crud/product';
 import { getChannelById } from '@repo/db/crud/channel';
-import { getPublisher } from '@repo/integrations';
+import { getPublisher, extractB2Key, resolveStoredImageUrl } from '@repo/integrations';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
@@ -28,6 +28,24 @@ import { businessAccessMiddleware } from '@api/middleware/business';
 export const postsRouter = new OpenAPIHono();
 
 postsRouter.use('/:businessId/*', authMiddleware, businessAccessMiddleware);
+
+async function resolvePostMediaUrls<T extends { mediaUrls?: string[] | null }>(
+  post: T,
+): Promise<T & { mediaUrls: string[] | null }> {
+  if (!post.mediaUrls) {
+    return { ...post, mediaUrls: null };
+  }
+  const resolved = await Promise.all(
+    post.mediaUrls.map(async (url) => {
+      const signed = await resolveStoredImageUrl(url);
+      return signed || url;
+    })
+  );
+  return {
+    ...post,
+    mediaUrls: resolved.filter((x): x is string => !!x),
+  };
+}
 
 // 1. List Posts
 const listPostsRoute = createRoute({
@@ -54,8 +72,9 @@ postsRouter.openapi(listPostsRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const query = c.req.valid('query');
   const items = await listPosts(businessId, query);
+  const resolvedItems = await Promise.all(items.map((item) => resolvePostMediaUrls(item)));
   return c.json(
-    items.map((item) => ({
+    resolvedItems.map((item) => ({
       id: item.id,
       channelId: item.channelId,
       productId: item.productId,
@@ -91,25 +110,30 @@ const createPostRoute = createRoute({
 postsRouter.openapi(createPostRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const body = c.req.valid('json');
+  const mediaUrlsKeys = body.mediaUrls
+    ? body.mediaUrls.map((url) => extractB2Key(url))
+    : null;
   const created = await createPost(businessId, body.channelId, {
     content: body.content,
-    mediaUrls: body.mediaUrls,
+    mediaUrls: mediaUrlsKeys,
     scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
     productId: body.productId,
   });
 
+  const resolvedCreated = await resolvePostMediaUrls(created);
+
   return c.json(
     {
-      id: created.id,
-      channelId: created.channelId,
-      productId: created.productId,
-      content: created.content,
-      mediaUrls: created.mediaUrls,
-      postState: created.postState,
-      platformPostId: created.platformPostId,
-      scheduledAt: created.scheduledAt?.toISOString() || null,
-      publishedAt: created.publishedAt?.toISOString() || null,
-      createdAt: created.createdAt.toISOString(),
+      id: resolvedCreated.id,
+      channelId: resolvedCreated.channelId,
+      productId: resolvedCreated.productId,
+      content: resolvedCreated.content,
+      mediaUrls: resolvedCreated.mediaUrls,
+      postState: resolvedCreated.postState,
+      platformPostId: resolvedCreated.platformPostId,
+      scheduledAt: resolvedCreated.scheduledAt?.toISOString() || null,
+      publishedAt: resolvedCreated.publishedAt?.toISOString() || null,
+      createdAt: resolvedCreated.createdAt.toISOString(),
     },
     201,
   );
@@ -146,20 +170,21 @@ postsRouter.openapi(getPostRoute, async (c) => {
     return c.json({ error: 'Post not found' }, 404);
   }
 
-  const latestSync = post.syncs?.[0];
+  const resolvedPost = await resolvePostMediaUrls(post);
+  const latestSync = resolvedPost.syncs?.[0];
 
   return c.json({
-    id: post.id,
-    channelId: post.channelId,
-    productId: post.productId,
-    content: post.content,
-    mediaUrls: post.mediaUrls,
-    postState: post.postState,
-    platformPostId: post.platformPostId,
-    scheduledAt: post.scheduledAt?.toISOString() || null,
-    publishedAt: post.publishedAt?.toISOString() || null,
-    createdAt: post.createdAt.toISOString(),
-    aiPrompt: post.aiPrompt,
+    id: resolvedPost.id,
+    channelId: resolvedPost.channelId,
+    productId: resolvedPost.productId,
+    content: resolvedPost.content,
+    mediaUrls: resolvedPost.mediaUrls,
+    postState: resolvedPost.postState,
+    platformPostId: resolvedPost.platformPostId,
+    scheduledAt: resolvedPost.scheduledAt?.toISOString() || null,
+    publishedAt: resolvedPost.publishedAt?.toISOString() || null,
+    createdAt: resolvedPost.createdAt.toISOString(),
+    aiPrompt: resolvedPost.aiPrompt,
     latestSync: latestSync
       ? {
           likeCount: latestSync.likeCount,
@@ -200,11 +225,14 @@ const updatePostRoute = createRoute({
 postsRouter.openapi(updatePostRoute, async (c) => {
   const { businessId, postId } = c.req.valid('param');
   const body = c.req.valid('json');
+  const mediaUrlsKeys = body.mediaUrls
+    ? body.mediaUrls.map((url) => extractB2Key(url))
+    : body.mediaUrls === null ? null : undefined;
 
   const updated = await updatePost(businessId, postId, {
     channelId: body.channelId,
     content: body.content,
-    mediaUrls: body.mediaUrls,
+    mediaUrls: mediaUrlsKeys,
     scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : body.scheduledAt === null ? null : undefined,
     postState: body.postState,
     platformPostId: body.platformPostId,
@@ -215,17 +243,19 @@ postsRouter.openapi(updatePostRoute, async (c) => {
     return c.json({ error: 'Post not found' }, 404);
   }
 
+  const resolvedUpdated = await resolvePostMediaUrls(updated);
+
   return c.json({
-    id: updated.id,
-    channelId: updated.channelId,
-    productId: updated.productId,
-    content: updated.content,
-    mediaUrls: updated.mediaUrls,
-    postState: updated.postState,
-    platformPostId: updated.platformPostId,
-    scheduledAt: updated.scheduledAt?.toISOString() || null,
-    publishedAt: updated.publishedAt?.toISOString() || null,
-    createdAt: updated.createdAt.toISOString(),
+    id: resolvedUpdated.id,
+    channelId: resolvedUpdated.channelId,
+    productId: resolvedUpdated.productId,
+    content: resolvedUpdated.content,
+    mediaUrls: resolvedUpdated.mediaUrls,
+    postState: resolvedUpdated.postState,
+    platformPostId: resolvedUpdated.platformPostId,
+    scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
+    publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
+    createdAt: resolvedUpdated.createdAt.toISOString(),
   });
 });
 
@@ -305,6 +335,15 @@ postsRouter.openapi(publishPostRoute, async (c) => {
   console.log(`[publish-post] postId=${postId} platform=${channel.platform} pageId=${channel.platformChannelId} contentLength=${post.content.length} mediaCount=${(post.mediaUrls ?? []).length}`);
 
   try {
+    const resolvedMediaUrls = post.mediaUrls
+      ? await Promise.all(
+          post.mediaUrls.map(async (url) => {
+            const resolved = await resolveStoredImageUrl(url);
+            return resolved || url;
+          })
+        )
+      : undefined;
+
     const publisher = getPublisher(channel.platform);
     const platformPostId = await publisher.publish(
       {
@@ -312,7 +351,7 @@ postsRouter.openapi(publishPostRoute, async (c) => {
         platformChannelId: channel.platformChannelId,
       },
       post.content,
-      post.mediaUrls || undefined,
+      resolvedMediaUrls,
     );
 
     console.log(`[publish-post] SUCCESS platformPostId=${platformPostId}`);
@@ -474,17 +513,19 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     productId,
   });
 
+  const resolvedCreated = await resolvePostMediaUrls(created);
+
   return c.json({
-    id: created.id,
-    channelId: created.channelId,
-    productId: created.productId,
-    content: created.content,
-    mediaUrls: created.mediaUrls,
-    postState: created.postState,
-    platformPostId: created.platformPostId,
-    scheduledAt: created.scheduledAt?.toISOString() || null,
-    publishedAt: created.publishedAt?.toISOString() || null,
-    createdAt: created.createdAt.toISOString(),
+    id: resolvedCreated.id,
+    channelId: resolvedCreated.channelId,
+    productId: resolvedCreated.productId,
+    content: resolvedCreated.content,
+    mediaUrls: resolvedCreated.mediaUrls,
+    postState: resolvedCreated.postState,
+    platformPostId: resolvedCreated.platformPostId,
+    scheduledAt: resolvedCreated.scheduledAt?.toISOString() || null,
+    publishedAt: resolvedCreated.publishedAt?.toISOString() || null,
+    createdAt: resolvedCreated.createdAt.toISOString(),
   });
 });
 
@@ -549,16 +590,18 @@ Output only the revised post content. Do not add any conversational text or wrap
     aiPrompt: instruction,
   });
 
+  const resolvedUpdated = await resolvePostMediaUrls(updated);
+
   return c.json({
-    id: updated.id,
-    channelId: updated.channelId,
-    productId: updated.productId,
-    content: updated.content,
-    mediaUrls: updated.mediaUrls,
-    postState: updated.postState,
-    platformPostId: updated.platformPostId,
-    scheduledAt: updated.scheduledAt?.toISOString() || null,
-    publishedAt: updated.publishedAt?.toISOString() || null,
-    createdAt: updated.createdAt.toISOString(),
+    id: resolvedUpdated.id,
+    channelId: resolvedUpdated.channelId,
+    productId: resolvedUpdated.productId,
+    content: resolvedUpdated.content,
+    mediaUrls: resolvedUpdated.mediaUrls,
+    postState: resolvedUpdated.postState,
+    platformPostId: resolvedUpdated.platformPostId,
+    scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
+    publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
+    createdAt: resolvedUpdated.createdAt.toISOString(),
   });
 });

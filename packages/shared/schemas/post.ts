@@ -6,7 +6,7 @@ export const postStateSchema = z.enum(['draft', 'scheduled', 'published', 'faile
 export const createPostInputSchema = z.object({
   channelId: uuidSchema,
   content: z.string().default(''),
-  mediaUrls: z.array(z.string().url()).optional(),
+  mediaUrls: z.array(z.string()).optional(),
   scheduledAt: timestampSchema.nullable().optional(),
   productId: uuidSchema.nullable().optional(),
 }).openapi('CreatePostInput');
@@ -14,7 +14,7 @@ export const createPostInputSchema = z.object({
 export const updatePostInputSchema = z.object({
   channelId: uuidSchema.optional(),
   content: z.string().optional(),
-  mediaUrls: z.array(z.string().url()).optional(),
+  mediaUrls: z.array(z.string()).optional(),
   scheduledAt: timestampSchema.nullable().optional(),
   postState: postStateSchema.optional(),
   platformPostId: z.string().optional(),
