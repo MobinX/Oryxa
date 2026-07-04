@@ -2,10 +2,10 @@
 
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { uploadVariantImage } from '@/lib/api';
+import { uploadVariantImageDirect } from '@/lib/uploads-client';
 
 type ImageUploadProps = {
-  token: string;
+  token?: string;
   businessId: string;
   onUploaded: (result: { key: string; previewUrl: string }) => void;
 };
@@ -19,15 +19,15 @@ export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps)
     setError(null);
     setUploading(true);
     try {
-      const result = await uploadVariantImage(token, businessId, file);
-      if (!result) {
-        setError('Image upload unavailable. Save the product without an image or configure B2 storage.');
-        return;
+      const result = await uploadVariantImageDirect(businessId, file);
+      const { key, previewUrl } = result;
+      onUploaded({ key, previewUrl });
+    } catch (err: any) {
+      if (err?.message?.includes('not configured')) {
+        setError('Image upload unavailable. Save without an image or configure B2 storage.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Upload failed');
       }
-      const { key, url } = result;
-      onUploaded({ key, previewUrl: url });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
