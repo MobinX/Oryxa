@@ -137,7 +137,7 @@ export default function PrivacyPage() {
             <section className="space-y-3 border-t border-border/40 pt-6">
               <h2 className="text-foreground font-geist font-bold text-base">5. Contact Support</h2>
               <p>
-                If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, please contact us at:
+                If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, you can follow our <Link href="/data-delete-instructions" className="text-primary hover:underline font-semibold">Data Deletion Instructions</Link> or contact us at:
               </p>
               <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
                 <p><strong className="text-foreground">RR Computer - Software Division</strong></p>

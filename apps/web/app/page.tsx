@@ -1219,6 +1219,7 @@ export default function Home() {
             <div className="flex flex-col gap-2">
               <Link href="/privacy" className="hover:text-foreground transition-colors font-medium">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-foreground transition-colors font-medium">Terms & Conditions</Link>
+              <Link href="/data-delete-instructions" className="hover:text-foreground transition-colors font-medium">Data Deletion</Link>
               <button 
                 onClick={() => setDemoModalOpen(true)}
                 className="hover:text-foreground transition-colors font-medium text-left cursor-pointer"
