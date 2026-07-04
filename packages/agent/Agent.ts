@@ -1,4 +1,5 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { ChatOpenAI } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
@@ -19,6 +20,8 @@ export interface AgentConfig {
   catalogSummary?: string;
   /** Inject a fake or test chat model (defaults to Gemini in production). */
   llm?: BaseChatModel;
+  /** Select the LLM provider to use (defaults to 'openai' if OPENAI_API_KEY is set, otherwise 'gemini'). */
+  llmProvider?: 'gemini' | 'openai';
   /** Override the default Messenger tool set (e.g. the comment tool set). */
   tools?: StructuredTool[];
   /** Override the default Messenger reply guidance in the system prompt. */
@@ -55,13 +58,32 @@ export class Agent {
   constructor(private config: AgentConfig) {}
 
   async run(): Promise<string> {
+    const provider =
+      this.config.llmProvider ??
+      (process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini');
+
     const llm =
       this.config.llm ??
-      new ChatGoogleGenerativeAI({
-        model: 'gemini-flash-lite-latest',
-        apiKey: process.env.GEMINI_API_KEY,
-        temperature: 0.3,
-      });
+      (provider === 'openai'
+        ? (() => {
+            const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
+            const isReasoning = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('gpt-5');
+            return new ChatOpenAI({
+              model,
+              apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
+              configuration: {
+                baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+              },
+              temperature: isReasoning ? undefined : 0.3,
+              maxTokens: 16384,
+              modelKwargs: isReasoning ? { reasoning_effort: 'low' } : undefined,
+            });
+          })()
+        : new ChatGoogleGenerativeAI({
+            model: 'gemini-flash-lite-latest',
+            apiKey: process.env.GEMINI_API_KEY,
+            temperature: 0.3,
+          }));
 
     const sentTexts = this.sentTexts;
     const { emitSse, sendMessageOverride } = this.config;

@@ -471,3 +471,16 @@ export const facebookPublisher: PostPublisher = {
 };
 
 registerPublisher('facebook', facebookPublisher);
+
+
+/*
+ * Go to the Website.  Press login or Start button
+ * Then login with test user credentials.
+ * Email: test@test.com
+ * Password: 12345678
+ *
+ * Then you will be taken to business manager where you can create business.  You will find "Test Business" in the list. This is already created for testing purpose. Additionally you can create any business of your wish to see any other functionality. Click on "Open".
+ * This will open you a business space where you will find dashboard, products , order , channels etc.
+ *
+ * Go to products. You will find "Test Product" . You can also create your own product. This product info along with previously added business info give AI context
+ * */
