@@ -66,66 +66,94 @@ export default function DataDeleteInstructionsPage() {
             </div>
           </div>
 
-          {/* Instructions Content */}
+           {/* Instructions Content */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              Oryxa, a product of <strong>RR Computer</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to disconnect your Facebook Page and request the permanent deletion of your stored information.
+              Oryxa, a product of <strong>RR Computer</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to delete your data or disconnect your channels.
             </p>
 
-            <section className="space-y-4">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Settings className="h-4.5 w-4.5 text-primary" />
-                <h2>Method 1: Disconnect and Delete via the Oryxa Dashboard</h2>
+            {/* Primary Method: Highlighted */}
+            <div className="rounded-2xl border-2 border-red-500/20 bg-red-500/5 dark:bg-red-950/10 p-5 sm:p-6 space-y-4">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-geist font-black text-lg">
+                <Trash2 className="h-5.5 w-5.5" />
+                <h2>Primary Method: Self-Service Permanent Data Deletion</h2>
               </div>
-              <p>
-                To disconnect your social channels and automatically revoke our access tokens, follow these steps:
+              <p className="text-foreground font-medium">
+                This is the fastest and recommended way to completely delete all data associated with your business.
               </p>
-              <ol className="list-decimal pl-5 space-y-2">
+              <ol className="list-decimal pl-5 space-y-2 text-foreground/90">
                 <li>Log in to your <strong>Oryxa Dashboard</strong>.</li>
-                <li>Go to the <strong>Channels</strong> configuration section.</li>
-                <li>Find the active Facebook Page or Instagram channel you wish to remove.</li>
-                <li>Click the **Delete / Trash** icon.</li>
-                <li>Confirm the deletion. This will automatically:
-                  <ul className="list-disc pl-5 mt-1.5 space-y-1 text-xs">
-                    <li>Unsubscribe our webhook subscription from your Page events.</li>
-                    <li>Wipe the stored Facebook Page Access Token from our databases.</li>
+                <li>In the left sidebar, navigate to the <strong>Settings</strong> page.</li>
+                <li>Scroll down to the <strong>Danger zone</strong> section at the bottom.</li>
+                <li>Click the red <strong>Delete My Data</strong> button.</li>
+                <li>A confirmation modal will appear. Type your exact business name to confirm.</li>
+                <li>Click <strong>Permanently Delete All Data</strong>.</li>
+              </ol>
+              <div className="text-xs text-muted-foreground bg-background/50 border border-border/40 rounded-lg p-3">
+                ℹ️ <strong>What gets deleted:</strong> This instantly purges all product lists, categories, conversation logs, customer lists, order records, and AI agent configurations. It also automatically unsubscribes your connected Facebook page from our Meta app webhook subscriptions.
+              </div>
+            </div>
+
+            {/* Extra Methods Section */}
+            <div className="space-y-6 pt-4 border-t border-border/40">
+              <h2 className="font-geist font-black text-xl text-foreground">
+                Extra Methods (For more privacy)
+              </h2>
+              <p className="text-xs">
+                These alternative options allow you to disconnect channels individually, revoke app-level Meta permissions, or request offline manual cleanup.
+              </p>
+
+              <div className="space-y-6 pl-1 border-l-2 border-primary/20">
+                {/* Method 1 */}
+                <section className="space-y-2 pl-4">
+                  <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                    <Settings className="h-4 w-4 text-primary" />
+                    <h3>Option A: Disconnect a Specific Page Channel</h3>
+                  </div>
+                  <p className="text-xs">
+                    To stop the Oryxa AI agent from replying on a specific page without deleting your business profile completely:
+                  </p>
+                  <ol className="list-decimal pl-5 space-y-1 text-xs">
+                    <li>Go to the <strong>Channels</strong> section in the dashboard.</li>
+                    <li>Click the <strong>Delete (Trash)</strong> icon next to the connected Facebook Page.</li>
+                    <li>Confirm the removal. We will unsubscribe the page webhooks and remove the access tokens.</li>
+                  </ol>
+                </section>
+
+                {/* Method 2 */}
+                <section className="space-y-2 pl-4">
+                  <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                    <RefreshCw className="h-4 w-4 text-primary" />
+                    <h3>Option B: Revoke App Permissions via Facebook Account</h3>
+                  </div>
+                  <p className="text-xs">
+                    To disconnect Oryxa directly from your Meta / Facebook account settings:
+                  </p>
+                  <ol className="list-decimal pl-5 space-y-1 text-xs">
+                    <li>Go to your Facebook Profile&apos;s <strong>Settings &amp; Privacy &gt; Settings</strong>.</li>
+                    <li>In the left sidebar, click <strong>Apps and Websites</strong>.</li>
+                    <li>Find <strong>Oryxa</strong> in the active list and click <strong>Remove</strong>.</li>
+                  </ol>
+                </section>
+
+                {/* Method 3 */}
+                <section className="space-y-2 pl-4">
+                  <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
+                    <Mail className="h-4 w-4 text-primary" />
+                    <h3>Option C: Email Data Deletion Request</h3>
+                  </div>
+                  <p className="text-xs">
+                    If you cannot access your dashboard, you can request manual offline deletion of all records:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-xs">
+                    <li>Email: <strong className="text-foreground">alamsarwar@hotmail.com</strong></li>
+                    <li>Subject: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[10px]">Oryxa Data Deletion Request</code></li>
+                    <li>Include: your Business Name, account email address, and connected Facebook Page ID(s).</li>
+                    <li>Processing time: <strong>7 business days</strong>.</li>
                   </ul>
-                </li>
-              </ol>
-            </section>
-
-            <section className="space-y-4">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <RefreshCw className="h-4.5 w-4.5 text-primary" />
-                <h2>Method 2: Remove the Oryxa App from your Facebook Account</h2>
+                </section>
               </div>
-              <p>
-                If you wish to revoke Oryxa's access credentials directly from your Meta / Facebook account settings, follow these steps:
-              </p>
-              <ol className="list-decimal pl-5 space-y-2">
-                <li>Go to your Facebook Profile's <strong>Settings &amp; Privacy &gt; Settings</strong>.</li>
-                <li>In the left sidebar, navigate to <strong>Apps and Websites</strong>.</li>
-                <li>Look for **Oryxa** in the list of active applications.</li>
-                <li>Click the **Remove** button next to it.</li>
-                <li>Confirm the removal. Facebook will cease supplying access tokens and delivery webhooks to our servers.</li>
-              </ol>
-            </section>
-
-            <section className="space-y-4">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Mail className="h-4.5 w-4.5 text-primary" />
-                <h2>Method 3: Request Permanent Data Deletion</h2>
-              </div>
-              <p>
-                Disconnecting your channels deactivates our API tokens, but does not immediately erase historical database logs (like conversation histories or product lists). If you wish to request a **permanent, complete hard-deletion** of all database records connected to your business workspace:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>Send an email to: <strong className="text-foreground">alamsarwar@hotmail.com</strong></li>
-                <li>Use the subject line: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs">Oryxa Data Deletion Request</code></li>
-                <li>Provide your **Business Name**, **Email Address** used for the account, and the **Facebook Page ID(s)** you connected.</li>
-                <li>Our technical support team will process your request and permanently purge your records within <strong>7 business days</strong>. A confirmation email will be sent once the process is complete.</li>
-              </ul>
-            </section>
+            </div>
 
             <section className="space-y-3 border-t border-border/40 pt-6">
               <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
