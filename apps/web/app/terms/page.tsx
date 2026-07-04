@@ -135,10 +135,16 @@ export default function TermsPage() {
               <p className="mt-2">
                 For questions regarding billing, enterprise terms, or service complaints, contact the RR Computer team at:
               </p>
-              <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs">
-                <p><strong>RR Computer - Software Division</strong></p>
-                <p>Email: terms@rrcomputer.com</p>
-                <p>Address: Dhaka, Bangladesh</p>
+              <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
+                <p><strong className="text-foreground">RR Computer - Software Division</strong></p>
+                <p>Email: alamsarwar@hotmail.com</p>
+                <p>
+                  Address:<br />
+                  51, Mirpur Road<br />
+                  Room 517, Alpana Plaza, Level 5<br />
+                  Dhaka 1205<br />
+                  Bangladesh
+                </p>
               </div>
             </section>
           </div>
