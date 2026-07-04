@@ -58,7 +58,7 @@ export default function TermsPage() {
             </div>
             <div className="text-center sm:text-left">
               <h1 className="font-geist font-black text-3xl tracking-tight text-foreground">
-                Terms & Conditions
+                Terms &amp; Conditions
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
                 Last Updated: July 4, 2026 • Oryxa is a product of RR Computer
@@ -69,7 +69,7 @@ export default function TermsPage() {
           {/* Terms Text */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              Welcome to Oryxa! These Terms & Conditions ("Terms") govern your access to and use of Oryxa ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>RR Computer</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
+              Welcome to Oryxa! These Terms &amp; Conditions ("Terms") govern your access to and use of Oryxa ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>RR Computer</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
             </p>
 
             <section className="space-y-3">
@@ -90,7 +90,7 @@ export default function TermsPage() {
             <section className="space-y-3">
               <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
                 <FileCheck className="h-4.5 w-4.5 text-primary" />
-                <h2>2. Channel Integration & Compliance</h2>
+                <h2>2. Channel Integration &amp; Compliance</h2>
               </div>
               <p>
                 Oryxa connects to third-party social platforms (Facebook Messenger, Instagram, WhatsApp) to auto-reply to customers.
@@ -105,7 +105,7 @@ export default function TermsPage() {
             <section className="space-y-3">
               <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
                 <AlertTriangle className="h-4.5 w-4.5 text-primary" />
-                <h2>3. AI Agents & Limitations of Service</h2>
+                <h2>3. AI Agents &amp; Limitations of Service</h2>
               </div>
               <p>
                 Our AI agents run on LangGraph and Gemini LLM tools to talk to customers and manage carts/orders:

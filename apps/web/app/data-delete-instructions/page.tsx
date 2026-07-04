@@ -103,7 +103,7 @@ export default function DataDeleteInstructionsPage() {
                 If you wish to revoke Oryxa's access credentials directly from your Meta / Facebook account settings, follow these steps:
               </p>
               <ol className="list-decimal pl-5 space-y-2">
-                <li>Go to your Facebook Profile's <strong>Settings & Privacy > Settings</strong>.</li>
+                <li>Go to your Facebook Profile's <strong>Settings &amp; Privacy &gt; Settings</strong>.</li>
                 <li>In the left sidebar, navigate to <strong>Apps and Websites</strong>.</li>
                 <li>Look for **Oryxa** in the list of active applications.</li>
                 <li>Click the **Remove** button next to it.</li>

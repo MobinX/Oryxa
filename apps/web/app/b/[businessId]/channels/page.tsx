@@ -159,15 +159,28 @@ export default async function ChannelsPage({
         </Card>
       )}
 
-      <Card>
-        <h2 className="text-lg font-semibold">Connect Facebook Messenger</h2>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Link your Facebook Page to enable AI-powered Messenger replies.
-        </p>
-        <div className="mt-4">
-          <FacebookConnectButton businessId={businessId} />
-        </div>
-      </Card>
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <h2 className="text-lg font-semibold">Connect Facebook Messenger</h2>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Link your Facebook Page to enable AI-powered Messenger replies.
+          </p>
+          <div className="mt-4">
+            <FacebookConnectButton businessId={businessId} />
+          </div>
+        </Card>
+
+        <Card className="opacity-80 relative overflow-hidden border-dashed bg-[var(--muted)]/20">
+          <h2 className="text-lg font-semibold">WhatsApp &amp; Instagram</h2>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Connect your WhatsApp Business and Instagram Direct channels for multi-channel AI auto-replies.
+          </p>
+          <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--primary)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
+            Coming Soon
+          </div>
+        </Card>
+      </div>
 
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Connected channels</h2>

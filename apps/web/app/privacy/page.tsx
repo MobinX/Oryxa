@@ -96,7 +96,7 @@ export default function PrivacyPage() {
                 We use the collected information for the following business operations:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
-                <li>Providing the LangGraph & Gemini AI-driven automated chat sales services.</li>
+                <li>Providing the LangGraph &amp; Gemini AI-driven automated chat sales services.</li>
                 <li>Creating and managing product carts, checking stock availability, and creating merchant orders directly from conversation streams.</li>
                 <li>Displaying performance metrics, response speed analytics, and message counts in the merchant dashboard.</li>
                 <li>Ensuring security, debugging system issues, and preventing fraudulent usage.</li>
@@ -112,7 +112,7 @@ export default function PrivacyPage() {
                 We do not sell merchant or customer data. To deliver Oryxa's core functionality, data is processed through the following secure third-party systems:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
-                <li><strong>Meta APIs (Facebook & Instagram):</strong> We fetch messages and dispatch AI replies via the Meta Graph Send API.</li>
+                <li><strong>Meta APIs (Facebook &amp; Instagram):</strong> We fetch messages and dispatch AI replies via the Meta Graph Send API.</li>
                 <li><strong>Google Gemini API:</strong> Message payloads are processed through Gemini LLM services to generate smart customer responses.</li>
                 <li><strong>Firebase Admin SDK:</strong> Used for secure auth session verification.</li>
                 <li><strong>Cloud Storage (Backblaze B2):</strong> To securely cache and serve product catalog and variant images.</li>
@@ -166,7 +166,7 @@ export default function PrivacyPage() {
               href="/terms"
               className="text-xs text-primary hover:underline font-semibold"
             >
-              Read Terms & Conditions
+              Read Terms &amp; Conditions
             </Link>
           </div>
 
