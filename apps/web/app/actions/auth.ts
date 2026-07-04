@@ -5,6 +5,7 @@ import { clearAuthCookie, setAuthCookie } from '@/lib/auth';
 import { syncUser } from '@/lib/api';
 
 export async function setAuthSession(
+  
   idToken: string,
   profile: {
     firebaseUid: string;
