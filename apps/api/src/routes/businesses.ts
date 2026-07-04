@@ -15,6 +15,7 @@ import {
   hardDeleteBusiness,
 } from '@repo/db/crud/business';
 import { getBusinessStats, getBusinessAnalytics } from '@repo/db/crud/stats';
+import { searchBusinessData } from '@repo/db/crud/search';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -218,4 +219,26 @@ businessesRouter.openapi(analyticsRoute, async (c) => {
   const data = await getBusinessAnalytics(id, days);
   return c.json(data);
 });
+
+const searchRoute = createRoute({
+  method: 'get',
+  path: '/{id}/search',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    query: z.object({ q: z.string().min(1) }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: 'Search results across products, categories, orders, and messages' },
+  },
+});
+
+businessesRouter.openapi(searchRoute, async (c) => {
+  const id = c.req.param('id');
+  const { q } = c.req.valid('query');
+  const data = await searchBusinessData(id, q);
+  return c.json(data);
+});
+
 

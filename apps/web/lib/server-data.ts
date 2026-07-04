@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { getBusiness, getBusinessStats, getMe, getBusinessAnalytics } from '@/lib/api';
+import { getBusiness, getBusinessStats, getMe, getBusinessAnalytics, searchBusiness } from '@/lib/api';
 
 /** One API call per business per request (layout + page share the result). */
 export const getBusinessForRequest = cache(async (businessId: string) => {
@@ -17,6 +17,12 @@ export const getBusinessAnalyticsForRequest = cache(async (businessId: string, d
   const token = await requireAuth();
   return getBusinessAnalytics(token, businessId, days);
 });
+
+export const searchBusinessForRequest = cache(async (businessId: string, query: string) => {
+  const token = await requireAuth();
+  return searchBusiness(token, businessId, query);
+});
+
 
 export const getMeForRequest = cache(async () => {
   const token = await requireAuth();

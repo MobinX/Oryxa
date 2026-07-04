@@ -91,6 +91,10 @@ export const getBusinessStats = (token: string, businessId: string) =>
 export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
 
+export const searchBusiness = (token: string, businessId: string, query: string) =>
+  apiFetch<any>(`/api/v1/businesses/${businessId}/search?q=${encodeURIComponent(query)}`, { token });
+
+
 
 export const updateBusiness = (token: string, id: string, data: Record<string, unknown>) =>
   apiFetch<{ success: boolean }>(`/api/v1/businesses/${id}`, {

@@ -14,6 +14,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { SearchBar } from '@/components/search-bar';
 
 export default async function AnalyticsPage({
   params,
@@ -54,14 +55,7 @@ export default async function AnalyticsPage({
     <div className="space-y-8">
       {/* Search and Profile Header */}
       <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-5">
-        <div className="relative flex-1 max-w-md">
-          <input
-            type="text"
-            placeholder="Search anything..."
-            className="w-full h-11 pl-4 pr-10 rounded-xl border border-border/80 bg-card/50 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-          />
-          <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        </div>
+        <SearchBar businessId={businessId} />
 
         <div className="flex items-center gap-3 shrink-0">
           <ThemeToggle />

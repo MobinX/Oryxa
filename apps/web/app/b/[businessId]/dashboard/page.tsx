@@ -18,6 +18,7 @@ import {
   FolderTree,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { SearchBar } from '@/components/search-bar';
 
 const sparklinePaths = {
   products: 'M5 22C20 22 25 12 40 12C55 12 60 25 75 25C90 25 95 8 110 8',
@@ -25,6 +26,7 @@ const sparklinePaths = {
   channels: 'M5 18C20 18 25 25 40 25C55 25 60 10 75 10C90 10 95 20 110 20',
   inbox: 'M5 12C20 12 25 5 40 5C55 5 60 22 75 22C90 22 95 15 110 15',
 };
+
 
 export default async function DashboardPage({
   params,
@@ -136,14 +138,7 @@ export default async function DashboardPage({
     <div className="space-y-8">
       {/* Top Navigation / Search Header */}
       <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-5">
-        <div className="relative flex-1 max-w-md">
-          <input
-            type="text"
-            placeholder="Search anything..."
-            className="w-full h-11 pl-4 pr-10 rounded-xl border border-border/80 bg-card/50 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-          />
-          <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        </div>
+        <SearchBar businessId={businessId} />
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <ThemeToggle />
