@@ -262,9 +262,14 @@ export default function Home() {
                 fill="url(#logo-grad)"
               />
             </svg>
-            <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity">
-              Oryxa
-            </span>
+            <div className="flex flex-col">
+              <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
+                Oryxa
+              </span>
+              <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
+                by RR Computer
+              </span>
+            </div>
           </Link>
 
           {/* Center Navigation Links (Desktop) */}
@@ -1170,12 +1175,17 @@ export default function Home() {
                   fill="url(#logo-grad-foot)"
                 />
               </svg>
-              <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity">
-                Oryxa
-              </span>
+              <div className="flex flex-col">
+                <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
+                  Oryxa
+                </span>
+                <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
+                  by RR Computer
+                </span>
+              </div>
             </Link>
             <p className="font-inter text-muted-foreground leading-relaxed text-xs">
-              Automating customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
+              A specialized AI-powered product developed by <strong>RR Computer</strong>. Oryxa automates customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
             </p>
           </div>
 
@@ -1221,7 +1231,7 @@ export default function Home() {
 
         {/* Bottom Bar */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-border/10 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-inter text-[11px]">
-          <div>© 2026 Oryxa. All rights reserved.</div>
+          <div>© 2026 Oryxa. A product of RR Computer. All rights reserved.</div>
           <div className="flex items-center gap-6">
             <span className="hover:text-foreground transition-colors cursor-pointer">Twitter</span>
             <span className="hover:text-foreground transition-colors cursor-pointer">GitHub</span>
