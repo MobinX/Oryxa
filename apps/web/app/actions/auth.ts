@@ -10,6 +10,7 @@ export async function setAuthSession(
     firebaseUid: string;
     name: string;
     email?: string;
+    signInMethod?: string;
   },
 ) {
   await setAuthCookie(idToken);
@@ -17,7 +18,7 @@ export async function setAuthSession(
     firebaseUid: profile.firebaseUid,
     name: profile.name,
     email: profile.email,
-    signInMethod: 'google',
+    signInMethod: profile.signInMethod ?? 'google',
   });
   redirect('/businesses');
 }

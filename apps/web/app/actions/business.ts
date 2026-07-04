@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { createBusiness, updateBusiness, deleteBusiness } from '@/lib/api';
+import { createBusiness, updateBusiness, deleteBusiness, hardDeleteBusiness } from '@/lib/api';
+
 
 export async function createBusinessAction(formData: FormData) {
   const token = await requireAuth();
@@ -43,12 +44,19 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
 
   revalidatePath('/businesses');
   revalidatePath(`/b/${businessId}`);
-  redirect('/businesses');
+  redirect(`/b/${businessId}/settings?saved=1`);
 }
 
 export async function deleteBusinessAction(businessId: string) {
   const token = await requireAuth();
   await deleteBusiness(token, businessId);
+  revalidatePath('/businesses');
+  redirect('/businesses');
+}
+
+export async function hardDeleteBusinessAction(businessId: string) {
+  const token = await requireAuth();
+  await hardDeleteBusiness(token, businessId);
   revalidatePath('/businesses');
   redirect('/businesses');
 }

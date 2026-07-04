@@ -1,22 +1,22 @@
-import { Check, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { listChannels, listAgents, type Channel, type Agent } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
+import { FacebookConnectButton } from '@/components/facebook-connect-button';
+import { ChannelAgentSelect } from '@/components/channel-agent-select';
 import {
-  connectFacebookAction,
   createAgentAction,
   updateAgentAction,
   deleteAgentAction,
   deleteAgentsBulkAction,
-  updateChannelAgentAction,
   deleteChannelAction,
   deleteChannelsBulkAction,
 } from '@/app/actions/channels';
+import { Check } from 'lucide-react';
 
 const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
@@ -55,6 +55,8 @@ export default async function ChannelsPage({
     listAgents(token, businessId),
   ]);
 
+  const agentList = agents.map((a: Agent) => ({ id: a.id, name: a.name }));
+
   const channelRows = channels.map((channel: Channel) => ({
     id: channel.id,
     cells: [
@@ -67,23 +69,13 @@ export default async function ChannelsPage({
       <span key="platformChannelId" className="text-[var(--muted-foreground)]">
         {channel.platformChannelId}
       </span>,
-      <form
+      <ChannelAgentSelect
         key="agentId"
-        action={updateChannelAgentAction.bind(null, businessId, channel.id)}
-        className="flex items-center gap-2"
-      >
-        <Select name="agentId" defaultValue={channel.agentId ?? ''} className="h-8 w-40 text-sm">
-          <option value="">Disabled</option>
-          {agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-            </option>
-          ))}
-        </Select>
-        <button type="submit" className="text-xs text-[var(--primary)] hover:underline">
-          Save
-        </button>
-      </form>,
+        businessId={businessId}
+        channelId={channel.id}
+        agentId={channel.agentId}
+        agents={agentList}
+      />,
     ],
     actions: (
       <form action={deleteChannelAction.bind(null, businessId, channel.id)}>
@@ -147,7 +139,7 @@ export default async function ChannelsPage({
 
       {connected === 'facebook' && (
         <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-          Facebook page(s) connected successfully.
+          ✓ Facebook page(s) connected successfully.
           {subscribeFailed && (
             <span className="mt-1 block text-amber-800 dark:text-amber-200">
               {subscribeFailed} page(s) could not be subscribed for webhooks — check Meta app webhook settings and
@@ -169,11 +161,12 @@ export default async function ChannelsPage({
 
       <Card>
         <h2 className="text-lg font-semibold">Connect Facebook Messenger</h2>
-        <form action={connectFacebookAction.bind(null, businessId)} className="mt-4">
-          <Button type="submit" className="w-full sm:w-auto">
-            Connect Facebook
-          </Button>
-        </form>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Link your Facebook Page to enable AI-powered Messenger replies.
+        </p>
+        <div className="mt-4">
+          <FacebookConnectButton businessId={businessId} />
+        </div>
       </Card>
 
       <div className="space-y-3">

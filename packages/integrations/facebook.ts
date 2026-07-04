@@ -115,6 +115,32 @@ export async function subscribeFacebookPageToWebhooks(
   console.log('[fb-subscribe] success', { pageId, success: data.success ?? true });
 }
 
+/**
+ * Unsubscribes a Page from this app's webhooks. Called when a channel is
+ * deleted so Meta stops delivering events for that page.
+ */
+export async function unsubscribeFacebookPageFromWebhooks(
+  pageId: string,
+  pageToken: string,
+): Promise<void> {
+  const url = `${GRAPH_API}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(pageToken)}`;
+  console.log('[fb-unsubscribe] unsubscribing page', { pageId });
+
+  const res = await fetch(url, { method: 'DELETE' });
+  const rawBody = await res.text();
+  console.log('[fb-unsubscribe] response', {
+    pageId,
+    status: res.status,
+    ok: res.ok,
+    body: rawBody,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Facebook page webhook unsubscription failed: ${rawBody}`);
+  }
+  console.log('[fb-unsubscribe] success', { pageId });
+}
+
 export async function sendMessage(
   pageToken: string,
   recipientId: string,

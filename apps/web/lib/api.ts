@@ -82,10 +82,15 @@ export type BusinessStats = {
   conversations: number;
   revenue: number;
   messages: number;
+  avgResponseTime: number;
 };
 
 export const getBusinessStats = (token: string, businessId: string) =>
   apiFetch<BusinessStats>(`/api/v1/businesses/${businessId}/stats`, { token });
+
+export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
+  apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
+
 
 export const updateBusiness = (token: string, id: string, data: Record<string, unknown>) =>
   apiFetch<{ success: boolean }>(`/api/v1/businesses/${id}`, {
@@ -96,6 +101,10 @@ export const updateBusiness = (token: string, id: string, data: Record<string, u
 
 export const deleteBusiness = (token: string, id: string) =>
   apiFetch<{ deleted: boolean }>(`/api/v1/businesses/${id}`, { method: 'DELETE', token });
+
+export const hardDeleteBusiness = (token: string, id: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/v1/businesses/${id}/data`, { method: 'DELETE', token });
+
 
 // Categories
 export type Category = { id: string; name: string; slug: string };

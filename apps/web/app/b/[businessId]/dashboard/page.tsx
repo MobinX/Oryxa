@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { getBusinessForRequest, getBusinessStatsForRequest, getMeForRequest } from '@/lib/server-data';
+import { getBusinessForRequest, getBusinessAnalyticsForRequest, getMeForRequest } from '@/lib/server-data';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { DropdownSelect } from '@/components/ui/dropdown-select';
 import {
   Package,
@@ -10,20 +9,14 @@ import {
   Radio,
   Search,
   Bell,
-  Calendar,
-  ChevronDown,
   ArrowRight,
   TrendingUp,
-  Plus,
-  CheckCircle2,
-  Clock,
-  Eye,
   Activity,
-  DollarSign,
-  TrendingDown,
   Sparkles,
+  ArrowUpRight,
+  ArrowDownRight,
+  FolderTree,
 } from 'lucide-react';
-
 import { ThemeToggle } from '@/components/theme-toggle';
 
 const sparklinePaths = {
@@ -40,13 +33,15 @@ export default async function DashboardPage({
 }) {
   const { businessId } = await params;
 
-  const [business, stats, me] = await Promise.all([
+  const [business, analytics, me] = await Promise.all([
     getBusinessForRequest(businessId),
-    getBusinessStatsForRequest(businessId),
+    getBusinessAnalyticsForRequest(businessId, 7), // Get last 7 days for dashboard stats
     getMeForRequest(),
   ]);
+
+  const stats = analytics.totals;
   const userInitial = me.name.trim().charAt(0).toUpperCase() || 'U';
-  const totalViews = (stats.messages ?? 0) + (stats.conversations ?? 0) * 5 + 128;
+  const totalViews = (stats.messages ?? 0) + (stats.conversations ?? 0) * 5;
 
   const topStats = [
     {
@@ -82,7 +77,7 @@ export default async function DashboardPage({
     {
       label: 'Inbox',
       count: stats.conversations,
-      desc: 'Unread messages',
+      desc: 'Total conversations',
       icon: MessageSquare,
       color: 'text-blue-500 bg-blue-500/10 dark:text-blue-400 dark:bg-blue-500/10',
       strokeColor: '#3B82F6',
@@ -91,11 +86,56 @@ export default async function DashboardPage({
     },
   ];
 
+  // Merge recent activity dynamically from recent orders and recent conversations
+  const recentActivity = [
+    ...analytics.recentOrders.map((o: any) => ({
+      type: 'order',
+      title: 'Order Received',
+      desc: `New order from ${o.customerName} for ${new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+      }).format(o.totalPrice)}`,
+      timeLabel: formatTimeAgo(new Date(o.createdAt)),
+      timestamp: new Date(o.createdAt).getTime(),
+      icon: ShoppingCart,
+      color: 'text-rose-600 bg-rose-500/10 dark:text-rose-400 dark:bg-rose-500/10',
+    })),
+    ...analytics.recentConversations.map((c: any) => ({
+      type: 'conversation',
+      title: 'New Conversation',
+      desc: `Chat started with ${c.customerName || 'customer'} (${c.id.slice(0, 8)})`,
+      timeLabel: formatTimeAgo(new Date(c.createdAt)),
+      timestamp: new Date(c.createdAt).getTime(),
+      icon: MessageSquare,
+      color: 'text-blue-600 bg-blue-500/10 dark:text-blue-400 dark:bg-blue-500/10',
+    })),
+  ]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 5);
+
+  // Helper to format percentage changes
+  const formatChange = (curr: number, prev: number) => {
+    if (prev === 0) return { label: curr > 0 ? '+100%' : '0%', positive: curr >= 0 };
+    const diff = ((curr - prev) / prev) * 100;
+    return {
+      label: `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}% vs last week`,
+      positive: diff >= 0,
+    };
+  };
+
+  const orderChange = formatChange(analytics.comparison.orders.current, analytics.comparison.orders.previous);
+  const revenueChange = formatChange(analytics.comparison.revenue.current, analytics.comparison.revenue.previous);
+  const messageChange = formatChange(analytics.comparison.messages.current, analytics.comparison.messages.previous);
+  // View change assumes direct mapping to message/conversations activity
+  const viewChange = formatChange(
+    analytics.comparison.messages.current + analytics.comparison.conversations.current * 5,
+    analytics.comparison.messages.previous + analytics.comparison.conversations.previous * 5
+  );
+
   return (
     <div className="space-y-8">
       {/* Top Navigation / Search Header */}
       <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-5">
-        {/* Search Field */}
         <div className="relative flex-1 max-w-md">
           <input
             type="text"
@@ -105,51 +145,39 @@ export default async function DashboardPage({
           <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         </div>
 
-        {/* Action Header Icons */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <ThemeToggle />
 
-          {/* Notification bell */}
           <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card hover:bg-muted transition-colors">
             <Bell className="h-5 w-5 text-muted-foreground" />
             <span className="absolute top-2.5 right-2.5 flex h-2 w-2 rounded-full bg-primary" />
           </button>
 
-          {/* Profile initial */}
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20">
             {userInitial}
           </div>
         </div>
       </div>
 
-      {/* Greeting and Date Header */}
+      {/* Greeting Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-geist text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Good morning, {me.name}! 👋
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Here's what's happening with your business today.
+            Here&apos;s a live overview of your business today.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <DropdownSelect
             options={[
-              { value: 'today', label: 'Today' },
-              { value: 'yesterday', label: 'Yesterday' },
-              { value: 'last7', label: 'Last 7 Days' },
+              { value: '7', label: 'Last 7 Days' },
+              { value: '30', label: 'Last 30 Days' },
             ]}
-            defaultValue="today"
+            defaultValue="7"
             showCalendarIcon
-          />
-          <DropdownSelect
-            options={[
-              { value: 'range', label: 'Jun 26 - Jun 26, 2026' },
-              { value: 'range2', label: 'Jun 1 - Jun 30, 2026' },
-            ]}
-            defaultValue="range"
-            align="right"
           />
         </div>
       </div>
@@ -158,7 +186,7 @@ export default async function DashboardPage({
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {topStats.map((item) => (
           <Link key={item.label} href={`/b/${businessId}/${item.href}`} className="block group">
-            <Card className="hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.99] border-border/60">
+            <Card className="hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.99] border-border/60 transition-all duration-200">
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-3">
                   <div className="flex items-center gap-2.5">
@@ -179,7 +207,6 @@ export default async function DashboardPage({
                   </div>
                 </div>
 
-                {/* SVG Sparkline Graph */}
                 <div className="w-20 h-10 shrink-0 self-end opacity-90 group-hover:opacity-100 transition-opacity">
                   <svg className="w-full h-full" viewBox="0 0 120 30" fill="none">
                     <path
@@ -210,52 +237,29 @@ export default async function DashboardPage({
                 </h3>
               </div>
 
-              {/* Activity Log List */}
               <div className="space-y-5">
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                    <Plus className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">Product added</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
-                      New product "Goth Barbie Tee" was added.
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
-                    2h ago
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
-                    <ShoppingCart className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">Order received</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
-                      New order #1234 received.
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
-                    5h ago
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                    <MessageSquare className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">New message</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
-                      You have a new message from Messenger.
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
-                    1d ago
-                  </span>
-                </div>
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No recent activity found.
+                  </p>
+                ) : (
+                  recentActivity.map((activity, index) => (
+                    <div key={index} className="flex items-start gap-3.5">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${activity.color}`}>
+                        <activity.icon className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground">{activity.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
+                          {activity.desc}
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
+                        {activity.timeLabel}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -263,7 +267,7 @@ export default async function DashboardPage({
               href={`/b/${businessId}/inbox`}
               className="mt-6 flex items-center justify-center gap-1.5 rounded-xl bg-muted/50 py-3 text-xs font-semibold text-primary hover:bg-muted transition-colors w-full"
             >
-              View all activity
+              View inbox
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Card>
@@ -272,7 +276,6 @@ export default async function DashboardPage({
         {/* Connect with Meta Promotion Card */}
         <div className="lg:col-span-7 flex">
           <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-800 p-8 text-white shadow-xl shadow-indigo-500/10 flex flex-col justify-between w-full min-h-[300px]">
-            {/* Ambient Background Circles */}
             <div className="absolute right-0 top-0 -mr-16 -mt-16 h-72 w-72 rounded-full bg-white/5 blur-2xl" />
             <div className="absolute -left-20 -bottom-20 h-72 w-72 rounded-full bg-indigo-400/10 blur-2xl" />
 
@@ -297,7 +300,6 @@ export default async function DashboardPage({
                 Connect Now
               </Link>
 
-              {/* Floating Social Icons Simulation */}
               <div className="flex items-center gap-2 self-start sm:self-auto opacity-95">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 border border-white/15 backdrop-blur-sm font-bold text-sm">
                   f
@@ -324,23 +326,12 @@ export default async function DashboardPage({
                 Performance overview
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Track your business performance at a glance.
+                Compare your business metrics with the previous period.
               </p>
             </div>
           </div>
-          <DropdownSelect
-            options={[
-              { value: 'week', label: 'This week' },
-              { value: 'month', label: 'This month' },
-              { value: 'year', label: 'This year' },
-            ]}
-            defaultValue="week"
-            align="right"
-            className="h-9"
-          />
         </div>
 
-        {/* Four Performance Metrics cards */}
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {/* Card 1: Total Views */}
           <Card className="border-border/60">
@@ -350,9 +341,9 @@ export default async function DashboardPage({
                   Total views
                 </span>
                 <h4 className="font-geist text-2xl font-black text-foreground">{totalViews}</h4>
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="text-xs">↑</span>
-                  <span>12.5% vs last week</span>
+                <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${viewChange.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  <span>{viewChange.positive ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}</span>
+                  <span>{viewChange.label}</span>
                 </div>
               </div>
               <div className="w-16 h-8 opacity-80">
@@ -368,17 +359,17 @@ export default async function DashboardPage({
             </div>
           </Card>
 
-          {/* Card 2: Engagement */}
+          {/* Card 2: Messages Received */}
           <Card className="border-border/60">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Engagement
+                  Messages
                 </span>
                 <h4 className="font-geist text-2xl font-black text-foreground">{stats.messages ?? 0}</h4>
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="text-xs">↑</span>
-                  <span>8.2% vs last week</span>
+                <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${messageChange.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  <span>{messageChange.positive ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}</span>
+                  <span>{messageChange.label}</span>
                 </div>
               </div>
               <div className="w-16 h-8 opacity-80">
@@ -394,17 +385,17 @@ export default async function DashboardPage({
             </div>
           </Card>
 
-          {/* Card 3: Conversions */}
+          {/* Card 3: Orders Placed */}
           <Card className="border-border/60">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Conversions
+                  Orders
                 </span>
                 <h4 className="font-geist text-2xl font-black text-foreground">{stats.orders}</h4>
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="text-xs">↑</span>
-                  <span>16.7% vs last week</span>
+                <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${orderChange.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  <span>{orderChange.positive ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}</span>
+                  <span>{orderChange.label}</span>
                 </div>
               </div>
               <div className="w-16 h-8 opacity-80">
@@ -434,9 +425,9 @@ export default async function DashboardPage({
                     maximumFractionDigits: 0,
                   }).format(stats.revenue ?? 0)}
                 </h4>
-                <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="text-xs">↑</span>
-                  <span>21.4% vs last week</span>
+                <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${revenueChange.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  <span>{revenueChange.positive ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}</span>
+                  <span>{revenueChange.label}</span>
                 </div>
               </div>
               <div className="w-16 h-8 opacity-80">
@@ -455,4 +446,15 @@ export default async function DashboardPage({
       </div>
     </div>
   );
+}
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }

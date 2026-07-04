@@ -4,14 +4,18 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { updateBusinessAction, deleteBusinessAction } from '@/app/actions/business';
+import { updateBusinessAction } from '@/app/actions/business';
+import { DeleteDataDialog } from '@/components/delete-data-dialog';
 
 export default async function SettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   const { businessId } = await params;
+  const { saved } = await searchParams;
   const business = await getBusinessForRequest(businessId);
 
   return (
@@ -19,12 +23,19 @@ export default async function SettingsPage({
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Business settings</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Update details or remove this business.
+          Update your business details or manage your data.
         </p>
       </div>
 
+      {saved === '1' && (
+        <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+          ✓ Settings saved successfully.
+        </Card>
+      )}
+
+      {/* Business Details */}
       <Card>
-        <h2 className="text-lg font-semibold">Details</h2>
+        <h2 className="text-lg font-semibold">Business details</h2>
         <form action={updateBusinessAction.bind(null, businessId)} className="mt-4 space-y-4">
           <div>
             <label className="text-sm font-medium">Business name</label>
@@ -41,15 +52,17 @@ export default async function SettingsPage({
               name="description"
               rows={3}
               defaultValue={business.description ?? ''}
+              placeholder="Describe your business, products, and services…"
               className="mt-1"
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-sm font-medium">Type</label>
+              <label className="text-sm font-medium">Business type</label>
               <Input
                 name="type"
                 defaultValue={business.type ?? ''}
+                placeholder="e.g. Retail, Restaurant, Services…"
                 className="mt-1"
               />
             </div>
@@ -58,16 +71,18 @@ export default async function SettingsPage({
               <Input
                 name="phone"
                 defaultValue={business.phone ?? ''}
+                placeholder="+1 (555) 000-0000"
                 className="mt-1"
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Employees</label>
+              <label className="text-sm font-medium">Employee count</label>
               <Input
                 name="employeeCount"
                 type="number"
                 min="1"
                 defaultValue={business.employeeCount ? String(business.employeeCount) : ''}
+                placeholder="e.g. 10"
                 className="mt-1"
               />
             </div>
@@ -76,20 +91,9 @@ export default async function SettingsPage({
             <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
           </div>
         </form>
-        <form
-          action={deleteBusinessAction.bind(null, businessId)}
-          className="border-t border-border pt-4 mt-6"
-        >
-          <Button
-            type="submit"
-            variant="outline"
-            className="text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/20 w-full sm:w-auto"
-          >
-            Delete business
-          </Button>
-        </form>
       </Card>
 
+      {/* Quick links */}
       <Card>
         <h2 className="text-lg font-semibold">Quick links</h2>
         <div className="mt-3 flex flex-wrap gap-3">
@@ -104,6 +108,12 @@ export default async function SettingsPage({
           </Link>
         </div>
       </Card>
+
+      {/* Danger Zone */}
+      <div>
+        <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-3">Danger zone</h2>
+        <DeleteDataDialog businessId={businessId} businessName={business.name} />
+      </div>
     </div>
   );
 }

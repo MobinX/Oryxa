@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth';
 import { listFacebookPendingPages } from '@/lib/api';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { connectSelectedFacebookPagesAction } from '@/app/actions/channels';
+import { ConnectFacebookForm } from '@/components/connect-facebook-form';
 
 export default async function ConnectFacebookPage({
   params,
@@ -17,8 +16,39 @@ export default async function ConnectFacebookPage({
   const authToken = await requireAuth();
 
   if (!token) {
+    // Handle the "no pages selected" case from the OAuth callback
+    if (error === 'no-pages-selected') {
+      return (
+        <div className="mx-auto max-w-lg space-y-6">
+          <div>
+            <h1 className="text-xl font-bold sm:text-2xl">Connect Facebook pages</h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              No pages were returned from Facebook.
+            </p>
+          </div>
+          <Card className="border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
+            <h3 className="font-semibold text-amber-800 dark:text-amber-200">No pages selected during Facebook login</h3>
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              It looks like you didn&apos;t select any Facebook Pages when granting access. This usually happens if you clicked &quot;Edit Settings&quot; during the Facebook login and unselected all pages, or if your Facebook account has no Pages.
+            </p>
+            <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+              <strong>To fix this:</strong> Try connecting again and make sure to select at least one Page when Facebook asks which pages to give Oryxa access to.
+            </p>
+            <div className="mt-4">
+              <Link
+                href={`/b/${businessId}/channels`}
+                className="inline-flex items-center gap-2 h-10 px-5 rounded-[12px] text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+              >
+                ← Try again
+              </Link>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-lg space-y-4">
         <h1 className="text-xl font-bold sm:text-2xl">Connect Facebook pages</h1>
         <Card className="p-4 text-sm text-red-600">
           Missing page selection token. Start over from{' '}
@@ -36,7 +66,7 @@ export default async function ConnectFacebookPage({
     pages = await listFacebookPendingPages(authToken, businessId, token);
   } catch {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-lg space-y-4">
         <h1 className="text-xl font-bold sm:text-2xl">Connect Facebook pages</h1>
         <Card className="p-4 text-sm text-red-600">
           This link expired or is invalid. Connect Facebook again from{' '}
@@ -49,15 +79,17 @@ export default async function ConnectFacebookPage({
     );
   }
 
-  const alreadyConnected = pages.filter((p) => p.connected);
-  const notYetConnected = pages.filter((p) => !p.connected);
+  // Check if any pages are already connected to OTHER businesses (already connected flag
+  // is set per-business, so "connected" here means connected to THIS business)
+  const alreadyConnectedElsewhere = pages.filter((p) => p.connected);
+  const hasOnlyAlreadyConnected = pages.length > 0 && pages.every((p) => p.connected);
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Choose Facebook pages</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Select the pages you want to connect to this business. You can connect multiple pages.
+          Select the pages you want to connect to this business.
         </p>
       </div>
 
@@ -67,57 +99,19 @@ export default async function ConnectFacebookPage({
         </Card>
       )}
 
-      <form action={connectSelectedFacebookPagesAction.bind(null, businessId, token)}>
-        <Card className="divide-y divide-[var(--border)] p-0">
-          {pages.length === 0 ? (
-            <p className="p-4 text-sm text-[var(--muted-foreground)]">No Facebook pages found on this account.</p>
-          ) : (
-            pages.map((page) => (
-              <label
-                key={page.id}
-                className="flex cursor-pointer items-start gap-3 p-4 hover:bg-[var(--muted)]/40"
-              >
-                <input
-                  type="checkbox"
-                  name="pageIds"
-                  value={page.id}
-                  defaultChecked={!page.connected && pages.length === 1}
-                  className="mt-1 h-4 w-4 shrink-0 accent-[var(--primary)]"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium">{page.name}</span>
-                  <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                    Page ID: {page.id}
-                  </span>
-                  {page.connected && (
-                    <span className="mt-1 inline-block text-xs text-[var(--muted-foreground)]">
-                      Already connected (select to refresh access token)
-                    </span>
-                  )}
-                </span>
-              </label>
-            ))
-          )}
+      {alreadyConnectedElsewhere.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+          <strong>Note:</strong> Some pages shown below are already connected to this business. If you select them again, their access token will be refreshed. Pages connected to <em>other</em> businesses in Oryxa may still appear — selecting them here will connect them to this business too.
         </Card>
+      )}
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button type="submit" className="w-full sm:w-auto" disabled={pages.length === 0}>
-            Connect selected
-          </Button>
-          <Link
-            href={`/b/${businessId}/channels`}
-            className="inline-flex h-10 w-full items-center justify-center rounded-[12px] border border-border bg-card px-5 text-sm font-medium text-foreground transition-all hover:bg-muted sm:w-auto"
-          >
-            Cancel
-          </Link>
-        </div>
+      {hasOnlyAlreadyConnected && (
+        <Card className="border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+          All these pages are already connected. You can select them to refresh the Facebook access token.
+        </Card>
+      )}
 
-        {alreadyConnected.length > 0 && notYetConnected.length > 0 && (
-          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-            Some pages are already linked to this business. Select them again to refresh their Facebook access token.
-          </p>
-        )}
-      </form>
+      <ConnectFacebookForm businessId={businessId} token={token} pages={pages} />
     </div>
   );
 }

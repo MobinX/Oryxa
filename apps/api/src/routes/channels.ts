@@ -28,6 +28,7 @@ import {
   updateChannelAgent,
   updateChannel,
   deleteChannel,
+  getChannelById,
   getChannelByBusinessPlatformChannelId,
   findChannelByBusinessPlatformChannelId,
   reactivateChannel,
@@ -41,6 +42,7 @@ import {
   createFacebookPagesSelectionToken,
   verifyFacebookPagesSelectionToken,
   subscribeFacebookPageToWebhooks,
+  unsubscribeFacebookPageFromWebhooks,
 } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
@@ -302,6 +304,23 @@ const deleteChannelRoute = createRoute({
 channelsRouter.openapi(deleteChannelRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const channelId = c.req.param('channelId');
+
+  // Fetch the channel first to access apiToken for webhook unsubscription
+  const channelRow = await getChannelById(channelId);
+
+  if (channelRow?.platform === 'facebook' && channelRow.apiToken) {
+    try {
+      await unsubscribeFacebookPageFromWebhooks(channelRow.platformChannelId, channelRow.apiToken);
+      console.log('[delete-channel] unsubscribed page from webhooks', { channelId, pageId: channelRow.platformChannelId });
+    } catch (err) {
+      // Log but don't block deletion — page token may have expired
+      console.warn('[delete-channel] webhook unsubscription failed (continuing with delete)', {
+        channelId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const result = await deleteChannel(businessId, channelId);
   if (!result) return c.json({ error: 'Channel not found' }, 404);
   return c.json(result);
@@ -490,7 +509,12 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   try {
     const userToken = await exchangeCodeForToken(code);
     const pages = await getUserPages(userToken);
-    if (pages.length === 0) return c.text('No pages found', 400);
+    if (pages.length === 0) {
+      const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+      return c.redirect(
+        `${webUrl}/b/${verified.businessId}/channels/connect-facebook?error=no-pages-selected`,
+      );
+    }
 
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,

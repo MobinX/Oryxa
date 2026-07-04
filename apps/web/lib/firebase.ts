@@ -1,5 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -32,6 +40,20 @@ export async function signInWithGoogle() {
 export async function logout() {
   const auth = getFirebaseAuth();
   if (auth) await signOut(auth);
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase not configured');
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function signUpWithEmail(email: string, password: string, name: string) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase not configured');
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(cred.user, { displayName: name });
+  return cred;
 }
 
 export async function getIdToken(): Promise<string | null> {

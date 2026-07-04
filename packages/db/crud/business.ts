@@ -56,3 +56,13 @@ export async function verifyBusinessOwnership(businessId: string, userId: string
 export async function hardDeleteBusinessesForUser(userId: string) {
   await db.delete(businesses).where(eq(businesses.userId, userId));
 }
+
+/** Permanently deletes all data for a business. Irreversible. */
+export async function hardDeleteBusiness(id: string, userId: string) {
+  const business = await db.query.businesses.findFirst({
+    where: and(eq(businesses.id, id), eq(businesses.userId, userId)),
+  });
+  if (!business) return null;
+  await db.delete(businesses).where(and(eq(businesses.id, id), eq(businesses.userId, userId)));
+  return { deleted: true };
+}

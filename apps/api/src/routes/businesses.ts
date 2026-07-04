@@ -12,8 +12,9 @@ import {
   listBusinessesByUserId,
   updateBusiness,
   deleteBusiness,
+  hardDeleteBusiness,
 } from '@repo/db/crud/business';
-import { getBusinessStats } from '@repo/db/crud/stats';
+import { getBusinessStats, getBusinessAnalytics } from '@repo/db/crud/stats';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -78,6 +79,7 @@ businessesRouter.openapi(createRoute_, async (c) => {
 });
 
 businessesRouter.use('/:id', businessAccessMiddleware);
+businessesRouter.use('/:id/*', businessAccessMiddleware);
 
 const statsRoute = createRoute({
   method: 'get',
@@ -175,3 +177,45 @@ businessesRouter.openapi(deleteRoute, async (c) => {
   if (!result) return c.json({ error: 'Not found' }, 404);
   return c.json(result);
 });
+
+const hardDeleteRoute = createRoute({
+  method: 'delete',
+  path: '/{id}/data',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ id: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: deleteBusinessOutputSchema } }, description: 'All data permanently deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+businessesRouter.openapi(hardDeleteRoute, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const result = await hardDeleteBusiness(id, user.id);
+  if (!result) return c.json({ error: 'Not found or not authorized' }, 404);
+  return c.json(result);
+});
+
+const analyticsRoute = createRoute({
+  method: 'get',
+  path: '/{id}/analytics',
+  tags: ['Businesses'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    query: z.object({ days: z.coerce.number().int().min(1).max(365).optional().default(30) }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: z.any() } }, description: 'Business analytics' },
+  },
+});
+
+businessesRouter.openapi(analyticsRoute, async (c) => {
+  const id = c.req.param('id');
+  const { days } = c.req.valid('query');
+  const data = await getBusinessAnalytics(id, days);
+  return c.json(data);
+});
+
