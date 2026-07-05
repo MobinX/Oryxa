@@ -29,6 +29,26 @@ export function createCommentAgentTools(
       context.emitSse?.('tool_call', { name: 'reply_comment', args: { text } });
       console.log(`[agent-tool] reply_comment called — text="${text}"`);
 
+      // Idempotency check: check if a reply has already been persisted for this comment
+      const { db } = await import('@repo/db/client');
+      const { comments } = await import('@repo/db/schema');
+      const { and, eq, isNull } = await import('drizzle-orm');
+
+      const existingReply = await db.query.comments.findFirst({
+        where: and(
+          eq(comments.commentThreadId, context.commentThreadId),
+          eq(comments.from, 'self'),
+          eq(comments.parentExternalId, context.parentCommentExternalId),
+          isNull(comments.deletedAt),
+        ),
+      });
+
+      if (existingReply) {
+        console.log(`[agent-tool] reply_comment skipped: already replied to comment ${context.parentCommentExternalId} (Reply ID: ${existingReply.externalId})`);
+        context.emitSse?.('tool_result', { name: 'reply_comment', result: 'Reply already posted to the comment.' });
+        return 'Reply already posted to the comment.';
+      }
+
       const newCommentId = await replyToFacebookComment(
         context.pageToken,
         context.parentCommentExternalId,

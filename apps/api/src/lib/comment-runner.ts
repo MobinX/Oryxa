@@ -70,6 +70,33 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     return;
   }
 
+  // Idempotency check: verify if we have already replied to this comment in this thread
+  const { db } = await import('@repo/db/client');
+  const { comments: commentsSchema } = await import('@repo/db/schema');
+  const { and, eq, isNull } = await import('drizzle-orm');
+
+  const existingReply = await db.query.comments.findFirst({
+    where: and(
+      eq(commentsSchema.commentThreadId, thread.id),
+      eq(commentsSchema.from, 'self'),
+      eq(commentsSchema.parentExternalId, current.externalId!),
+      isNull(commentsSchema.deletedAt),
+    ),
+  });
+
+  if (existingReply) {
+    console.log(`[comment-runner] Idempotency catch: Comment ${current.externalId} already has a reply (${existingReply.externalId}). Marking comment done and skipping.`);
+    await markCommentDone(current.id);
+    await updateCommentThreadState(thread.id, 'done');
+
+    // Drain the rest of this commenter's queue, one per follow-up run.
+    const hasPending = await checkPendingComments(thread.id);
+    if (hasPending) {
+      await triggerCommentRun(commentThreadId);
+    }
+    return;
+  }
+
   // Give the agent the context of what post the comment is on. Fetched from the
   // Graph API once, cached on the thread (posts don't change), and injected into
   // the system prompt. Best-effort: if the lookup fails the agent just works
@@ -130,19 +157,33 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     // Fallback: if the agent did not call reply_comment, but returned a non-silent reply, send it directly.
     if (sentCommentTexts.length === 0 && reply && reply.trim() !== 'SILENT') {
       console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
-      const newCommentId = await replyToFacebookComment(
-        thread.channel.apiToken,
-        current.externalId!,
-        reply,
-      );
-      await createComment({
-        commentThreadId: thread.id,
-        from: 'self',
-        content: reply,
-        externalId: newCommentId,
-        parentExternalId: current.externalId!,
-        state: 'done',
+      
+      const existingFallbackReply = await db.query.comments.findFirst({
+        where: and(
+          eq(commentsSchema.commentThreadId, thread.id),
+          eq(commentsSchema.from, 'self'),
+          eq(commentsSchema.parentExternalId, current.externalId!),
+          isNull(commentsSchema.deletedAt),
+        ),
       });
+
+      if (!existingFallbackReply) {
+        const newCommentId = await replyToFacebookComment(
+          thread.channel.apiToken,
+          current.externalId!,
+          reply,
+        );
+        await createComment({
+          commentThreadId: thread.id,
+          from: 'self',
+          content: reply,
+          externalId: newCommentId,
+          parentExternalId: current.externalId!,
+          state: 'done',
+        });
+      } else {
+        console.log(`[comment-runner] fallback skipped: already replied to comment ${current.externalId}`);
+      }
     }
   } catch (err) {
     console.error('Comment agent run failed:', err);
