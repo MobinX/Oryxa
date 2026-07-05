@@ -17,6 +17,7 @@ import {
   deleteChannelsBulkAction,
 } from '@/app/actions/channels';
 import { Check } from 'lucide-react';
+import { DeleteSuccessDialog } from '@/components/delete-success-dialog';
 
 const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
@@ -130,6 +131,7 @@ export default async function ChannelsPage({
 
   return (
     <div className="space-y-8">
+      <DeleteSuccessDialog />
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Channels</h1>
         <p className="text-sm text-[var(--muted-foreground)] sm:text-base">

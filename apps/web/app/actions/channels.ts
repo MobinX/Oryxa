@@ -76,6 +76,7 @@ export async function deleteChannelAction(businessId: string, channelId: string)
   const token = await requireAuth();
   await deleteChannel(token, businessId, channelId);
   revalidatePath(`/b/${businessId}/channels`);
+  redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
 export async function deleteChannelsBulkAction(businessId: string, formData: FormData) {
@@ -85,6 +86,7 @@ export async function deleteChannelsBulkAction(businessId: string, formData: For
     ids.map((id) => deleteChannel(token, businessId, id).catch(() => null)),
   );
   revalidatePath(`/b/${businessId}/channels`);
+  redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
 export async function connectFacebookAction(businessId: string) {
