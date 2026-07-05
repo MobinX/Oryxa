@@ -19,7 +19,15 @@
     "paths": {
       "@/*": [
         "./*"
-      ]
+      ],
+      "@repo/db": ["../../packages/db"],
+      "@repo/db/*": ["../../packages/db/*"],
+      "@repo/shared": ["../../packages/shared"],
+      "@repo/shared/*": ["../../packages/shared/*"],
+      "@repo/integrations": ["../../packages/integrations"],
+      "@repo/integrations/*": ["../../packages/integrations/*"],
+      "@db/*": ["../../packages/db/*"],
+      "@shared/*": ["../../packages/shared/*"]
     },
     "noEmit": true,
     "incremental": true,
