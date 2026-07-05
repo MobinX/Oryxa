@@ -1,14 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+
+const mockInvoke = vi.fn(async () => ({ content: 'Generated copy from AI' }));
+ChatGoogleGenerativeAI.prototype.invoke = mockInvoke as any;
+
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { app } from '@api/app';
-
-const invokeMock = vi.fn(async () => ({ content: 'Generated copy from AI' }));
-vi.mock('@langchain/google-genai', () => ({
-  ChatGoogleGenerativeAI: vi.fn().mockImplementation(() => ({
-    invoke: invokeMock,
-  })),
-}));
 
 const publishMock = vi.fn(async () => 'FB_POST_123');
 const syncStatsMock = vi.fn(async () => ({
@@ -81,7 +79,7 @@ describe('Posts API', () => {
     expect(list[0].id).toBe(postId);
 
     // 5. AI Generate post from product
-    invokeMock.mockClear();
+    mockInvoke.mockClear();
     const generateRes = await app.request(`/api/v1/${seed.business.id}/posts/generate`, {
       method: 'POST',
       headers: authHeaders(),

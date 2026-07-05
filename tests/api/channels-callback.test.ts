@@ -72,16 +72,18 @@ describe('Facebook OAuth callback', () => {
     expect(channels.find((c) => c.platformChannelId === 'OAUTH_PAGE_1')).toBeUndefined();
   });
 
-  it('returns 400 when user has no Facebook pages', async () => {
+  it('returns 302 redirect when user has no Facebook pages', async () => {
     const { user, business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockResolvedValue('user-token');
     getUserPagesMock.mockResolvedValue([]);
 
     const res = await app.request(
       `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
     );
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('No pages found');
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain(`/b/${business.id}/channels/connect-facebook?error=no-pages-selected`);
   });
 
   it('returns 500 when token exchange fails', async () => {

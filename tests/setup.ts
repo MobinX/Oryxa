@@ -12,3 +12,6 @@ process.env.AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost
 if (!process.env.NEON_DATABASE_URL && process.env.DATABASE_URL?.includes('neon.tech')) {
   process.env.NEON_DATABASE_URL = process.env.DATABASE_URL;
 }
+
+process.env.GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'mock-google-api-key';
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'mock-gemini-api-key';
