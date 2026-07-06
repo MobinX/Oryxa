@@ -82,7 +82,7 @@ export async function updateConversationState(
 ) {
   await db
     .update(conversations)
-    .set({ lastMessageState: state })
+    .set({ lastMessageState: state, lastStateAt: new Date() })
     .where(eq(conversations.id, conversationId));
 }
 
@@ -157,7 +157,7 @@ export async function markMessagesDoneByIds(conversationId: string, ids: string[
 export async function claimConversationForAgentRun(conversationId: string): Promise<boolean> {
   const claimed = await db
     .update(conversations)
-    .set({ lastMessageState: 'working' })
+    .set({ lastMessageState: 'working', lastStateAt: new Date() })
     .where(
       and(
         eq(conversations.id, conversationId),
@@ -166,6 +166,29 @@ export async function claimConversationForAgentRun(conversationId: string): Prom
     )
     .returning({ id: conversations.id });
   return claimed.length > 0;
+}
+
+/**
+ * Atomically resets a conversation that has been stuck in `working` or
+ * `pending` for longer than the stale threshold back to `pending`, so that
+ * the webhook can kick off a fresh agent run. Returns the conversation id when
+ * the reset happened (i.e. this caller owns the recovery), or null when the
+ * conversation is already `done` or was reset by a concurrent caller.
+ */
+export async function resetStaleConversation(
+  conversationId: string,
+): Promise<string | null> {
+  const reset = await db
+    .update(conversations)
+    .set({ lastMessageState: 'pending', lastStateAt: new Date() })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        inArray(conversations.lastMessageState, ['working', 'pending']),
+      ),
+    )
+    .returning({ id: conversations.id });
+  return reset.length > 0 ? reset[0].id : null;
 }
 
 export async function listConversations(
@@ -290,7 +313,7 @@ export async function processInboundMessage(
   // state machine and the UI.
   await db
     .update(conversations)
-    .set({ lastMessageState: 'pending' })
+    .set({ lastMessageState: 'pending', lastStateAt: new Date() })
     .where(and(eq(conversations.id, conv.id), eq(conversations.lastMessageState, 'done')));
 
   // Name/avatar aren't in the Messenger webhook payload — they must be looked up

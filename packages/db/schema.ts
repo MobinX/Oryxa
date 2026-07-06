@@ -124,6 +124,8 @@ export const conversations = pgTable('conversations', {
   customerName: varchar('customer_name', { length: 255 }),
   customerAvatar: varchar('customer_avatar', { length: 500 }),
   lastMessageState: messageStateEnum('last_message_state').default('done').notNull(),
+  /** Tracks when lastMessageState last changed — used by the stale-runner watchdog. */
+  lastStateAt: timestamp('last_state_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -219,6 +221,8 @@ export const commentThreads = pgTable('comment_threads', {
   /** Cached post caption/attachment/permalink so the agent has post context. */
   postContext: text('post_context'),
   lastCommentState: messageStateEnum('last_comment_state').default('done').notNull(),
+  /** Tracks when lastCommentState last changed — used by the stale-runner watchdog. */
+  lastStateAt: timestamp('last_state_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({

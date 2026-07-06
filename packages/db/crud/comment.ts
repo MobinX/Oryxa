@@ -72,7 +72,7 @@ export async function updateCommentThreadState(
 ) {
   await db
     .update(commentThreads)
-    .set({ lastCommentState: state })
+    .set({ lastCommentState: state, lastStateAt: new Date() })
     .where(eq(commentThreads.id, threadId));
 }
 
@@ -149,7 +149,7 @@ export async function processInboundComment(
   // an in-progress ('working') run.
   await db
     .update(commentThreads)
-    .set({ lastCommentState: 'pending' })
+    .set({ lastCommentState: 'pending', lastStateAt: new Date() })
     .where(and(eq(commentThreads.id, thread.id), eq(commentThreads.lastCommentState, 'done')));
 
   // Enrich name/avatar from the platform if either is still missing (best-effort,
@@ -202,7 +202,7 @@ export async function setCommentThreadPostContext(
 export async function claimCommentThreadForRun(threadId: string): Promise<boolean> {
   const claimed = await db
     .update(commentThreads)
-    .set({ lastCommentState: 'working' })
+    .set({ lastCommentState: 'working', lastStateAt: new Date() })
     .where(
       and(
         eq(commentThreads.id, threadId),
@@ -211,6 +211,28 @@ export async function claimCommentThreadForRun(threadId: string): Promise<boolea
     )
     .returning({ id: commentThreads.id });
   return claimed.length > 0;
+}
+
+/**
+ * Atomically resets a comment thread that has been stuck in `working` or
+ * `pending` for longer than the stale threshold back to `pending`, so that
+ * the webhook can kick off a fresh comment agent run. Returns the thread id
+ * when the reset happened (this caller owns recovery), or null otherwise.
+ */
+export async function resetStaleCommentThread(
+  threadId: string,
+): Promise<string | null> {
+  const reset = await db
+    .update(commentThreads)
+    .set({ lastCommentState: 'pending', lastStateAt: new Date() })
+    .where(
+      and(
+        eq(commentThreads.id, threadId),
+        inArray(commentThreads.lastCommentState, ['working', 'pending']),
+      ),
+    )
+    .returning({ id: commentThreads.id });
+  return reset.length > 0 ? reset[0].id : null;
 }
 
 /** The single oldest pending customer comment in a thread (the head of that user's queue). */

@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
-import { processInboundMessage, setConversationProfileIfMissing } from '@repo/db/crud/conversation';
-import { processInboundComment, setCommentThreadProfileIfMissing } from '@repo/db/crud/comment';
+import { processInboundMessage, setConversationProfileIfMissing, resetStaleConversation } from '@repo/db/crud/conversation';
+import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { runInBackground } from '@api/lib/background';
 import { verifyWebhookSignature, getFacebookUserProfile } from '@repo/integrations/facebook';
+import { STALE_RUNNER_MS } from '@api/lib/config';
 
 type MessagingEvent = {
   sender?: { id?: string };
@@ -310,6 +311,40 @@ async function processMessagingEvents(
     if (inserted && priorStatus === 'done' && channel.agentId) {
       fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
       await triggerAgentRun(conversationId);
+    } else if (inserted && (priorStatus === 'working' || priorStatus === 'pending') && channel.agentId) {
+      // The conversation was already in-flight. Check whether the prior runner
+      // is still alive or has gone stale (crashed / cold-start / Vercel timeout).
+      // We detect staleness by comparing now against the lastStateAt timestamp
+      // that is stamped on every state transition.
+      const { getConversationWithHistory } = await import('@repo/db/crud/conversation');
+      const conv = await getConversationWithHistory(conversationId);
+      const ageMs = conv?.lastStateAt
+        ? Date.now() - new Date(conv.lastStateAt).getTime()
+        : Infinity;
+
+      fbLog('processMessagingEvents stale check', {
+        index,
+        conversationId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: ageMs > STALE_RUNNER_MS,
+      });
+
+      if (ageMs > STALE_RUNNER_MS) {
+        // Prior execution is presumed dead. Reset the lock and fire a fresh run
+        // so the new message (and any others that piled up) get processed.
+        fbLog('processMessagingEvents recovering stale runner', { index, conversationId, ageMs });
+        const recovered = await resetStaleConversation(conversationId);
+        if (recovered) {
+          fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
+          await triggerAgentRun(conversationId);
+        } else {
+          fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });
+        }
+      } else {
+        fbLog('processMessagingEvents runner still fresh — no extra trigger needed', { index, conversationId, ageMs });
+      }
     } else {
       fbLog('processMessagingEvents no agent trigger', {
         index,
@@ -409,6 +444,37 @@ async function processCommentChanges(
     if (inserted && priorStatus === 'done' && channel.agentId) {
       fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
       await triggerCommentRun(threadId);
+    } else if (inserted && (priorStatus === 'working' || priorStatus === 'pending') && channel.agentId) {
+      // The thread was already in-flight. Check whether the prior comment runner
+      // is stale (crashed / cold-start / Vercel timeout).
+      const { getCommentThreadWithChannel } = await import('@repo/db/crud/comment');
+      const thread = await getCommentThreadWithChannel(threadId);
+      const ageMs = thread?.lastStateAt
+        ? Date.now() - new Date(thread.lastStateAt).getTime()
+        : Infinity;
+
+      fbLog('processCommentChanges stale check', {
+        index,
+        threadId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: ageMs > STALE_RUNNER_MS,
+      });
+
+      if (ageMs > STALE_RUNNER_MS) {
+        // Prior execution is presumed dead. Reset the lock and fire a fresh run.
+        fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
+        const recovered = await resetStaleCommentThread(threadId);
+        if (recovered) {
+          fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
+          await triggerCommentRun(threadId);
+        } else {
+          fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
+        }
+      } else {
+        fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
+      }
     } else {
       fbLog('processCommentChanges no agent trigger', {
         index,

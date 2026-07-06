@@ -1,38 +1,61 @@
 import type { Context } from 'hono';
 
-// Promises tracked for non-edge runtimes so tests can flush them deterministically.
+// Promises tracked for Bun/Node runtimes so tests can flush them deterministically.
 const pending = new Set<Promise<unknown>>();
 
-type ExecutionContextLike = { waitUntil?: (p: Promise<unknown>) => void };
+type ExecutionCtxLike = { waitUntil: (p: Promise<unknown>) => void };
 
 /**
- * Runs `promise` after the response is sent.
+ * Runs `promise` in the background without blocking the HTTP response.
  *
- * On edge/serverless runtimes (Vercel, Workers) uses `c.executionCtx.waitUntil`
- * so the platform keeps the work alive past the request. On a long-lived Node/
- * Bun server it's fire-and-forget (the process stays up). In tests (no
- * executionCtx) the promise is tracked in `pending` so `flushBackground` can
- * await it — keeping webhook tests deterministic.
+ * Platform support — checked in priority order:
+ *
+ * 1. **Vercel** (`process.env.VERCEL`) — uses `waitUntil` from
+ *    `@vercel/functions`. Registers the promise with Vercel's lifecycle so it
+ *    survives past the response AND logs appear in the **same invocation**.
+ *
+ * 2. **Cloudflare Workers / Netlify Edge** — both implement the Web Workers
+ *    `ExecutionContext` API. Hono exposes it as `c.executionCtx.waitUntil()`,
+ *    which tells the runtime to keep the isolate alive until the promise settles.
+ *    Cloudflare: 30 s limit after response. Netlify: subject to CPU time limits.
+ *
+ * 3. **Bun / Node (local dev, self-hosted)** — process never shuts down between
+ *    requests, so the promise runs freely on the event loop. Tracked in `pending`
+ *    for deterministic test flushing via `flushBackground()`.
  */
 export function runInBackground<T>(c: Context, promise: Promise<T>): void {
-  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
-  try {
-    const ctx = (c as unknown as { executionCtx?: ExecutionContextLike }).executionCtx;
-    waitUntil = ctx?.waitUntil?.bind(ctx);
-  } catch {
-    // No ExecutionContext available (Node/Bun/tests).
-  }
+  const safe = promise.catch((err) => console.error('[background] task error:', err));
 
-  if (waitUntil) {
-    waitUntil(promise.catch((err) => console.error('Background task error:', err)));
+  // ── 1. Vercel ──────────────────────────────────────────────────────────────
+  if (process.env.VERCEL) {
+    import('@vercel/functions')
+      .then(({ waitUntil }) => waitUntil(safe))
+      .catch(() => {
+        // @vercel/functions unavailable — fall through to event-loop path so
+        // work is never silently dropped.
+        const tracked = safe.finally(() => pending.delete(tracked));
+        pending.add(tracked);
+      });
     return;
   }
 
-  const tracked = promise.finally(() => pending.delete(tracked));
+  // ── 2. Cloudflare Workers & Netlify Edge (ExecutionContext API) ────────────
+  try {
+    const ctx = (c as unknown as { executionCtx?: ExecutionCtxLike }).executionCtx;
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(safe);
+      return;
+    }
+  } catch {
+    // executionCtx not available on this runtime — fall through.
+  }
+
+  // ── 3. Bun / Node / tests ─────────────────────────────────────────────────
+  const tracked = safe.finally(() => pending.delete(tracked));
   pending.add(tracked);
 }
 
-/** Await all in-flight background tasks (test helper; no-op on edge). */
+/** Await all in-flight background tasks (test helper; no-op on edge runtimes). */
 export async function flushBackground(): Promise<void> {
   while (pending.size > 0) {
     await Promise.allSettled([...pending]);
