@@ -96,7 +96,7 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
   // POST request: read text, copy all non-host headers, and execute async fetch
   const rawBody = await c.req.text();
   const headers: Record<string, string> = {};
-  c.req.header().forEach((value, key) => {
+  Object.entries(c.req.header()).forEach(([key, value]) => {
     if (key.toLowerCase() !== 'host') {
       headers[key] = value;
     }
