@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import {
   getPostCommentsAction,
   replyToCommentAction,
-  toggleAutoReplyAction
+  type LiveCommentThread,
 } from '@/app/actions/comments';
 
 type PostsClientProps = {
@@ -89,11 +89,10 @@ export function PostsClient({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Facebook Comments Section states
-  const [threads, setThreads] = useState<any[]>([]);
+  const [threads, setThreads] = useState<LiveCommentThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState(false);
-  const [replyText, setReplyText] = useState<Record<string, string>>({}); // threadId -> text
+  const [replyText, setReplyText] = useState<Record<string, string>>({}); // fbCommentId -> text
   const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({});
-  const [togglingAutoReply, setTogglingAutoReply] = useState<Record<string, boolean>>({});
 
   // Fetch comments when selected post detail changes
   useEffect(() => {
@@ -122,49 +121,50 @@ export function PostsClient({
     void fetchThreads();
   }, [selectedPostDetail?.platformPostId, selectedPostDetail?.postState, businessId]);
 
-  async function handleSendReply(threadId: string, parentExternalId: string) {
-    const text = replyText[threadId]?.trim();
+  /**
+   * Posts a manual reply to a Facebook comment from the UI.
+   * @param fbCommentId  The Facebook comment id of the top-level comment being replied to.
+   */
+  async function handleSendReply(fbCommentId: string) {
+    if (!selectedPostDetail) return;
+    const text = replyText[fbCommentId]?.trim();
     if (!text) return;
 
-    setSubmittingReply(prev => ({ ...prev, [threadId]: true }));
+    setSubmittingReply(prev => ({ ...prev, [fbCommentId]: true }));
     try {
-      const newComment = await replyToCommentAction(businessId, threadId, parentExternalId, text);
-      
-      // Update local state to show the reply immediately
-      setThreads(prevThreads => 
-        prevThreads.map(t => 
-          t.id === threadId 
-            ? { ...t, comments: [...t.comments, newComment] } 
-            : t
-        )
+      await replyToCommentAction(
+        businessId,
+        selectedPostDetail.channelId,
+        fbCommentId,
+        text,
       );
-      setReplyText(prev => ({ ...prev, [threadId]: '' }));
-      setSuccessMsg('Reply posted successfully.');
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to post reply');
-    } finally {
-      setSubmittingReply(prev => ({ ...prev, [threadId]: false }));
-    }
-  }
 
-  async function handleToggleAutoReply(threadId: string, currentEnabled: boolean) {
-    setTogglingAutoReply(prev => ({ ...prev, [threadId]: true }));
-    try {
-      const updated = await toggleAutoReplyAction(businessId, threadId, !currentEnabled);
-      
-      // Update local state to reflect the state change
-      setThreads(prevThreads => 
-        prevThreads.map(t => 
-          t.id === threadId 
-            ? { ...t, lastCommentState: updated.lastCommentState } 
-            : t
-        )
+      // Optimistically append the reply into local state so the user sees it immediately
+      setThreads(prevThreads =>
+        prevThreads.map(t =>
+          t.id === fbCommentId
+            ? {
+                ...t,
+                replies: [
+                  ...t.replies,
+                  {
+                    id: `ui_reply_${Date.now()}`,
+                    externalId: `ui_reply_${Date.now()}`,
+                    content: text,
+                    time: new Date().toISOString(),
+                    from: 'self' as const,
+                  },
+                ],
+              }
+            : t,
+        ),
       );
-      setSuccessMsg(updated.lastCommentState === 'working' ? 'Auto-reply turned off for this thread.' : 'Auto-reply turned on.');
+      setReplyText(prev => ({ ...prev, [fbCommentId]: '' }));
+      setSuccessMsg('Reply posted to Facebook successfully.');
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to toggle auto-reply');
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to post reply to Facebook.');
     } finally {
-      setTogglingAutoReply(prev => ({ ...prev, [threadId]: false }));
+      setSubmittingReply(prev => ({ ...prev, [fbCommentId]: false }));
     }
   }
 
@@ -990,127 +990,112 @@ export function PostsClient({
                         </p>
                       ) : (
                         <div className="space-y-6">
-                          {threads.map((thread) => {
-                            const isAutoReplyOn = thread.lastCommentState !== 'working';
-                            const topComment = thread.comments.find((c: any) => c.parentExternalId === null || !c.parentExternalId);
-                            const replies = thread.comments.filter((c: any) => c.parentExternalId !== null && c.parentExternalId);
-
-                            return (
-                              <div key={thread.id} className="space-y-3.5 border-b border-border/20 pb-4 last:border-0 last:pb-0">
-                                {/* Comment Header / Customer Comment */}
-                                <div className="flex gap-2.5 items-start">
-                                  {/* Commenter avatar */}
-                                  <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center text-xs font-semibold text-muted-foreground uppercase border border-border">
-                                    {thread.commenterAvatar ? (
-                                      <img src={thread.commenterAvatar} alt={thread.commenterName || 'User'} className="h-full w-full object-cover" />
-                                    ) : (
-                                      (thread.commenterName || 'U').charAt(0)
-                                    )}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    {/* Bubble content */}
-                                    <div className="bg-muted/30 dark:bg-muted/10 rounded-2xl p-3 inline-block max-w-full">
-                                      <span className="block text-xs font-bold text-foreground">
-                                        {thread.commenterName || 'Facebook User'}
-                                      </span>
-                                      <p className="text-xs text-foreground/90 mt-1 leading-relaxed whitespace-pre-wrap break-words">
-                                        {topComment?.content || 'No comment content.'}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-3.5 mt-1.5 pl-2 text-[10px] text-muted-foreground font-semibold">
-                                      <span>
-                                        {topComment?.time
-                                          ? new Date(topComment.time).toLocaleDateString(undefined, {
-                                              month: 'short',
-                                              day: 'numeric',
-                                              hour: '2-digit',
-                                              minute: '2-digit',
-                                            })
-                                          : 'Just now'}
-                                      </span>
-                                      
-                                      {/* Mute/Off Auto-Reply Toggle Button */}
-                                      <button
-                                        onClick={() => handleToggleAutoReply(thread.id, isAutoReplyOn)}
-                                        disabled={togglingAutoReply[thread.id]}
-                                        className={cn(
-                                          "hover:underline cursor-pointer flex items-center gap-1",
-                                          isAutoReplyOn ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                                        )}
-                                      >
-                                        {togglingAutoReply[thread.id] ? (
-                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                        ) : isAutoReplyOn ? (
-                                          'Auto-Reply: On'
-                                        ) : (
-                                          'Auto-Reply: Off'
-                                        )}
-                                      </button>
-                                    </div>
-                                  </div>
+                          {threads.map((thread) => (
+                            <div key={thread.id} className="space-y-3.5 border-b border-border/20 pb-4 last:border-0 last:pb-0">
+                              {/* Top-level customer comment */}
+                              <div className="flex gap-2.5 items-start">
+                                {/* Commenter avatar */}
+                                <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center text-xs font-semibold text-muted-foreground uppercase border border-border">
+                                  {thread.commenterAvatar ? (
+                                    <img src={thread.commenterAvatar} alt={thread.commenterName || 'User'} className="h-full w-full object-cover" />
+                                  ) : (
+                                    (thread.commenterName || 'U').charAt(0)
+                                  )}
                                 </div>
-
-                                {/* Nested Replies List */}
-                                {replies.length > 0 && (
-                                  <div className="space-y-3 pl-10 border-l border-border/30 ml-4 mt-2">
-                                    {replies.map((reply: any) => (
-                                      <div key={reply.id} className="flex gap-2 items-start">
-                                        <div className="h-6 w-6 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0 flex items-center justify-center text-[10px] font-bold">
-                                          AI
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="bg-primary/5 dark:bg-primary/10 rounded-2xl p-2.5 inline-block max-w-full">
-                                            <span className="block text-[11px] font-bold text-foreground">
-                                              {reply.from === 'agent' ? 'Store Reply' : 'Page Response'}
-                                            </span>
-                                            <p className="text-xs text-foreground/90 mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
-                                              {reply.content}
-                                            </p>
-                                          </div>
-                                          <div className="text-[10px] text-muted-foreground mt-1 pl-1">
-                                            {new Date(reply.time).toLocaleDateString(undefined, {
-                                              month: 'short',
-                                              day: 'numeric',
-                                              hour: '2-digit',
-                                              minute: '2-digit',
-                                            })}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
+                                <div className="flex-1 min-w-0">
+                                  <div className="bg-muted/30 dark:bg-muted/10 rounded-2xl p-3 inline-block max-w-full">
+                                    <span className="block text-xs font-bold text-foreground">
+                                      {thread.commenterName || 'Facebook User'}
+                                    </span>
+                                    <p className="text-xs text-foreground/90 mt-1 leading-relaxed whitespace-pre-wrap break-words">
+                                      {thread.comment.content || 'No comment content.'}
+                                    </p>
                                   </div>
-                                )}
-
-                                {/* Reply Input Box */}
-                                <div className="pl-10 mt-2 flex gap-2">
-                                  <Input
-                                    value={replyText[thread.id] || ''}
-                                    onChange={(e) => setReplyText(prev => ({ ...prev, [thread.id]: e.target.value }))}
-                                    placeholder="Write a reply..."
-                                    disabled={submittingReply[thread.id]}
-                                    className="h-8.5 text-xs bg-muted/10 border-border/80"
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        handleSendReply(thread.id, topComment?.externalId || '');
-                                      }
-                                    }}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    disabled={submittingReply[thread.id] || !replyText[thread.id]?.trim()}
-                                    onClick={() => handleSendReply(thread.id, topComment?.externalId || '')}
-                                    className="h-8.5 font-bold rounded-lg shrink-0 px-3.5"
-                                  >
-                                    {submittingReply[thread.id] ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      'Reply'
-                                    )}
-                                  </Button>
+                                  <div className="mt-1.5 pl-2 text-[10px] text-muted-foreground font-semibold">
+                                    {new Date(thread.comment.time).toLocaleDateString(undefined, {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </div>
                                 </div>
                               </div>
-                            );
-                          })}
+
+                              {/* Nested Replies */}
+                              {thread.replies.length > 0 && (
+                                <div className="space-y-3 pl-10 border-l border-border/30 ml-4 mt-2">
+                                  {thread.replies.map((reply) => (
+                                    <div key={reply.id} className="flex gap-2 items-start">
+                                      <div
+                                        className={cn(
+                                          'h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold border',
+                                          reply.from === 'self'
+                                            ? 'bg-primary/10 text-primary border-primary/20'
+                                            : 'bg-muted text-muted-foreground border-border',
+                                        )}
+                                      >
+                                        {reply.from === 'self' ? '✦' : (thread.commenterName || 'U').charAt(0)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div
+                                          className={cn(
+                                            'rounded-2xl p-2.5 inline-block max-w-full',
+                                            reply.from === 'self'
+                                              ? 'bg-primary/5 dark:bg-primary/10'
+                                              : 'bg-muted/20 dark:bg-muted/10',
+                                          )}
+                                        >
+                                          <span className="block text-[11px] font-bold text-foreground">
+                                            {reply.from === 'self' ? 'Page Response' : (thread.commenterName || 'Facebook User')}
+                                          </span>
+                                          <p className="text-xs text-foreground/90 mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
+                                            {reply.content}
+                                          </p>
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground mt-1 pl-1">
+                                          {new Date(reply.time).toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Reply Input */}
+                              <div className="pl-10 mt-2 flex gap-2">
+                                <Input
+                                  value={replyText[thread.id] || ''}
+                                  onChange={(e) =>
+                                    setReplyText((prev) => ({ ...prev, [thread.id]: e.target.value }))
+                                  }
+                                  placeholder="Write a reply as page..."
+                                  disabled={submittingReply[thread.id]}
+                                  className="h-8.5 text-xs bg-muted/10 border-border/80"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSendReply(thread.id);
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  disabled={submittingReply[thread.id] || !replyText[thread.id]?.trim()}
+                                  onClick={() => handleSendReply(thread.id)}
+                                  className="h-8.5 font-bold rounded-lg shrink-0 px-3.5"
+                                >
+                                  {submittingReply[thread.id] ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    'Reply'
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
