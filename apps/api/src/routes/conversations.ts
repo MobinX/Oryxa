@@ -48,14 +48,26 @@ conversationsRouter.openapi(listConversationsRoute, async (c) => {
   const query = c.req.valid('query');
   const convs = await listConversations(businessId, query);
   return c.json(
-    convs.map((conv) => ({
-      id: conv.id,
-      customerName: conv.customerName,
-      lastMessageState: conv.lastMessageState,
-      channelId: conv.channelId,
-      customerPlatformId: conv.customerPlatformId,
-      createdAt: conv.createdAt.toISOString(),
-    })),
+    convs.map((conv) => {
+      let pageName: string | null = null;
+      if (conv.channel?.extraInfo) {
+        try {
+          const info = JSON.parse(conv.channel.extraInfo) as { pageName?: string };
+          pageName = info.pageName ?? null;
+        } catch {
+          // ignore malformed JSON
+        }
+      }
+      return {
+        id: conv.id,
+        customerName: conv.customerName,
+        lastMessageState: conv.lastMessageState,
+        channelId: conv.channelId,
+        customerPlatformId: conv.customerPlatformId,
+        createdAt: conv.createdAt.toISOString(),
+        pageName,
+      };
+    }),
   );
 });
 

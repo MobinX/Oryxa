@@ -13,6 +13,7 @@ export const conversationListItemSchema = z.object({
   channelId: uuidSchema,
   customerPlatformId: z.string(),
   createdAt: timestampSchema,
+  pageName: z.string().nullable().optional(),
 });
 
 export const messageSchema = z.object({

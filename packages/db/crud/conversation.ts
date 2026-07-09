@@ -203,6 +203,7 @@ export async function listConversations(
     where: and(...conditions),
     limit,
     orderBy: [desc(conversations.createdAt)],
+    with: { channel: { columns: { extraInfo: true } } },
   });
 }
 

@@ -70,12 +70,9 @@ export default async function InboxPage({
                       'max-w-[85%] rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
                       m.from === 'customer'
                         ? 'bg-muted'
-                        : 'ml-auto bg-primary text-white',
+                        : 'ml-auto bg-primary text-primary-foreground dark:bg-indigo-600 dark:text-white',
                     )}
                   >
-                    {m.from === 'self' && (
-                      <span className="mb-1 block text-xs opacity-70">AI / You</span>
-                    )}
                     {m.content}
                   </div>
                 ))}

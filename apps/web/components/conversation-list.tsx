@@ -2,13 +2,13 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Badge } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 type Conversation = {
   id: string;
   customerName: string | null;
   lastMessageState: string;
+  pageName?: string | null;
 };
 
 /**
@@ -98,12 +98,12 @@ export function ConversationList({
             />
             <Link
               href={`/b/${businessId}/inbox?c=${conv.id}`}
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+              className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
             >
               <span className={cn('truncate font-medium text-sm', selectedId === conv.id ? 'text-primary font-semibold' : 'text-foreground/90')}>{conv.customerName ?? 'Customer'}</span>
-              <Badge variant={conv.lastMessageState === 'pending' ? 'warning' : 'default'}>
-                {conv.lastMessageState}
-              </Badge>
+              {conv.pageName && (
+                <span className="truncate text-xs text-muted-foreground">{conv.pageName}</span>
+              )}
             </Link>
           </div>
         ))}

@@ -420,6 +420,7 @@ export type Conversation = {
   channelId: string;
   customerPlatformId: string;
   createdAt: string;
+  pageName?: string | null;
 };
 
 export const listConversations = (token: string, businessId: string) =>
