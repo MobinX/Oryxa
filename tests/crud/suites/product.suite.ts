@@ -205,4 +205,41 @@ export function registerProductCrudTests() {
     const results = await searchProducts(businessId, 'Gadget');
     expect(results.length).toBeGreaterThan(0);
   });
+
+  it('searchProducts excludes soft-deleted products', async () => {
+    const businessId = await setup();
+    const name = `Gone Widget ${Date.now()}`;
+    const created = await createProduct({
+      businessId,
+      name,
+      price: 12,
+      sku: `GONE-${Date.now()}`,
+      variants: [{ name: 'Default', stock: 3, isAvailable: true }],
+    });
+    expect((await searchProducts(businessId, 'Gone Widget')).some((p) => p.id === created.id)).toBe(true);
+
+    await deleteProduct(businessId, created.id);
+
+    const results = await searchProducts(businessId, 'Gone Widget');
+    expect(results.some((p) => p.id === created.id)).toBe(false);
+  });
+
+  it('searchProducts excludes products in soft-deleted categories', async () => {
+    const businessId = await setup();
+    const catName = `HiddenCat-${Date.now()}`;
+    const created = await createProduct({
+      businessId,
+      name: `Item In ${catName}`,
+      price: 8,
+      sku: `HID-${Date.now()}`,
+      categoryName: catName,
+      variants: [],
+    });
+    const cats = await listCategories(businessId);
+    const cat = cats.find((c) => c.name === catName)!;
+    await deleteCategory(businessId, cat.id);
+
+    const results = await searchProducts(businessId, catName);
+    expect(results.some((p) => p.id === created.id)).toBe(false);
+  });
 }
