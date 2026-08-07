@@ -469,6 +469,9 @@ export type OrderDetail = {
   businessId: string;
   productId: string | null;
   variantId: string | null;
+  productName?: string | null;
+  variantName?: string | null;
+  variantImageUrl?: string | null;
   count: number;
   variantPrice: number;
   customerName: string;

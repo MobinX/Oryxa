@@ -271,9 +271,14 @@ export async function deleteProduct(businessId: string, productId: string) {
   });
   if (!product) return null;
 
+  const now = new Date();
+  await db
+    .update(variants)
+    .set({ deletedAt: now })
+    .where(and(eq(variants.productId, productId), isNull(variants.deletedAt)));
   await db
     .update(products)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: now })
     .where(eq(products.id, productId));
   return { deleted: true };
 }
@@ -374,16 +379,38 @@ export async function listCategories(businessId: string) {
 }
 
 export async function searchProducts(businessId: string, query: string, limit = 5) {
-  return db.query.products.findMany({
-    where: and(
-      eq(products.businessId, businessId),
-      isNull(products.deletedAt),
-      or(
-        ilike(products.name, `%${query}%`),
-        ilike(products.sku, `%${query}%`),
+  const rows = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      price: products.price,
+      sku: products.sku,
+      description: products.description,
+      categoryId: products.categoryId,
+    })
+    .from(products)
+    .leftJoin(categories, eq(products.categoryId, categories.id))
+    .where(
+      and(
+        eq(products.businessId, businessId),
+        isNull(products.deletedAt),
+        or(isNull(products.categoryId), isNull(categories.deletedAt)),
+        or(
+          ilike(products.name, `%${query}%`),
+          ilike(products.sku, `%${query}%`),
+        ),
       ),
-    ),
-    limit,
-    with: { variants: { where: isNull(variants.deletedAt) } },
-  });
+    )
+    .limit(limit);
+
+  const results = await Promise.all(
+    rows.map(async (p) => {
+      const productVariants = await db.query.variants.findMany({
+        where: and(eq(variants.productId, p.id), isNull(variants.deletedAt)),
+      });
+      return { ...p, variants: productVariants };
+    }),
+  );
+
+  return results;
 }

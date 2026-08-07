@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { seedTestWorld } from '../../helpers/seed';
-import { createOrder, listOrders, updateOrderState } from '@repo/db/crud/order';
+import { createOrder, getOrderById, listOrders, updateOrderState } from '@repo/db/crud/order';
+import { getProductById } from '@repo/db/crud/product';
 
 export function registerOrderCrudTests() {
   it('createOrder computes total price', async () => {
@@ -16,6 +17,50 @@ export function registerOrderCrudTests() {
     });
     expect(order.totalPrice).toBe(59.98);
     expect(order.state).toBe('pending');
+  });
+
+  it('createOrder decrements variant stock', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    expect(productDetail.variants[0]!.stock).toBe(10);
+
+    await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 3,
+      customerName: 'Buyer',
+    });
+
+    const after = await getProductById(business.id, productDetail.id);
+    expect(after?.variants.find((v) => v.id === variantId)?.stock).toBe(7);
+  });
+
+  it('createOrder rejects when stock is insufficient', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    await expect(
+      createOrder({
+        businessId: business.id,
+        productId: productDetail.id,
+        variantId: productDetail.variants[0]!.id,
+        count: 99,
+        customerName: 'Buyer',
+      }),
+    ).rejects.toThrow(/Insufficient stock/);
+  });
+
+  it('getOrderById includes product and variant names', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const created = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId: productDetail.variants[0]!.id,
+      count: 1,
+      customerName: 'Buyer',
+    });
+    const order = await getOrderById(business.id, created.id);
+    expect(order?.productName).toBe('Test T-Shirt');
+    expect(order?.variantName).toBe('Red M');
   });
 
   it('createOrder throws for missing product', async () => {

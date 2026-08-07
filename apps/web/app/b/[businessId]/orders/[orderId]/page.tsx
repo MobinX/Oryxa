@@ -64,13 +64,37 @@ export default async function OrderDetailPage({
             <span className="text-[var(--muted-foreground)]">Unit price: </span>
             ${order.variantPrice.toFixed(2)} × {order.count}
           </div>
-          <div>
-            <span className="text-[var(--muted-foreground)]">Product: </span>
-            {order.productId ?? '—'}
-          </div>
-          <div>
-            <span className="text-[var(--muted-foreground)]">Variant: </span>
-            {order.variantId ?? '—'}
+          <div className="sm:col-span-2 flex items-start gap-3">
+            {order.variantImageUrl ? (
+              <img
+                src={order.variantImageUrl}
+                alt={order.variantName ?? order.productName ?? 'Product'}
+                className="h-16 w-16 shrink-0 rounded-lg object-cover border border-[var(--border)]"
+              />
+            ) : (
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[var(--background)] text-xs text-[var(--muted-foreground)] border border-[var(--border)]">
+                No img
+              </div>
+            )}
+            <div className="min-w-0 space-y-1">
+              <div>
+                <span className="text-[var(--muted-foreground)]">Product: </span>
+                {order.productId ? (
+                  <Link
+                    href={`/b/${businessId}/products/${order.productId}/edit`}
+                    className="font-medium text-[var(--primary)] hover:underline"
+                  >
+                    {order.productName ?? 'View product'}
+                  </Link>
+                ) : (
+                  <span>{order.productName ?? '—'}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-[var(--muted-foreground)]">Variant: </span>
+                <span className="font-medium">{order.variantName ?? '—'}</span>
+              </div>
+            </div>
           </div>
           <div className="sm:col-span-2">
             <span className="text-[var(--muted-foreground)]">Created: </span>

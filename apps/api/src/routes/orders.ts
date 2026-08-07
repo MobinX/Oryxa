@@ -37,14 +37,28 @@ const createOrderRoute = createRoute({
   },
   responses: {
     201: { content: { 'application/json': { schema: createOrderOutputSchema } }, description: 'Order created' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Bad request' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
   },
 });
 
 ordersRouter.openapi(createOrderRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const data = c.req.valid('json');
-  const order = await createOrder({ ...data, businessId });
-  return c.json(order, 201);
+  try {
+    const order = await createOrder({ ...data, businessId });
+    return c.json(order, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to create order';
+    if (
+      message.includes('not found') ||
+      message.includes('Insufficient stock')
+    ) {
+      const status = message.includes('not found') ? 404 : 400;
+      return c.json({ error: message }, status);
+    }
+    throw err;
+  }
 });
 
 const listOrdersRoute = createRoute({
@@ -131,6 +145,7 @@ const updateOrderRoute = createRoute({
   },
   responses: {
     200: { content: { 'application/json': { schema: updateOrderOutputSchema } }, description: 'Updated' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Bad request' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
   },
 });
@@ -139,9 +154,17 @@ ordersRouter.openapi(updateOrderRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const orderId = c.req.param('orderId');
   const data = c.req.valid('json');
-  const result = await updateOrder(businessId, orderId, data);
-  if (!result) return c.json({ error: 'Order not found' }, 404);
-  return c.json(result);
+  try {
+    const result = await updateOrder(businessId, orderId, data);
+    if (!result) return c.json({ error: 'Order not found' }, 404);
+    return c.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update order';
+    if (message.includes('Insufficient stock')) {
+      return c.json({ error: message }, 400);
+    }
+    throw err;
+  }
 });
 
 const deleteOrderRoute = createRoute({

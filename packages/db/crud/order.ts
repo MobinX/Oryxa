@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, gte } from 'drizzle-orm';
 import { db } from '@db/client';
 import { orders, products, variants } from '@db/schema';
 import {
@@ -6,6 +6,7 @@ import {
   updateOrderInputSchema,
   updateOrderStateInputSchema,
 } from '@repo/shared';
+import { resolveStoredImageUrl } from '@repo/integrations/b2';
 
 export async function createOrder(input: unknown) {
   const parsed = createOrderInputSchema.parse(input);
@@ -16,11 +17,24 @@ export async function createOrder(input: unknown) {
   });
   if (!product) throw new Error('Product not found');
 
+  let variant =
+    parsed.variantId
+      ? product.variants.find((v) => v.id === parsed.variantId)
+      : product.variants.length === 1
+        ? product.variants[0]
+        : undefined;
+
+  if (parsed.variantId && !variant) throw new Error('Variant not found');
+
   let variantPrice = parseFloat(product.price);
-  if (parsed.variantId) {
-    const variant = product.variants.find((v) => v.id === parsed.variantId);
-    if (!variant) throw new Error('Variant not found');
+  if (variant) {
     variantPrice = variant.price ? parseFloat(variant.price) : variantPrice;
+  }
+
+  if (variant) {
+    if (variant.stock < parsed.count) {
+      throw new Error(`Insufficient stock: only ${variant.stock} available`);
+    }
   }
 
   const totalPrice = variantPrice * parsed.count;
@@ -30,7 +44,7 @@ export async function createOrder(input: unknown) {
     .values({
       businessId: parsed.businessId,
       productId: parsed.productId,
-      variantId: parsed.variantId,
+      variantId: variant?.id ?? parsed.variantId,
       count: parsed.count,
       variantPrice: variantPrice.toFixed(2),
       customerName: parsed.customerName,
@@ -42,6 +56,20 @@ export async function createOrder(input: unknown) {
     })
     .returning();
 
+  if (variant) {
+    const decremented = await db
+      .update(variants)
+      .set({ stock: sql`${variants.stock} - ${parsed.count}` })
+      .where(and(eq(variants.id, variant.id), gte(variants.stock, parsed.count)))
+      .returning({ id: variants.id, stock: variants.stock });
+
+    if (decremented.length === 0) {
+      // Race: stock changed after check — soft-delete the just-created order and fail
+      await db.update(orders).set({ deletedAt: new Date() }).where(eq(orders.id, order.id));
+      throw new Error('Insufficient stock');
+    }
+  }
+
   return {
     id: order.id,
     totalPrice,
@@ -52,12 +80,36 @@ export async function createOrder(input: unknown) {
 export async function getOrderById(businessId: string, orderId: string) {
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
+    with: {
+      product: true,
+      variant: true,
+    },
   });
   if (!order) return null;
+
+  const productActive = order.product && !order.product.deletedAt ? order.product : null;
+  const variantActive = order.variant && !order.variant.deletedAt ? order.variant : null;
+  const variantImageUrl = variantActive?.imageUrl
+    ? await resolveStoredImageUrl(variantActive.imageUrl)
+    : null;
+
   return {
-    ...order,
-    totalPrice: parseFloat(order.totalPrice),
+    id: order.id,
+    businessId: order.businessId,
+    productId: order.productId,
+    variantId: order.variantId,
+    productName: productActive?.name ?? null,
+    variantName: variantActive?.name ?? null,
+    variantImageUrl,
+    count: order.count,
     variantPrice: parseFloat(order.variantPrice),
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    customerAddress: order.customerAddress,
+    state: order.state,
+    totalPrice: parseFloat(order.totalPrice),
+    conversationId: order.conversationId,
+    createdAt: order.createdAt,
   };
 }
 
@@ -111,6 +163,26 @@ export async function updateOrder(businessId: string, orderId: string, input: un
   if (parsed.count !== undefined) {
     const variantPrice = parseFloat(order.variantPrice);
     fields.totalPrice = (variantPrice * parsed.count).toFixed(2);
+
+    // Adjust stock when quantity changes on a pending order with a variant
+    if (order.variantId && parsed.count !== order.count) {
+      const delta = parsed.count - order.count;
+      if (delta > 0) {
+        const decremented = await db
+          .update(variants)
+          .set({ stock: sql`${variants.stock} - ${delta}` })
+          .where(and(eq(variants.id, order.variantId), gte(variants.stock, delta)))
+          .returning({ id: variants.id });
+        if (decremented.length === 0) {
+          throw new Error('Insufficient stock for quantity increase');
+        }
+      } else if (delta < 0) {
+        await db
+          .update(variants)
+          .set({ stock: sql`${variants.stock} + ${-delta}` })
+          .where(eq(variants.id, order.variantId));
+      }
+    }
   }
 
   const [updated] = await db
@@ -127,6 +199,14 @@ export async function deleteOrder(businessId: string, orderId: string) {
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
+
+  if (order.variantId) {
+    await db
+      .update(variants)
+      .set({ stock: sql`${variants.stock} + ${order.count}` })
+      .where(eq(variants.id, order.variantId));
+  }
+
   await db
     .update(orders)
     .set({ deletedAt: new Date() })
