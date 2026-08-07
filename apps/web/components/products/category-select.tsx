@@ -33,7 +33,7 @@ export function CategorySelect({
         </label>
         <Input name="categoryName" placeholder="e.g. Clothing, Electronics" />
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          Used only when no existing category is selected above.
+          If filled, this name is used instead of the selection above (creates the category if needed).
         </p>
       </div>
     </div>

@@ -16,16 +16,22 @@ export async function createProduct(input: unknown) {
   const parsed = createProductInputSchema.parse(input);
 
   let categoryId = parsed.categoryId ?? null;
-  if (!categoryId && parsed.categoryName) {
-    const [cat] = await db
-      .insert(categories)
-      .values({
-        businessId: parsed.businessId,
-        name: parsed.categoryName,
-        slug: slugify(parsed.categoryName),
-      })
-      .returning();
-    categoryId = cat.id;
+  // Typed categoryName takes priority over categoryId.
+  if (parsed.categoryName) {
+    const categorySlug = slugify(parsed.categoryName);
+    const existingCategory = await db.query.categories.findFirst({
+      where: and(
+        eq(categories.businessId, parsed.businessId),
+        eq(categories.slug, categorySlug),
+        isNull(categories.deletedAt),
+      ),
+    });
+    if (existingCategory) {
+      categoryId = existingCategory.id;
+    } else {
+      const cat = await createCategory(parsed.businessId, parsed.categoryName);
+      categoryId = cat.id;
+    }
   }
 
   const slug = slugify(parsed.name);
@@ -90,9 +96,10 @@ export async function getProductById(businessId: string, productId: string) {
   return {
     ...product,
     price: parseFloat(product.price),
-    category: product.category
-      ? { id: product.category.id, name: product.category.name }
-      : null,
+    category:
+      product.category && !product.category.deletedAt
+        ? { id: product.category.id, name: product.category.name }
+        : null,
     variants: mappedVariants,
   };
 }
@@ -138,7 +145,7 @@ export async function listProducts(
         sku: p.sku,
         description: p.description,
         createdAt: p.createdAt,
-        categoryName: p.category?.name ?? null,
+        categoryName: p.category && !p.category.deletedAt ? p.category.name : null,
         variantCount: p.variants.length,
         thumbnailUrl,
       };
@@ -158,19 +165,44 @@ export async function updateProduct(businessId: string, productId: string, input
   });
   if (!product) return null;
 
-  const { variants: variantUpdates, ...productFields } = parsed;
+  const { variants: variantUpdates, categoryId: inputCategoryId, categoryName, ...productFields } = parsed;
+
+  let categoryId: string | undefined;
+  // Typed categoryName takes priority over categoryId.
+  if (categoryName) {
+    const categorySlug = slugify(categoryName);
+    const existingCategory = await db.query.categories.findFirst({
+      where: and(
+        eq(categories.businessId, businessId),
+        eq(categories.slug, categorySlug),
+        isNull(categories.deletedAt),
+      ),
+    });
+    if (existingCategory) {
+      categoryId = existingCategory.id;
+    } else {
+      const cat = await createCategory(businessId, categoryName);
+      categoryId = cat.id;
+    }
+  } else if (inputCategoryId) {
+    const cat = await getCategoryById(businessId, inputCategoryId);
+    if (!cat) return null;
+    categoryId = cat.id;
+  }
 
   const hasProductUpdate =
     productFields.name !== undefined ||
     productFields.price !== undefined ||
     productFields.sku !== undefined ||
-    productFields.description !== undefined;
+    productFields.description !== undefined ||
+    categoryId !== undefined;
 
   if (hasProductUpdate) {
     await db
       .update(products)
       .set({
         ...productFields,
+        ...(categoryId !== undefined && { categoryId }),
         price: productFields.price?.toFixed(2),
         slug: productFields.name ? slugify(productFields.name) : undefined,
       })
@@ -247,9 +279,28 @@ export async function deleteProduct(businessId: string, productId: string) {
 }
 
 export async function createCategory(businessId: string, name: string) {
+  const slug = slugify(name);
+
+  const existing = await db.query.categories.findFirst({
+    where: and(eq(categories.businessId, businessId), eq(categories.slug, slug)),
+  });
+
+  if (existing && !existing.deletedAt) {
+    throw new Error('A category with this name already exists');
+  }
+
+  if (existing?.deletedAt) {
+    const [restored] = await db
+      .update(categories)
+      .set({ name, deletedAt: null })
+      .where(eq(categories.id, existing.id))
+      .returning();
+    return restored;
+  }
+
   const [cat] = await db
     .insert(categories)
-    .values({ businessId, name, slug: slugify(name) })
+    .values({ businessId, name, slug })
     .returning();
   return cat;
 }
@@ -274,17 +325,52 @@ export async function updateCategory(businessId: string, categoryId: string, inp
 export async function deleteCategory(businessId: string, categoryId: string) {
   const cat = await getCategoryById(businessId, categoryId);
   if (!cat) return null;
+
+  const now = new Date();
+
+  await db
+    .update(products)
+    .set({ deletedAt: now })
+    .where(
+      and(
+        eq(products.businessId, businessId),
+        eq(products.categoryId, categoryId),
+        isNull(products.deletedAt),
+      ),
+    );
+
   await db
     .update(categories)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: now })
     .where(eq(categories.id, categoryId));
+
   return { deleted: true };
 }
 
 export async function listCategories(businessId: string) {
-  return db.query.categories.findMany({
+  const cats = await db.query.categories.findMany({
     where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt)),
   });
+
+  const countRows = await db
+    .select({
+      categoryId: products.categoryId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(products)
+    .where(and(eq(products.businessId, businessId), isNull(products.deletedAt)))
+    .groupBy(products.categoryId);
+
+  const countById = new Map(
+    countRows.filter((r) => r.categoryId).map((r) => [r.categoryId as string, r.count]),
+  );
+
+  return cats.map((c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    productCount: countById.get(c.id) ?? 0,
+  }));
 }
 
 export async function searchProducts(businessId: string, query: string, limit = 5) {

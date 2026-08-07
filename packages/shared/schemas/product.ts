@@ -84,6 +84,8 @@ export const updateProductInputSchema = z.object({
   price: z.coerce.number().positive().optional(),
   sku: z.string().max(100).optional(),
   description: z.string().optional(),
+  categoryId: uuidSchema.optional(),
+  categoryName: z.string().min(1).max(255).optional(),
   variants: z.array(updateVariantInputSchema).optional(),
 });
 
@@ -102,6 +104,7 @@ export const selectCategorySchema = z.object({
   id: uuidSchema,
   name: z.string(),
   slug: z.string(),
+  productCount: z.number().int().optional(),
 });
 
 export const deleteCategoryOutputSchema = z.object({ deleted: z.boolean() });

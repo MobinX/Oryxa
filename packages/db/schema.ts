@@ -1,5 +1,5 @@
 import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 export const orderStateEnum = pgEnum('order_state', ['pending', 'acknowledged', 'onDelivery', 'done']);
 export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter']);
@@ -43,7 +43,9 @@ export const categories = pgTable('categories', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
-  uniq: uniqueIndex('categories_business_slug_idx').on(t.businessId, t.slug),
+  uniq: uniqueIndex('categories_business_slug_idx')
+    .on(t.businessId, t.slug)
+    .where(sql`${t.deletedAt} is null`),
 }));
 
 export const products = pgTable('products', {
@@ -58,7 +60,9 @@ export const products = pgTable('products', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
-  uniq: uniqueIndex('products_business_slug_idx').on(t.businessId, t.slug),
+  uniq: uniqueIndex('products_business_slug_idx')
+    .on(t.businessId, t.slug)
+    .where(sql`${t.deletedAt} is null`),
 }));
 
 export const variants = pgTable('variants', {

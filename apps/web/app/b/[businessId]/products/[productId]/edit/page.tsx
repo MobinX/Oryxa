@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
-import { getProduct } from '@/lib/api';
+import { getProduct, listCategories } from '@/lib/api';
 import { updateProductAction } from '@/app/actions/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantEditor } from '@/components/products/variant-editor';
+import { CategorySelect } from '@/components/products/category-select';
 
 export default async function EditProductPage({
   params,
@@ -23,6 +24,8 @@ export default async function EditProductPage({
   } catch {
     notFound();
   }
+
+  const categories = await listCategories(token, businessId);
 
   const variantInitial = product.variants.map((v) => ({
     id: v.id,
@@ -43,11 +46,6 @@ export default async function EditProductPage({
       </Link>
       <Card className="mt-4 sm:mt-6">
         <h1 className="text-xl font-bold">Edit product</h1>
-        {product.category && (
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Category: {product.category.name}
-          </p>
-        )}
         <form
           action={updateProductAction.bind(null, businessId, productId)}
           encType="multipart/form-data"
@@ -76,6 +74,12 @@ export default async function EditProductPage({
             <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium">Description</label>
               <Textarea name="description" rows={3} defaultValue={product.description ?? ''} />
+            </div>
+            <div className="sm:col-span-2">
+              <CategorySelect
+                categories={categories}
+                defaultCategoryId={product.category?.id}
+              />
             </div>
           </div>
 

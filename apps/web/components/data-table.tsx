@@ -20,6 +20,11 @@ type DataTableProps = {
   /** Server action invoked with FormData containing `idField` repeated for each selected id. */
   bulkDeleteAction?: (formData: FormData) => Promise<void>;
   bulkDeleteIdField?: string;
+  /**
+   * Optional per-row metadata used to build a confirm dialog before bulk delete.
+   * Must be serializable (passed from Server → Client).
+   */
+  bulkDeleteMeta?: Record<string, { name: string; productCount: number }>;
   emptyMessage?: string;
   /** When true, the last column header gets "Actions" label automatically. */
   hasRowActions?: boolean;
@@ -34,6 +39,7 @@ export function DataTable({
   rows,
   bulkDeleteAction,
   bulkDeleteIdField = 'ids',
+  bulkDeleteMeta,
   emptyMessage = 'No records found.',
   hasRowActions,
 }: DataTableProps) {
@@ -57,6 +63,21 @@ export function DataTable({
 
   const submitBulk = () => {
     if (!bulkDeleteAction) return;
+    if (bulkDeleteMeta) {
+      const selectedMeta = [...selected]
+        .map((id) => bulkDeleteMeta[id])
+        .filter(Boolean) as Array<{ name: string; productCount: number }>;
+      if (selectedMeta.length > 0) {
+        const productCount = selectedMeta.reduce((sum, c) => sum + c.productCount, 0);
+        const names = selectedMeta.map((c) => `"${c.name}"`).join(', ');
+        const itemLabel = selectedMeta.length === 1 ? 'item' : 'items';
+        const message =
+          productCount > 0
+            ? `Delete ${selectedMeta.length} ${itemLabel} (${names})?\n\nThis will also soft-delete ${productCount} related product${productCount === 1 ? '' : 's'}. Those products will disappear from your catalog, filters, and agent search.\n\nContinue?`
+            : `Delete ${selectedMeta.length} ${itemLabel} (${names})?\n\nContinue?`;
+        if (!confirm(message)) return;
+      }
+    }
     const form = new FormData();
     for (const id of selected) form.append(bulkDeleteIdField, id);
     startTransition(async () => {

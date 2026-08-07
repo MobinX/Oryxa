@@ -102,8 +102,9 @@ export async function createProductAction(businessId: string, formData: FormData
     sku,
     price,
     description: description || undefined,
-    categoryId: categoryId || undefined,
-    categoryName: !categoryId && categoryName ? categoryName : undefined,
+    // Typed name wins over dropdown selection.
+    categoryName: categoryName || undefined,
+    categoryId: categoryName ? undefined : categoryId || undefined,
     variants,
   });
 
@@ -121,6 +122,8 @@ export async function updateProductAction(
   const sku = String(formData.get('sku') ?? '').trim();
   const price = parseFloat(String(formData.get('price') ?? ''));
   const description = String(formData.get('description') ?? '').trim();
+  const categoryId = String(formData.get('categoryId') ?? '').trim();
+  const categoryName = String(formData.get('categoryName') ?? '').trim();
 
   const variants = await parseVariants(token, businessId, formData);
 
@@ -129,6 +132,9 @@ export async function updateProductAction(
     sku: sku || undefined,
     price: price || undefined,
     description,
+    // Typed name wins over dropdown selection.
+    categoryName: categoryName || undefined,
+    categoryId: categoryName ? undefined : categoryId || undefined,
     variants,
   });
 
