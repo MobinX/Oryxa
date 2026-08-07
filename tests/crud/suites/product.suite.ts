@@ -8,6 +8,7 @@ import {
   updateProduct,
   deleteProduct,
   createCategory,
+  deleteCategory,
   listCategories,
   searchProducts,
 } from '@repo/db/crud/product';
@@ -87,6 +88,22 @@ export function registerProductCrudTests() {
     expect(result?.updated).toBe(true);
   });
 
+  it('updateProduct changes category', async () => {
+    const businessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Categorized',
+      price: 5,
+      sku: `CAT-${Date.now()}`,
+      categoryName: 'Original',
+      variants: [],
+    });
+    const next = await createCategory(businessId, `Next-${Date.now()}`);
+    await updateProduct(businessId, created.id, { categoryId: next.id });
+    const after = await getProductById(businessId, created.id);
+    expect(after?.category?.id).toBe(next.id);
+  });
+
   it('updateProduct syncs variants (update, add, remove)', async () => {
     const businessId = await setup();
     const created = await createProduct({
@@ -137,6 +154,48 @@ export function registerProductCrudTests() {
     expect(cat.slug).toMatch(/^electronics/);
     const cats = await listCategories(businessId);
     expect(cats.some((c) => c.id === cat.id)).toBe(true);
+  });
+
+  it('createCategory restores soft-deleted slug', async () => {
+    const businessId = await setup();
+    const name = `Restored-${Date.now()}`;
+    const cat = await createCategory(businessId, name);
+    await deleteCategory(businessId, cat.id);
+    expect(await listCategories(businessId)).not.toContainEqual(expect.objectContaining({ id: cat.id }));
+
+    const restored = await createCategory(businessId, name);
+    expect(restored.id).toBe(cat.id);
+    expect(restored.deletedAt).toBeNull();
+    expect((await listCategories(businessId)).some((c) => c.id === cat.id)).toBe(true);
+  });
+
+  it('deleteCategory soft-deletes related products and hides category', async () => {
+    const businessId = await setup();
+    const catName = `Cascade-${Date.now()}`;
+    const created = await createProduct({
+      businessId,
+      name: 'In Category',
+      price: 9,
+      sku: `INCAT-${Date.now()}`,
+      categoryName: catName,
+      variants: [],
+    });
+    const cats = await listCategories(businessId);
+    const cat = cats.find((c) => c.name === catName);
+    expect(cat).toBeTruthy();
+    expect(cat?.productCount).toBe(1);
+
+    await deleteCategory(businessId, cat!.id);
+
+    expect(await listCategories(businessId)).not.toContainEqual(expect.objectContaining({ id: cat!.id }));
+    expect(await getProductById(businessId, created.id)).toBeNull();
+  });
+
+  it('createCategory rejects active duplicate slug', async () => {
+    const businessId = await setup();
+    const name = `Dup-${Date.now()}`;
+    await createCategory(businessId, name);
+    await expect(createCategory(businessId, name)).rejects.toThrow(/already exists/);
   });
 
   it('searchProducts finds by name', async () => {

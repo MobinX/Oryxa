@@ -42,14 +42,23 @@ const createCategoryRoute = createRoute({
   },
   responses: {
     201: { content: { 'application/json': { schema: selectCategorySchema } }, description: 'Category created' },
+    409: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Category slug already exists' },
   },
 });
 
 productsRouter.openapi(createCategoryRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const { name } = c.req.valid('json');
-  const cat = await createCategory(businessId, name);
-  return c.json(cat, 201);
+  try {
+    const cat = await createCategory(businessId, name);
+    return c.json(cat, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to create category';
+    if (message.includes('already exists')) {
+      return c.json({ error: message }, 409);
+    }
+    throw err;
+  }
 });
 
 const listCategoriesRoute = createRoute({

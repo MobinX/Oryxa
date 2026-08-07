@@ -111,7 +111,7 @@ export const hardDeleteBusiness = (token: string, id: string) =>
 
 
 // Categories
-export type Category = { id: string; name: string; slug: string };
+export type Category = { id: string; name: string; slug: string; productCount?: number };
 
 export const createCategory = (token: string, businessId: string, name: string) =>
   apiFetch<Category>(`/api/v1/${businessId}/categories`, {
@@ -204,6 +204,8 @@ export type UpdateProductInput = {
   price?: number;
   sku?: string;
   description?: string;
+  categoryId?: string;
+  categoryName?: string;
   variants?: Array<{
     id?: string;
     name: string;

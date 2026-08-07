@@ -1,10 +1,11 @@
-import { Check, Trash2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { listCategories, type Category } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
+import { DeleteCategoryButton } from '@/components/products/delete-category-button';
 import {
   createCategoryAction,
   updateCategoryAction,
@@ -15,6 +16,7 @@ import {
 const headers: DataTableHeader[] = [
   { key: 'name', header: 'Name', className: 'w-full min-w-[150px]' },
   { key: 'slug', header: 'Slug' },
+  { key: 'products', header: 'Products' },
 ];
 
 export default async function CategoriesPage({
@@ -26,6 +28,10 @@ export default async function CategoriesPage({
   const token = await requireAuth();
   const categories = await listCategories(token, businessId);
 
+  const bulkDeleteMeta = Object.fromEntries(
+    categories.map((c) => [c.id, { name: c.name, productCount: c.productCount ?? 0 }]),
+  );
+
   const tableRows = categories.map((category: Category) => ({
     id: category.id,
     cells: [
@@ -35,6 +41,7 @@ export default async function CategoriesPage({
       <span key="slug" className="text-[var(--muted-foreground)]">
         {category.slug}
       </span>,
+      <span key="products">{category.productCount ?? 0}</span>,
     ],
     actions: (
       <>
@@ -49,16 +56,11 @@ export default async function CategoriesPage({
             <span className="hidden sm:inline">Save</span>
           </button>
         </form>
-        <form action={deleteCategoryAction.bind(null, businessId, category.id)}>
-          <button
-            type="submit"
-            className="inline-flex items-center justify-center text-sm text-red-600 hover:underline font-semibold"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4 sm:hidden" />
-            <span className="hidden sm:inline">Delete</span>
-          </button>
-        </form>
+        <DeleteCategoryButton
+          categoryName={category.name}
+          productCount={category.productCount ?? 0}
+          onDelete={deleteCategoryAction.bind(null, businessId, category.id)}
+        />
       </>
     ),
   }));
@@ -90,6 +92,7 @@ export default async function CategoriesPage({
         rows={tableRows}
         bulkDeleteAction={deleteCategoriesBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
         bulkDeleteIdField="categoryIds"
+        bulkDeleteMeta={bulkDeleteMeta}
         hasRowActions
       />
     </div>
