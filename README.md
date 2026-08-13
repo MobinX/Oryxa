@@ -1,5 +1,7 @@
 # Oryxa
 
+
+
 Multi-channel AI auto-reply SaaS for e-commerce. MVP: Facebook Messenger + Gemini agent + product catalog + orders.
 
 ## Stack
