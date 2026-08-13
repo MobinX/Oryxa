@@ -152,6 +152,7 @@ export async function updateProductAction(
   }
 
   revalidatePath(`/b/${businessId}/products`);
+  revalidatePath(`/b/${businessId}/products/${productId}/edit`);
   expireProducts(businessId, productId);
   expireCategories(businessId);
   redirect(`/b/${businessId}/products`);

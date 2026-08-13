@@ -119,7 +119,9 @@ export async function listProducts(
     orderBy: [desc(products.createdAt)],
     with: {
       category: true,
-      variants: true,
+      variants: {
+        where: isNull(variants.deletedAt),
+      },
     },
   });
 
@@ -211,7 +213,7 @@ export async function updateProduct(businessId: string, productId: string, input
 
   if (variantUpdates) {
     const existing = await db.query.variants.findMany({
-      where: eq(variants.productId, productId),
+      where: and(eq(variants.productId, productId), isNull(variants.deletedAt)),
     });
     const incomingIds = new Set(
       variantUpdates.filter((v) => v.id).map((v) => v.id as string),

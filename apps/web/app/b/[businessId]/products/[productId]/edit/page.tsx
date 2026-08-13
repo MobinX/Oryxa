@@ -21,16 +21,33 @@ export default function EditProductPage({
 }) {
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        href="../.."
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+      <Suspense
+        fallback={
+          <span className="text-sm text-[var(--muted-foreground)]">← Back to products</span>
+        }
       >
-        ← Back to products
-      </Link>
+        <ProductsBackLink params={params} />
+      </Suspense>
       <Suspense fallback={<EditProductSkeleton />}>
         <EditProductForm params={params} searchParams={searchParams} />
       </Suspense>
     </div>
+  );
+}
+
+async function ProductsBackLink({
+  params,
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  const { businessId } = await params;
+  return (
+    <Link
+      href={`/b/${businessId}/products`}
+      className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    >
+      ← Back to products
+    </Link>
   );
 }
 
@@ -63,6 +80,15 @@ async function EditProductForm({
     imagePreviewUrl: v.imageUrl,
   }));
 
+  const formKey = [
+    product.name,
+    product.sku,
+    String(product.price),
+    product.description ?? '',
+    product.category?.id ?? '',
+    ...variantInitial.map((v) => `${v.id}:${v.name}:${v.stock}:${v.price ?? ''}:${v.imageKey ?? ''}`),
+  ].join('|');
+
   return (
     <Card className="mt-4 sm:mt-6">
       <h1 className="text-xl font-bold">Edit product</h1>
@@ -72,6 +98,7 @@ async function EditProductForm({
         </p>
       )}
       <form
+        key={formKey}
         action={updateProductAction.bind(null, businessId, productId)}
         className="mt-6 space-y-4"
       >

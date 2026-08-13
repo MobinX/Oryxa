@@ -18,16 +18,33 @@ export default function NewProductPage({
 }) {
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        href=".."
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+      <Suspense
+        fallback={
+          <span className="text-sm text-[var(--muted-foreground)]">← Back to products</span>
+        }
       >
-        ← Back to products
-      </Link>
+        <ProductsBackLink params={params} />
+      </Suspense>
       <Suspense fallback={<NewProductSkeleton />}>
         <NewProductForm params={params} />
       </Suspense>
     </div>
+  );
+}
+
+async function ProductsBackLink({
+  params,
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  const { businessId } = await params;
+  return (
+    <Link
+      href={`/b/${businessId}/products`}
+      className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    >
+      ← Back to products
+    </Link>
   );
 }
 

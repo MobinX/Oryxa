@@ -64,6 +64,7 @@ export async function cachedProduct(token: string, businessId: string, productId
   'use cache';
   cacheLife('minutes');
   cacheTag(cacheTags.product(productId));
+  cacheTag(cacheTags.products(businessId));
   return getProduct(token, businessId, productId);
 }
 

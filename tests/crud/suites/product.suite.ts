@@ -156,6 +156,10 @@ export function registerProductCrudTests() {
     expect(after?.variants.find((v) => v.id === smallId)?.stock).toBe(10);
     expect(after?.variants.some((v) => v.name === 'XL')).toBe(true);
     expect(after?.variants.some((v) => v.id === largeId)).toBe(false);
+
+    const listed = await listProducts(businessId, { limit: 20 });
+    const row = listed.products.find((p) => p.id === created.id);
+    expect(row?.variantCount).toBe(2);
   });
 
   it('deleteProduct removes product', async () => {
