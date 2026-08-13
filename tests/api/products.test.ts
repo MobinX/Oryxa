@@ -52,6 +52,17 @@ describe('Products API', () => {
     expect(body.error).toBe('Product entity missing');
   });
 
+  it('PUT /:businessId/products/:productId returns 400 for unknown category', async () => {
+    const { business, product } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ categoryId: '00000000-0000-0000-0000-000000000000' }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Category not found');
+  });
+
   it('PUT /:businessId/products/:productId updates product', async () => {
     const { business, product } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {

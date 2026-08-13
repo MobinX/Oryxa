@@ -12,6 +12,7 @@ import {
   createComment,
   listComments,
   updateCommentThreadState,
+  persistPageReply,
 } from '@repo/db/crud/comment';
 
 describe('Comment CRUD', () => {
@@ -176,5 +177,105 @@ describe('Comment CRUD', () => {
     expect(await checkPendingComments(threadId)).toBe(false);
 
     await updateCommentThreadState(threadId, 'done');
+  });
+
+  it('persistPageReply attaches to the customer thread and marks the parent comment done', async () => {
+    const seed = await seedTestWorld();
+    const { threadId } = await processInboundComment(
+      { id: seed.channel.id, businessId: seed.business.id },
+      'USER_UI',
+      'Ui',
+      'POST_UI',
+      'need help',
+      'C_UI_PARENT',
+    );
+
+    const result = await persistPageReply({
+      parentCommentId: 'C_UI_PARENT',
+      content: 'human admin reply',
+      externalId: 'C_UI_SELF',
+    });
+    expect(result?.threadId).toBe(threadId);
+
+    const all = await listComments(threadId);
+    const parent = all.find((c) => c.externalId === 'C_UI_PARENT');
+    const self = all.find((c) => c.externalId === 'C_UI_SELF');
+    expect(parent?.state).toBe('done');
+    expect(self?.from).toBe('self');
+    expect(self?.parentExternalId).toBe('C_UI_PARENT');
+    expect(await checkPendingComments(threadId)).toBe(false);
+  });
+
+  it('persistPageReply seeds the customer thread when the parent was never ingested', async () => {
+    const seed = await seedTestWorld();
+    const result = await persistPageReply({
+      parentCommentId: 'C_MISSING',
+      content: 'admin reply to live graph comment',
+      externalId: 'C_MISSING_SELF',
+      businessId: seed.business.id,
+      channelId: seed.channel.id,
+      platformPostId: 'POST_LIVE',
+      commenterPlatformId: 'USER_LIVE',
+      commenterName: 'Live User',
+      parentContent: 'do you ship?',
+      parentFrom: 'customer',
+    });
+    expect(result).not.toBeNull();
+
+    const all = await listComments(result!.threadId);
+    const parent = all.find((c) => c.externalId === 'C_MISSING');
+    const self = all.find((c) => c.externalId === 'C_MISSING_SELF');
+    expect(parent?.from).toBe('customer');
+    expect(parent?.state).toBe('done');
+    expect(parent?.content).toBe('do you ship?');
+    expect(self?.from).toBe('self');
+    expect(self?.parentExternalId).toBe('C_MISSING');
+    expect(await checkPendingComments(result!.threadId)).toBe(false);
+
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_LIVE',
+      'USER_LIVE',
+    );
+    expect(thread.id).toBe(result!.threadId);
+
+    // Later webhook for the same comment must not reopen it as pending.
+    const inbound = await processInboundComment(
+      { id: seed.channel.id, businessId: seed.business.id },
+      'USER_LIVE',
+      'Live User',
+      'POST_LIVE',
+      'do you ship?',
+      'C_MISSING',
+    );
+    expect(inbound.inserted).toBe(false);
+    const parentAfter = (await listComments(result!.threadId)).find(
+      (c) => c.externalId === 'C_MISSING',
+    );
+    expect(parentAfter?.state).toBe('done');
+  });
+
+  it('persistPageReply does not seed a ghost thread without a real commenter id', async () => {
+    const seed = await seedTestWorld();
+
+    const missing = await persistPageReply({
+      parentCommentId: 'C_GHOST',
+      content: 'orphan reply',
+      externalId: 'C_GHOST_SELF',
+    });
+    expect(missing).toBeNull();
+
+    const keyedByCommentId = await persistPageReply({
+      parentCommentId: 'C_GHOST2',
+      content: 'orphan reply',
+      externalId: 'C_GHOST2_SELF',
+      businessId: seed.business.id,
+      channelId: seed.channel.id,
+      platformPostId: 'POST_GHOST',
+      commenterPlatformId: 'C_GHOST2',
+      parentContent: 'hello',
+    });
+    expect(keyedByCommentId).toBeNull();
   });
 });

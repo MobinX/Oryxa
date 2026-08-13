@@ -285,6 +285,99 @@ export async function markCommentDone(commentId: string): Promise<void> {
     .where(eq(comments.id, commentId));
 }
 
+export async function findCommentByExternalId(externalId: string) {
+  return db.query.comments.findFirst({
+    where: and(eq(comments.externalId, externalId), isNull(comments.deletedAt)),
+  });
+}
+
+/**
+ * Persist a page/admin reply onto the *customer* thread that owns `parentCommentId`.
+ * Never creates a ghost thread keyed by the Facebook comment id (that poisons
+ * agent history and leaves the real thread's customer comment pending forever).
+ *
+ * If the parent was never ingested (live Graph comment, no webhook yet), seeds
+ * the real (channel, post, commenter) thread with the parent already `done`
+ * and attaches this reply. Requires the commenter's Facebook user id — not the
+ * comment id, and not the page id.
+ *
+ * Marks the parent customer comment done so the agent will not also reply to it.
+ */
+export async function persistPageReply(opts: {
+  parentCommentId: string;
+  content: string;
+  externalId: string;
+  businessId?: string;
+  channelId?: string;
+  platformPostId?: string;
+  commenterPlatformId?: string;
+  commenterName?: string | null;
+  parentContent?: string;
+  parentFrom?: 'customer' | 'self';
+}): Promise<{ threadId: string } | null> {
+  let parent = await findCommentByExternalId(opts.parentCommentId);
+  let threadId = parent?.commentThreadId;
+
+  if (!threadId) {
+    const commenterId = opts.commenterPlatformId?.trim();
+    // Comment id as commenter id is the old ghost-thread bug. Skip seeding.
+    const canSeed =
+      !!commenterId &&
+      commenterId !== opts.parentCommentId &&
+      !!opts.businessId &&
+      !!opts.channelId &&
+      !!opts.platformPostId;
+
+    if (!canSeed) return null;
+
+    const thread = await getOrCreateCommentThread(
+      opts.businessId!,
+      opts.channelId!,
+      opts.platformPostId!,
+      commenterId,
+      opts.commenterName ?? undefined,
+    );
+    threadId = thread.id;
+
+    await db
+      .insert(comments)
+      .values({
+        commentThreadId: threadId,
+        from: opts.parentFrom ?? 'customer',
+        content: opts.parentContent ?? '',
+        state: 'done',
+        externalId: opts.parentCommentId,
+      })
+      .onConflictDoNothing({ target: comments.externalId });
+
+    parent = await findCommentByExternalId(opts.parentCommentId);
+    threadId = parent?.commentThreadId ?? threadId;
+  }
+
+  await db
+    .insert(comments)
+    .values({
+      commentThreadId: threadId,
+      from: 'self',
+      content: opts.content,
+      state: 'done',
+      externalId: opts.externalId,
+      parentExternalId: opts.parentCommentId,
+    })
+    .onConflictDoNothing({ target: comments.externalId });
+
+  if (parent?.from === 'customer' && parent.state !== 'done') {
+    await markCommentDone(parent.id);
+  }
+
+  const hasPending = await checkPendingComments(threadId);
+  if (!hasPending) {
+    await updateCommentThreadState(threadId, 'done');
+  }
+
+  return { threadId };
+}
+
 export async function listComments(threadId: string) {
   return db.query.comments.findMany({
     where: and(eq(comments.commentThreadId, threadId), isNull(comments.deletedAt)),

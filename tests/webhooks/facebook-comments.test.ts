@@ -158,4 +158,35 @@ describe('Facebook Webhook: comments', () => {
     expect(thread.commenterName).toBe('Avatar User');
     expect(thread.commenterAvatar).toBe('https://img/alice.png');
   });
+
+  it('stores parent_id when it is a string comment id (nested reply webhook)', async () => {
+    const seed = await seedTestWorld();
+    await postWebhook({
+      object: 'page',
+      entry: [commentEntry(seed.pageChannelId, commentValue({ comment_id: 'CMT_ROOT' }))],
+    });
+    triggerCommentRunMock.mockClear();
+
+    const res = await postWebhook({
+      object: 'page',
+      entry: [commentEntry(seed.pageChannelId, commentValue({
+        comment_id: 'CMT_NESTED',
+        message: 'following up on your reply',
+        parent_id: 'CMT_ROOT',
+        post_id: 'POST_1',
+      }))],
+    });
+    expect(res.status).toBe(200);
+
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_1',
+      'COMMENTER_1',
+      'Alice',
+    );
+    const all = await listComments(thread.id);
+    const nested = all.find((c) => c.externalId === 'CMT_NESTED');
+    expect(nested?.parentExternalId).toBe('CMT_ROOT');
+  });
 });

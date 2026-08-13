@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, or, ilike, isNull } from 'drizzle-orm';
+import { eq, and, desc, sql, or, ilike, isNull, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema } from '@repo/shared';
@@ -186,7 +186,7 @@ export async function updateProduct(businessId: string, productId: string, input
     }
   } else if (inputCategoryId) {
     const cat = await getCategoryById(businessId, inputCategoryId);
-    if (!cat) return null;
+    if (!cat) throw new Error('Category not found');
     categoryId = cat.id;
   }
 
@@ -333,16 +333,26 @@ export async function deleteCategory(businessId: string, categoryId: string) {
 
   const now = new Date();
 
-  await db
-    .update(products)
-    .set({ deletedAt: now })
-    .where(
-      and(
-        eq(products.businessId, businessId),
-        eq(products.categoryId, categoryId),
-        isNull(products.deletedAt),
-      ),
-    );
+  const related = await db.query.products.findMany({
+    where: and(
+      eq(products.businessId, businessId),
+      eq(products.categoryId, categoryId),
+      isNull(products.deletedAt),
+    ),
+    columns: { id: true },
+  });
+  const productIds = related.map((p) => p.id);
+
+  if (productIds.length > 0) {
+    await db
+      .update(variants)
+      .set({ deletedAt: now })
+      .where(and(inArray(variants.productId, productIds), isNull(variants.deletedAt)));
+    await db
+      .update(products)
+      .set({ deletedAt: now })
+      .where(inArray(products.id, productIds));
+  }
 
   await db
     .update(categories)

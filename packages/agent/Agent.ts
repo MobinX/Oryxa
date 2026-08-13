@@ -46,9 +46,10 @@ const DEFAULT_REPLY_GUIDANCE = [
   'CRITICAL: You are only allowed to call the send_message tool ONCE per turn. Do not send multiple messages. Once you call send_message, do not call it or any other tools again. Stop and finish the turn immediately.',
   'ORDER MANAGEMENT: If the customer asks to edit details (such as address, phone number, or product count) of an order, or asks about order status/details:',
   '  1. Search the conversation history for any previously mentioned order ID (UUID).',
-  '  2. Use the get_order tool to view the current details, or the update_order tool to change details (like address or phone).',
+  '  2. Use the get_order tool to view the current details, or the update_order tool to change details (like address, phone, or quantity).',
   '  3. Do NOT call create_order again. Creating a new order when one already exists in the history is a critical defect.',
-  '  4. If the customer asks to cancel their order, search history for the order ID and use the cancel_order tool to mark the order as cancelled in the database. Always cancel/delete the order in the database when requested.',
+  '  4. If update_order or cancel_order returns an error (not pending, already fulfilled, insufficient stock), tell the customer that outcome. Do not retry with create_order.',
+  '  5. If the customer asks to cancel their order, search history for the order ID and use the cancel_order tool. Fulfilled (done) orders cannot be cancelled.',
 ].join('\n');
 
 export class Agent {
