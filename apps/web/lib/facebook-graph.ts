@@ -1,13 +1,3 @@
-import dns from 'node:dns';
-
-// Prefer IPv4 — Node's default "verbatim" order often tries broken IPv6 first
-// and surfaces UND_ERR_CONNECT_TIMEOUT against graph.facebook.com.
-try {
-  dns.setDefaultResultOrder('ipv4first');
-} catch {
-  // ignore on older runtimes
-}
-
 export const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 function isRetryableNetworkError(err: unknown): boolean {
@@ -41,8 +31,8 @@ function toUserFacingGraphError(err: unknown, fallback: string): Error {
 }
 
 /**
- * Facebook Graph fetch with IPv4 preference, 30s abort timeout, and one retry
- * on transient network failures. Safe for Next.js / Vercel serverless.
+ * Facebook Graph fetch with a 30s abort timeout and one retry on transient
+ * network failures (timeouts, resets, DNS blips). Safe for Next.js / Vercel.
  */
 export async function graphFetch(
   pathOrUrl: string,
