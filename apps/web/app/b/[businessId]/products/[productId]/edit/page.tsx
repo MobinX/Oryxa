@@ -12,10 +12,13 @@ import { CategorySelect } from '@/components/products/category-select';
 
 export default async function EditProductPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string; productId: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { businessId, productId } = await params;
+  const { error } = await searchParams;
   const token = await requireAuth();
 
   let product;
@@ -46,6 +49,11 @@ export default async function EditProductPage({
       </Link>
       <Card className="mt-4 sm:mt-6">
         <h1 className="text-xl font-bold">Edit product</h1>
+        {error && (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+            {error}
+          </p>
+        )}
         <form
           action={updateProductAction.bind(null, businessId, productId)}
           encType="multipart/form-data"

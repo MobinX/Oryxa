@@ -165,6 +165,7 @@ const updateProductRoute = createRoute({
   },
   responses: {
     200: { content: { 'application/json': { schema: updateProductOutputSchema } }, description: 'Updated' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Bad request' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
   },
 });
@@ -173,9 +174,17 @@ productsRouter.openapi(updateProductRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const productId = c.req.param('productId');
   const data = c.req.valid('json');
-  const result = await updateProduct(businessId, productId, data);
-  if (!result) return c.json({ error: 'Product entity missing' }, 404);
-  return c.json(result);
+  try {
+    const result = await updateProduct(businessId, productId, data);
+    if (!result) return c.json({ error: 'Product entity missing' }, 404);
+    return c.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update product';
+    if (message.includes('Category not found')) {
+      return c.json({ error: message }, 400);
+    }
+    throw err;
+  }
 });
 
 const deleteProductRoute = createRoute({

@@ -49,11 +49,24 @@ type CommentChangeValue = {
   item?: string;
   verb?: string;
   comment_id?: string;
-  parent_id?: { id?: string };
+  /** Meta sends a string post/comment id, not `{ id }`. */
+  parent_id?: string | { id?: string };
   message?: string;
   from?: { id?: string; name?: string };
   post_id?: string;
 };
+
+function facebookParentCommentId(
+  parentId: CommentChangeValue['parent_id'],
+  postId: string | undefined,
+): string | undefined {
+  if (!parentId) return undefined;
+  const raw = typeof parentId === 'string' ? parentId : parentId.id;
+  if (!raw) return undefined;
+  // Top-level comments have parent_id === post_id; that is not a parent comment.
+  if (postId && raw === postId) return undefined;
+  return raw;
+}
 
 type WebhookChange = {
   field?: string;
@@ -423,7 +436,7 @@ async function processCommentChanges(
       value.post_id ?? '',
       text,
       commentId,
-      value.parent_id?.id,
+      facebookParentCommentId(value.parent_id, value.post_id),
     );
 
     fbLog('processCommentChanges persisted', {

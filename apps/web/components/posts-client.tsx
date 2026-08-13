@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ import {
   type Post,
   type PostDetail,
   type PostState,
+  type Channel,
 } from '@/lib/api';
 import {
   Facebook,
@@ -35,19 +37,19 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  getPostCommentsAction,
-  replyToCommentAction,
-  type LiveCommentThread,
-} from '@/app/actions/comments';
+import { CommentSection } from '@/components/comments/comment-section';
 
 type PostsClientProps = {
   token: string;
   businessId: string;
   initialPosts: Post[];
-  channels: any[];
+  channels: Channel[];
   products: any[];
 };
+
+function channelPageName(channel: Channel | null | undefined): string {
+  return channel?.pageName || 'Connected Page';
+}
 
 export function PostsClient({
   token,
@@ -56,11 +58,23 @@ export function PostsClient({
   channels,
   products,
 }: PostsClientProps) {
+  const router = useRouter();
+  const routeParams = useParams<{ businessId: string; postId?: string }>();
+  const selectedPostId = routeParams.postId ?? null;
+
+  function selectPost(postId: string | null) {
+    if (postId) {
+      router.push(`/b/${businessId}/posts/${postId}`);
+    } else {
+      router.push(`/b/${businessId}/posts`);
+    }
+  }
+
   const [posts, setPosts] = useState<Post[]>(initialPosts);
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPostDetail, setSelectedPostDetail] = useState<PostDetail | null>(null);
   const [filterPlatform, setFilterPlatform] = useState<'all' | 'facebook' | 'instagram'>('all');
   const [updatingChannel, setUpdatingChannel] = useState(false);
+  const [liveCommentCount, setLiveCommentCount] = useState<number | null>(null);
 
   // Loading states
   const [creating, setCreating] = useState(false);
@@ -88,86 +102,6 @@ export function PostsClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Facebook Comments Section states
-  const [threads, setThreads] = useState<LiveCommentThread[]>([]);
-  const [loadingThreads, setLoadingThreads] = useState(false);
-  const [replyText, setReplyText] = useState<Record<string, string>>({}); // fbCommentId -> text
-  const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({});
-
-  // Fetch comments when selected post detail changes
-  useEffect(() => {
-    const platformPostId = selectedPostDetail?.platformPostId;
-    const postState = selectedPostDetail?.postState;
-
-    if (!platformPostId || postState !== 'published') {
-      setThreads([]);
-      return;
-    }
-
-    const finalPlatformPostId: string = platformPostId;
-
-    async function fetchThreads() {
-      setLoadingThreads(true);
-      try {
-        const data = await getPostCommentsAction(businessId, finalPlatformPostId);
-        setThreads(data);
-      } catch (err) {
-        console.error('Failed to load comments:', err);
-      } finally {
-        setLoadingThreads(false);
-      }
-    }
-
-    void fetchThreads();
-  }, [selectedPostDetail?.platformPostId, selectedPostDetail?.postState, businessId]);
-
-  /**
-   * Posts a manual reply to a Facebook comment from the UI.
-   * @param fbCommentId  The Facebook comment id of the top-level comment being replied to.
-   */
-  async function handleSendReply(fbCommentId: string) {
-    if (!selectedPostDetail) return;
-    const text = replyText[fbCommentId]?.trim();
-    if (!text) return;
-
-    setSubmittingReply(prev => ({ ...prev, [fbCommentId]: true }));
-    try {
-      await replyToCommentAction(
-        businessId,
-        selectedPostDetail.channelId,
-        fbCommentId,
-        text,
-      );
-
-      // Optimistically append the reply into local state so the user sees it immediately
-      setThreads(prevThreads =>
-        prevThreads.map(t =>
-          t.id === fbCommentId
-            ? {
-                ...t,
-                replies: [
-                  ...t.replies,
-                  {
-                    id: `ui_reply_${Date.now()}`,
-                    externalId: `ui_reply_${Date.now()}`,
-                    content: text,
-                    time: new Date().toISOString(),
-                    from: 'self' as const,
-                  },
-                ],
-              }
-            : t,
-        ),
-      );
-      setReplyText(prev => ({ ...prev, [fbCommentId]: '' }));
-      setSuccessMsg('Reply posted to Facebook successfully.');
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to post reply to Facebook.');
-    } finally {
-      setSubmittingReply(prev => ({ ...prev, [fbCommentId]: false }));
-    }
-  }
-
   // Auto-clear message
   useEffect(() => {
     if (errorMsg || successMsg) {
@@ -186,12 +120,14 @@ export function PostsClient({
       setContent('');
       setMediaUrls([]);
       setScheduledAt('');
+      setLiveCommentCount(null);
       return;
     }
 
     async function loadDetail() {
       setLoadingDetail(true);
       setErrorMsg(null);
+      setLiveCommentCount(null);
       try {
         const detail = await getPost(token, businessId, selectedPostId!);
         setSelectedPostDetail(detail);
@@ -242,7 +178,7 @@ export function PostsClient({
         content: '',
       });
       setPosts([created, ...posts]);
-      setSelectedPostId(created.id);
+      selectPost(created.id);
       setSuccessMsg('Created a new draft post.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create post');
@@ -298,7 +234,7 @@ export function PostsClient({
       await deletePost(token, businessId, postId);
       setPosts(posts.filter((p) => p.id !== postId));
       if (selectedPostId === postId) {
-        setSelectedPostId(null);
+        selectPost(null);
       }
       setSuccessMsg('Post deleted successfully.');
     } catch (err) {
@@ -385,7 +321,7 @@ export function PostsClient({
       });
 
       setPosts([created, ...posts]);
-      setSelectedPostId(created.id);
+      selectPost(created.id);
       setSourceMode('write');
       setSuccessMsg('AI-generated draft ready!');
     } catch (err) {
@@ -520,7 +456,7 @@ export function PostsClient({
               return (
                 <div
                   key={post.id}
-                  onClick={() => setSelectedPostId(post.id)}
+                  onClick={() => selectPost(post.id)}
                   className={cn(
                     'group relative rounded-xl border p-3 cursor-pointer transition-all duration-200 hover:shadow-sm',
                     isSelected
@@ -536,7 +472,7 @@ export function PostsClient({
                         <Instagram className="h-3 w-3 text-pink-600" />
                       )}
                       <span className="truncate max-w-[120px] font-medium">
-                        {channel?.extraInfo ? JSON.parse(channel.extraInfo).name : 'Meta Page'}
+                        {channelPageName(channel)}
                       </span>
                     </div>
 
@@ -607,10 +543,7 @@ export function PostsClient({
                       
                       {selectedPostDetail.postState === 'published' ? (
                         <span className="text-sm font-bold text-foreground">
-                          {activeChannel?.extraInfo
-                            ? JSON.parse(activeChannel.extraInfo).name
-                            : 'Connected Page'}{' '}
-                          ({activeChannel?.platform})
+                          {channelPageName(activeChannel)}
                         </span>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -638,15 +571,11 @@ export function PostsClient({
                             }}
                             className="h-9 py-1 text-xs w-56 bg-card font-semibold"
                           >
-                            {channels.map((chan) => {
-                              const info = chan.extraInfo ? JSON.parse(chan.extraInfo) : null;
-                              const label = info?.name || `${chan.platform} (${chan.platformChannelId})`;
-                              return (
-                                <option key={chan.id} value={chan.id}>
-                                  {label} ({chan.platform})
-                                </option>
-                              );
-                            })}
+                            {channels.map((chan) => (
+                              <option key={chan.id} value={chan.id}>
+                                {channelPageName(chan)}
+                              </option>
+                            ))}
                           </Select>
                           {updatingChannel && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                         </div>
@@ -954,7 +883,7 @@ export function PostsClient({
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
                           <span className="text-[10px] font-bold text-muted-foreground block uppercase">Comments</span>
                           <span className="text-xl font-bold text-primary">
-                            {selectedPostDetail.latestSync?.commentCount.toLocaleString() ?? 0}
+                            {(liveCommentCount ?? selectedPostDetail.latestSync?.commentCount ?? 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
@@ -972,133 +901,14 @@ export function PostsClient({
                       </div>
                     </div>
 
-                    {/* Facebook comments section */}
-                    <div className="bg-card border border-border/80 rounded-2xl p-5 shrink-0 space-y-4">
-                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Facebook className="h-4 w-4 text-blue-600 animate-pulse" /> Facebook Comments & Replies
-                        </h4>
-                      </div>
-
-                      {loadingThreads ? (
-                        <div className="py-8 flex justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        </div>
-                      ) : threads.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic text-center py-4">
-                          No comments on this post yet.
-                        </p>
-                      ) : (
-                        <div className="space-y-6">
-                          {threads.map((thread) => (
-                            <div key={thread.id} className="space-y-3.5 border-b border-border/20 pb-4 last:border-0 last:pb-0">
-                              {/* Top-level customer comment */}
-                              <div className="flex gap-2.5 items-start">
-                                {/* Commenter avatar */}
-                                <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center text-xs font-semibold text-muted-foreground uppercase border border-border">
-                                  {thread.commenterAvatar ? (
-                                    <img src={thread.commenterAvatar} alt={thread.commenterName || 'User'} className="h-full w-full object-cover" />
-                                  ) : (
-                                    (thread.commenterName || 'U').charAt(0)
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="bg-muted/30 dark:bg-muted/10 rounded-2xl p-3 inline-block max-w-full">
-                                    <span className="block text-xs font-bold text-foreground">
-                                      {thread.commenterName || 'Facebook User'}
-                                    </span>
-                                    <p className="text-xs text-foreground/90 mt-1 leading-relaxed whitespace-pre-wrap break-words">
-                                      {thread.comment.content || 'No comment content.'}
-                                    </p>
-                                  </div>
-                                  <div className="mt-1.5 pl-2 text-[10px] text-muted-foreground font-semibold">
-                                    {new Date(thread.comment.time).toLocaleDateString(undefined, {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Nested Replies */}
-                              {thread.replies.length > 0 && (
-                                <div className="space-y-3 pl-10 border-l border-border/30 ml-4 mt-2">
-                                  {thread.replies.map((reply) => (
-                                    <div key={reply.id} className="flex gap-2 items-start">
-                                      <div
-                                        className={cn(
-                                          'h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold border',
-                                          reply.from === 'self'
-                                            ? 'bg-primary/10 text-primary border-primary/20'
-                                            : 'bg-muted text-muted-foreground border-border',
-                                        )}
-                                      >
-                                        {reply.from === 'self' ? '✦' : (thread.commenterName || 'U').charAt(0)}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div
-                                          className={cn(
-                                            'rounded-2xl p-2.5 inline-block max-w-full',
-                                            reply.from === 'self'
-                                              ? 'bg-primary/5 dark:bg-primary/10'
-                                              : 'bg-muted/20 dark:bg-muted/10',
-                                          )}
-                                        >
-                                          <span className="block text-[11px] font-bold text-foreground">
-                                            {reply.from === 'self' ? 'Page Response' : (thread.commenterName || 'Facebook User')}
-                                          </span>
-                                          <p className="text-xs text-foreground/90 mt-0.5 leading-relaxed whitespace-pre-wrap break-words">
-                                            {reply.content}
-                                          </p>
-                                        </div>
-                                        <div className="text-[10px] text-muted-foreground mt-1 pl-1">
-                                          {new Date(reply.time).toLocaleDateString(undefined, {
-                                            month: 'short',
-                                            day: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                          })}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Reply Input */}
-                              <div className="pl-10 mt-2 flex gap-2">
-                                <Input
-                                  value={replyText[thread.id] || ''}
-                                  onChange={(e) =>
-                                    setReplyText((prev) => ({ ...prev, [thread.id]: e.target.value }))
-                                  }
-                                  placeholder="Write a reply as page..."
-                                  disabled={submittingReply[thread.id]}
-                                  className="h-8.5 text-xs bg-muted/10 border-border/80"
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSendReply(thread.id);
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  disabled={submittingReply[thread.id] || !replyText[thread.id]?.trim()}
-                                  onClick={() => handleSendReply(thread.id)}
-                                  className="h-8.5 font-bold rounded-lg shrink-0 px-3.5"
-                                >
-                                  {submittingReply[thread.id] ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    'Reply'
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    {selectedPostDetail.platformPostId && (
+                      <CommentSection
+                        businessId={businessId}
+                        channelId={selectedPostDetail.channelId}
+                        platformPostId={selectedPostDetail.platformPostId}
+                        onCommentCountChange={setLiveCommentCount}
+                      />
+                    )}
                   </>
                 )}
 

@@ -28,10 +28,13 @@ const nextState: Record<string, string> = {
 
 export default async function OrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string; orderId: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { businessId, orderId } = await params;
+  const { error } = await searchParams;
   const token = await requireAuth();
 
   let order;
@@ -114,6 +117,11 @@ export default async function OrderDetailPage({
         )}
 
         <h2 className="mt-6 text-lg font-semibold">Edit order</h2>
+        {error && (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+            {error}
+          </p>
+        )}
         <form
           id="update-order-form"
           action={updateOrderAction.bind(null, businessId, order.id)}
@@ -122,7 +130,18 @@ export default async function OrderDetailPage({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">Quantity</label>
-              <Input name="count" type="number" min="1" defaultValue={String(order.count)} />
+              <Input
+                name="count"
+                type="number"
+                min="1"
+                defaultValue={String(order.count)}
+                disabled={order.state !== 'pending'}
+              />
+              {order.state !== 'pending' && (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Quantity can only be changed while the order is pending.
+                </p>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">State</label>

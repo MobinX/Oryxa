@@ -160,7 +160,7 @@ ordersRouter.openapi(updateOrderRoute, async (c) => {
     return c.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update order';
-    if (message.includes('Insufficient stock')) {
+    if (message.includes('Insufficient stock') || message.includes('pending orders')) {
       return c.json({ error: message }, 400);
     }
     throw err;

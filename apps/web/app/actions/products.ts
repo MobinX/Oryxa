@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
 import {
+  ApiError,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -127,16 +128,25 @@ export async function updateProductAction(
 
   const variants = await parseVariants(token, businessId, formData);
 
-  await updateProduct(token, businessId, productId, {
-    name: name || undefined,
-    sku: sku || undefined,
-    price: price || undefined,
-    description,
-    // Typed name wins over dropdown selection.
-    categoryName: categoryName || undefined,
-    categoryId: categoryName ? undefined : categoryId || undefined,
-    variants,
-  });
+  try {
+    await updateProduct(token, businessId, productId, {
+      name: name || undefined,
+      sku: sku || undefined,
+      price: price || undefined,
+      description,
+      // Typed name wins over dropdown selection.
+      categoryName: categoryName || undefined,
+      categoryId: categoryName ? undefined : categoryId || undefined,
+      variants,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      redirect(
+        `/b/${businessId}/products/${productId}/edit?error=${encodeURIComponent(err.message)}`,
+      );
+    }
+    throw err;
+  }
 
   revalidatePath(`/b/${businessId}/products`);
   redirect(`/b/${businessId}/products`);

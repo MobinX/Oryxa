@@ -1,157 +1,15 @@
 'use server';
 
 import { db } from '@repo/db/client';
-import { comments, commentThreads, channels } from '@repo/db/schema';
+import { channels } from '@repo/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
-import { replyToFacebookComment } from '@repo/integrations/facebook';
 import { requireAuth } from '@/lib/auth';
+import { GRAPH_API, graphFetch } from '@/lib/facebook-graph';
+import { persistPageReply } from '@repo/db/crud/comment';
+import type { CommentReaction, LiveCommentThread } from '@/lib/comment-types';
 
-const GRAPH_API = 'https://graph.facebook.com/v21.0';
-
-/**
- * Shape of a top-level Facebook comment (and its replies) returned to the UI.
- * Using the Facebook comment id as the "thread" identifier so no DB lookup is
- * needed just to browse comments.
- */
-export type LiveCommentThread = {
-  /** The Facebook top-level comment id — used as the thread key in the UI. */
-  id: string;
-  commenterName: string | null;
-  commenterAvatar: string | null;
-  /** The top-level (parent) comment. */
-  comment: {
-    externalId: string;
-    content: string;
-    time: string;
-    from: 'customer';
-  };
-  /** Replies to the top-level comment (from page or agent). */
-  replies: Array<{
-    id: string;
-    externalId: string;
-    content: string;
-    time: string;
-    /** 'self' = page/agent reply; 'customer' = commenter's own follow-up reply */
-    from: 'self' | 'customer';
-  }>;
-};
-
-/**
- * Fetches Facebook post comments LIVE from the Graph API on every call.
- * Never reads from the local DB — always reflects the real-time state on Facebook.
- *
- * The `platformPostId` is the Facebook post id (e.g. "123456789_987654321").
- * We extract the page id prefix to look up the correct channel (and page token).
- */
-export async function getPostCommentsAction(
-  businessId: string,
-  platformPostId: string,
-): Promise<LiveCommentThread[]> {
-  await requireAuth();
-
-  // Resolve the page token from the DB channel record.
-  // FB post ids are formatted as "{pageId}_{postId}".
-  const pageId = platformPostId.split('_')[0];
-  if (!pageId) {
-    throw new Error('Invalid platformPostId — cannot extract page id.');
-  }
-
-  const channel = await db.query.channels.findFirst({
-    where: and(
-      eq(channels.businessId, businessId),
-      eq(channels.platformChannelId, pageId),
-      isNull(channels.deletedAt),
-    ),
-  });
-
-  if (!channel || !channel.apiToken) {
-    throw new Error('Facebook channel not found or missing access token for this business.');
-  }
-
-  const pageToken = channel.apiToken;
-
-  // Fetch top-level comments with their nested replies in one Graph API call.
-  // fields: id, message, from, created_time, comments (nested replies)
-  const fields = [
-    'id',
-    'message',
-    'from',
-    'created_time',
-    'comments{id,message,from,created_time}',
-  ].join(',');
-
-  const url = `${GRAPH_API}/${platformPostId}/comments?fields=${encodeURIComponent(fields)}&limit=100&access_token=${pageToken}`;
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to fetch Facebook comments: ${err}`);
-  }
-
-  const data = (await res.json()) as {
-    data: Array<{
-      id: string;
-      message?: string;
-      from?: { id?: string; name?: string };
-      created_time?: string;
-      comments?: {
-        data: Array<{
-          id: string;
-          message?: string;
-          from?: { id?: string; name?: string };
-          created_time?: string;
-        }>;
-      };
-    }>;
-  };
-
-  // Map each FB top-level comment into a LiveCommentThread.
-  const threads: LiveCommentThread[] = (data.data ?? []).map((fbComment) => {
-    const replies = (fbComment.comments?.data ?? []).map((r) => ({
-      id: r.id,
-      externalId: r.id,
-      content: r.message ?? '',
-      time: r.created_time ?? new Date().toISOString(),
-      // We treat replies from the same commenter as 'customer', others as 'self'
-      from: r.from?.id === fbComment.from?.id ? ('customer' as const) : ('self' as const),
-    }));
-
-    return {
-      id: fbComment.id, // Facebook comment id as thread key
-      commenterName: fbComment.from?.name ?? null,
-      commenterAvatar: null, // Graph API doesn't expose profile pics on feed comments
-      comment: {
-        externalId: fbComment.id,
-        content: fbComment.message ?? '',
-        time: fbComment.created_time ?? new Date().toISOString(),
-        from: 'customer' as const,
-      },
-      replies,
-    };
-  });
-
-  return threads;
-}
-
-/**
- * Posts a reply to a Facebook comment from the UI, then persists the reply
- * to the local DB (inside a commentThread row, creating one if needed).
- *
- * @param businessId   - the merchant's business id
- * @param channelId    - the Oryxa channel id (from the post detail) used to look up the page token
- * @param parentCommentId - the Facebook comment id to reply to
- * @param content      - the reply text
- * @returns the saved DB comment row
- */
-export async function replyToCommentAction(
-  businessId: string,
-  channelId: string,
-  parentCommentId: string,
-  content: string,
-) {
-  await requireAuth();
-
-  // Fetch the channel (page token) directly by channelId.
+/** Resolve page access token the same way messaging/posts do: channel FK → apiToken. */
+async function resolveChannel(businessId: string, channelId: string) {
   const channel = await db.query.channels.findFirst({
     where: and(
       eq(channels.id, channelId),
@@ -167,10 +25,185 @@ export async function replyToCommentAction(
     throw new Error('Channel is missing a Facebook access token.');
   }
 
-  // Post the reply to Facebook Graph API.
+  return {
+    apiToken: channel.apiToken,
+    pageId: channel.platformChannelId,
+  };
+}
+
+async function resolveChannelToken(businessId: string, channelId: string) {
+  return (await resolveChannel(businessId, channelId)).apiToken;
+}
+
+/**
+ * Fetches Facebook post comments LIVE from the Graph API on every call.
+ * Never reads from the local DB — always reflects the real-time state on Facebook.
+ *
+ * Resolves the page token via the post's channelId (same pattern as messaging /
+ * reply/create/react) — never by parsing platformPostId.
+ */
+export async function getPostCommentsAction(
+  businessId: string,
+  channelId: string,
+  platformPostId: string,
+): Promise<LiveCommentThread[]> {
+  await requireAuth();
+
+  const { apiToken: pageToken, pageId } = await resolveChannel(businessId, channelId);
+
+  type GraphComment = {
+    id: string;
+    message?: string;
+    from?: { id?: string; name?: string };
+    created_time?: string;
+    like_count?: number;
+    user_likes?: boolean;
+    parent?: { id?: string };
+    comments?: { data: GraphComment[] };
+  };
+
+  // filter=stream returns replies in the same list (with `parent`), which the
+  // nested comments{} edge often omits — that's why UI replies vanished on refetch.
+  const fields = [
+    'id',
+    'message',
+    'from',
+    'created_time',
+    'like_count',
+    'user_likes',
+    'parent',
+    'comments.limit(50){id,message,from,created_time,like_count,user_likes,parent}',
+  ].join(',');
+
+  const url = `${GRAPH_API}/${platformPostId}/comments?fields=${encodeURIComponent(fields)}&filter=stream&order=chronological&limit=100&access_token=${pageToken}`;
+  const res = await graphFetch(url);
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to fetch Facebook comments: ${err}`);
+  }
+
+  const data = (await res.json()) as { data: GraphComment[] };
+  const flat: GraphComment[] = [];
+  for (const item of data.data ?? []) {
+    flat.push(item);
+    for (const nested of item.comments?.data ?? []) {
+      flat.push({ ...nested, parent: nested.parent ?? { id: item.id } });
+    }
+  }
+
+  const unique: GraphComment[] = [];
+  const seenIds = new Set<string>();
+  for (const c of flat) {
+    if (seenIds.has(c.id)) continue;
+    seenIds.add(c.id);
+    unique.push(c);
+  }
+
+  const byId = new Map(unique.map((c) => [c.id, c]));
+
+  function rootId(comment: GraphComment): string {
+    let current = comment;
+    const walked = new Set<string>();
+    while (current.parent?.id && !walked.has(current.id)) {
+      walked.add(current.id);
+      const parent = byId.get(current.parent.id);
+      if (!parent) return current.parent.id;
+      current = parent;
+    }
+    return current.id;
+  }
+
+  // Top-level: no parent comment in this payload (parent is the post itself).
+  const roots = unique.filter((c) => !c.parent?.id || !byId.has(c.parent.id));
+  const repliesByRoot = new Map<string, GraphComment[]>();
+
+  for (const c of unique) {
+    if (!c.parent?.id || !byId.has(c.parent.id)) continue;
+    const rid = rootId(c);
+    if (rid === c.id) continue;
+    const list = repliesByRoot.get(rid) ?? [];
+    list.push(c);
+    repliesByRoot.set(rid, list);
+  }
+
+  const threads: LiveCommentThread[] = roots.map((fbComment) => {
+    const replies = (repliesByRoot.get(fbComment.id) ?? []).map((r) => {
+      const fromSelf = r.from?.id === pageId;
+      return {
+        id: r.id,
+        externalId: r.id,
+        content: r.message ?? '',
+        time: r.created_time ?? new Date().toISOString(),
+        from: fromSelf ? ('self' as const) : ('customer' as const),
+        commenterPlatformId: fromSelf ? null : (r.from?.id ?? null),
+        commenterName: fromSelf ? null : (r.from?.name ?? null),
+        likeCount: r.like_count ?? 0,
+        userLikes: Boolean(r.user_likes),
+      };
+    });
+
+    const rootFromPage = fbComment.from?.id === pageId;
+    return {
+      id: fbComment.id,
+      commenterPlatformId: rootFromPage ? null : (fbComment.from?.id ?? null),
+      commenterName:
+        rootFromPage
+          ? 'Page Response'
+          : (fbComment.from?.name ?? null),
+      commenterAvatar: null,
+      comment: {
+        externalId: fbComment.id,
+        content: fbComment.message ?? '',
+        time: fbComment.created_time ?? new Date().toISOString(),
+        from: 'customer' as const,
+        likeCount: fbComment.like_count ?? 0,
+        userLikes: Boolean(fbComment.user_likes),
+      },
+      replies,
+    };
+  });
+
+  return threads;
+}
+
+/**
+ * Posts a reply to a Facebook comment from the UI, then best-effort persists
+ * the reply locally. Returns a plain serializable object for the client.
+ */
+export async function replyToCommentAction(
+  businessId: string,
+  channelId: string,
+  parentCommentId: string,
+  content: string,
+  platformPostId?: string,
+  persist?: {
+    commenterPlatformId: string | null;
+    commenterName?: string | null;
+    parentContent: string;
+    parentFrom: 'customer' | 'self';
+  },
+) {
+  await requireAuth();
+
+  const { apiToken: pageToken, pageId } = await resolveChannel(businessId, channelId);
+
+  // Same Graph call shape as createPostCommentAction (form-urlencoded).
   let externalReplyId: string | undefined;
   try {
-    externalReplyId = await replyToFacebookComment(channel.apiToken, parentCommentId, content);
+    const res = await graphFetch(`${GRAPH_API}/${parentCommentId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        message: content,
+        access_token: pageToken,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    const data = (await res.json()) as { id?: string };
+    externalReplyId = data.id;
   } catch (err) {
     console.error('[replyToCommentAction] Facebook reply failed:', err);
     throw new Error(
@@ -178,51 +211,148 @@ export async function replyToCommentAction(
     );
   }
 
-  // Resolve or create a commentThread row so the reply is tied to a thread.
-  // Threads are keyed by (channelId, platformItemId=postId, commenterPlatformId).
-  // For a manual UI reply we use the parentCommentId as a stand-in commenter id
-  // (the real commenter id isn't available here without an extra API call).
-  // If a thread already exists (created by the webhook flow) we reuse it.
-  let thread = await db.query.commentThreads.findFirst({
-    where: and(
-      eq(commentThreads.channelId, channelId),
-      eq(commentThreads.commenterPlatformId, parentCommentId),
-      isNull(commentThreads.deletedAt),
-    ),
-  });
+  const replyId = externalReplyId ?? `ui_reply_${Date.now()}`;
 
-  if (!thread) {
-    // Determine the FB post id from the parentCommentId prefix if possible,
-    // otherwise use parentCommentId as the platformItemId (best-effort).
-    const platformItemId = parentCommentId.includes('_')
-      ? parentCommentId.split('_').slice(0, 2).join('_')
-      : parentCommentId;
+  try {
+    const commenterId =
+      persist?.commenterPlatformId && persist.commenterPlatformId !== pageId
+        ? persist.commenterPlatformId
+        : undefined;
 
-    const [created] = await db
-      .insert(commentThreads)
-      .values({
-        businessId,
-        channelId,
-        platformItemId,
-        commenterPlatformId: parentCommentId,
-        lastCommentState: 'done',
-      })
-      .returning();
-    thread = created;
+    await persistPageReply({
+      parentCommentId,
+      content,
+      externalId: replyId,
+      businessId,
+      channelId,
+      platformPostId,
+      commenterPlatformId: commenterId,
+      commenterName: persist?.commenterName,
+      parentContent: persist?.parentContent,
+      parentFrom: persist?.parentFrom,
+    });
+  } catch (err) {
+    console.error('[replyToCommentAction] Local persist failed (FB reply OK):', err);
   }
 
-  // Persist the reply comment row.
-  const [newComment] = await db
-    .insert(comments)
-    .values({
-      commentThreadId: thread!.id,
-      from: 'self',
-      content,
-      state: 'done',
-      externalId: externalReplyId ?? `ui_reply_${Date.now()}`,
-      parentExternalId: parentCommentId,
-    })
-    .returning();
+  return {
+    id: replyId,
+    externalId: replyId,
+    content,
+    time: new Date().toISOString(),
+    parentExternalId: parentCommentId,
+  };
+}
 
-  return newComment;
+/**
+ * Posts a top-level comment on a Facebook post from the UI.
+ * Graph only — not a customer thread, so it is not written to comment history.
+ */
+export async function createPostCommentAction(
+  businessId: string,
+  channelId: string,
+  platformPostId: string,
+  content: string,
+) {
+  await requireAuth();
+
+  const pageToken = await resolveChannelToken(businessId, channelId);
+  const url = `${GRAPH_API}/${platformPostId}/comments`;
+  const body = new URLSearchParams({
+    message: content,
+    access_token: pageToken,
+  });
+
+  let externalCommentId: string | undefined;
+  try {
+    const res = await graphFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err);
+    }
+    const data = (await res.json()) as { id?: string };
+    externalCommentId = data.id;
+  } catch (err) {
+    console.error('[createPostCommentAction] Facebook comment failed:', err);
+    throw new Error(
+      err instanceof Error ? err.message : 'Failed to post comment to Facebook.',
+    );
+  }
+
+  const id = externalCommentId ?? `ui_comment_${Date.now()}`;
+  return {
+    id,
+    externalId: id,
+    content,
+    time: new Date().toISOString(),
+  };
+}
+
+/**
+ * Sets or clears a Page reaction on a Facebook comment.
+ * Pass `reaction: null` to remove the current reaction.
+ */
+export async function reactToCommentAction(
+  businessId: string,
+  channelId: string,
+  commentId: string,
+  reaction: CommentReaction | null,
+): Promise<{ reaction: CommentReaction | null }> {
+  await requireAuth();
+
+  const pageToken = await resolveChannelToken(businessId, channelId);
+
+  try {
+    if (reaction === null) {
+      // Prefer reactions delete; fall back to likes delete for older like-only state.
+      const reactionsRes = await graphFetch(
+        `${GRAPH_API}/${commentId}/reactions?access_token=${pageToken}`,
+        { method: 'DELETE' },
+      );
+      if (!reactionsRes.ok) {
+        const likesRes = await graphFetch(
+          `${GRAPH_API}/${commentId}/likes?access_token=${pageToken}`,
+          { method: 'DELETE' },
+        );
+        if (!likesRes.ok) {
+          throw new Error(await likesRes.text());
+        }
+      }
+      return { reaction: null };
+    }
+
+    if (reaction === 'LIKE') {
+      const res = await graphFetch(`${GRAPH_API}/${commentId}/likes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ access_token: pageToken }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return { reaction: 'LIKE' };
+    }
+
+    const res = await graphFetch(`${GRAPH_API}/${commentId}/reactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        type: reaction,
+        access_token: pageToken,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    return { reaction };
+  } catch (err) {
+    console.error('[reactToCommentAction] Facebook reaction failed:', err);
+    throw new Error(
+      err instanceof Error ? err.message : 'Failed to update Facebook reaction.',
+    );
+  }
 }

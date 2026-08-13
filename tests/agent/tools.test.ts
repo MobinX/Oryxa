@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { createAgentTools } from '@repo/agent/tools';
+import { updateOrderState } from '@repo/db/crud/order';
 
 const sendMessageMock = vi.fn(async () => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
@@ -43,6 +44,81 @@ describe('Agent Tools', () => {
       customerPhone: '555-0001',
     });
     expect(result).toContain('"id"');
+  });
+
+  it('update_order tool tells the agent when the order is not pending', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools({
+      businessId: seed.business.id,
+      conversationId: seed.conversation.id,
+      pageToken: 'tok',
+      customerPlatformId: 'cust',
+      customerName: 'Tool Buyer',
+    });
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const updateOrderTool = tools.find((t) => t.name === 'update_order')!;
+
+    const created = JSON.parse(
+      await createOrderTool.invoke({
+        productId: seed.productDetail.id,
+        variantId: seed.productDetail.variants[0]?.id,
+        count: 1,
+      }),
+    );
+    await updateOrderState(seed.business.id, created.id, { state: 'done' });
+
+    const result = await updateOrderTool.invoke({ orderId: created.id, count: 3 });
+    expect(result).toContain("Updates are only allowed for pending orders");
+    expect(result).toContain('done');
+  });
+
+  it('update_order tool tells the agent when stock is insufficient', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools({
+      businessId: seed.business.id,
+      conversationId: seed.conversation.id,
+      pageToken: 'tok',
+      customerPlatformId: 'cust',
+      customerName: 'Tool Buyer',
+    });
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const updateOrderTool = tools.find((t) => t.name === 'update_order')!;
+
+    const created = JSON.parse(
+      await createOrderTool.invoke({
+        productId: seed.productDetail.id,
+        variantId: seed.productDetail.variants[0]?.id,
+        count: 1,
+      }),
+    );
+
+    const result = await updateOrderTool.invoke({ orderId: created.id, count: 99 });
+    expect(result).toMatch(/Insufficient stock/i);
+  });
+
+  it('cancel_order tool tells the agent when the order is already fulfilled', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools({
+      businessId: seed.business.id,
+      conversationId: seed.conversation.id,
+      pageToken: 'tok',
+      customerPlatformId: 'cust',
+      customerName: 'Tool Buyer',
+    });
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const cancelOrderTool = tools.find((t) => t.name === 'cancel_order')!;
+
+    const created = JSON.parse(
+      await createOrderTool.invoke({
+        productId: seed.productDetail.id,
+        variantId: seed.productDetail.variants[0]?.id,
+        count: 1,
+      }),
+    );
+    await updateOrderState(seed.business.id, created.id, { state: 'done' });
+
+    const result = await cancelOrderTool.invoke({ orderId: created.id });
+    expect(result).toContain('already fulfilled');
   });
 
   it('send_message tool calls Facebook API', async () => {

@@ -175,6 +175,7 @@ export async function replyToFacebookComment(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text }),
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {

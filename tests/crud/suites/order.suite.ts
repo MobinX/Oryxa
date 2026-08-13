@@ -1,6 +1,13 @@
 import { it, expect } from 'vitest';
 import { seedTestWorld } from '../../helpers/seed';
-import { createOrder, getOrderById, listOrders, updateOrderState } from '@repo/db/crud/order';
+import {
+  createOrder,
+  getOrderById,
+  listOrders,
+  updateOrder,
+  updateOrderState,
+  deleteOrder,
+} from '@repo/db/crud/order';
 import { getProductById } from '@repo/db/crud/product';
 
 export function registerOrderCrudTests() {
@@ -106,5 +113,82 @@ export function registerOrderCrudTests() {
       state: 'done',
     });
     expect(result).toBeNull();
+  });
+
+  it('updateOrder adjusts stock when quantity changes on a pending order', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const order = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 2,
+      customerName: 'Buyer',
+    });
+
+    await updateOrder(business.id, order.id, { count: 4 });
+    const afterIncrease = await getProductById(business.id, productDetail.id);
+    expect(afterIncrease?.variants.find((v) => v.id === variantId)?.stock).toBe(6);
+
+    await updateOrder(business.id, order.id, { count: 1 });
+    const afterDecrease = await getProductById(business.id, productDetail.id);
+    expect(afterDecrease?.variants.find((v) => v.id === variantId)?.stock).toBe(9);
+  });
+
+  it('updateOrder rejects quantity changes on fulfilled orders', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const order = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 2,
+      customerName: 'Buyer',
+    });
+    await updateOrderState(business.id, order.id, { state: 'done' });
+
+    await expect(updateOrder(business.id, order.id, { count: 5 })).rejects.toThrow(
+      /pending orders/,
+    );
+
+    const after = await getProductById(business.id, productDetail.id);
+    expect(after?.variants.find((v) => v.id === variantId)?.stock).toBe(8);
+    const unchanged = await getOrderById(business.id, order.id);
+    expect(unchanged?.count).toBe(2);
+  });
+
+  it('deleteOrder restores stock for pending orders', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const order = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 3,
+      customerName: 'Buyer',
+    });
+
+    await deleteOrder(business.id, order.id);
+
+    const after = await getProductById(business.id, productDetail.id);
+    expect(after?.variants.find((v) => v.id === variantId)?.stock).toBe(10);
+  });
+
+  it('deleteOrder does not restore stock for fulfilled orders', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const order = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 3,
+      customerName: 'Buyer',
+    });
+    await updateOrderState(business.id, order.id, { state: 'done' });
+
+    await deleteOrder(business.id, order.id);
+
+    const after = await getProductById(business.id, productDetail.id);
+    expect(after?.variants.find((v) => v.id === variantId)?.stock).toBe(7);
   });
 }

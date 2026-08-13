@@ -55,17 +55,22 @@ export function createCatalogTools(context: {
       context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
 
-      const order = await createOrder({
-        businessId: context.businessId,
-        productId,
-        variantId,
-        count: count ?? 1,
-        customerName: context.customerName ?? 'Customer',
-        customerPhone,
-        customerAddress,
-        conversationId: context.conversationId,
-      });
-      const result = JSON.stringify(order);
+      let result: string;
+      try {
+        const order = await createOrder({
+          businessId: context.businessId,
+          productId,
+          variantId,
+          count: count ?? 1,
+          customerName: context.customerName ?? 'Customer',
+          customerPhone,
+          customerAddress,
+          conversationId: context.conversationId,
+        });
+        result = JSON.stringify(order);
+      } catch (err) {
+        result = err instanceof Error ? err.message : 'Failed to create order.';
+      }
 
       console.log(`[agent-tool] create_order result: ${result}`);
       context.emitSse?.('tool_result', { name: 'create_order', result });
@@ -73,7 +78,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'create_order',
-      description: 'Create a NEW customer order. Do NOT use this tool if the customer is attempting to modify/change details (like phone or address) of an order that was already placed in the conversation. For modifications, use update_order instead.',
+      description: 'Create a NEW customer order. If this tool returns an error (product not found, insufficient stock), tell the customer that message. Do NOT use this tool to modify an existing order — use update_order instead.',
       schema: z.object({
         productId: z.string().uuid(),
         variantId: z.string().uuid().optional(),
@@ -123,20 +128,25 @@ export function createCatalogTools(context: {
         return result;
       }
 
-      const updateResult = await updateOrder(context.businessId, orderId, {
-        count,
-        customerPhone,
-        customerAddress,
-      });
+      let result: string;
+      try {
+        const updateResult = await updateOrder(context.businessId, orderId, {
+          count,
+          customerPhone,
+          customerAddress,
+        });
+        result = JSON.stringify(updateResult);
+      } catch (err) {
+        result = err instanceof Error ? err.message : 'Failed to update order.';
+      }
 
-      const result = JSON.stringify(updateResult);
       console.log(`[agent-tool] update_order result: ${result}`);
       context.emitSse?.('tool_result', { name: 'update_order', result });
       return result;
     },
     {
       name: 'update_order',
-      description: 'Update details of a previously placed order. If the customer asks to modify details but did not specify the order ID, look up the order ID in the prior conversation history and use it here. Do NOT call create_order first.',
+      description: 'Update a pending order (quantity, phone, or address). If this tool returns an error (order not found, not pending, or insufficient stock), tell the customer that message. Do NOT call create_order first. If the customer did not give an order ID, look it up in conversation history.',
       schema: z.object({
         orderId: z.string().uuid().describe('The UUID of the order to update'),
         count: z.number().int().min(1).optional(),
@@ -158,6 +168,12 @@ export function createCatalogTools(context: {
         return result;
       }
 
+      if (order.state === 'done') {
+        const result = `Cannot cancel order. Order is already fulfilled ('done'). Tell the customer it can no longer be cancelled.`;
+        context.emitSse?.('tool_result', { name: 'cancel_order', result });
+        return result;
+      }
+
       await deleteOrder(context.businessId, orderId);
       const result = JSON.stringify({ id: orderId, cancelled: true });
       console.log(`[agent-tool] cancel_order result: ${result}`);
@@ -166,7 +182,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'cancel_order',
-      description: 'Cancel a previously placed order. If the customer asks to cancel the order, search the history for the order ID, and call this tool to delete/cancel the order in the database.',
+      description: 'Cancel an unfulfilled order. If this tool returns an error (not found or already fulfilled), tell the customer that message. Search conversation history for the order ID if the customer did not provide one.',
       schema: z.object({
         orderId: z.string().uuid().describe('The UUID of the order to cancel'),
       }),

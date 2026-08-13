@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
 import {
+  ApiError,
   createOrder,
   updateOrder,
   updateOrderState,
@@ -58,13 +59,22 @@ export async function updateOrderAction(
   const customerAddress = String(formData.get('customerAddress') ?? '').trim();
   const state = String(formData.get('state') ?? '').trim();
 
-  await updateOrder(token, businessId, orderId, {
-    count: Number.isFinite(count) && count > 0 ? count : undefined,
-    customerName: customerName || undefined,
-    customerPhone: customerPhone || undefined,
-    customerAddress: customerAddress || undefined,
-    state: state || undefined,
-  });
+  try {
+    await updateOrder(token, businessId, orderId, {
+      count: Number.isFinite(count) && count > 0 ? count : undefined,
+      customerName: customerName || undefined,
+      customerPhone: customerPhone || undefined,
+      customerAddress: customerAddress || undefined,
+      state: state || undefined,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      redirect(
+        `/b/${businessId}/orders/${orderId}?error=${encodeURIComponent(err.message)}`,
+      );
+    }
+    throw err;
+  }
 
   revalidatePath(`/b/${businessId}/orders`);
   redirect(`/b/${businessId}/orders`);

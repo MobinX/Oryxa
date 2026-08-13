@@ -160,12 +160,15 @@ export async function updateOrder(businessId: string, orderId: string, input: un
   if (!order) return null;
 
   const fields: Record<string, unknown> = { ...parsed };
-  if (parsed.count !== undefined) {
+  if (parsed.count !== undefined && parsed.count !== order.count) {
+    if (order.state !== 'pending') {
+      throw new Error('Quantity can only be changed on pending orders');
+    }
+
     const variantPrice = parseFloat(order.variantPrice);
     fields.totalPrice = (variantPrice * parsed.count).toFixed(2);
 
-    // Adjust stock when quantity changes on a pending order with a variant
-    if (order.variantId && parsed.count !== order.count) {
+    if (order.variantId) {
       const delta = parsed.count - order.count;
       if (delta > 0) {
         const decremented = await db
@@ -200,7 +203,9 @@ export async function deleteOrder(businessId: string, orderId: string) {
   });
   if (!order) return null;
 
-  if (order.variantId) {
+  // Only unfulfilled orders still hold reserved stock. `done` orders already
+  // consumed those units, so deleting the record must not put them back.
+  if (order.variantId && order.state !== 'done') {
     await db
       .update(variants)
       .set({ stock: sql`${variants.stock} + ${order.count}` })

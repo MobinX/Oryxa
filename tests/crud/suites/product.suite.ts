@@ -1,6 +1,9 @@
 import { it, expect } from 'vitest';
 import { syncUser } from '@repo/db/crud/user';
 import { createBusiness } from '@repo/db/crud/business';
+import { db } from '@db/client';
+import { variants } from '@db/schema';
+import { eq, and, isNull } from 'drizzle-orm';
 import {
   createProduct,
   getProductById,
@@ -104,6 +107,27 @@ export function registerProductCrudTests() {
     expect(after?.category?.id).toBe(next.id);
   });
 
+  it('updateProduct rejects unknown categoryId without changing other fields', async () => {
+    const businessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Keep Name',
+      price: 5,
+      sku: `KEEP-${Date.now()}`,
+      variants: [],
+    });
+
+    await expect(
+      updateProduct(businessId, created.id, {
+        name: 'Renamed',
+        categoryId: '00000000-0000-0000-0000-000000000000',
+      }),
+    ).rejects.toThrow(/Category not found/);
+
+    const after = await getProductById(businessId, created.id);
+    expect(after?.name).toBe('Keep Name');
+  });
+
   it('updateProduct syncs variants (update, add, remove)', async () => {
     const businessId = await setup();
     const created = await createProduct({
@@ -178,7 +202,7 @@ export function registerProductCrudTests() {
       price: 9,
       sku: `INCAT-${Date.now()}`,
       categoryName: catName,
-      variants: [],
+      variants: [{ name: 'Default', stock: 3, isAvailable: true }],
     });
     const cats = await listCategories(businessId);
     const cat = cats.find((c) => c.name === catName);
@@ -189,6 +213,17 @@ export function registerProductCrudTests() {
 
     expect(await listCategories(businessId)).not.toContainEqual(expect.objectContaining({ id: cat!.id }));
     expect(await getProductById(businessId, created.id)).toBeNull();
+
+    const leftoverVariants = await db.query.variants.findMany({
+      where: and(eq(variants.productId, created.id), isNull(variants.deletedAt)),
+    });
+    expect(leftoverVariants).toHaveLength(0);
+
+    const allVariants = await db.query.variants.findMany({
+      where: eq(variants.productId, created.id),
+    });
+    expect(allVariants.length).toBeGreaterThan(0);
+    expect(allVariants.every((v) => v.deletedAt !== null)).toBe(true);
   });
 
   it('createCategory rejects active duplicate slug', async () => {

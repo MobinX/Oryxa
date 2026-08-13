@@ -37,6 +37,8 @@ internalRouter.post('/run-comment', async (c) => {
     return c.text('Invalid payload', 400);
   }
 
+  // Accept immediately so the webhook/previous run can return. The LLM work
+  // continues on THIS invocation via waitUntil — a fresh serverless maxDuration.
   runInBackground(c, runAgentForCommentThread(parsed.data.commentThreadId));
   return c.text('accepted', 202);
 });

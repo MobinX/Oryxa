@@ -19,6 +19,8 @@ export function createCommentAgentTools(
     pageToken: string;
     /** Platform comment id of the customer comment currently being replied to. */
     parentCommentExternalId: string;
+    /** Graph node to POST /comments on. Nested replies must target the top-level comment. */
+    graphReplyToId?: string;
     customerName?: string | null;
     emitSse?: SseEmitter;
   },
@@ -51,7 +53,7 @@ export function createCommentAgentTools(
 
       const newCommentId = await replyToFacebookComment(
         context.pageToken,
-        context.parentCommentExternalId,
+        context.graphReplyToId ?? context.parentCommentExternalId,
         text,
       );
       await createComment({
