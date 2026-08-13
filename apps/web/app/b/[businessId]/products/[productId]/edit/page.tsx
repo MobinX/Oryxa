@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
-import { getProduct, listCategories } from '@/lib/api';
+import { cachedCategories, cachedProduct } from '@/app/_cache/queries';
 import { updateProductAction } from '@/app/actions/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +10,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantEditor } from '@/components/products/variant-editor';
 import { CategorySelect } from '@/components/products/category-select';
+import EditProductSkeleton from './skeleton';
 
-export default async function EditProductPage({
+export default function EditProductPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string; productId: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
+  return (
+    <div className="mx-auto max-w-2xl">
+      <Link
+        href="../.."
+        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+      >
+        ← Back to products
+      </Link>
+      <Suspense fallback={<EditProductSkeleton />}>
+        <EditProductForm params={params} searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function EditProductForm({
   params,
   searchParams,
 }: {
@@ -23,12 +47,12 @@ export default async function EditProductPage({
 
   let product;
   try {
-    product = await getProduct(token, businessId, productId);
+    product = await cachedProduct(token, businessId, productId);
   } catch {
     notFound();
   }
 
-  const categories = await listCategories(token, businessId);
+  const categories = await cachedCategories(token, businessId);
 
   const variantInitial = product.variants.map((v) => ({
     id: v.id,
@@ -40,69 +64,60 @@ export default async function EditProductPage({
   }));
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Link
-        href={`/b/${businessId}/products`}
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    <Card className="mt-4 sm:mt-6">
+      <h1 className="text-xl font-bold">Edit product</h1>
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+          {error}
+        </p>
+      )}
+      <form
+        action={updateProductAction.bind(null, businessId, productId)}
+        className="mt-6 space-y-4"
       >
-        ← Back to products
-      </Link>
-      <Card className="mt-4 sm:mt-6">
-        <h1 className="text-xl font-bold">Edit product</h1>
-        {error && (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            {error}
-          </p>
-        )}
-        <form
-          action={updateProductAction.bind(null, businessId, productId)}
-          encType="multipart/form-data"
-          className="mt-6 space-y-4"
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium">Product name</label>
-              <Input name="name" defaultValue={product.name} required />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Price ($)</label>
-              <Input
-                name="price"
-                type="number"
-                step="0.01"
-                min="0.01"
-                defaultValue={String(product.price)}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">SKU</label>
-              <Input name="sku" defaultValue={product.sku} required />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium">Description</label>
-              <Textarea name="description" rows={3} defaultValue={product.description ?? ''} />
-            </div>
-            <div className="sm:col-span-2">
-              <CategorySelect
-                categories={categories}
-                defaultCategoryId={product.category?.id}
-              />
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium">Product name</label>
+            <Input name="name" defaultValue={product.name} required />
           </div>
-
-          <VariantEditor initial={variantInitial} businessId={businessId} />
-
-          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
-            <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">
-              <Button type="button" variant="outline" className="w-full">
-                Cancel
-              </Button>
-            </Link>
-            <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Price ($)</label>
+            <Input
+              name="price"
+              type="number"
+              step="0.01"
+              min="0.01"
+              defaultValue={String(product.price)}
+              required
+            />
           </div>
-        </form>
-      </Card>
-    </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">SKU</label>
+            <Input name="sku" defaultValue={product.sku} required />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium">Description</label>
+            <Textarea name="description" rows={3} defaultValue={product.description ?? ''} />
+          </div>
+          <div className="sm:col-span-2">
+            <CategorySelect
+              categories={categories}
+              defaultCategoryId={product.category?.id}
+            />
+          </div>
+        </div>
+
+        <VariantEditor initial={variantInitial} businessId={businessId} />
+
+        <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+          <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">
+            <Button type="button" variant="outline" className="w-full">
+              Cancel
+            </Button>
+          </Link>
+          <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
+        </div>
+      </form>
+    </Card>
   );
 }

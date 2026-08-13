@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { expireChannelPage } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import {
   createAgent,
@@ -29,6 +30,7 @@ export async function createAgentAction(businessId: string, formData: FormData) 
   });
 
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
 }
 
 export async function updateAgentAction(
@@ -44,12 +46,14 @@ export async function updateAgentAction(
     systemPrompt: systemPrompt || undefined,
   });
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
 }
 
 export async function deleteAgentAction(businessId: string, agentId: string) {
   const token = await requireAuth();
   await deleteAgent(token, businessId, agentId);
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
 }
 
 export async function deleteAgentsBulkAction(businessId: string, formData: FormData) {
@@ -59,6 +63,7 @@ export async function deleteAgentsBulkAction(businessId: string, formData: FormD
     ids.map((id) => deleteAgent(token, businessId, id).catch(() => null)),
   );
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
 }
 
 export async function updateChannelAgentAction(
@@ -70,12 +75,14 @@ export async function updateChannelAgentAction(
   const agentId = String(formData.get('agentId') ?? '') || null;
   await updateChannelAgent(token, businessId, channelId, agentId);
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
 }
 
 export async function deleteChannelAction(businessId: string, channelId: string) {
   const token = await requireAuth();
   await deleteChannel(token, businessId, channelId);
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
   redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
@@ -86,6 +93,7 @@ export async function deleteChannelsBulkAction(businessId: string, formData: For
     ids.map((id) => deleteChannel(token, businessId, id).catch(() => null)),
   );
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
   redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
@@ -122,6 +130,7 @@ export async function connectSelectedFacebookPagesAction(
   }
 
   revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
   const failed = result.failed ?? [];
 
   if (result.connected.length === 0 && failed.length > 0) {

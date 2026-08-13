@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Building2, Plus, ArrowRight, Pencil, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import { listBusinesses, type Business } from '@/lib/api';
+import { cachedBusinesses } from '@/app/_cache/queries';
+import type { Business } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
@@ -9,15 +11,40 @@ import {
   deleteBusinessAction,
   deleteBusinessesBulkAction,
 } from '@/app/actions/business';
+import BusinessesSkeleton from './skeleton';
 
 const headers: DataTableHeader[] = [
   { key: 'name', header: 'Business', className: 'w-full min-w-[200px]' },
   { key: 'createdAt', header: 'Created', className: 'hidden sm:table-cell text-muted-foreground' },
 ];
 
-export default async function BusinessesPage() {
+export default function BusinessesPage() {
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">Your businesses</h1>
+          <p className="mt-1 text-muted-foreground">
+            Select a business or create a new one.
+          </p>
+        </div>
+        <Link href="/businesses/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New business
+          </Button>
+        </Link>
+      </div>
+      <Suspense fallback={<BusinessesSkeleton />}>
+        <BusinessesList />
+      </Suspense>
+    </div>
+  );
+}
+
+async function BusinessesList() {
   const token = await requireAuth();
-  const { businesses } = await listBusinesses(token);
+  const { businesses } = await cachedBusinesses(token);
 
   const tableRows = businesses.map((business: Business) => ({
     id: business.id,
@@ -66,48 +93,33 @@ export default async function BusinessesPage() {
     ),
   }));
 
-  return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold sm:text-2xl">Your businesses</h1>
-          <p className="mt-1 text-muted-foreground">
-            Select a business or create a new one.
-          </p>
-        </div>
-        <Link href="/businesses/new">
+  if (businesses.length === 0) {
+    return (
+      <Card className="mt-12 text-center">
+        <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
+        <h2 className="mt-4 text-lg font-semibold">No businesses yet</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Create your first business to manage products, orders, and channels.
+        </p>
+        <Link href="/businesses/new" className="mt-6 inline-block">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            New business
+            Create your first business
           </Button>
         </Link>
-      </div>
+      </Card>
+    );
+  }
 
-      {businesses.length === 0 ? (
-        <Card className="mt-12 text-center">
-          <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold">No businesses yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Create your first business to manage products, orders, and channels.
-          </p>
-          <Link href="/businesses/new" className="mt-6 inline-block">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Create your first business
-            </Button>
-          </Link>
-        </Card>
-      ) : (
-        <div className="mt-8">
-          <DataTable
-            headers={headers}
-            rows={tableRows}
-            bulkDeleteAction={deleteBusinessesBulkAction as unknown as (fd: FormData) => Promise<void>}
-            bulkDeleteIdField="businessIds"
-            hasRowActions
-          />
-        </div>
-      )}
+  return (
+    <div className="mt-8">
+      <DataTable
+        headers={headers}
+        rows={tableRows}
+        bulkDeleteAction={deleteBusinessesBulkAction as unknown as (fd: FormData) => Promise<void>}
+        bulkDeleteIdField="businessIds"
+        hasRowActions
+      />
     </div>
   );
 }

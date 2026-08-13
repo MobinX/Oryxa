@@ -1,12 +1,9 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Eye, CheckCircle2, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import {
-  listOrders,
-  toCsv,
-  csvColumnsForOrders,
-  type OrderListItem,
-} from '@/lib/api';
+import { cachedOrders } from '@/app/_cache/queries';
+import { toCsv, csvColumnsForOrders, type OrderListItem } from '@/lib/api';
 import { Badge } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
@@ -16,6 +13,7 @@ import {
   deleteOrderAction,
   deleteOrdersBulkAction,
 } from '@/app/actions/orders';
+import OrdersSkeleton from './skeleton';
 
 const stateVariant: Record<string, 'warning' | 'info' | 'purple' | 'success'> = {
   pending: 'warning',
@@ -73,14 +71,46 @@ function orderRowActions(businessId: string, order: OrderListItem) {
   );
 }
 
-export default async function OrdersPage({
+export default function OrdersPage({
+  params,
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">Orders</h1>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            <Suspense fallback="…">
+              <OrderCount params={params} />
+            </Suspense>
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Suspense fallback={<div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />}>
+            <OrderCsv params={params} />
+          </Suspense>
+          <Link href="new">
+            <Button>New order</Button>
+          </Link>
+        </div>
+      </div>
+      <Suspense fallback={<OrdersSkeleton />}>
+        <OrdersContent params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function OrdersContent({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
   const token = await requireAuth();
-  const orders = await listOrders(token, businessId);
+  const orders = await cachedOrders(token, businessId);
 
   const tableRows = orders.map((order) => ({
     id: order.id,
@@ -103,30 +133,29 @@ export default async function OrdersPage({
     actions: orderRowActions(businessId, order),
   }));
 
-  const csv = toCsv(orders as unknown as Record<string, unknown>[], csvColumnsForOrders());
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold sm:text-2xl">Orders</h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{orders.length} total</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <CsvDownloadButton csv={csv} filename={`orders-${businessId}.csv`} />
-          <Link href={`/b/${businessId}/orders/new`}>
-            <Button>New order</Button>
-          </Link>
-        </div>
-      </div>
-
-      <DataTable
-        headers={headers}
-        rows={tableRows}
-        bulkDeleteAction={deleteOrdersBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
-        bulkDeleteIdField="orderIds"
-        hasRowActions
-      />
-    </div>
+    <DataTable
+      headers={headers}
+      rows={tableRows}
+      bulkDeleteAction={deleteOrdersBulkAction.bind(null, businessId) as unknown as (fd: FormData) => Promise<void>}
+      bulkDeleteIdField="orderIds"
+      hasRowActions
+    />
   );
 }
+
+async function OrderCount({ params }: { params: Promise<{ businessId: string }> }) {
+  const { businessId } = await params;
+  const token = await requireAuth();
+  const orders = await cachedOrders(token, businessId);
+  return <>{orders.length} total</>;
+}
+
+async function OrderCsv({ params }: { params: Promise<{ businessId: string }> }) {
+  const { businessId } = await params;
+  const token = await requireAuth();
+  const orders = await cachedOrders(token, businessId);
+  const csv = toCsv(orders as unknown as Record<string, unknown>[], csvColumnsForOrders());
+  return <CsvDownloadButton csv={csv} filename={`orders-${businessId}.csv`} />;
+}
+

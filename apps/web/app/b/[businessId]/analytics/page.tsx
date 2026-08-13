@@ -1,4 +1,7 @@
-import { getBusinessForRequest, getBusinessAnalyticsForRequest, getMeForRequest } from '@/lib/server-data';
+import { Suspense } from 'react';
+import { requireAuth } from '@/lib/auth';
+import { cachedAnalytics, cachedBusiness, cachedMe } from '@/app/_cache/queries';
+import AnalyticsSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { DropdownSelect } from '@/components/ui/dropdown-select';
 import {
@@ -16,7 +19,21 @@ import {
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
 
-export default async function AnalyticsPage({
+export default function AnalyticsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ days?: string }>;
+}) {
+  return (
+    <Suspense fallback={<AnalyticsSkeleton />}>
+      <AnalyticsContent params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function AnalyticsContent({
   params,
   searchParams,
 }: {
@@ -26,11 +43,12 @@ export default async function AnalyticsPage({
   const { businessId } = await params;
   const daysParam = (await searchParams).days;
   const days = daysParam ? parseInt(daysParam, 10) : 30;
+  const token = await requireAuth();
 
   const [business, analytics, me] = await Promise.all([
-    getBusinessForRequest(businessId),
-    getBusinessAnalyticsForRequest(businessId, days),
-    getMeForRequest(),
+    cachedBusiness(token, businessId),
+    cachedAnalytics(token, businessId, days),
+    cachedMe(token),
   ]);
 
   const stats = analytics.totals;

@@ -1,6 +1,8 @@
-import { Trash2 } from 'lucide-react';
+import { Suspense } from 'react';
+import { Trash2, Check } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import { listChannels, listAgents, type Channel, type Agent } from '@/lib/api';
+import { cachedAgents, cachedChannels } from '@/app/_cache/queries';
+import type { Channel, Agent } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,8 +18,8 @@ import {
   deleteChannelAction,
   deleteChannelsBulkAction,
 } from '@/app/actions/channels';
-import { Check } from 'lucide-react';
 import { DeleteSuccessDialog } from '@/components/delete-success-dialog';
+import ChannelsSkeleton from './skeleton';
 
 const DEFAULT_PROMPT =
   'You are a friendly sales assistant. Help customers find products and place orders. Always confirm order details before creating an order.';
@@ -35,7 +37,35 @@ const agentHeaders: DataTableHeader[] = [
   { key: 'systemPrompt', header: 'Prompt', className: 'hidden md:table-cell' },
 ];
 
-export default async function ChannelsPage({
+export default function ChannelsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{
+    connected?: string;
+    error?: string;
+    detail?: string;
+    subscribeFailed?: string;
+    subscribeDetail?: string;
+  }>;
+}) {
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-xl font-bold sm:text-2xl">Channels</h1>
+        <p className="text-sm text-[var(--muted-foreground)] sm:text-base">
+          Connect messaging platforms and bind AI agents.
+        </p>
+      </div>
+      <Suspense fallback={<ChannelsSkeleton />}>
+        <ChannelsContent params={params} searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ChannelsContent({
   params,
   searchParams,
 }: {
@@ -52,8 +82,8 @@ export default async function ChannelsPage({
   const { connected, error, detail, subscribeFailed, subscribeDetail } = await searchParams;
   const token = await requireAuth();
   const [channels, agents] = await Promise.all([
-    listChannels(token, businessId),
-    listAgents(token, businessId),
+    cachedChannels(token, businessId),
+    cachedAgents(token, businessId),
   ]);
 
   const agentList = agents.map((a: Agent) => ({ id: a.id, name: a.name }));
@@ -130,14 +160,8 @@ export default async function ChannelsPage({
   }));
 
   return (
-    <div className="space-y-8">
+    <>
       <DeleteSuccessDialog />
-      <div>
-        <h1 className="text-xl font-bold sm:text-2xl">Channels</h1>
-        <p className="text-sm text-[var(--muted-foreground)] sm:text-base">
-          Connect messaging platforms and bind AI agents.
-        </p>
-      </div>
 
       {connected === 'facebook' && (
         <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
@@ -216,6 +240,6 @@ export default async function ChannelsPage({
           hasRowActions
         />
       </div>
-    </div>
+    </>
   );
 }

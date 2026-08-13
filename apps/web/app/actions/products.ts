@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { expireCategories, expireProducts } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import {
   ApiError,
@@ -110,6 +111,8 @@ export async function createProductAction(businessId: string, formData: FormData
   });
 
   revalidatePath(`/b/${businessId}/products`);
+  expireProducts(businessId);
+  expireCategories(businessId);
   redirect(`/b/${businessId}/products`);
 }
 
@@ -149,6 +152,8 @@ export async function updateProductAction(
   }
 
   revalidatePath(`/b/${businessId}/products`);
+  expireProducts(businessId, productId);
+  expireCategories(businessId);
   redirect(`/b/${businessId}/products`);
 }
 
@@ -156,6 +161,7 @@ export async function deleteProductAction(businessId: string, productId: string)
   const token = await requireAuth();
   await deleteProduct(token, businessId, productId);
   revalidatePath(`/b/${businessId}/products`);
+  expireProducts(businessId, productId);
 }
 
 export async function deleteProductsBulkAction(
@@ -168,6 +174,8 @@ export async function deleteProductsBulkAction(
     ids.map((id) => deleteProduct(token, businessId, id).catch(() => null)),
   );
   revalidatePath(`/b/${businessId}/products`);
+  expireProducts(businessId);
+  for (const id of ids) expireProducts(businessId, id);
 }
 
 export async function createCategoryAction(businessId: string, formData: FormData) {
@@ -177,6 +185,7 @@ export async function createCategoryAction(businessId: string, formData: FormDat
   await createCategory(token, businessId, name);
   revalidatePath(`/b/${businessId}/products`);
   revalidatePath(`/b/${businessId}/categories`);
+  expireCategories(businessId);
 }
 
 export async function updateCategoryAction(
@@ -190,6 +199,7 @@ export async function updateCategoryAction(
   await updateCategory(token, businessId, categoryId, name);
   revalidatePath(`/b/${businessId}/products`);
   revalidatePath(`/b/${businessId}/categories`);
+  expireCategories(businessId);
 }
 
 export async function deleteCategoryAction(businessId: string, categoryId: string) {
@@ -197,6 +207,7 @@ export async function deleteCategoryAction(businessId: string, categoryId: strin
   await deleteCategory(token, businessId, categoryId);
   revalidatePath(`/b/${businessId}/products`);
   revalidatePath(`/b/${businessId}/categories`);
+  expireCategories(businessId);
 }
 
 export async function deleteCategoriesBulkAction(
@@ -210,4 +221,5 @@ export async function deleteCategoriesBulkAction(
   );
   revalidatePath(`/b/${businessId}/products`);
   revalidatePath(`/b/${businessId}/categories`);
+  expireCategories(businessId);
 }

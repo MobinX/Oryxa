@@ -1,8 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthToken } from '@/lib/auth';
 
-export const dynamic = 'force-dynamic';
-
 export async function POST(req: NextRequest) {
   const token = await getAuthToken();
   if (!token) {

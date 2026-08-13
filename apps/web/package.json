@@ -9,22 +9,22 @@
     "gen:api": "openapi-zod-client http://localhost:3001/doc -o lib/api-generated.ts --export-schemas false 2>/dev/null || echo 'Start API first: bun run dev:api'"
   },
   "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/integrations": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^11.3.0",
     "lucide-react": "^0.475.0",
-    "next": "^15.1.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.1",
-    "@repo/db": "workspace:*",
-    "@repo/integrations": "workspace:*"
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.6",
     "@types/node": "^22.13.1",
-    "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "openapi-zod-client": "^1.18.3",
     "tailwindcss": "^4.0.6",
     "typescript": "^5.7.3"

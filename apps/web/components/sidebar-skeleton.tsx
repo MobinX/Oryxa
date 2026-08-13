@@ -21,7 +21,7 @@ const nav = [
   { href: 'settings', label: 'Settings', icon: Settings },
 ];
 
-export function SidebarSkeleton({ businessId }: { businessId: string }) {
+export function SidebarSkeleton({ businessId: _businessId }: { businessId?: string }) {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-sidebar-bg lg:hidden">

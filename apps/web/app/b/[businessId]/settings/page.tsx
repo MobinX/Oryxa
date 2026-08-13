@@ -1,23 +1,22 @@
 import Link from 'next/link';
-import { getBusinessForRequest } from '@/lib/server-data';
+import { Suspense } from 'react';
+import { requireAuth } from '@/lib/auth';
+import { cachedBusiness } from '@/app/_cache/queries';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { updateBusinessAction } from '@/app/actions/business';
 import { DeleteDataDialog } from '@/components/delete-data-dialog';
+import SettingsSkeleton from './skeleton';
 
-export default async function SettingsPage({
+export default function SettingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  const { businessId } = await params;
-  const { saved } = await searchParams;
-  const business = await getBusinessForRequest(businessId);
-
   return (
     <div className="space-y-6">
       <div>
@@ -26,14 +25,33 @@ export default async function SettingsPage({
           Update your business details or manage your data.
         </p>
       </div>
+      <Suspense fallback={<SettingsSkeleton />}>
+        <SettingsContent params={params} searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
 
+async function SettingsContent({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ saved?: string }>;
+}) {
+  const { businessId } = await params;
+  const { saved } = await searchParams;
+  const token = await requireAuth();
+  const business = await cachedBusiness(token, businessId);
+
+  return (
+    <>
       {saved === '1' && (
         <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
           ✓ Settings saved successfully.
         </Card>
       )}
 
-      {/* Business Details */}
       <Card>
         <h2 className="text-lg font-semibold">Business details</h2>
         <form action={updateBusinessAction.bind(null, businessId)} className="mt-4 space-y-4">
@@ -93,7 +111,6 @@ export default async function SettingsPage({
         </form>
       </Card>
 
-      {/* Quick links */}
       <Card>
         <h2 className="text-lg font-semibold">Quick links</h2>
         <div className="mt-3 flex flex-wrap gap-3">
@@ -109,11 +126,10 @@ export default async function SettingsPage({
         </div>
       </Card>
 
-      {/* Danger Zone */}
       <div>
         <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-3">Danger zone</h2>
         <DeleteDataDialog businessId={businessId} businessName={business.name} />
       </div>
-    </div>
+    </>
   );
 }

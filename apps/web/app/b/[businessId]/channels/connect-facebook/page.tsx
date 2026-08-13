@@ -1,10 +1,26 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
 import { listFacebookPendingPages } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { ConnectFacebookForm } from '@/components/connect-facebook-form';
+import ConnectFacebookSkeleton from './skeleton';
 
-export default async function ConnectFacebookPage({
+export default function ConnectFacebookPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ token?: string; error?: string }>;
+}) {
+  return (
+    <Suspense fallback={<ConnectFacebookSkeleton />}>
+      <ConnectFacebookContent params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function ConnectFacebookContent({
   params,
   searchParams,
 }: {

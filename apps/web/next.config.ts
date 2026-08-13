@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  cacheComponents: true,
   transpilePackages: [],
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '**' }],

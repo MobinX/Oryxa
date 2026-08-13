@@ -1,5 +1,8 @@
 import Link from 'next/link';
-import { getBusinessForRequest, getBusinessAnalyticsForRequest, getMeForRequest } from '@/lib/server-data';
+import { Suspense } from 'react';
+import { requireAuth } from '@/lib/auth';
+import { cachedAnalytics, cachedBusiness, cachedMe } from '@/app/_cache/queries';
+import DashboardSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { DropdownSelect } from '@/components/ui/dropdown-select';
 import {
@@ -28,17 +31,30 @@ const sparklinePaths = {
 };
 
 
-export default async function DashboardPage({
+export default function DashboardPage({
+  params,
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent params={params} />
+    </Suspense>
+  );
+}
+
+async function DashboardContent({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
+  const token = await requireAuth();
 
   const [business, analytics, me] = await Promise.all([
-    getBusinessForRequest(businessId),
-    getBusinessAnalyticsForRequest(businessId, 7), // Get last 7 days for dashboard stats
-    getMeForRequest(),
+    cachedBusiness(token, businessId),
+    cachedAnalytics(token, businessId, 7),
+    cachedMe(token),
   ]);
 
   const stats = analytics.totals;

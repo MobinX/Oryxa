@@ -1,13 +1,9 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import {
-  listProducts,
-  listCategories,
-  toCsv,
-  csvColumnsForProducts,
-  type ProductListItem,
-} from '@/lib/api';
+import { cachedCategories, cachedProducts } from '@/app/_cache/queries';
+import { toCsv, csvColumnsForProducts, type ProductListItem } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -15,6 +11,7 @@ import { Badge, Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { CsvDownloadButton } from '@/components/csv-download-button';
 import { deleteProductAction, deleteProductsBulkAction } from '@/app/actions/products';
+import ProductsSkeleton from './skeleton';
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -28,7 +25,42 @@ const headers: DataTableHeader[] = [
   { key: 'variantCount', header: 'Variants', className: 'hidden sm:table-cell' },
 ];
 
-export default async function ProductsPage({
+export default function ProductsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ q?: string; categoryId?: string }>;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">Products</h1>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Manage your catalog
+            <Suspense fallback={null}>
+              <ProductCount params={params} searchParams={searchParams} />
+            </Suspense>
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Suspense fallback={<div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />}>
+            <ProductCsv params={params} searchParams={searchParams} />
+          </Suspense>
+          <Link href="new">
+            <Button>Add product</Button>
+          </Link>
+        </div>
+      </div>
+      <Suspense fallback={<ProductsSkeleton />}>
+        <ProductsContent params={params} searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ProductsContent({
   params,
   searchParams,
 }: {
@@ -39,9 +71,9 @@ export default async function ProductsPage({
   const { q = '', categoryId = '' } = await searchParams;
   const token = await requireAuth();
 
-  const [{ products, totalCount }, categories] = await Promise.all([
-    listProducts(token, businessId, { categoryId: categoryId || undefined, limit: 100 }),
-    listCategories(token, businessId),
+  const [{ products }, categories] = await Promise.all([
+    cachedProducts(token, businessId, { categoryId: categoryId || undefined, limit: 100 }),
+    cachedCategories(token, businessId),
   ]);
 
   const query = q.trim().toLowerCase();
@@ -102,25 +134,8 @@ export default async function ProductsPage({
     ),
   }));
 
-  const csv = toCsv(filtered as unknown as Record<string, unknown>[], csvColumnsForProducts());
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold sm:text-2xl">Products</h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Manage your catalog — {totalCount} total
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <CsvDownloadButton csv={csv} filename={`products-${businessId}.csv`} />
-          <Link href={`/b/${businessId}/products/new`}>
-            <Button>Add product</Button>
-          </Link>
-        </div>
-      </div>
-
+    <>
       <form className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" method="get">
         <Input
           name="q"
@@ -163,6 +178,48 @@ export default async function ProductsPage({
           hasRowActions
         />
       )}
-    </div>
+    </>
   );
 }
+
+async function ProductCount({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ q?: string; categoryId?: string }>;
+}) {
+  const { businessId } = await params;
+  const { categoryId = '' } = await searchParams;
+  const token = await requireAuth();
+  const { totalCount } = await cachedProducts(token, businessId, {
+    categoryId: categoryId || undefined,
+    limit: 100,
+  });
+  return <> — {totalCount} total</>;
+}
+
+async function ProductCsv({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ q?: string; categoryId?: string }>;
+}) {
+  const { businessId } = await params;
+  const { q = '', categoryId = '' } = await searchParams;
+  const token = await requireAuth();
+  const { products } = await cachedProducts(token, businessId, {
+    categoryId: categoryId || undefined,
+    limit: 100,
+  });
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? products.filter(
+        (p) => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query),
+      )
+    : products;
+  const csv = toCsv(filtered as unknown as Record<string, unknown>[], csvColumnsForProducts());
+  return <CsvDownloadButton csv={csv} filename={`products-${businessId}.csv`} />;
+}
+

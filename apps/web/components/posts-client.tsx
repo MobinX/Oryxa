@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ImageUpload } from '@/components/image-upload';
+import {
+  getPostCachedAction,
+  listComposerProductsAction,
+} from '@/app/actions/posts';
 import {
   createPost,
   updatePost,
@@ -15,11 +20,11 @@ import {
   syncPost,
   generatePost,
   tunePost,
-  getPost,
   type Post,
   type PostDetail,
   type PostState,
   type Channel,
+  type ProductListItem,
 } from '@/lib/api';
 import {
   Facebook,
@@ -37,15 +42,35 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CommentSection } from '@/components/comments/comment-section';
+import { Pulse } from '@/components/skeletons';
+import { PostsComposerSkeleton } from '@/components/posts-panel-skeleton';
+
+const CommentSection = dynamic(
+  () => import('@/components/comments/comment-section').then((mod) => mod.CommentSection),
+  {
+    ssr: false,
+    loading: () => <Pulse className="h-40 w-full rounded-2xl" />,
+  },
+);
 
 type PostsClientProps = {
   token: string;
   businessId: string;
   initialPosts: Post[];
   channels: Channel[];
-  products: any[];
 };
+
+function scheduleInputValue(iso: string | null | undefined) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const tzoffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzoffset).toISOString().slice(0, 16);
+}
+
+function findPost(list: Post[], id: string | null) {
+  if (!id) return null;
+  return list.find((post) => post.id === id) ?? null;
+}
 
 function channelPageName(channel: Channel | null | undefined): string {
   return channel?.pageName || 'Connected Page';
@@ -56,7 +81,6 @@ export function PostsClient({
   businessId,
   initialPosts,
   channels,
-  products,
 }: PostsClientProps) {
   const router = useRouter();
   const routeParams = useParams<{ businessId: string; postId?: string }>();
@@ -70,8 +94,11 @@ export function PostsClient({
     }
   }
 
+  const seededPost = findPost(initialPosts, selectedPostId);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
-  const [selectedPostDetail, setSelectedPostDetail] = useState<PostDetail | null>(null);
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const [selectedPostDetail, setSelectedPostDetail] = useState<PostDetail | null>(seededPost);
   const [filterPlatform, setFilterPlatform] = useState<'all' | 'facebook' | 'instagram'>('all');
   const [updatingChannel, setUpdatingChannel] = useState(false);
   const [liveCommentCount, setLiveCommentCount] = useState<number | null>(null);
@@ -83,16 +110,18 @@ export function PostsClient({
   const [syncing, setSyncing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [tuning, setTuning] = useState(false);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(() => Boolean(selectedPostId && !seededPost));
 
   // Content edit state
-  const [content, setContent] = useState('');
-  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
-  const [scheduledAt, setScheduledAt] = useState('');
+  const [content, setContent] = useState(() => seededPost?.content ?? '');
+  const [mediaUrls, setMediaUrls] = useState<string[]>(() => seededPost?.mediaUrls || []);
+  const [scheduledAt, setScheduledAt] = useState(() => scheduleInputValue(seededPost?.scheduledAt));
 
   // AI Generator state
   const [sourceMode, setSourceMode] = useState<'write' | 'ai'>('write');
-  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
+  const [productOptions, setProductOptions] = useState<ProductListItem[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedTone, setSelectedTone] = useState('friendly');
 
   // AI Tune instruction state
@@ -113,7 +142,8 @@ export function PostsClient({
     }
   }, [errorMsg, successMsg]);
 
-  // Fetch full post details when selection changes
+  // Paint the selected draft from the list immediately; only fetch extra
+  // fields (aiPrompt / latestSync) when the list item is missing or published.
   useEffect(() => {
     if (!selectedPostId) {
       setSelectedPostDetail(null);
@@ -121,36 +151,71 @@ export function PostsClient({
       setMediaUrls([]);
       setScheduledAt('');
       setLiveCommentCount(null);
+      setLoadingDetail(false);
       return;
     }
 
-    async function loadDetail() {
+    const fromList = findPost(postsRef.current, selectedPostId);
+    if (fromList) {
+      setSelectedPostDetail((prev) =>
+        prev?.id === fromList.id ? { ...prev, ...fromList } : fromList,
+      );
+      setContent(fromList.content);
+      setMediaUrls(fromList.mediaUrls || []);
+      setScheduledAt(scheduleInputValue(fromList.scheduledAt));
+      setLoadingDetail(false);
+    } else {
       setLoadingDetail(true);
-      setErrorMsg(null);
-      setLiveCommentCount(null);
-      try {
-        const detail = await getPost(token, businessId, selectedPostId!);
+    }
+    setLiveCommentCount(null);
+
+    const needsDetail = !fromList || fromList.postState === 'published';
+    if (!needsDetail) return;
+
+    let cancelled = false;
+    void getPostCachedAction(businessId, selectedPostId)
+      .then((detail) => {
+        if (cancelled) return;
         setSelectedPostDetail(detail);
         setContent(detail.content);
         setMediaUrls(detail.mediaUrls || []);
-        if (detail.scheduledAt) {
-          // Format ISO timestamp to YYYY-MM-DDTHH:MM for datetime-local input
-          const d = new Date(detail.scheduledAt);
-          const tzoffset = d.getTimezoneOffset() * 60000; //offset in milliseconds
-          const localISOTime = new Date(d.getTime() - tzoffset).toISOString().slice(0, 16);
-          setScheduledAt(localISOTime);
-        } else {
-          setScheduledAt('');
-        }
-      } catch (err) {
+        setScheduledAt(scheduleInputValue(detail.scheduledAt));
+      })
+      .catch((err) => {
+        if (cancelled || fromList) return;
         setErrorMsg(err instanceof Error ? err.message : 'Failed to load post details');
-      } finally {
-        setLoadingDetail(false);
-      }
-    }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDetail(false);
+      });
 
-    void loadDetail();
-  }, [selectedPostId, token, businessId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPostId, businessId]);
+
+  useEffect(() => {
+    if (sourceMode !== 'ai' || productOptions.length > 0) return;
+    let cancelled = false;
+    setLoadingProducts(true);
+    void listComposerProductsAction(businessId)
+      .then((res) => {
+        if (cancelled) return;
+        setProductOptions(res.products);
+        setSelectedProductId((current) => current || res.products[0]?.id || '');
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setErrorMsg(err instanceof Error ? err.message : 'Failed to load products');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProducts(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceMode, businessId, productOptions.length]);
 
   // Filter posts
   const filteredPosts = posts.filter((post) => {
@@ -519,13 +584,10 @@ export function PostsClient({
 
       {/* Right panel: Composer / Detail */}
       <div className="flex-1 flex flex-col min-h-0 bg-card">
-        {selectedPostId && selectedPostDetail ? (
+        {loadingDetail ? (
+          <PostsComposerSkeleton />
+        ) : selectedPostId && selectedPostDetail ? (
           <div className="flex-1 flex flex-col min-h-0">
-            {loadingDetail ? (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : (
               <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 space-y-6">
                 
                 {/* 1. Header with Milestones */}
@@ -656,12 +718,19 @@ export function PostsClient({
                             value={selectedProductId}
                             onChange={(e) => setSelectedProductId(e.target.value)}
                             className="bg-card"
+                            disabled={loadingProducts}
                           >
-                            {products.map((prod) => (
-                              <option key={prod.id} value={prod.id}>
-                                {prod.name} (${prod.price})
-                              </option>
-                            ))}
+                            {loadingProducts && productOptions.length === 0 ? (
+                              <option value="">Loading products…</option>
+                            ) : productOptions.length === 0 ? (
+                              <option value="">No products yet</option>
+                            ) : (
+                              productOptions.map((prod) => (
+                                <option key={prod.id} value={prod.id}>
+                                  {prod.name} (${prod.price})
+                                </option>
+                              ))
+                            )}
                           </Select>
                         </div>
 
@@ -682,7 +751,7 @@ export function PostsClient({
                         <Button
                           type="button"
                           onClick={handleAIGenerate}
-                          disabled={generating || products.length === 0}
+                          disabled={generating || loadingProducts || productOptions.length === 0}
                           className="w-full md:w-auto h-10 px-4 font-bold shrink-0"
                         >
                           {generating ? (
@@ -913,7 +982,6 @@ export function PostsClient({
                 )}
 
               </div>
-            )}
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground max-w-md mx-auto">

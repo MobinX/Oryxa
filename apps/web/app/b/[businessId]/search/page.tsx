@@ -1,5 +1,8 @@
 import Link from 'next/link';
-import { getBusinessForRequest, searchBusinessForRequest } from '@/lib/server-data';
+import { Suspense } from 'react';
+import { requireAuth } from '@/lib/auth';
+import { cachedBusiness } from '@/app/_cache/queries';
+import { searchBusiness } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SearchBar } from '@/components/search-bar';
@@ -9,10 +12,32 @@ import {
   ShoppingCart,
   MessageSquare,
   ArrowRight,
-  Sparkles,
 } from 'lucide-react';
+import SearchSkeleton from './skeleton';
 
-export default async function SearchPage({
+export default function SearchPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ q?: string }>;
+}) {
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 border-b border-border/40 pb-5 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Search Results</h1>
+          <p className="text-sm text-muted-foreground">Search products, orders, categories, and messages.</p>
+        </div>
+      </div>
+      <Suspense fallback={<SearchSkeleton />}>
+        <SearchContent params={params} searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function SearchContent({
   params,
   searchParams,
 }: {
@@ -21,12 +46,13 @@ export default async function SearchPage({
 }) {
   const { businessId } = await params;
   const { q = '' } = await searchParams;
-  const business = await getBusinessForRequest(businessId);
+  const token = await requireAuth();
+  const business = await cachedBusiness(token, businessId);
 
   let results = { products: [], categories: [], orders: [], messages: [] };
   if (q.trim()) {
     try {
-      results = await searchBusinessForRequest(businessId, q);
+      results = await searchBusiness(token, businessId, q);
     } catch (e) {
       console.error('Search error:', e);
     }
@@ -40,14 +66,10 @@ export default async function SearchPage({
 
   return (
     <div className="space-y-8">
-      {/* Top Header with search input */}
-      <div className="flex flex-col gap-4 border-b border-border/40 pb-5 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Search Results</h1>
-          <p className="text-sm text-muted-foreground">
-            Search results for &ldquo;<span className="font-semibold text-foreground">{q}</span>&rdquo; in {business.name}.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Search results for &ldquo;<span className="font-semibold text-foreground">{q}</span>&rdquo; in {business.name}.
+        </p>
         <div className="w-full md:max-w-md">
           <SearchBar businessId={businessId} initialQuery={q} />
         </div>

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { expireOrders } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import {
   ApiError,
@@ -19,6 +20,7 @@ export async function advanceOrderStateAction(
   const token = await requireAuth();
   await updateOrderState(token, businessId, orderId, nextState);
   revalidatePath(`/b/${businessId}/orders`);
+  expireOrders(businessId, orderId);
 }
 
 export async function createOrderAction(businessId: string, formData: FormData) {
@@ -44,6 +46,7 @@ export async function createOrderAction(businessId: string, formData: FormData) 
   });
 
   revalidatePath(`/b/${businessId}/orders`);
+  expireOrders(businessId);
   redirect(`/b/${businessId}/orders`);
 }
 
@@ -77,6 +80,7 @@ export async function updateOrderAction(
   }
 
   revalidatePath(`/b/${businessId}/orders`);
+  expireOrders(businessId, orderId);
   redirect(`/b/${businessId}/orders`);
 }
 
@@ -84,6 +88,7 @@ export async function deleteOrderAction(businessId: string, orderId: string) {
   const token = await requireAuth();
   await deleteOrder(token, businessId, orderId);
   revalidatePath(`/b/${businessId}/orders`);
+  expireOrders(businessId, orderId);
 }
 
 export async function deleteOrdersBulkAction(businessId: string, formData: FormData) {
@@ -93,4 +98,6 @@ export async function deleteOrdersBulkAction(businessId: string, formData: FormD
     ids.map((id) => deleteOrder(token, businessId, id).catch(() => null)),
   );
   revalidatePath(`/b/${businessId}/orders`);
+  expireOrders(businessId);
+  for (const id of ids) expireOrders(businessId, id);
 }
