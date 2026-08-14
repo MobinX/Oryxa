@@ -225,8 +225,36 @@ export type SendMessageOptions = {
   humanAgent?: boolean;
 };
 
-export const senderAction = (pageToken: string, recipientId: string, sender_action: 'mark_seen' | 'typing_on' | 'typing_off') =>
-  fetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: recipientId }, sender_action }) }).then(() => undefined).catch(() => undefined);
+export async function senderAction(
+  pageToken: string,
+  recipientId: string,
+  sender_action: 'mark_seen' | 'typing_on' | 'typing_off',
+): Promise<void> {
+  const isTyping = sender_action === 'typing_on' || sender_action === 'typing_off';
+  if (isTyping) console.log(`[typing :] ${sender_action}`, { recipientId });
+  try {
+    const res = await fetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: { id: recipientId }, sender_action }),
+    });
+    const body = await res.text();
+    if (isTyping) {
+      const parsed = parseGraphError(body);
+      console.log(`[typing :] ${sender_action} fetch`, {
+        recipientId,
+        status: res.status,
+        ok: res.ok,
+        body,
+        ...(res.ok ? {} : { code: parsed.code, subcode: parsed.subcode, message: parsed.message }),
+      });
+    }
+  } catch (err) {
+    if (isTyping) {
+      console.log(`[typing :] ${sender_action} failed`, { recipientId, err: String(err) });
+    }
+  }
+}
 
 export async function sendMessage(
   pageToken: string,
