@@ -61,10 +61,7 @@ export async function runAgentCore(
 
   console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
   if (!sendMessageOverride) {
-    await Promise.all([
-      sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'mark_seen' }),
-      sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'typing_on' }),
-    ]);
+    await sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'typing_on' });
   }
   emitSse?.('runner_start', { conversationId });
 
