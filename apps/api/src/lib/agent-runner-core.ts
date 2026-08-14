@@ -42,7 +42,7 @@ export async function runAgentCore(
   } = await import('@repo/db/crud/conversation');
   const { Agent } = await import('@repo/agent');
   const { listProducts } = await import('@repo/db/crud/product');
-  const { sendMessage } = await import('@repo/integrations/facebook');
+  const { sendMessage, senderAction } = await import('@repo/integrations/facebook');
 
   const conv = await getConversationWithHistory(conversationId);
   if (!conv?.channel?.agent) {
@@ -61,7 +61,7 @@ export async function runAgentCore(
 
   console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
   if (!sendMessageOverride) {
-    await sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'typing_on' });
+    await senderAction(conv.channel.apiToken, conv.customerPlatformId, 'typing_on');
   }
   emitSse?.('runner_start', { conversationId });
 

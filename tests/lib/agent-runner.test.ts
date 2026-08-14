@@ -9,6 +9,7 @@ import type { AgentConfig } from '@repo/agent';
 const sendMessageMock = vi.fn(async () => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
+  senderAction: vi.fn(async () => undefined),
 }));
 
 vi.mock('@repo/agent', async (importOriginal) => {

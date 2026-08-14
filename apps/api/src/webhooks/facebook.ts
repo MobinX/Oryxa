@@ -5,7 +5,7 @@ import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleComm
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { runInBackground } from '@api/lib/background';
-import { verifyWebhookSignature, getFacebookUserProfile, sendMessage } from '@repo/integrations/facebook';
+import { verifyWebhookSignature, getFacebookUserProfile, senderAction } from '@repo/integrations/facebook';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 
 type MessagingEvent = {
@@ -323,7 +323,7 @@ async function processMessagingEvents(
 
     if (inserted && priorStatus === 'done' && channel.agentId) {
       fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
-      await sendMessage(channel.apiToken, senderId, '', { action: 'typing_on' });
+      await senderAction(channel.apiToken, senderId, 'typing_on');
       await triggerAgentRun(conversationId);
     } else if (inserted && (priorStatus === 'working' || priorStatus === 'pending') && channel.agentId) {
       // The conversation was already in-flight. Check whether the prior runner
@@ -352,7 +352,7 @@ async function processMessagingEvents(
         const recovered = await resetStaleConversation(conversationId);
         if (recovered) {
           fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
-          await sendMessage(channel.apiToken, senderId, '', { action: 'typing_on' });
+          await senderAction(channel.apiToken, senderId, 'typing_on');
           await triggerAgentRun(conversationId);
         } else {
           fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });

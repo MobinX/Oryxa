@@ -40,11 +40,27 @@ describe('Facebook Integration', () => {
 
     const { sendMessage } = await import('@repo/integrations/facebook');
     await sendMessage('page-token', 'recipient-1', 'Hello');
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const typingOff = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(typingOff.sender_action).toBe('typing_off');
+    const call = fetchMock.mock.calls.at(-1);
     expect(call[0]).toContain('/me/messages');
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body.message.text).toBe('Hello');
     expect(body.messaging_type).toBe('RESPONSE');
+  });
+
+  it('senderAction posts a sender_action without a message', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as typeof fetch;
+
+    const { senderAction } = await import('@repo/integrations/facebook');
+    await senderAction('page-token', 'recipient-1', 'typing_on');
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.sender_action).toBe('typing_on');
+    expect(body.message).toBeUndefined();
   });
 
   it('sendMessage throws on API error', async () => {

@@ -223,7 +223,6 @@ export type SendMessageOptions = {
    * Automated agent replies must omit this — Meta forbids the tag for bots.
    */
   humanAgent?: boolean;
-  action?: 'mark_seen' | 'typing_on' | 'typing_off';
 };
 
 export const senderAction = (pageToken: string, recipientId: string, sender_action: 'mark_seen' | 'typing_on' | 'typing_off') =>
@@ -235,7 +234,6 @@ export async function sendMessage(
   text: string,
   options?: SendMessageOptions,
 ): Promise<void> {
-  if (options?.action) return senderAction(pageToken, recipientId, options.action);
   const recipient = { id: recipientId };
   const message = { text };
 

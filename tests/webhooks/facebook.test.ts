@@ -41,6 +41,7 @@ vi.mock('@repo/integrations/facebook', () => ({
   replyToFacebookComment: vi.fn(async () => 'MOCK_REPLY_ID'),
   publishFacebookPost: vi.fn(async () => 'MOCK_POST_ID'),
   sendMessage: vi.fn(async () => 'MOCK_MSG_ID'),
+  senderAction: vi.fn(async () => undefined),
 }));
 
 async function postWebhook(payload: unknown) {
