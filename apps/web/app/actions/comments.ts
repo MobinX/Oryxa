@@ -293,8 +293,8 @@ export async function createPostCommentAction(
 }
 
 /**
- * Sets or clears a Page reaction on a Facebook comment.
- * Pass `reaction: null` to remove the current reaction.
+ * Likes or removes the Page's like from a Facebook comment.
+ * Pass `reaction: null` to remove the current like.
  */
 export async function reactToCommentAction(
   businessId: string,
@@ -308,19 +308,12 @@ export async function reactToCommentAction(
 
   try {
     if (reaction === null) {
-      // Prefer reactions delete; fall back to likes delete for older like-only state.
-      const reactionsRes = await graphFetch(
-        `${GRAPH_API}/${commentId}/reactions?access_token=${pageToken}`,
+      const res = await graphFetch(
+        `${GRAPH_API}/${commentId}/likes?access_token=${pageToken}`,
         { method: 'DELETE' },
       );
-      if (!reactionsRes.ok) {
-        const likesRes = await graphFetch(
-          `${GRAPH_API}/${commentId}/likes?access_token=${pageToken}`,
-          { method: 'DELETE' },
-        );
-        if (!likesRes.ok) {
-          throw new Error(await likesRes.text());
-        }
+      if (!res.ok) {
+        throw new Error(await res.text());
       }
       return { reaction: null };
     }
@@ -337,18 +330,7 @@ export async function reactToCommentAction(
       return { reaction: 'LIKE' };
     }
 
-    const res = await graphFetch(`${GRAPH_API}/${commentId}/reactions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        type: reaction,
-        access_token: pageToken,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(await res.text());
-    }
-    return { reaction };
+    throw new Error('Only LIKE reactions are supported.');
   } catch (err) {
     console.error('[reactToCommentAction] Facebook reaction failed:', err);
     throw new Error(

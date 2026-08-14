@@ -1,15 +1,5 @@
-/** Facebook reaction types the Page can apply to a comment. */
-export type CommentReaction = 'LIKE' | 'LOVE' | 'CARE' | 'HAHA' | 'WOW' | 'SAD' | 'ANGRY';
-
-export const COMMENT_REACTIONS: CommentReaction[] = [
-  'LIKE',
-  'LOVE',
-  'CARE',
-  'HAHA',
-  'WOW',
-  'SAD',
-  'ANGRY',
-];
+/** The Page can only like or remove its like from a comment. */
+export type CommentReaction = 'LIKE';
 
 /**
  * Shape of a top-level Facebook comment (and its replies) returned to the UI.
