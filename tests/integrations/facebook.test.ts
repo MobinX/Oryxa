@@ -40,7 +40,7 @@ describe('Facebook Integration', () => {
 
     const { sendMessage } = await import('@repo/integrations/facebook');
     await sendMessage('page-token', 'recipient-1', 'Hello');
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.at(-1);
     expect(call[0]).toContain('/me/messages');
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body.message.text).toBe('Hello');
@@ -77,7 +77,7 @@ describe('Facebook Integration', () => {
     await expect(sendMessage('page-token', 'recipient-1', 'Bot reply')).rejects.toThrow(
       'Facebook send message failed',
     );
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('exchangeCodeForToken throws on API error', async () => {

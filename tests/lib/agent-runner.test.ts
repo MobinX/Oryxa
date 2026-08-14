@@ -98,7 +98,7 @@ describe('Agent Runner', () => {
     sendMessageMock.mockClear();
     await runAgentForConversation(seed.conversation.id);
 
-    expect(sendMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'final summary that must not be sent');
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
     expect(selfContents).not.toContain('final summary that must not be sent');

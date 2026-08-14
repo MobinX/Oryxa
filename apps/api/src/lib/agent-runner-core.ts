@@ -60,6 +60,7 @@ export async function runAgentCore(
   }
 
   console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
+  if (!sendMessageOverride) void sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'mark_seen' }).then(() => sendMessage(conv.channel.apiToken, conv.customerPlatformId, '', { action: 'typing_on' }));
   emitSse?.('runner_start', { conversationId });
 
   // Drain the ENTIRE backlog in this run: snapshot every pending customer

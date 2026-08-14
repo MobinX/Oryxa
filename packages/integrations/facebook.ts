@@ -223,7 +223,11 @@ export type SendMessageOptions = {
    * Automated agent replies must omit this — Meta forbids the tag for bots.
    */
   humanAgent?: boolean;
+  action?: 'mark_seen' | 'typing_on' | 'typing_off';
 };
+
+export const senderAction = (pageToken: string, recipientId: string, sender_action: 'mark_seen' | 'typing_on' | 'typing_off') =>
+  fetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: recipientId }, sender_action }) }).then(() => undefined).catch(() => undefined);
 
 export async function sendMessage(
   pageToken: string,
@@ -231,6 +235,7 @@ export async function sendMessage(
   text: string,
   options?: SendMessageOptions,
 ): Promise<void> {
+  if (options?.action) return senderAction(pageToken, recipientId, options.action);
   const recipient = { id: recipientId };
   const message = { text };
 
@@ -244,6 +249,7 @@ export async function sendMessage(
     return;
   }
 
+  await senderAction(pageToken, recipientId, 'typing_off');
   await postMessengerSend(pageToken, {
     recipient,
     message,
