@@ -41,9 +41,7 @@ describe('Facebook Integration', () => {
     const { sendMessage } = await import('@repo/integrations/facebook');
     await sendMessage('page-token', 'recipient-1', 'Hello');
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const typingOff = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(typingOff.sender_action).toBe('typing_off');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const call = fetchMock.mock.calls.at(-1);
     expect(call[0]).toContain('/me/messages');
     const body = JSON.parse((call[1] as RequestInit).body as string);
@@ -93,7 +91,7 @@ describe('Facebook Integration', () => {
     await expect(sendMessage('page-token', 'recipient-1', 'Bot reply')).rejects.toThrow(
       'Facebook send message failed',
     );
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it('exchangeCodeForToken throws on API error', async () => {

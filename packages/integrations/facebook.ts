@@ -275,7 +275,8 @@ export async function sendMessage(
     return;
   }
 
-  await senderAction(pageToken, recipientId, 'typing_off');
+  // TESTING: skip typing_off so the typing bubble stays until Meta clears it.
+  // await senderAction(pageToken, recipientId, 'typing_off');
   await postMessengerSend(pageToken, {
     recipient,
     message,
