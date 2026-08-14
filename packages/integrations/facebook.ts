@@ -141,24 +141,114 @@ export async function unsubscribeFacebookPageFromWebhooks(
   console.log('[fb-unsubscribe] success', { pageId });
 }
 
+/** Graph error_subcodes for “sent outside the allowed messaging window”. */
+const OUTSIDE_WINDOW_SUBCODES = new Set([2018278, 2534022, 2018065]);
+
+function parseGraphError(body: string): {
+  code?: number;
+  subcode?: number;
+  message?: string;
+} {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { code?: number; error_subcode?: number; message?: string };
+    };
+    return {
+      code: parsed.error?.code,
+      subcode: parsed.error?.error_subcode,
+      message: parsed.error?.message,
+    };
+  } catch {
+    return {};
+  }
+}
+
+export class FacebookSendError extends Error {
+  readonly name = 'FacebookSendError';
+  readonly userMessage: string;
+  readonly graphCode?: number;
+  readonly graphSubcode?: number;
+
+  constructor(
+    public readonly status: number,
+    public readonly body: string,
+  ) {
+    const parsed = parseGraphError(body);
+    super(`Facebook send message failed: ${body}`);
+    this.graphCode = parsed.code;
+    this.graphSubcode = parsed.subcode;
+    this.userMessage = isOutsideWindow(parsed.code, parsed.subcode)
+      ? "Facebook only allows a reply within 24 hours of the customer's last message. Ask them to send you a message, then try again."
+      : parsed.message || 'Failed to send Facebook message.';
+  }
+
+  get isOutsideWindow(): boolean {
+    return isOutsideWindow(this.graphCode, this.graphSubcode);
+  }
+}
+
+export function isFacebookSendError(err: unknown): err is FacebookSendError {
+  return (
+    err instanceof FacebookSendError ||
+    (err instanceof Error && err.name === 'FacebookSendError' && 'userMessage' in err)
+  );
+}
+
+function isOutsideWindow(code?: number, subcode?: number): boolean {
+  return code === 10 && subcode != null && OUTSIDE_WINDOW_SUBCODES.has(subcode);
+}
+
+type SendPayload = {
+  recipient: { id: string };
+  message: { text: string };
+  messaging_type: 'RESPONSE' | 'MESSAGE_TAG';
+  tag?: 'HUMAN_AGENT';
+};
+
+async function postMessengerSend(pageToken: string, payload: SendPayload): Promise<void> {
+  const res = await fetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new FacebookSendError(res.status, await res.text());
+  }
+}
+
+export type SendMessageOptions = {
+  /**
+   * Set by the inbox UI send path only. Always uses Meta's HUMAN_AGENT tag.
+   * Automated agent replies must omit this — Meta forbids the tag for bots.
+   */
+  humanAgent?: boolean;
+};
+
 export async function sendMessage(
   pageToken: string,
   recipientId: string,
   text: string,
+  options?: SendMessageOptions,
 ): Promise<void> {
-  const res = await fetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      recipient: { id: recipientId },
-      message: { text },
-    }),
-  });
+  const recipient = { id: recipientId };
+  const message = { text };
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Facebook send message failed: ${err}`);
+  if (options?.humanAgent) {
+    await postMessengerSend(pageToken, {
+      recipient,
+      message,
+      messaging_type: 'MESSAGE_TAG',
+      tag: 'HUMAN_AGENT',
+    });
+    return;
   }
+
+  await postMessengerSend(pageToken, {
+    recipient,
+    message,
+    messaging_type: 'RESPONSE',
+  });
 }
 
 /**

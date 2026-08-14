@@ -2,9 +2,8 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
 import { listConversations, listMessages } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { sendMessageAction, deleteConversationAction, deleteConversationsBulkAction } from '@/app/actions/inbox';
+import { deleteConversationAction, deleteConversationsBulkAction } from '@/app/actions/inbox';
+import { InboxReplyForm } from '@/components/inbox-reply-form';
 import { ConversationList } from '@/components/conversation-list';
 import { cn } from '@/lib/utils';
 import InboxSkeleton from './skeleton';
@@ -94,15 +93,7 @@ async function InboxContent({
                 </div>
               ))}
             </div>
-            <form
-              action={sendMessageAction.bind(null, businessId, selectedId)}
-              className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row"
-            >
-              <Input name="content" placeholder="Type a reply (bypasses AI)…" required className="flex-1" />
-              <Button type="submit" className="w-full sm:w-auto">
-                Send
-              </Button>
-            </form>
+            <InboxReplyForm businessId={businessId} conversationId={selectedId} />
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8 text-center text-muted-foreground">

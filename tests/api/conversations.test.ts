@@ -10,6 +10,8 @@ vi.mock('@repo/integrations/facebook', () => ({
   exchangeCodeForToken: vi.fn(),
   getUserPages: vi.fn(),
   verifyWebhookSignature: vi.fn(() => true),
+  isFacebookSendError: (err: unknown) =>
+    err instanceof Error && err.name === 'FacebookSendError' && 'userMessage' in err,
 }));
 
 describe('Conversations API', () => {
@@ -48,7 +50,28 @@ describe('Conversations API', () => {
       'page-token-test',
       'CUSTOMER_FB_ID',
       'Human reply here',
+      { humanAgent: true },
     );
+  });
+
+  it('POST /:businessId/conversations/:id/messages returns 422 when Facebook rejects the send', async () => {
+    const fbErr = Object.assign(new Error('Facebook send message failed'), {
+      name: 'FacebookSendError',
+      userMessage:
+        "Facebook only allows a reply within 24 hours of the customer's last message. Ask them to send you a message, then try again.",
+    });
+    sendMessageMock.mockRejectedValueOnce(fbErr);
+    const seed = await seedTestWorld();
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/messages`,
+      {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ content: 'Too late', contentType: 'text' }),
+      },
+    );
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/24 hours/);
   });
 
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {

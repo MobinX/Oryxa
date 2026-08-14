@@ -18,7 +18,7 @@ import {
   updateConversationState,
   deleteConversation,
 } from '@repo/db/crud/conversation';
-import { sendMessage } from '@repo/integrations/facebook';
+import { sendMessage, isFacebookSendError } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -107,6 +107,10 @@ const createMessageRoute = createRoute({
   responses: {
     201: { content: { 'application/json': { schema: createMessageOutputSchema } }, description: 'Message sent' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+    422: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Facebook rejected the send',
+    },
   },
 });
 
@@ -118,7 +122,17 @@ conversationsRouter.openapi(createMessageRoute, async (c) => {
   const conv = await getConversationForBusiness(conversationId, businessId);
   if (!conv?.channel) return c.json({ error: 'Conversation not found' }, 404);
 
-  await sendMessage(conv.channel.apiToken, conv.customerPlatformId, data.content);
+  try {
+    // Inbox UI path — always HUMAN_AGENT. Agent tools call sendMessage without this flag.
+    await sendMessage(conv.channel.apiToken, conv.customerPlatformId, data.content, {
+      humanAgent: true,
+    });
+  } catch (err) {
+    if (isFacebookSendError(err)) {
+      return c.json({ error: err.userMessage }, 422);
+    }
+    throw err;
+  }
 
   const message = await createMessage({
     conversationId,

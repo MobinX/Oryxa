@@ -7,14 +7,20 @@ import { sendMessage, deleteConversation } from '@/lib/api';
 export async function sendMessageAction(
   businessId: string,
   conversationId: string,
+  _prev: { error: string | null },
   formData: FormData,
-) {
+): Promise<{ error: string | null }> {
   const token = await requireAuth();
   const content = String(formData.get('content') ?? '').trim();
-  if (!content) return;
+  if (!content) return { error: 'Message cannot be empty.' };
 
-  await sendMessage(token, businessId, conversationId, content);
-  revalidatePath(`/b/${businessId}/inbox`);
+  try {
+    await sendMessage(token, businessId, conversationId, content);
+    revalidatePath(`/b/${businessId}/inbox`);
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to send message.' };
+  }
 }
 
 export async function deleteConversationAction(
