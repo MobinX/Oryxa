@@ -49,6 +49,44 @@ export async function cachedAnalytics(token: string, businessId: string, days: n
   return getBusinessAnalytics(token, businessId, days);
 }
 
+export async function cachedTokenAnalytics(token: string, businessId: string, hours: number = 24) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.analytics(businessId));
+  try {
+    const { getTokenAnalytics } = await import('@/lib/api');
+    return await getTokenAnalytics(token, businessId, hours);
+  } catch {
+    return {
+      totals: {
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalTokens: 0,
+        totalCacheHitTokens: 0,
+        totalCacheMissTokens: 0,
+        totalRuns: 0,
+        avgTokensPerMessage: 0,
+        overallCacheHitPercent: 0,
+        totalEstimatedCostUsd: 0,
+      },
+      byIntegration: [],
+      hourlyGraphData: [],
+    };
+  }
+}
+
+export async function cachedTokenLogs(token: string, businessId: string, limit: number = 50) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.analytics(businessId));
+  try {
+    const { getTokenLogs } = await import('@/lib/api');
+    return await getTokenLogs(token, businessId, limit);
+  } catch {
+    return [];
+  }
+}
+
 export async function cachedProducts(
   token: string,
   businessId: string,

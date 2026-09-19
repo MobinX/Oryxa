@@ -6,6 +6,7 @@ import { registerProductCrudTests } from '../crud/suites/product.suite';
 import { registerOrderCrudTests } from '../crud/suites/order.suite';
 import { registerChannelCrudTests } from '../crud/suites/channel.suite';
 import { registerConversationCrudTests } from '../crud/suites/conversation.suite';
+import { registerTokenAnalyticsCrudTests } from '../crud/suites/token-analytics.suite';
 
 const neonUrl = getNeonDatabaseUrl();
 
@@ -37,4 +38,9 @@ describe.skipIf(!neonUrl)('Neon CRUD — Channel & Agent', () => {
 describe.skipIf(!neonUrl)('Neon CRUD — Conversation', () => {
   withNeon();
   registerConversationCrudTests();
+});
+
+describe.skipIf(!neonUrl)('Neon CRUD — Token Analytics', () => {
+  withNeon();
+  registerTokenAnalyticsCrudTests();
 });

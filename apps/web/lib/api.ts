@@ -91,6 +91,12 @@ export const getBusinessStats = (token: string, businessId: string) =>
 export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
 
+export const getTokenAnalytics = (token: string, businessId: string, hours: number = 24) =>
+  apiFetch<any>(`/api/v1/${businessId}/analytics/tokens?hours=${hours}`, { token });
+
+export const getTokenLogs = (token: string, businessId: string, limit: number = 50) =>
+  apiFetch<any[]>(`/api/v1/${businessId}/analytics/tokens/logs?limit=${limit}`, { token });
+
 export const searchBusiness = (token: string, businessId: string, query: string) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/search?q=${encodeURIComponent(query)}`, { token });
 

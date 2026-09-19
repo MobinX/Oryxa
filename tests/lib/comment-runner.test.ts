@@ -14,8 +14,8 @@ vi.mock('@repo/integrations/facebook', () => ({
   getFacebookPostContext: (...args: unknown[]) => getFacebookPostContextMock(...args),
 }));
 
-vi.mock('@repo/agent', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@repo/agent')>();
+vi.mock('@repo/agent', async () => {
+  const mod = await import('../../packages/agent/index');
   const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,

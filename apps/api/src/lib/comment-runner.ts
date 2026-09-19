@@ -175,9 +175,32 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     });
 
     try {
-      const reply = await agent.run();
+      const { replyText, metrics } = await agent.run();
 
-      if (sentCommentTexts.length === 0 && reply && reply.trim() !== 'SILENT') {
+      // Log token metrics for this comment thread turn
+      try {
+        const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
+        await recordTokenUsage({
+          businessId: thread.businessId,
+          channelId: thread.channelId,
+          commentThreadId: thread.id,
+          integrationType: 'facebook_comment',
+          provider: metrics.provider,
+          model: metrics.model,
+          inputTokens: metrics.inputTokens,
+          outputTokens: metrics.outputTokens,
+          totalTokens: metrics.totalTokens,
+          cacheHitTokens: metrics.cacheHitTokens,
+          cacheMissTokens: metrics.cacheMissTokens,
+          cacheHitPercent: metrics.cacheHitPercent,
+          latencyMs: metrics.latencyMs,
+          estimatedCostUsd: metrics.estimatedCostUsd,
+        });
+      } catch (metricErr) {
+        console.error('[comment-runner] failed to record token metrics:', metricErr);
+      }
+
+      if (sentCommentTexts.length === 0 && replyText && replyText.trim() !== 'SILENT') {
         console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
 
         const existingFallbackReply = await db.query.comments.findFirst({
@@ -193,12 +216,12 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           const newCommentId = await replyToFacebookComment(
             thread.channel.apiToken,
             graphReplyToId,
-            reply,
+            replyText,
           );
           await createComment({
             commentThreadId: thread.id,
             from: 'self',
-            content: reply,
+            content: replyText,
             externalId: newCommentId,
             parentExternalId: current.externalId!,
             state: 'done',

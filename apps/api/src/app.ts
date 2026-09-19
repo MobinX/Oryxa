@@ -9,6 +9,7 @@ import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
 import { conversationsRouter } from '@api/routes/conversations';
 import { postsRouter } from '@api/routes/posts';
 import { uploadsRouter } from '@api/routes/uploads';
+import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 
@@ -36,6 +37,7 @@ app.route('/api/v1', channelsRouter);
 app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
 app.route('/api/v1', uploadsRouter);
+app.route('/api/v1', tokenAnalyticsRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 

@@ -6,6 +6,14 @@ export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsa
 export const messageFromEnum = pgEnum('message_from', ['self', 'customer']);
 export const messageStateEnum = pgEnum('message_state', ['pending', 'working', 'done']);
 export const postStateEnum = pgEnum('post_state', ['draft', 'scheduled', 'published', 'failed']);
+export const integrationTypeEnum = pgEnum('integration_type', [
+  'facebook_messenger',
+  'facebook_comment',
+  'instagram_messenger',
+  'whatsapp',
+  'ai_post_generation',
+  'ai_post_tuning',
+]);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -166,6 +174,8 @@ export const businessRelations = relations(businesses, ({ one, many }) => ({
   commentThreads: many(commentThreads),
   categories: many(categories),
   posts: many(posts),
+  llmTokenLogs: many(llmTokenLogs),
+  hourlyTokenAnalytics: many(hourlyTokenAnalytics),
 }));
 
 export const categoryRelations = relations(categories, ({ one, many }) => ({
@@ -299,3 +309,62 @@ export const postRelations = relations(posts, ({ one, many }) => ({
 export const postSyncRelations = relations(postSyncs, ({ one }) => ({
   post: one(posts, { fields: [postSyncs.postId], references: [posts.id] }),
 }));
+
+export const llmTokenLogs = pgTable('llm_token_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'set null' }),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+  commentThreadId: uuid('comment_thread_id').references(() => commentThreads.id, { onDelete: 'cascade' }),
+  postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }),
+  messageId: uuid('message_id').references(() => messages.id, { onDelete: 'set null' }),
+  integrationType: integrationTypeEnum('integration_type').notNull(),
+  provider: varchar('provider', { length: 50 }).default('gemini').notNull(),
+  model: varchar('model', { length: 100 }).notNull(),
+  inputTokens: integer('input_tokens').default(0).notNull(),
+  outputTokens: integer('output_tokens').default(0).notNull(),
+  totalTokens: integer('total_tokens').default(0).notNull(),
+  cacheHitTokens: integer('cache_hit_tokens').default(0).notNull(),
+  cacheMissTokens: integer('cache_miss_tokens').default(0).notNull(),
+  cacheHitPercent: numeric('cache_hit_percent', { precision: 5, scale: 2 }).default('0.00').notNull(),
+  latencyMs: integer('latency_ms').default(0).notNull(),
+  estimatedCostUsd: numeric('estimated_cost_usd', { precision: 10, scale: 6 }).default('0.000000').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  businessTimeIdx: index('llm_token_logs_business_time_idx').on(t.businessId, t.createdAt),
+  businessIntegrationIdx: index('llm_token_logs_business_integration_idx').on(t.businessId, t.integrationType, t.createdAt),
+}));
+
+export const hourlyTokenAnalytics = pgTable('hourly_token_analytics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  integrationType: integrationTypeEnum('integration_type').notNull(),
+  hourBucket: timestamp('hour_bucket').notNull(),
+  totalInputTokens: integer('total_input_tokens').default(0).notNull(),
+  totalOutputTokens: integer('total_output_tokens').default(0).notNull(),
+  totalTokens: integer('total_tokens').default(0).notNull(),
+  totalCacheHitTokens: integer('total_cache_hit_tokens').default(0).notNull(),
+  totalCacheMissTokens: integer('total_cache_miss_tokens').default(0).notNull(),
+  runCount: integer('run_count').default(0).notNull(),
+  avgTokensPerMessage: numeric('avg_tokens_per_message', { precision: 10, scale: 2 }).default('0.00').notNull(),
+  avgLatencyMs: integer('avg_latency_ms').default(0).notNull(),
+  totalEstimatedCostUsd: numeric('total_estimated_cost_usd', { precision: 10, scale: 6 }).default('0.000000').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  uniqHourlyBucket: uniqueIndex('hourly_token_analytics_uniq_idx').on(t.businessId, t.integrationType, t.hourBucket),
+  businessBucketIdx: index('hourly_token_analytics_business_bucket_idx').on(t.businessId, t.hourBucket),
+}));
+
+export const llmTokenLogRelations = relations(llmTokenLogs, ({ one }) => ({
+  business: one(businesses, { fields: [llmTokenLogs.businessId], references: [businesses.id] }),
+  channel: one(channels, { fields: [llmTokenLogs.channelId], references: [channels.id] }),
+  conversation: one(conversations, { fields: [llmTokenLogs.conversationId], references: [conversations.id] }),
+  commentThread: one(commentThreads, { fields: [llmTokenLogs.commentThreadId], references: [commentThreads.id] }),
+  post: one(posts, { fields: [llmTokenLogs.postId], references: [posts.id] }),
+  message: one(messages, { fields: [llmTokenLogs.messageId], references: [messages.id] }),
+}));
+
+export const hourlyTokenAnalyticsRelations = relations(hourlyTokenAnalytics, ({ one }) => ({
+  business: one(businesses, { fields: [hourlyTokenAnalytics.businessId], references: [businesses.id] }),
+}));
+

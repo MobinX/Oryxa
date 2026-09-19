@@ -445,9 +445,20 @@ postsRouter.openapi(syncPostRoute, async (c) => {
 
 // Helper: initialize LLM for post generation/tuning
 function getLlm() {
+  const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
+  if (provider === 'openai') {
+    return new ChatOpenAI({
+      model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+      apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
+      configuration: {
+        baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+      },
+      temperature: 0.7,
+    });
+  }
   return new ChatGoogleGenerativeAI({
     model: 'gemini-flash-lite-latest',
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY || 'fake-key',
     temperature: 0.7,
   });
 }
@@ -496,6 +507,7 @@ ${tone ? `Desired Tone: ${tone}` : ''}
 
 Make the post punchy, call-to-action oriented, and format it nicely with emojis. Do not output anything other than the post content.`;
 
+  const startTime = Date.now();
   const llm = getLlm();
   const res = await llm.invoke([
     {
@@ -504,6 +516,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     },
     { role: 'user', content: prompt },
   ]);
+  const latencyMs = Date.now() - startTime;
 
   const content = String(res.content).trim();
 
@@ -512,6 +525,41 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     content,
     productId,
   });
+
+  // Log token telemetry
+  try {
+    const usage = res.usage_metadata;
+    const inputTokens = usage?.input_tokens ?? 0;
+    const outputTokens = usage?.output_tokens ?? 0;
+    const totalTokens = inputTokens + outputTokens;
+    const cacheHitTokens = (usage as any)?.input_token_details?.cache_read ?? 0;
+    const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
+    const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
+    const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
+    const rateIn = provider === 'openai' ? 0.15 : 0.075;
+    const rateOut = provider === 'openai' ? 0.60 : 0.30;
+    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
+
+    const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
+    await recordTokenUsage({
+      businessId,
+      channelId,
+      postId: created.id,
+      integrationType: 'ai_post_generation',
+      provider,
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-5-mini') : 'gemini-flash-lite-latest',
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      cacheHitTokens,
+      cacheMissTokens,
+      cacheHitPercent,
+      latencyMs,
+      estimatedCostUsd,
+    });
+  } catch (metricErr) {
+    console.error('[posts-router] failed to record token metrics for generatePost:', metricErr);
+  }
 
   const resolvedCreated = await resolvePostMediaUrls(created);
 
@@ -573,6 +621,7 @@ Please refine or rewrite this post according to the following instruction:
 
 Output only the revised post content. Do not add any conversational text or wrapper quotes.`;
 
+  const startTime = Date.now();
   const llm = getLlm();
   const res = await llm.invoke([
     {
@@ -581,6 +630,7 @@ Output only the revised post content. Do not add any conversational text or wrap
     },
     { role: 'user', content: prompt },
   ]);
+  const latencyMs = Date.now() - startTime;
 
   const content = String(res.content).trim();
 
@@ -589,6 +639,45 @@ Output only the revised post content. Do not add any conversational text or wrap
     content,
     aiPrompt: instruction,
   });
+
+  if (!updated) {
+    return c.json({ error: 'Post not found' }, 404);
+  }
+
+  // Log token telemetry
+  try {
+    const usage = res.usage_metadata;
+    const inputTokens = usage?.input_tokens ?? 0;
+    const outputTokens = usage?.output_tokens ?? 0;
+    const totalTokens = inputTokens + outputTokens;
+    const cacheHitTokens = (usage as any)?.input_token_details?.cache_read ?? 0;
+    const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
+    const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
+    const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
+    const rateIn = provider === 'openai' ? 0.15 : 0.075;
+    const rateOut = provider === 'openai' ? 0.60 : 0.30;
+    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
+
+    const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
+    await recordTokenUsage({
+      businessId,
+      channelId: post.channelId,
+      postId: post.id,
+      integrationType: 'ai_post_tuning',
+      provider,
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-5-mini') : 'gemini-flash-lite-latest',
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      cacheHitTokens,
+      cacheMissTokens,
+      cacheHitPercent,
+      latencyMs,
+      estimatedCostUsd,
+    });
+  } catch (metricErr) {
+    console.error('[posts-router] failed to record token metrics for tunePost:', metricErr);
+  }
 
   const resolvedUpdated = await resolvePostMediaUrls(updated);
 

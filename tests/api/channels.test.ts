@@ -4,7 +4,7 @@ import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { app } from '@api/app';
 
 vi.mock('@repo/integrations/facebook', async () => {
-  const actual = await vi.importActual<typeof import('@repo/integrations/facebook')>('@repo/integrations/facebook');
+  const actual = await import('../../packages/integrations/facebook');
   return {
     ...actual,
     getFacebookOAuthUrl: vi.fn(() => 'https://facebook.com/oauth'),

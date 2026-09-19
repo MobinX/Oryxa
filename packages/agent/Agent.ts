@@ -52,22 +52,47 @@ const DEFAULT_REPLY_GUIDANCE = [
   '  5. If the customer asks to cancel their order, search history for the order ID and use the cancel_order tool. Fulfilled (done) orders cannot be cancelled.',
 ].join('\n');
 
+export interface TokenUsageMetrics {
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+  cacheHitPercent: number;
+  latencyMs: number;
+  estimatedCostUsd: number;
+}
+
+export interface AgentRunResult {
+  replyText: string;
+  sentTexts: string[];
+  metrics: TokenUsageMetrics;
+}
+
 export class Agent {
   /** Texts the agent actually sent via the reply tool during `run()`. */
   sentTexts: string[] = [];
 
   constructor(private config: AgentConfig) {}
 
-  async run(): Promise<string> {
+  async run(): Promise<AgentRunResult> {
+    const startTime = Date.now();
     const provider =
       this.config.llmProvider ??
       (process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini');
+
+    const modelName =
+      provider === 'openai'
+        ? (process.env.OPENAI_MODEL || 'gpt-5-mini')
+        : 'gemini-flash-lite-latest';
 
     const llm =
       this.config.llm ??
       (provider === 'openai'
         ? (() => {
-            const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
+            const model = modelName;
             const isReasoning = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('gpt-5');
             return new ChatOpenAI({
               model,
@@ -81,7 +106,7 @@ export class Agent {
             });
           })()
         : new ChatGoogleGenerativeAI({
-            model: 'gemini-flash-lite-latest',
+            model: modelName,
             apiKey: process.env.GEMINI_API_KEY,
             temperature: 0.3,
           }));
@@ -136,15 +161,61 @@ export class Agent {
     ];
 
     const result = await agent.invoke({ messages });
+    const latencyMs = Date.now() - startTime;
     const lastMessage = result.messages[result.messages.length - 1];
     const replyText =
       typeof lastMessage.content === 'string'
         ? lastMessage.content
         : JSON.stringify(lastMessage.content);
 
-    console.log(`[agent] run complete — sentTexts=${sentTexts.length} finalReply="${replyText.slice(0, 120)}${replyText.length > 120 ? '…' : ''}"`);
+    // Aggregate usage metadata across all AI messages in the React loop
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheHitTokens = 0;
+
+    for (const msg of result.messages) {
+      if (msg._getType() === 'ai' && msg.usage_metadata) {
+        const usage = msg.usage_metadata;
+        inputTokens += usage.input_tokens || 0;
+        outputTokens += usage.output_tokens || 0;
+
+        const details = (usage as any).input_token_details;
+        if (details) {
+          cacheHitTokens += details.cache_read || details.cached_tokens || 0;
+        }
+      }
+    }
+
+    const totalTokens = inputTokens + outputTokens;
+    const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
+    const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
+    
+    // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out; OpenAI gpt-5-mini: $0.15/1M in, $0.60/1M out)
+    const rateIn = provider === 'openai' ? 0.15 : 0.075;
+    const rateOut = provider === 'openai' ? 0.60 : 0.30;
+    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
+
+    const metrics: TokenUsageMetrics = {
+      provider,
+      model: modelName,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      cacheHitTokens,
+      cacheMissTokens,
+      cacheHitPercent,
+      latencyMs,
+      estimatedCostUsd,
+    };
+
+    console.log(`[agent] run complete — sentTexts=${sentTexts.length} totalTokens=${totalTokens} cacheHit%=${cacheHitPercent}% finalReply="${replyText.slice(0, 120)}${replyText.length > 120 ? '…' : ''}"`);
     emitSse?.('reply', { text: replyText });
 
-    return replyText;
+    return {
+      replyText,
+      sentTexts: this.sentTexts,
+      metrics,
+    };
   }
 }
+

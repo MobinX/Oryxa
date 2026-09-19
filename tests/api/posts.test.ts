@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { ChatOpenAI } from '@langchain/openai';
 
-const mockInvoke = vi.fn(async () => ({ content: 'Generated copy from AI' }));
+const mockInvoke = vi.fn(async () => ({
+  content: 'Generated copy from AI',
+  usage_metadata: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+}));
 ChatGoogleGenerativeAI.prototype.invoke = mockInvoke as any;
+ChatOpenAI.prototype.invoke = mockInvoke as any;
 
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';

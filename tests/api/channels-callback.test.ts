@@ -10,7 +10,7 @@ const getUserPagesMock = vi.fn();
 const subscribeFacebookPageToWebhooksMock = vi.fn();
 
 vi.mock('@repo/integrations/facebook', async () => {
-  const actual = await vi.importActual<typeof import('@repo/integrations/facebook')>('@repo/integrations/facebook');
+  const actual = await import('../../packages/integrations/facebook');
   return {
     ...actual,
     exchangeCodeForToken: (...args: unknown[]) => exchangeCodeForTokenMock(...args),

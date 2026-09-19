@@ -57,6 +57,13 @@
       "when": 1786100954979,
       "tag": "0007_add_last_state_at",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0008_add_token_analytics",
+      "breakpoints": true
     }
   ]
 }

@@ -111,19 +111,42 @@ export async function runAgentCore(
   });
 
   try {
-    const reply = await agent.run();
+    const { replyText, metrics } = await agent.run();
+
+    // Log token metrics for this Messenger conversation turn
+    try {
+      const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
+      await recordTokenUsage({
+        businessId: conv.businessId,
+        channelId: conv.channelId,
+        conversationId: conv.id,
+        integrationType: 'facebook_messenger',
+        provider: metrics.provider,
+        model: metrics.model,
+        inputTokens: metrics.inputTokens,
+        outputTokens: metrics.outputTokens,
+        totalTokens: metrics.totalTokens,
+        cacheHitTokens: metrics.cacheHitTokens,
+        cacheMissTokens: metrics.cacheMissTokens,
+        cacheHitPercent: metrics.cacheHitPercent,
+        latencyMs: metrics.latencyMs,
+        estimatedCostUsd: metrics.estimatedCostUsd,
+      });
+    } catch (metricErr) {
+      console.error('[agent-runner-core] failed to record token metrics:', metricErr);
+    }
 
     // #8: the send_message tool is the source of truth — it sends AND persists
     // the exact text. Only fall back to sending+saving the final LLM message if
     // the agent never called send_message (so the customer still gets a reply).
-    if (agent.sentTexts.length === 0 && reply) {
+    if (agent.sentTexts.length === 0 && replyText) {
       console.log(`[agent-runner-core] fallback: agent did not call send_message, sending final reply directly`);
-      emitSse?.('message_sent', { text: reply, fallback: true });
-      await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, reply);
+      emitSse?.('message_sent', { text: replyText, fallback: true });
+      await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
       await createMessage({
         conversationId: conv.id,
         from: 'self',
-        content: reply,
+        content: replyText,
         state: 'done',
       });
     }

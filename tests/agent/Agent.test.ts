@@ -27,8 +27,10 @@ describe('Agent', () => {
       llm: createSendMessageFakeLlm('Yes, we have shirts in stock!'),
     });
 
-    const reply = await agent.run();
-    expect(typeof reply).toBe('string');
+    const { replyText, metrics } = await agent.run();
+    expect(typeof replyText).toBe('string');
+    expect(metrics).toBeDefined();
+    expect(metrics.totalTokens).toBeGreaterThanOrEqual(0);
   }, 30_000);
 
   it('maps self messages to AI history role', async () => {
@@ -46,6 +48,7 @@ describe('Agent', () => {
       llm: createSendMessageFakeLlm('How can I help?'),
     });
 
-    await expect(agent.run()).resolves.toEqual(expect.any(String));
+    const result = await agent.run();
+    expect(typeof result.replyText).toBe('string');
   }, 30_000);
 });
