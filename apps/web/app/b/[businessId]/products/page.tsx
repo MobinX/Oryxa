@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth-provider';
 import {
@@ -10,6 +11,8 @@ import {
   updateProduct,
   deleteProduct,
   listCategories,
+  getBusiness,
+  listCustomers,
   type ProductListItem,
   type ProductVariant,
 } from '@/lib/api';
@@ -58,6 +61,20 @@ export default function ProductsPage({
     enabled: !!token,
   });
 
+  const { data: business } = useQuery({
+    queryKey: ['business', businessId],
+    queryFn: () => getBusiness(token!, businessId),
+    enabled: !!token,
+  });
+  const hasCompany = !!business?.companyId;
+
+  const { data: customers } = useQuery({
+    queryKey: ['customers', businessId],
+    queryFn: () => listCustomers(token!, businessId).then((r) => r.customers),
+    enabled: !!token && hasCompany,
+    retry: false,
+  });
+
   const editingId = modal?.type === 'edit' ? modal.productId : null;
 
   const { data: editingProduct, isLoading: loadingProduct } = useQuery({
@@ -85,6 +102,7 @@ export default function ProductsPage({
     sku: string;
     description: string;
     categoryName?: string;
+    customerId?: string;
     variants: ProductVariant[];
   }) {
     setSubmitting(true);
@@ -94,6 +112,7 @@ export default function ProductsPage({
       sku: values.sku,
       description: values.description,
       categoryName: values.categoryName,
+      customerId: values.customerId,
       variants: values.variants.map((v) => ({
         name: v.name,
         stock: v.stock,
@@ -112,6 +131,7 @@ export default function ProductsPage({
     price: number;
     sku: string;
     description: string;
+    customerId?: string;
     variants: ProductVariant[];
   }) {
     if (modal?.type !== 'edit') return;
@@ -121,6 +141,7 @@ export default function ProductsPage({
       price: values.price,
       sku: values.sku,
       description: values.description,
+      customerId: values.customerId ?? null,
       variants: values.variants.map((v) => ({
         id: v.id,
         name: v.name,
@@ -158,6 +179,16 @@ export default function ProductsPage({
         </div>
         <Button onClick={() => setModal({ type: 'create' })}>Add product</Button>
       </div>
+
+      {!hasCompany && (
+        <p className="-mt-4 text-sm text-[var(--muted-foreground)]">
+          Assign a company in{' '}
+          <Link href={`/b/${businessId}/companies`} className="text-[var(--primary)] hover:underline">
+            Companies
+          </Link>{' '}
+          to tag products with customers.
+        </p>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <Input
@@ -203,6 +234,7 @@ export default function ProductsPage({
                 <th className="px-4 py-3 text-left font-medium">Product</th>
                 <th className="hidden px-4 py-3 text-left font-medium md:table-cell">SKU</th>
                 <th className="hidden px-4 py-3 text-left font-medium lg:table-cell">Category</th>
+                <th className="hidden px-4 py-3 text-left font-medium lg:table-cell">Customer</th>
                 <th className="px-4 py-3 text-left font-medium">Price</th>
                 <th className="hidden px-4 py-3 text-left font-medium sm:table-cell">Variants</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -238,6 +270,13 @@ export default function ProductsPage({
                   <td className="hidden px-4 py-3 lg:table-cell">
                     {product.categoryName ? (
                       <Badge>{product.categoryName}</Badge>
+                    ) : (
+                      <span className="text-[var(--muted-foreground)]">—</span>
+                    )}
+                  </td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    {product.customerName ? (
+                      <Badge>{product.customerName}</Badge>
                     ) : (
                       <span className="text-[var(--muted-foreground)]">—</span>
                     )}
@@ -278,6 +317,8 @@ export default function ProductsPage({
             token={token!}
             businessId={businessId}
             categories={categories ?? []}
+            customers={customers ?? []}
+            hasCompany={hasCompany}
             submitting={submitting}
             onCancel={closeModal}
             onSubmit={handleCreate}
@@ -295,6 +336,8 @@ export default function ProductsPage({
               token={token!}
               businessId={businessId}
               categories={categories ?? []}
+              customers={customers ?? []}
+              hasCompany={hasCompany}
               submitting={submitting}
               initial={{
                 name: editingProduct.name,
@@ -302,6 +345,7 @@ export default function ProductsPage({
                 sku: editingProduct.sku,
                 description: editingProduct.description ?? '',
                 categoryName: editingProduct.category?.name ?? '',
+                customerId: editingProduct.customerId ?? editingProduct.customer?.id ?? '',
                 variants: editingProduct.variants.map((v) => ({
                   id: v.id,
                   name: v.name,

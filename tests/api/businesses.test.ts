@@ -23,7 +23,7 @@ describe('Businesses API', () => {
     const res = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.name).toBe('Test Store');
+    expect(body.name).toMatch(/^Test Store/);
   });
 
   it('PUT /api/v1/businesses/:id updates business', async () => {

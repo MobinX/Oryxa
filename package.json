@@ -14,6 +14,7 @@
     "build:web": "bun --filter web build",
     "start:api": "bun --filter api start",
     "start:web": "bun --filter web start",
+    "db:generate": "drizzle-kit generate",
     "db:push": "bun --filter @repo/db db:push",
     "db:studio": "bun --filter @repo/db db:studio",
     "gen:api": "bun --filter web gen:api",

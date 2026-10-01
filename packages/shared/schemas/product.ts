@@ -4,6 +4,7 @@ import { timestampSchema, uuidSchema } from '@shared/schemas/base';
 export const baseProductSchema = z.object({
   businessId: uuidSchema,
   categoryId: uuidSchema.nullable().optional(),
+  customerId: uuidSchema.nullable().optional(),
   name: z.string().min(1).max(255).openapi({ example: 'Premium Cotton T-Shirt' }),
   price: z.coerce.number().positive().openapi({ example: 29.99 }),
   slug: z.string().regex(/^[a-z0-9-]+$/),
@@ -53,6 +54,7 @@ export const variantOutputSchema = baseVariantSchema.extend({
 
 export const getProductByIdOutputSchema = selectProductSchema.extend({
   category: z.object({ id: uuidSchema, name: z.string() }).nullable(),
+  customer: z.object({ id: uuidSchema, name: z.string() }).nullable(),
   variants: z.array(variantOutputSchema),
 });
 
@@ -64,6 +66,7 @@ export const listProductsQuerySchema = z.object({
 
 export const listProductItemSchema = selectProductSchema.extend({
   categoryName: z.string().nullable().optional(),
+  customerName: z.string().nullable().optional(),
   variantCount: z.number().int().optional(),
   thumbnailUrl: z.string().nullable().optional(),
 });
@@ -82,6 +85,7 @@ export const updateProductInputSchema = z.object({
   price: z.coerce.number().positive().optional(),
   sku: z.string().max(100).optional(),
   description: z.string().optional(),
+  customerId: uuidSchema.nullable().optional(),
   variants: z.array(updateVariantInputSchema).optional(),
 });
 

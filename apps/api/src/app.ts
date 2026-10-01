@@ -10,6 +10,8 @@ import { conversationsRouter } from '@api/routes/conversations';
 import { uploadsRouter } from '@api/routes/uploads';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
+import { companiesRouter } from '@api/routes/companies';
+import { customersRouter } from '@api/routes/customers';
 
 export const app = new OpenAPIHono();
 
@@ -27,9 +29,11 @@ app.get('/', (c) => c.json({ name: 'Oryxa API', version: '1.0.0' }));
 
 app.route('/api/v1/users', usersRouter);
 app.route('/api/v1/businesses', businessesRouter);
+app.route('/api/v1/companies', companiesRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);
+app.route('/api/v1', customersRouter);
 app.route('/api/v1', ordersRouter);
 app.route('/api/v1', channelsRouter);
 app.route('/api/v1', conversationsRouter);

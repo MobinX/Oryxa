@@ -14,12 +14,15 @@ type ProductFormProps = {
   token: string;
   businessId: string;
   categories: CategoryOption[];
+  customers?: Array<{ id: string; name: string }>;
+  hasCompany?: boolean;
   initial?: {
     name: string;
     price: string;
     sku: string;
     description: string;
     categoryName: string;
+    customerId?: string | null;
     variants: ProductVariant[];
   };
   submitting?: boolean;
@@ -30,6 +33,7 @@ type ProductFormProps = {
     sku: string;
     description: string;
     categoryName?: string;
+    customerId?: string;
     variants: ProductVariant[];
   }) => Promise<void>;
 };
@@ -41,6 +45,8 @@ export function ProductForm({
   token,
   businessId,
   categories,
+  customers = [],
+  hasCompany = true,
   initial,
   submitting = false,
   onCancel,
@@ -51,6 +57,7 @@ export function ProductForm({
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [categoryName, setCategoryName] = useState(initial?.categoryName ?? '');
+  const [customerId, setCustomerId] = useState(initial?.customerId ?? '');
   const [variants, setVariants] = useState<ProductVariant[]>(
     initial?.variants?.length ? initial.variants : [emptyVariant()],
   );
@@ -69,6 +76,7 @@ export function ProductForm({
             sku: sku.trim(),
             description: description.trim(),
             categoryName: categoryName.trim() || undefined,
+            customerId: customerId || undefined,
             variants: variants.map(({ imagePreviewUrl: _preview, imageUrl: _url, imageKey, ...variant }) => ({
               ...variant,
               imageUrl: imageKey ?? undefined,
@@ -122,6 +130,23 @@ export function ProductForm({
                 <option key={c.id} value={c.name} />
               ))}
             </datalist>
+          </div>
+        )}
+        {hasCompany && (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium">Customer (for this company)</label>
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm"
+            >
+              <option value="">— No customer —</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
       </div>

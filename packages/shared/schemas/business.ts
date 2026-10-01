@@ -17,6 +17,7 @@ export const updateBusinessInputSchema = createBusinessInputSchema.partial();
 export const selectBusinessSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
+  companyId: uuidSchema.nullable().optional(),
   name: z.string(),
   description: z.string().nullable().optional(),
   employeeCount: z.number().nullable().optional(),

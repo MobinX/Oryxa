@@ -9,6 +9,8 @@ import {
   ShoppingCart,
   Radio,
   LogOut,
+  Users,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logout } from '@/lib/firebase';
@@ -17,6 +19,8 @@ import { useRouter } from 'next/navigation';
 const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: 'products', label: 'Products', icon: Package },
+  { href: 'customers', label: 'Customers', icon: Users },
+  { href: 'companies', label: 'Companies', icon: Building2 },
   { href: 'channels', label: 'Channels', icon: Radio },
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
   { href: 'orders', label: 'Orders', icon: ShoppingCart },
