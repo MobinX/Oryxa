@@ -36,8 +36,10 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
   // reason/uid only: path, method and status already live on the one evt=req
   // for this request, and repeating them here would be the same fact twice.
   auth: ['reason', 'uid'],
-  webhook: ['pageId', 'entryCount', 'messagingCount', 'changesCount', 'signatureValid', 'channelId', 'event'],
-  webhook_item: ['externalId', 'commentId', 'parentId', 'verb', 'kind', 'inserted', 'priorStatus', 'channelId'],
+  // The handshake itself: `evt=req` already carries method/path/status, so this
+  // says only what a Meta subscription failure looks like from the inside.
+  webhook: ['event', 'object', 'pageId', 'entryCount', 'messagingCount', 'changesCount', 'signatureValid', 'mode', 'verified', 'hasChallenge'],
+  webhook_item: ['kind', 'externalId', 'commentId', 'parentId', 'verb', 'inserted', 'priorStatus', 'outcome', 'ageMs'],
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
   db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
   db_summary: ['table', 'count', 'totalMs'],
@@ -73,9 +75,9 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
 };
 
 /** Precomputed so `emit()` allocates nothing per event on the request path. */
-const ALLOWED: Record<Evt, ReadonlySet<string>> = Object.fromEntries(
-  EVENTS.map((evt) => [evt, new Set(ALLOWLIST[evt])]),
-) as Record<Evt, ReadonlySet<string>>;
+const ALLOWED = new Map<Evt, ReadonlySet<string>>(
+  EVENTS.map((evt) => [evt, new Set(ALLOWLIST[evt])] as const),
+);
 
 /** Text that leaves the system because the owner asked to see it, gated by LOG_CONTENT. */
 const CUSTOMER_TEXT = new Set(['content', 'text', 'replyText', 'turns', 'args', 'result']);
@@ -197,10 +199,10 @@ function scalarize(field: string, value: unknown, policy: ContentPolicy): string
 }
 
 function filterFields(evt: Evt, fields: Fields, policy: ContentPolicy): Fields {
-  const allowed = ALLOWED[evt];
+  const allowed = ALLOWED.get(evt);
   const out: Fields = {};
   for (const key of Object.keys(fields)) {
-    if (!allowed.has(key)) {
+    if (!allowed?.has(key)) {
       const marker = `${evt}.${key}`;
       if (!warnedFields.has(marker) && process.env.NODE_ENV !== 'production') {
         warnedFields.add(marker);
@@ -235,7 +237,9 @@ function dedupeKey(
     case 'auth':
       return `${evt}:${requestId ?? ''}:${fields.reason ?? ''}`;
     case 'anomaly':
-      return `${evt}:${fields.kind ?? ''}`;
+      // The detail is part of the fact: two Graph codes explaining two failed
+      // sends are two facts, while the same claim lost twice is one.
+      return `${evt}:${fields.kind ?? ''}:${fields.detail ?? ''}`;
     case 'agent_run':
       return ctx ? `${evt}:${ctx.runId}` : null;
     case 'tool_call':
@@ -380,6 +384,8 @@ export const ANOMALY_KINDS = [
   'error_state_done',
   'tool_call_unresolved',
   'duplicate_reply_prevented',
+  'webhook_unknown_page',
+  'graph_send_failed',
 ] as const;
 
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];

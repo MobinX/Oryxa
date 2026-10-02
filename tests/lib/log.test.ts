@@ -106,9 +106,19 @@ describe('constraint B — every log is unique', () => {
     const { events } = await captured(() => {
       emit('anomaly', { kind: 'double_send' });
       emit('anomaly', { kind: 'double_send' });
-      emit('anomaly', { kind: 'double_send', detail: 'later detail' });
+      // The detail is part of the fact: two comments of the same kind that were
+      // prevented for two different ids are two things that happened.
+      emit('anomaly', { kind: 'duplicate_reply_prevented', detail: 'c_1' });
+      emit('anomaly', { kind: 'duplicate_reply_prevented', detail: 'c_1' });
+      emit('anomaly', { kind: 'duplicate_reply_prevented', detail: 'c_2' });
     });
-    expect(events.filter((e) => e.evt === 'anomaly')).toHaveLength(1);
+    const anomalies = events.filter((e) => e.evt === 'anomaly');
+    expect(anomalies).toHaveLength(3);
+    expect(anomalies.map((a) => `${a.kind}:${a.detail ?? ''}`)).toEqual([
+      'double_send:',
+      'duplicate_reply_prevented:c_1',
+      'duplicate_reply_prevented:c_2',
+    ]);
   });
 
   it('keeps the same fact from two different invocations', async () => {

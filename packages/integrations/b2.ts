@@ -1,6 +1,7 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+import { loggedCall } from './http-log';
 
 export const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -178,7 +179,9 @@ export async function uploadImageToB2(params: {
   if (_uploadOverride) {
     await _uploadOverride(command);
   } else {
-    await getB2Client().send(command);
+    // The presigned URL is local crypto, so only the real network call is
+    // reported — and never the key, which carries the customer's file name.
+    await loggedCall('b2', 'PutObject', () => getB2Client().send(command));
   }
 
   const url = await getSignedB2Url(key);

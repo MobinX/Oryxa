@@ -13,6 +13,8 @@ import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
+import { emit } from '@api/lib/log';
+import { setIntegrationLogSink } from '@repo/integrations/http-log';
 
 export const app = new OpenAPIHono();
 
@@ -21,6 +23,11 @@ export const app = new OpenAPIHono();
 app.use('*', logRequest);
 app.onError(handleError);
 app.notFound(handleNotFound);
+
+// The Graph and B2 calls live in a leaf package that knows nothing about logging;
+// this is the one place that connects it to the queue, so a token URL never
+// reaches the ingest path.
+setIntegrationLogSink((evt, fields) => emit(evt, fields));
 
 app.use(
   '*',
