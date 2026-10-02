@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["bun", "vitest/globals"],
+    "paths": {
+      "@repo/db": ["packages/db"],
+      "@repo/db/*": ["packages/db/*"],
+      "@repo/shared": ["packages/shared"],
+      "@repo/shared/*": ["packages/shared/*"],
+      "@repo/agent": ["packages/agent"],
+      "@repo/agent/*": ["packages/agent/*"],
+      "@repo/integrations": ["packages/integrations"],
+      "@repo/integrations/*": ["packages/integrations/*"],
+      "@repo/utils": ["packages/utils"],
+      "@repo/utils/*": ["packages/utils/*"],
+      "@db/*": ["packages/db/*"],
+      "@shared/*": ["packages/shared/*"],
+      "@agent/*": ["packages/agent/*"],
+      "@api/*": ["apps/api/src/*"]
+    }
+  },
+  "include": [
+    "apps/api/src/**/*.ts",
+    "apps/api/api/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["**/node_modules", "**/dist", "**/public"]
+}

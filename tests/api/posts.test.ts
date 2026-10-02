@@ -98,8 +98,13 @@ describe('Posts API', () => {
     const generated = await generateRes.json();
     expect(typeof generated.content).toBe('string');
     expect(generated.content.length).toBeGreaterThan(0);
+    // Guards the prototype patch above: if it ever stops applying (two module
+    // copies, a bumped range), this fails instead of silently calling the live
+    // endpoint from .env.
+    expect(mockInvoke).toHaveBeenCalled();
 
     // 6. AI Tune post draft
+    mockInvoke.mockClear();
     const tuneRes = await app.request(`/api/v1/${seed.business.id}/posts/${postId}/tune`, {
       method: 'POST',
       headers: authHeaders(),
@@ -112,6 +117,7 @@ describe('Posts API', () => {
     expect(typeof tuned.content).toBe('string');
     expect(tuned.content.length).toBeGreaterThan(0);
     expect(tuned.id).toBe(postId);
+    expect(mockInvoke).toHaveBeenCalled();
 
     // 7. Publish post
     publishMock.mockClear();

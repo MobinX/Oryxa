@@ -4,6 +4,7 @@ import { seedTestWorld } from '../helpers/seed';
 import { runAgentForCommentThread, triggerCommentRun } from '@api/lib/comment-runner';
 import { listComments } from '@repo/db/crud/comment';
 import type { AgentConfig } from '@repo/agent';
+import { agentRunResult, stubAgentRun } from '../helpers/agent-run';
 
 const replyToFacebookCommentMock = vi.fn(async () => `reply-id-${Math.random()}`);
 const sendMessageMock = vi.fn(async () => undefined);
@@ -76,9 +77,10 @@ describe('Comment Runner', () => {
 
     const { Agent } = await import('@repo/agent');
     let capturedHistory: Array<{ from: string; content: string }> = [];
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
-      capturedHistory = [...(this as { config: { history: Array<{ from: string; content: string }> } }).config.history];
-      return 'ok';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { history: Array<{ from: string; content: string }> } }) {
+      capturedHistory = [...this.config.history];
+      // Silent reply: this test is about which comment reaches the agent, not delivery.
+      return agentRunResult('');
     });
 
     await runAgentForCommentThread(threadId);
@@ -103,10 +105,8 @@ describe('Comment Runner', () => {
     const threadId = await seedCommentThread(seed, 'USER_SILENT', 'P2');
 
     const { Agent } = await import('@repo/agent');
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function () {
-      // Agent judged it not-for-page → no tool call, empty reply.
-      return '';
-    });
+    // Agent judged it not-for-page → no tool call, empty reply.
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun(''));
 
     replyToFacebookCommentMock.mockClear();
     await runAgentForCommentThread(threadId);
@@ -118,6 +118,32 @@ describe('Comment Runner', () => {
     expect(all.find((c) => c.content === 'first comment')?.state).toBe('done');
     // No self reply row was created.
     expect(all.filter((c) => c.from === 'self')).toHaveLength(0);
+
+    runSpy.mockRestore();
+  }, 30_000);
+
+  it('falls back to reply+save when the agent produced a reply but never called reply_comment', async () => {
+    // Mirror of the messenger runner's fallback path: the reply tool is the source
+    // of truth, but a reply that never went through it must still reach the thread.
+    const seed = await seedTestWorld();
+    const threadId = await seedCommentThread(seed, 'USER_FALLBACK', 'PFB');
+
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('fallback comment reply'));
+
+    replyToFacebookCommentMock.mockClear();
+    await runAgentForCommentThread(threadId);
+
+    expect(replyToFacebookCommentMock).toHaveBeenCalledWith(
+      'page-token-test',
+      'c-USER_FALLBACK-PFB-0',
+      'fallback comment reply',
+    );
+
+    const all = await listComments(threadId);
+    const selfContents = all.filter((c) => c.from === 'self').map((c) => c.content);
+    expect(selfContents).toContain('fallback comment reply');
+    expect(all.find((c) => c.content === 'first comment')?.state).toBe('done');
 
     runSpy.mockRestore();
   }, 30_000);
@@ -136,7 +162,7 @@ describe('Comment Runner', () => {
     );
 
     const { Agent } = await import('@repo/agent');
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockResolvedValue('ok');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun(''));
 
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -211,9 +237,10 @@ describe('Comment Runner', () => {
 
     const { Agent } = await import('@repo/agent');
     let capturedSystemPrompt = '';
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
-      capturedSystemPrompt = (this as { config: { systemPrompt: string } }).config.systemPrompt;
-      return 'ok';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { systemPrompt: string } }) {
+      capturedSystemPrompt = this.config.systemPrompt;
+      // Silent reply: prompt construction is under test here, not delivery.
+      return agentRunResult('');
     });
 
     getFacebookPostContextMock.mockClear();
@@ -234,9 +261,10 @@ describe('Comment Runner', () => {
     getFacebookPostContextMock.mockResolvedValueOnce('Post caption: New drop!');
     const { Agent } = await import('@repo/agent');
     let capturedSystemPrompt = '';
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
-      capturedSystemPrompt = (this as { config: { systemPrompt: string } }).config.systemPrompt;
-      return 'ok';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { systemPrompt: string } }) {
+      capturedSystemPrompt = this.config.systemPrompt;
+      // Silent reply: prompt construction is under test here, not delivery.
+      return agentRunResult('');
     });
 
     await runAgentForCommentThread(threadId);

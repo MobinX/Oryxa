@@ -5,6 +5,7 @@ import { runAgentForConversation, triggerAgentRun } from '@api/lib/agent-runner'
 import { listMessages } from '@repo/db/crud/conversation';
 import { getConversationForBusiness } from '@repo/db/crud/conversation';
 import type { AgentConfig } from '@repo/agent';
+import { agentRunResult, stubAgentRun } from '../helpers/agent-run';
 
 const sendMessageMock = vi.fn(async () => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
@@ -91,10 +92,9 @@ describe('Agent Runner', () => {
     // the source of truth — the runner must NOT send or save a fallback reply.
     const seed = await seedTestWorld();
     const { Agent } = await import('@repo/agent');
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
-      this.sentTexts = ['reply via tool'];
-      return 'final summary that must not be sent';
-    });
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(
+      stubAgentRun('final summary that must not be sent', ['reply via tool']),
+    );
 
     sendMessageMock.mockClear();
     await runAgentForConversation(seed.conversation.id);
@@ -112,10 +112,7 @@ describe('Agent Runner', () => {
     // so the runner sends and persists that reply itself.
     const seed = await seedTestWorld();
     const { Agent } = await import('@repo/agent');
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this) {
-      this.sentTexts = [];
-      return 'fallback reply';
-    });
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('fallback reply'));
 
     sendMessageMock.mockClear();
     await runAgentForConversation(seed.conversation.id);
@@ -143,11 +140,12 @@ describe('Agent Runner', () => {
     }
 
     const { Agent } = await import('@repo/agent');
+    const sentViaTool = ['reply'];
     let capturedHistory: Array<{ from: string; content: string }> = [];
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: unknown) {
-      capturedHistory = [...(this as { config: { history: Array<{ from: string; content: string }> } }).config.history];
-      (this as { sentTexts: string[] }).sentTexts = ['reply'];
-      return 'done';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { sentTexts: string[]; config: { history: Array<{ from: string; content: string }> } }) {
+      capturedHistory = [...this.config.history];
+      this.sentTexts = sentViaTool;
+      return agentRunResult('done', sentViaTool);
     });
 
     sendMessageMock.mockClear();
