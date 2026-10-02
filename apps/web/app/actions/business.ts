@@ -61,6 +61,21 @@ export async function updateStoreAction(businessId: string, formData: FormData) 
     if (slug.length >= 2) payload.slug = slug;
   }
 
+  const theme: Record<string, string> = {};
+  const tagline = String(formData.get('tagline') ?? '').trim();
+  const accentColor = String(formData.get('accentColor') ?? '').trim();
+  const heroImageUrl = String(formData.get('heroImageUrl') ?? '').trim();
+  const logoUrl = String(formData.get('logoUrl') ?? '').trim();
+  const font = String(formData.get('font') ?? '').trim();
+  const layout = String(formData.get('layout') ?? '').trim();
+  if (tagline) theme.tagline = tagline.slice(0, 280);
+  if (/^#[0-9a-fA-F]{3,8}$/.test(accentColor)) theme.accentColor = accentColor;
+  if (heroImageUrl) theme.heroImageUrl = heroImageUrl.slice(0, 1000);
+  if (logoUrl) theme.logoUrl = logoUrl.slice(0, 1000);
+  if (font === 'sans' || font === 'serif' || font === 'mono') theme.font = font;
+  if (layout === 'grid' || layout === 'featured') theme.layout = layout;
+  payload.storeTheme = theme;
+
   await updateBusiness(token, businessId, payload);
 
   revalidatePath(`/b/${businessId}/settings`);

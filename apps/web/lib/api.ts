@@ -53,6 +53,14 @@ export type Business = {
   name: string;
   slug?: string | null;
   storePublished?: boolean;
+  storeTheme?: {
+    accentColor?: string;
+    font?: 'sans' | 'serif' | 'mono';
+    tagline?: string;
+    heroImageUrl?: string;
+    logoUrl?: string;
+    layout?: 'grid' | 'featured';
+  } | null;
   description?: string | null;
   employeeCount?: number | null;
   type?: string | null;
