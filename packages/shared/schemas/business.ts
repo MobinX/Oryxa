@@ -10,6 +10,8 @@ export const createBusinessInputSchema = z.object({
   hasTaxLicense: z.boolean().default(false),
   phone: z.string().max(20).optional(),
   facebookPageLink: z.string().max(500).optional(),
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,253}[a-z0-9]$/, 'lowercase letters, numbers and hyphens').optional(),
+  storePublished: z.boolean().optional(),
 }).openapi('CreateBusinessInput');
 
 export const updateBusinessInputSchema = createBusinessInputSchema.partial();
@@ -18,6 +20,8 @@ export const selectBusinessSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
   name: z.string(),
+  slug: z.string().nullable().optional(),
+  storePublished: z.boolean().default(false),
   description: z.string().nullable().optional(),
   employeeCount: z.number().nullable().optional(),
   type: z.string().nullable().optional(),

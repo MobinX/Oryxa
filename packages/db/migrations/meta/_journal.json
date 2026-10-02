@@ -64,6 +64,13 @@
       "when": 1786200000000,
       "tag": "0008_add_token_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0009_store_slug",
+      "breakpoints": true
     }
   ]
 }

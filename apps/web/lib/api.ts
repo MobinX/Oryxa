@@ -51,6 +51,8 @@ export type Business = {
   id: string;
   userId: string;
   name: string;
+  slug?: string | null;
+  storePublished?: boolean;
   description?: string | null;
   employeeCount?: number | null;
   type?: string | null;

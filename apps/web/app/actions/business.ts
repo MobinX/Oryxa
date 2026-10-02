@@ -50,6 +50,24 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
   redirect(`/b/${businessId}/settings?saved=1`);
 }
 
+export async function updateStoreAction(businessId: string, formData: FormData) {
+  const token = await requireAuth();
+  const rawSlug = String(formData.get('slug') ?? '').trim().toLowerCase();
+  const storePublished = formData.get('storePublished') === 'on';
+
+  const payload: Record<string, unknown> = { storePublished };
+  if (rawSlug) {
+    const slug = rawSlug.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    if (slug.length >= 2) payload.slug = slug;
+  }
+
+  await updateBusiness(token, businessId, payload);
+
+  revalidatePath(`/b/${businessId}/settings`);
+  expireBusiness(businessId);
+  redirect(`/b/${businessId}/settings?saved=1`);
+}
+
 export async function deleteBusinessAction(businessId: string) {
   const token = await requireAuth();
   await deleteBusiness(token, businessId);
