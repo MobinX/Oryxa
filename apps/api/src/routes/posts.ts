@@ -22,6 +22,7 @@ import { getProductById } from '@repo/db/crud/product';
 import { getChannelById } from '@repo/db/crud/channel';
 import { getPublisher, extractB2Key, resolveStoredImageUrl } from '@repo/integrations';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { ChatOpenAI } from '@langchain/openai';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 

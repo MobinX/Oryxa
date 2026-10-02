@@ -174,15 +174,16 @@ export class Agent {
     let cacheHitTokens = 0;
 
     for (const msg of result.messages) {
-      if (msg._getType() === 'ai' && msg.usage_metadata) {
-        const usage = msg.usage_metadata;
-        inputTokens += usage.input_tokens || 0;
-        outputTokens += usage.output_tokens || 0;
+      if (msg._getType() !== 'ai') continue;
+      // usage_metadata only exists on AIMessage; _getType() isn't a type predicate.
+      const usage = (msg as AIMessage).usage_metadata;
+      if (!usage) continue;
+      inputTokens += usage.input_tokens || 0;
+      outputTokens += usage.output_tokens || 0;
 
-        const details = (usage as any).input_token_details;
-        if (details) {
-          cacheHitTokens += details.cache_read || details.cached_tokens || 0;
-        }
+      const details = (usage as any).input_token_details;
+      if (details) {
+        cacheHitTokens += details.cache_read || details.cached_tokens || 0;
       }
     }
 

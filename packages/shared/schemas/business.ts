@@ -22,8 +22,10 @@ export const selectBusinessSchema = z.object({
   employeeCount: z.number().nullable().optional(),
   type: z.string().nullable().optional(),
   foundedDate: timestampSchema.nullable().optional(),
-  hasTradeLicense: z.boolean(),
-  hasTaxLicense: z.boolean(),
+  // has_trade_license / has_tax_license are nullable columns, so the API can
+  // return null for a business created before the defaults were added.
+  hasTradeLicense: z.boolean().nullable(),
+  hasTaxLicense: z.boolean().nullable(),
   facebookPageLink: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   createdAt: timestampSchema,

@@ -41,18 +41,18 @@ app.route('/api/v1', tokenAnalyticsRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 
+// app.doc() config accepts no `components` key, so security schemes must be
+// registered on the registry or every `security: [{ bearerAuth: [] }]` route
+// ships a dangling reference.
+app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  bearerFormat: 'JWT',
+});
+
 app.doc('/doc', {
   openapi: '3.0.0',
   info: { title: 'Oryxa API', version: '1.0.0' },
-  components: {
-    securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-      },
-    },
-  },
 });
 
 app.get('/ui', swaggerUI({ url: '/doc' }));
