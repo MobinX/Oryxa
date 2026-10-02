@@ -11,3 +11,10 @@ export const TRIGGER_TIMEOUT_MS = 9000;
  * short enough to recover before a customer notices silence.
  */
 export const STALE_RUNNER_MS = 35_000;
+
+/**
+ * How many times one conversation's tail may re-trigger a follow-up run before
+ * the chain itself is the story. Each re-trigger is a fresh invocation with a
+ * 9 s handshake, so a runaway loop both spams the customer and never settles.
+ */
+export const RUN_LOOP_DEPTH_THRESHOLD = 5;

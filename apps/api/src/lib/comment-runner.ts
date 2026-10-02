@@ -1,3 +1,9 @@
+import type { TokenUsageMetrics } from '@repo/agent';
+import { emit, emitAnomaly, errorFields } from '@api/lib/log';
+import { currentContext, outboundRunHeaders, tagContext } from '@api/lib/ctx';
+import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
+import { RUN_LOOP_DEPTH_THRESHOLD } from '@api/lib/config';
+
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
 
@@ -13,6 +19,7 @@ export async function triggerCommentRun(commentThreadId: string): Promise<void> 
       headers: {
         'Content-Type': 'application/json',
         'x-internal-key': INTERNAL_KEY,
+        ...outboundRunHeaders(),
       },
       body: JSON.stringify({ commentThreadId }),
       signal: AbortSignal.timeout(8000),
@@ -91,12 +98,39 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   const { listProducts } = await import('@repo/db/crud/product');
   const { getFacebookPostContext, replyToFacebookComment } = await import('@repo/integrations/facebook');
 
+  const trace = createAgentTrace();
+  const started = performance.now();
+  let ok = true;
+  let replyText = '';
+  let metrics: TokenUsageMetrics | undefined;
+  let sentViaFallback = 0;
+  let clearedCount = 0;
+  let replyPreexisting = false;
+  let handledExternalId: string | null | undefined;
+  let stateSetTo = 'working';
+  let runError: unknown;
+
   const thread = await getCommentThreadWithChannel(commentThreadId);
-  if (!thread?.channel?.agent) return;
+  if (!thread?.channel?.agent) {
+    emitAnomaly('channel_without_agent', { detail: commentThreadId });
+    return;
+  }
 
   const claimed = await claimCommentThreadForRun(thread.id);
-  if (!claimed) return;
+  if (!claimed) {
+    // Another runner holds this thread: nothing was replied to here, and the
+    // pending comments wait for whoever won the claim.
+    emitAnomaly('claim_lost');
+    return;
+  }
 
+  tagContext({ commentThreadId: thread.id, businessId: thread.businessId, channelId: thread.channelId });
+  const runDepth = currentContext()?.runDepth ?? 0;
+  if (runDepth >= RUN_LOOP_DEPTH_THRESHOLD) {
+    emitAnomaly('run_loop_depth', { count: runDepth });
+  }
+
+  const sentCommentTexts: string[] = [];
   let current: Awaited<ReturnType<typeof getOldestPendingComment>> = null;
 
   try {
@@ -104,6 +138,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     if (!current) {
       return;
     }
+    handledExternalId = current.externalId;
 
     const { db } = await import('@repo/db/client');
     const { comments: commentsSchema } = await import('@repo/db/schema');
@@ -119,8 +154,10 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     });
 
     if (existingReply) {
-      console.log(`[comment-runner] Idempotency catch: Comment ${current.externalId} already has a reply (${existingReply.externalId}). Marking comment done and skipping.`);
+      emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
       await markCommentDone(current.id);
+      clearedCount = 1;
+      replyPreexisting = true;
       current = null;
       return;
     }
@@ -145,7 +182,12 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
       .join('\n');
 
-    const sentCommentTexts: string[] = [];
+    const systemPrompt = postContext
+      ? `Post being commented on:\n${postContext}\n\n${thread.channel.agent.systemPrompt}`
+      : thread.channel.agent.systemPrompt;
+
+    emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt }));
+
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
     const tools = createCommentAgentTools(
       {
@@ -155,14 +197,13 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         parentCommentExternalId: current.externalId!,
         graphReplyToId,
         customerName: thread.commenterName,
+        emitSse: trace.emitSse,
       },
       (text) => sentCommentTexts.push(text),
     );
 
     const agent = new Agent({
-      systemPrompt: postContext
-        ? `Post being commented on:\n${postContext}\n\n${thread.channel.agent.systemPrompt}`
-        : thread.channel.agent.systemPrompt,
+      systemPrompt,
       business: thread.business ?? { id: thread.businessId, name: 'Store' },
       history,
       conversationId: thread.id,
@@ -175,7 +216,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     });
 
     try {
-      const { replyText, metrics } = await agent.run();
+      const run = await agent.run();
+      replyText = run.replyText;
+      metrics = run.metrics;
 
       // Log token metrics for this comment thread turn
       try {
@@ -197,12 +240,13 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           estimatedCostUsd: metrics.estimatedCostUsd,
         });
       } catch (metricErr) {
-        console.error('[comment-runner] failed to record token metrics:', metricErr);
+        // The reply was still posted; only the usage row is missing, so the turn
+        // never counts against the plan.
+        emitAnomaly('token_metrics_unrecorded', { detail: metricErr });
+        emit('error', errorFields(metricErr), { dedupe: null });
       }
 
       if (sentCommentTexts.length === 0 && replyText && replyText.trim() !== 'SILENT') {
-        console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
-
         const existingFallbackReply = await db.query.comments.findFirst({
           where: and(
             eq(commentsSchema.commentThreadId, thread.id),
@@ -226,29 +270,86 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
             parentExternalId: current.externalId!,
             state: 'done',
           });
+          sentViaFallback = 1;
         } else {
-          console.log(`[comment-runner] fallback skipped: already replied to comment ${current.externalId}`);
+          emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
+          replyPreexisting = true;
         }
       }
     } catch (err) {
-      console.error('Comment agent run failed:', err);
+      ok = false;
+      runError = err;
+      emit('error', errorFields(err), { dedupe: null });
     }
 
     await markCommentDone(current.id);
+    clearedCount = 1;
     current = null;
   } catch (err) {
-    console.error('Comment agent run failed:', err);
+    ok = false;
+    runError = err;
+    emit('error', errorFields(err), { dedupe: null });
     if (current) {
       try {
         await markCommentDone(current.id);
+        clearedCount = 1;
       } catch (markErr) {
-        console.error('Failed to mark comment done after runner error:', markErr);
+        // The comment stays pending, so it is retried — but the thread state
+        // below still goes to `done`.
+        emit('error', errorFields(markErr), { dedupe: null });
       }
       current = null;
     }
   } finally {
     await updateCommentThreadState(thread.id, 'done');
+    stateSetTo = 'done';
+
+    const sentViaTool = sentCommentTexts.length;
+    const unresolved = trace.unresolved();
+    if (unresolved) {
+      // A tool that reported a call but no result threw inside it — for
+      // reply_comment that is the Graph post or the history write failing.
+      emitAnomaly('tool_call_unresolved', { detail: unresolved });
+    }
+    if (sentViaTool > 0 && sentViaFallback > 0) {
+      emitAnomaly('double_send');
+    }
+    if (runError && stateSetTo === 'done') {
+      // The thread is released as `done` whether or not the run broke, so only
+      // the log records that this comment was never answered properly. The
+      // exception itself is on this invocation's `evt=error`.
+      emitAnomaly('error_state_done');
+    }
+    if (
+      ok &&
+      clearedCount > 0 &&
+      !replyPreexisting &&
+      replyText.trim() !== 'SILENT' &&
+      sentViaTool + sentViaFallback === 0
+    ) {
+      // The comment was retired with no page reply and no decision to stay
+      // silent: a customer who asked and will never be answered. Which comment
+      // this was, and what the agent said instead, is on the run's own event.
+      emitAnomaly('comment_unanswered');
+    }
+
     const hasPending = await checkPendingComments(thread.id);
+    emit('agent_run', {
+      ok,
+      pendingClaimed: handledExternalId !== undefined ? 1 : 0,
+      repliedCount: clearedCount,
+      sentViaTool,
+      sentViaFallback,
+      fallbackUsed: sentViaFallback > 0,
+      stateSetTo,
+      toolCallCount: trace.toolCallCount(),
+      externalId: handledExternalId ?? undefined,
+      replyText,
+      ...tokenFields(metrics),
+      durationMs: Math.round((performance.now() - started) * 10) / 10,
+      reTriggered: hasPending,
+    });
+
     if (hasPending) {
       await triggerCommentRun(commentThreadId);
     }

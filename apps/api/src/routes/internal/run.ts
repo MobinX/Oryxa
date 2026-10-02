@@ -21,7 +21,7 @@ internalRouter.post('/run', async (c) => {
 
   // Run after the response is sent; on edge kept alive via waitUntil, on Node
   // fire-and-forget, in tests drained via flushBackground.
-  runInBackground(c, runAgentForConversation(parsed.data.conversationId));
+  runInBackground(c, runAgentForConversation(parsed.data.conversationId), 'agent-run');
   return c.text('accepted', 202);
 });
 
@@ -39,7 +39,7 @@ internalRouter.post('/run-comment', async (c) => {
 
   // Accept immediately so the webhook/previous run can return. The LLM work
   // continues on THIS invocation via waitUntil — a fresh serverless maxDuration.
-  runInBackground(c, runAgentForCommentThread(parsed.data.commentThreadId));
+  runInBackground(c, runAgentForCommentThread(parsed.data.commentThreadId), 'comment-run');
   return c.text('accepted', 202);
 });
 

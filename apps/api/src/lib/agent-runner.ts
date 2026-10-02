@@ -1,4 +1,5 @@
 import { runAgentCore } from '@api/lib/agent-runner-core';
+import { outboundRunHeaders } from '@api/lib/ctx';
 import { TRIGGER_TIMEOUT_MS } from './config';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
@@ -10,6 +11,7 @@ export async function triggerAgentRun(conversationId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       'x-internal-key': INTERNAL_KEY,
+      ...outboundRunHeaders(),
     },
     body: JSON.stringify({ conversationId }),
   }).catch((err) => console.error('Failed to trigger agent run:', err));
