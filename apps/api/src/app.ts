@@ -3,6 +3,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import { cors } from 'hono/cors';
 import { usersRouter } from '@api/routes/users';
 import { businessesRouter } from '@api/routes/businesses';
+import { storeRouter } from '@api/routes/store';
 import { productsRouter } from '@api/routes/products';
 import { ordersRouter } from '@api/routes/orders';
 import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
@@ -29,6 +30,7 @@ app.get('/', (c) => c.json({ name: 'Oryxa API', version: '1.0.0' }));
 
 app.route('/api/v1/users', usersRouter);
 app.route('/api/v1/businesses', businessesRouter);
+app.route('/api/v1/store', storeRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);

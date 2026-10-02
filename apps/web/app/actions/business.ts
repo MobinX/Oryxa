@@ -50,6 +50,39 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
   redirect(`/b/${businessId}/settings?saved=1`);
 }
 
+export async function updateStoreAction(businessId: string, formData: FormData) {
+  const token = await requireAuth();
+  const rawSlug = String(formData.get('slug') ?? '').trim().toLowerCase();
+  const storePublished = formData.get('storePublished') === 'on';
+
+  const payload: Record<string, unknown> = { storePublished };
+  if (rawSlug) {
+    const slug = rawSlug.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    if (slug.length >= 2) payload.slug = slug;
+  }
+
+  const theme: Record<string, string> = {};
+  const tagline = String(formData.get('tagline') ?? '').trim();
+  const accentColor = String(formData.get('accentColor') ?? '').trim();
+  const heroImageUrl = String(formData.get('heroImageUrl') ?? '').trim();
+  const logoUrl = String(formData.get('logoUrl') ?? '').trim();
+  const font = String(formData.get('font') ?? '').trim();
+  const layout = String(formData.get('layout') ?? '').trim();
+  if (tagline) theme.tagline = tagline.slice(0, 280);
+  if (/^#[0-9a-fA-F]{3,8}$/.test(accentColor)) theme.accentColor = accentColor;
+  if (heroImageUrl) theme.heroImageUrl = heroImageUrl.slice(0, 1000);
+  if (logoUrl) theme.logoUrl = logoUrl.slice(0, 1000);
+  if (font === 'sans' || font === 'serif' || font === 'mono') theme.font = font;
+  if (layout === 'grid' || layout === 'featured') theme.layout = layout;
+  payload.storeTheme = theme;
+
+  await updateBusiness(token, businessId, payload);
+
+  revalidatePath(`/b/${businessId}/settings`);
+  expireBusiness(businessId);
+  redirect(`/b/${businessId}/settings?saved=1`);
+}
+
 export async function deleteBusinessAction(businessId: string) {
   const token = await requireAuth();
   await deleteBusiness(token, businessId);

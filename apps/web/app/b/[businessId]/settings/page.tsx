@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { updateBusinessAction } from '@/app/actions/business';
+import { updateBusinessAction, updateStoreAction } from '@/app/actions/business';
 import { DeleteDataDialog } from '@/components/delete-data-dialog';
 import SettingsSkeleton from './skeleton';
 
@@ -107,6 +107,76 @@ async function SettingsContent({
           </div>
           <div className="flex flex-col sm:flex-row sm:justify-end border-t border-border pt-4">
             <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold">Public storefront</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Give your store a link customers can visit to browse your products.
+        </p>
+        <form action={updateStoreAction.bind(null, businessId)} className="mt-4 space-y-4">
+          <div>
+            <label className="text-sm font-medium">Store link</label>
+            <div className="mt-1 flex items-center gap-1 text-sm">
+              <span className="text-[var(--muted-foreground)]">/store/</span>
+              <Input
+                name="slug"
+                defaultValue={business.slug ?? ''}
+                placeholder="my-book-store"
+                className="flex-1"
+                pattern="[a-z0-9-]*"
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Tagline</label>
+              <Input name="tagline" defaultValue={business.storeTheme?.tagline ?? ''} placeholder="Quality books, delivered fast" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Accent color</label>
+              <Input name="accentColor" type="color" defaultValue={business.storeTheme?.accentColor ?? '#111111'} className="mt-1 h-10 p-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Font</label>
+              <select name="font" defaultValue={business.storeTheme?.font ?? 'sans'} className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900">
+                <option value="sans">Sans (modern)</option>
+                <option value="serif">Serif (elegant)</option>
+                <option value="mono">Mono</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Layout</label>
+              <select name="layout" defaultValue={business.storeTheme?.layout ?? 'grid'} className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900">
+                <option value="grid">Grid</option>
+                <option value="featured">Featured</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Hero image URL</label>
+              <Input name="heroImageUrl" defaultValue={business.storeTheme?.heroImageUrl ?? ''} placeholder="https://…" className="mt-1" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Logo image URL</label>
+              <Input name="logoUrl" defaultValue={business.storeTheme?.logoUrl ?? ''} placeholder="https://…" className="mt-1" />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="storePublished" defaultChecked={business.storePublished} className="h-4 w-4" />
+            Publish my storefront (make it visible to customers)
+          </label>
+          {business.slug && business.storePublished && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)] p-3 text-sm">
+              <span className="text-[var(--muted-foreground)]">Live at: </span>
+              <Link href={`/store/${business.slug}`} className="font-medium text-[var(--primary)] underline">
+                /store/{business.slug}
+              </Link>
+            </div>
+          )}
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button type="submit">Save storefront</Button>
           </div>
         </form>
       </Card>
