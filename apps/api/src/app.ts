@@ -12,8 +12,15 @@ import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
+import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
 
 export const app = new OpenAPIHono();
+
+// Outermost so every request gets a requestId and correlation context; it adds
+// no request or response header.
+app.use('*', logRequest);
+app.onError(handleError);
+app.notFound(handleNotFound);
 
 app.use(
   '*',

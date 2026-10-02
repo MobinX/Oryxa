@@ -1,9 +1,14 @@
 import type { Context } from 'hono';
+import { emit, errorFields, flush, logsToAxiom } from './log';
 
 // Promises tracked for Bun/Node runtimes so tests can flush them deterministically.
 const pending = new Set<Promise<unknown>>();
 
 type ExecutionCtxLike = { waitUntil: (p: Promise<unknown>) => void };
+
+function tenth(ms: number): number {
+  return Math.round(ms * 10) / 10;
+}
 
 /**
  * Runs `promise` in the background without blocking the HTTP response.
@@ -22,9 +27,25 @@ type ExecutionCtxLike = { waitUntil: (p: Promise<unknown>) => void };
  * 3. **Bun / Node (local dev, self-hosted)** — process never shuts down between
  *    requests, so the promise runs freely on the event loop. Tracked in `pending`
  *    for deterministic test flushing via `flushBackground()`.
+ *
+ * Every task ends with a `flush()`: the response was already sent, so this is
+ * where the work the task logged actually leaves the process.
  */
-export function runInBackground<T>(c: Context, promise: Promise<T>): void {
-  const safe = promise.catch((err) => console.error('[background] task error:', err));
+export function runInBackground<T>(c: Context, promise: Promise<T>, task = 'task'): void {
+  const started = performance.now();
+  // A background failure never reaches a response, so without this event the
+  // only record is stderr — and stderr is not searchable a week later.
+  const safe = promise
+    .catch((err) => {
+      emit('bg', {
+        task,
+        ok: false,
+        durationMs: tenth(performance.now() - started),
+        ...errorFields(err),
+      });
+      if (!logsToAxiom()) console.error('[background] task error:', err);
+    })
+    .then(() => flush());
 
   // ── 1. Vercel ──────────────────────────────────────────────────────────────
   if (process.env.VERCEL) {
