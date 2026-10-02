@@ -1,5 +1,14 @@
-import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
+
+export type StoreTheme = {
+  accentColor?: string;
+  font?: 'sans' | 'serif' | 'mono';
+  tagline?: string;
+  heroImageUrl?: string;
+  logoUrl?: string;
+  layout?: 'grid' | 'featured';
+};
 
 export const orderStateEnum = pgEnum('order_state', ['pending', 'acknowledged', 'onDelivery', 'done']);
 export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter']);
@@ -33,6 +42,7 @@ export const businesses = pgTable('businesses', {
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }),
   storePublished: boolean('store_published').default(false).notNull(),
+  storeTheme: jsonb('store_theme').$type<StoreTheme>(),
   description: text('description'),
   employeeCount: integer('employee_count'),
   type: varchar('type', { length: 100 }),
