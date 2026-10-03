@@ -13,9 +13,9 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { token?: string | null } = {},
+  options: RequestInit & { token?: string | null; signInPath?: string | null } = {},
 ): Promise<T> {
-  const { token, ...init } = options;
+  const { token, signInPath, ...init } = options;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init.headers as Record<string, string>),
@@ -28,7 +28,10 @@ export async function apiFetch<T>(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     if (res.status === 401) {
-      redirect('/login?clear=true');
+      // `null` says the caller signs the redirect itself: a route with its own
+      // sign-in page must not bounce the reader to the app's.
+      if (signInPath === null) throw new ApiError(err.error ?? 'Request failed', res.status);
+      redirect(signInPath ?? '/login?clear=true');
     }
     throw new ApiError(err.error ?? 'Request failed', res.status);
   }
@@ -710,4 +713,43 @@ export const tunePost = (
     token,
     body: JSON.stringify({ instruction }),
   });
+
+// Logs — the read-only observability surface, on /api2 rather than /api/v1
+export type LogEventRow = {
+  time: string;
+  evt: string;
+  fields: Record<string, unknown>;
+};
+
+export type LogQueryResult = {
+  events: LogEventRow[];
+  nextCursor?: string;
+  window: { startTime: string; endTime: string };
+  limit: number;
+  /** `axiom` when ingest is configured, `memory` when this process is its own store. */
+  source: 'axiom' | 'memory';
+};
+
+export type LogEventTypeOption = { evt: string; label: string };
+
+export type LogFilter = {
+  type?: string;
+  start?: string;
+  end?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export const getLogEvents = (token: string, filter: LogFilter) => {
+  const params = new URLSearchParams();
+  if (filter.type) params.set('type', filter.type);
+  if (filter.start) params.set('start', filter.start);
+  if (filter.end) params.set('end', filter.end);
+  if (filter.limit) params.set('limit', String(filter.limit));
+  if (filter.cursor) params.set('cursor', filter.cursor);
+  return apiFetch<LogQueryResult>(`/api2/logs?${params.toString()}`, { token, signInPath: null });
+};
+
+export const getLogEventTypes = (token: string) =>
+  apiFetch<{ types: LogEventTypeOption[] }>('/api2/logs/types', { token, signInPath: null });
 
