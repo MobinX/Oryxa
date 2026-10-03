@@ -10,6 +10,7 @@ import { conversationsRouter } from '@api/routes/conversations';
 import { postsRouter } from '@api/routes/posts';
 import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
+import { logsRouter } from '@api/routes/logs';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
@@ -57,6 +58,9 @@ app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
 app.route('/api/v1', uploadsRouter);
 app.route('/api/v1', tokenAnalyticsRouter);
+// A prefix of its own so nothing is added inside /api/v1, which the Flutter
+// client's generated contract lives on.
+app.route('/api2', logsRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 
