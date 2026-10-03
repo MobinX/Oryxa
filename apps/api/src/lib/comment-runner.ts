@@ -134,7 +134,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   }
 
   const sentCommentTexts: string[] = [];
-  let current: Awaited<ReturnType<typeof getOldestPendingComment>> = null;
+  let current: Awaited<ReturnType<typeof getOldestPendingComment>> | null = null;
 
   try {
     current = await getOldestPendingComment(thread.id);

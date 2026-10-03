@@ -47,9 +47,36 @@ export function instrumentSql<T>(raw: T): T {
       throw err;
     }
 
+    if (isLazyQuery(result)) {
+      // `neon()` returns a thenable whose `then` runs the statement, so it has to
+      // be adopted exactly once: observing a second copy would send every query
+      // to Postgres twice, duplicating inserts and letting the copy that reports
+      // win a conditional write the caller's copy then misses (`claim …`,
+      // `on conflict do nothing`). The caller's own touch executes it, and this
+      // line rides that same execution.
+      let run: Promise<unknown> | undefined;
+      const start = () =>
+        (run ??= Promise.resolve(result).then(
+          (value) => {
+            safeReport(report, {
+              ...summary,
+              durationMs: elapsed(started),
+              rowCount: rowCountOf(value),
+            });
+            return value;
+          },
+          (err: unknown) => {
+            safeReport(report, { ...summary, durationMs: elapsed(started), errorName: nameOf(err) });
+            throw err;
+          },
+        ));
+
+      return observableOnce(result, start);
+    }
+
     if (isThenable(result)) {
       // Observation only: attaching handlers leaves the caller's promise, and its
-      // rejection, intact.
+      // rejection, intact. A native promise memoizes, so awaiting a copy is safe.
       Promise.resolve(result).then(
         (value) => {
           safeReport(report, {
@@ -79,6 +106,41 @@ export function instrumentSql<T>(raw: T): T {
 
 function elapsed(started: number): number {
   return Math.round((performance.now() - started) * 10) / 10;
+}
+
+const LAZY_QUERY_TAG = 'NeonQueryPromise';
+
+/**
+ * The shape `@neondatabase/serverless` builds for one http query: nothing is sent
+ * until a handler is attached, and every `then`/`catch`/`finally` call sends the
+ * statement again. Identified by the tag the driver itself puts on it.
+ */
+function isLazyQuery(value: unknown): value is Record<PropertyKey, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { [Symbol.toStringTag]?: unknown })[Symbol.toStringTag] === LAZY_QUERY_TAG
+  );
+}
+
+/**
+ * The same query, run once: the caller's first touch adopts the driver's thenable
+ * through `start`, and every later touch — including this logger's — shares that
+ * one execution. `parameterizedQuery`, `opts` and the tag are carried over so
+ * `sql.transaction([...])`, which reads them off the queued queries, still works.
+ */
+function observableOnce(lazy: Record<PropertyKey, unknown>, start: () => Promise<unknown>): unknown {
+  const once: Record<PropertyKey, unknown> = {};
+  for (const key of Reflect.ownKeys(lazy)) {
+    if (key === 'then' || key === 'catch' || key === 'finally') continue;
+    Object.defineProperty(once, key, Object.getOwnPropertyDescriptor(lazy, key) as PropertyDescriptor);
+  }
+
+  once.then = (onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+    start().then(onFulfilled, onRejected);
+  once.catch = (onRejected?: (reason: unknown) => unknown) => start().catch(onRejected);
+  once.finally = (onFinally?: () => unknown) => start().finally(onFinally);
+  return once;
 }
 
 function safeReport(report: DatabaseLogSink, fields: Fields): void {

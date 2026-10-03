@@ -143,6 +143,95 @@ describe('the query instrument', () => {
     expect(reports[0].durationMs).toBe(123.5);
     vi.restoreAllMocks();
   });
+
+  describe('the lazy query promise neon() hands back', () => {
+    /**
+     * `createNeonQueryPromise` in @neondatabase/serverless runs the statement on
+     * every `then`/`catch`/`finally` call, so a second `await` is a second query.
+     * This fake counts executions to make that visible.
+     */
+    function lazyQuery(rows: unknown[], execute: () => void, fail?: Error) {
+      return {
+        [Symbol.toStringTag]: 'NeonQueryPromise',
+        parameterizedQuery: { query: 'select 1', params: [] },
+        opts: undefined,
+        then(onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) {
+          execute();
+          if (fail) return Promise.reject(fail).then(onFulfilled, onRejected);
+          return Promise.resolve(rows).then(onFulfilled, onRejected);
+        },
+        catch(onRejected?: (e: unknown) => unknown) {
+          execute();
+          return (fail ? Promise.reject(fail) : Promise.resolve(rows)).catch(onRejected);
+        },
+        finally(onFinally?: () => unknown) {
+          execute();
+          return (fail ? Promise.reject(fail) : Promise.resolve(rows)).finally(onFinally);
+        },
+      };
+    }
+
+    it('is executed once, and the caller and the log share that one execution', async () => {
+      const reports = recording();
+      let executions = 0;
+      const wrapped = wrap(() => lazyQuery([{ id: 1 }], () => executions++));
+
+      const rows = await wrapped(SELECT);
+
+      expect(executions).toBe(1);
+      expect(rows).toEqual([{ id: 1 }]);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({ operation: 'select', table: 'messages', rowCount: 1 });
+    });
+
+    it('awaits repeatedly without querying again', async () => {
+      const reports = recording();
+      let executions = 0;
+      const wrapped = wrap(() => lazyQuery([{ id: 1 }], () => executions++));
+
+      const query = wrapped(SELECT);
+      await query;
+      await query;
+      await Promise.resolve(query);
+
+      expect(executions).toBe(1);
+      expect(reports).toHaveLength(1);
+    });
+
+    it('still sends the statement when nobody awaits it, as the driver does', async () => {
+      const reports = recording();
+      let executions = 0;
+      wrap(() => lazyQuery([], () => executions++))(SELECT);
+      await Promise.resolve();
+
+      expect(executions).toBe(0);
+      expect(reports).toHaveLength(0);
+    });
+
+    it('carries the fields sql.transaction() reads off a queued query', () => {
+      recording();
+      let executions = 0;
+      const query = wrap(() => lazyQuery([], () => executions++))('insert into "posts" values (1)');
+
+      expect((query as { [Symbol.toStringTag]: string })[Symbol.toStringTag]).toBe('NeonQueryPromise');
+      expect((query as { parameterizedQuery: unknown }).parameterizedQuery).toEqual({
+        query: 'select 1',
+        params: [],
+      });
+    });
+
+    it('raises a rejection to the caller and reports it once', async () => {
+      const reports = recording();
+      let executions = 0;
+      const boom = new Error('graph said no');
+      const wrapped = wrap(() => lazyQuery([], () => executions++, boom));
+
+      await expect(wrapped(SELECT)).rejects.toBe(boom);
+      expect(executions).toBe(1);
+      expect(reports[0]).toMatchObject({ errorName: 'Error' });
+      expect(reports[0].rowCount).toBeUndefined();
+    });
+  });
 });
 
 describe('what the API decides to keep', () => {
