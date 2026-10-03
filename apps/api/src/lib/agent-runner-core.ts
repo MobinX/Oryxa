@@ -55,6 +55,7 @@ export async function runAgentCore(
 
   const conv = await getConversationWithHistory(conversationId);
   if (!conv?.channel?.agent) {
+    console.log(`[agent-runner-core] no agent on conversation ${conversationId} — skipping`);
     // Nothing can reply to this customer until an agent is attached to the
     // channel — a silence with no error anywhere in the system.
     emitAnomaly('channel_without_agent', { detail: conversationId });
@@ -71,11 +72,14 @@ export async function runAgentCore(
     new Date(Date.now() - STALE_RUNNER_MS),
   );
   if (!claimed) {
+    console.log(`[agent-runner-core] conversation ${conversationId} already working — skipping duplicate`);
     // Message-lock contention: another runner owns this conversation, so this
     // caller did nothing and the backlog waits for whichever run holds the lock.
     emitAnomaly('claim_lost');
     return;
   }
+
+  console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
 
   tagContext({ conversationId: conv.id, businessId: conv.businessId, channelId: conv.channelId });
   const runDepth = currentContext()?.runDepth ?? 0;
@@ -94,6 +98,7 @@ export async function runAgentCore(
   // out-of-order follow-up run.
   const pendingMsgs = await listPendingCustomerMessages(conv.id);
   const repliedMessageIds = pendingMsgs.map((m) => m.id);
+  console.log(`[agent-runner-core] pending messages in backlog: ${pendingMsgs.length}`);
 
   // Build the agent's history: all pending customer messages (the backlog,
   // chronological) merged with the recent context from the last 10 loaded
@@ -106,6 +111,8 @@ export async function runAgentCore(
     .map((m) => ({ from: m.from, content: m.content }));
 
   const catalog = await listProducts(conv.businessId, { limit: 10 });
+  console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);
+  console.log(`[agent-runner-core] catalog loaded — ${catalog.products.length} products`);
   const catalogSummary = catalog.products
     .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
     .join('\n');
@@ -165,6 +172,7 @@ export async function runAgentCore(
         estimatedCostUsd: metrics.estimatedCostUsd,
       });
     } catch (metricErr) {
+      console.error('[agent-runner-core] failed to record token metrics:', metricErr);
       // The reply still went out; the usage row did not, so this turn is
       // invisible to quota and the customer's allowance silently grows.
       emitAnomaly('token_metrics_unrecorded', { detail: metricErr });
@@ -175,6 +183,7 @@ export async function runAgentCore(
     // the exact text. Only fall back to sending+saving the final LLM message if
     // the agent never called send_message (so the customer still gets a reply).
     if (agent.sentTexts.length === 0 && replyText) {
+      console.log(`[agent-runner-core] fallback: agent did not call send_message, sending final reply directly`);
       emitSse('message_sent', { text: replyText, fallback: true });
       await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
       await createMessage({
@@ -192,9 +201,11 @@ export async function runAgentCore(
     clearedCount = repliedMessageIds.length;
     await updateConversationState(conv.id, 'done');
     stateSetTo = 'done';
+    console.log(`[agent-runner-core] conversation ${conversationId} state → done`);
     emitSse('runner_done', { conversationId });
     ok = true;
   } catch (err) {
+    console.error('[agent-runner-core] agent run failed:', err);
     emit('error', errorFields(err), { dedupe: null });
     emitSse('runner_error', { conversationId, error: String(err) });
     // Pre-existing behaviour: a failed run releases the lock as `done` rather
@@ -250,6 +261,7 @@ export async function runAgentCore(
   });
 
   if (hasPending) {
+    console.log(`[agent-runner-core] found more pending messages — re-triggering`);
     // Re-trigger via HTTP so the new run is handled by the same routing
     // (background on Bun, waitUntil on Vercel). Import lazily to keep this
     // module free of circular deps.

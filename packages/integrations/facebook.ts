@@ -86,9 +86,20 @@ export async function subscribeFacebookPageToWebhooks(
 ): Promise<void> {
   const fields = FACEBOOK_PAGE_WEBHOOK_FIELDS.join(',');
   const url = `${GRAPH_API}/${pageId}/subscribed_apps?subscribed_fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(pageToken)}`;
+  console.log('[fb-subscribe] subscribing page', {
+    pageId,
+    fields,
+    graphApiVersion: GRAPH_API,
+  });
 
   const res = await loggedFetch(url, { method: 'POST' });
   const rawBody = await res.text();
+  console.log('[fb-subscribe] response', {
+    pageId,
+    status: res.status,
+    ok: res.ok,
+    body: rawBody,
+  });
 
   if (!res.ok) {
     throw new Error(`Facebook page webhook subscription failed: ${rawBody}`);
@@ -102,6 +113,7 @@ export async function subscribeFacebookPageToWebhooks(
   if (data.success === false) {
     throw new Error('Facebook page webhook subscription failed: success=false');
   }
+  console.log('[fb-subscribe] success', { pageId, success: data.success ?? true });
 }
 
 /**
@@ -113,13 +125,21 @@ export async function unsubscribeFacebookPageFromWebhooks(
   pageToken: string,
 ): Promise<void> {
   const url = `${GRAPH_API}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(pageToken)}`;
+  console.log('[fb-unsubscribe] unsubscribing page', { pageId });
 
   const res = await loggedFetch(url, { method: 'DELETE' });
   const rawBody = await res.text();
+  console.log('[fb-unsubscribe] response', {
+    pageId,
+    status: res.status,
+    ok: res.ok,
+    body: rawBody,
+  });
 
   if (!res.ok) {
     throw new Error(`Facebook page webhook unsubscription failed: ${rawBody}`);
   }
+  console.log('[fb-unsubscribe] success', { pageId });
 }
 
 /** Graph error_subcodes for “sent outside the allowed messaging window”. */
@@ -214,17 +234,29 @@ export async function senderAction(
   recipientId: string,
   sender_action: 'mark_seen' | 'typing_on' | 'typing_off',
 ): Promise<void> {
+  const isTyping = sender_action === 'typing_on' || sender_action === 'typing_off';
+  if (isTyping) console.log(`[typing :] ${sender_action}`, { recipientId });
   try {
     const res = await loggedFetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipient: { id: recipientId }, sender_action }),
     });
-    // Best effort: a typing indicator Meta refused is not a failed reply, so the
-    // outcome is left to the one evt=http_out the call already reported.
-    await res.text();
-  } catch {
-    // Never fails the run — the caller is already replying.
+    const body = await res.text();
+    if (isTyping) {
+      const parsed = parseGraphError(body);
+      console.log(`[typing :] ${sender_action} fetch`, {
+        recipientId,
+        status: res.status,
+        ok: res.ok,
+        body,
+        ...(res.ok ? {} : { code: parsed.code, subcode: parsed.subcode, message: parsed.message }),
+      });
+    }
+  } catch (err) {
+    if (isTyping) {
+      console.log(`[typing :] ${sender_action} failed`, { recipientId, err: String(err) });
+    }
   }
 }
 
@@ -508,6 +540,10 @@ export async function publishFacebookPost(
     params.append('message', message);
   }
 
+  const tokenPreview = `${pageToken.slice(0, 6)}…${pageToken.slice(-4)}`;
+  console.log(`[fb-publish] POST ${endpoint} | tokenPreview=${tokenPreview} | hasMedia=${hasMedia}`);
+  const t0 = Date.now();
+
   let res: Response;
   try {
     res = await loggedFetch(endpoint, {
@@ -515,17 +551,22 @@ export async function publishFacebookPost(
       body: params,
     });
   } catch (networkErr: any) {
+    console.error(`[fb-publish] Network error after ${Date.now() - t0}ms:`, networkErr?.message, networkErr?.cause);
     throw new Error(`Facebook publish network error: ${networkErr?.message ?? networkErr}`);
   }
+
+  console.log(`[fb-publish] response status=${res.status} in ${Date.now() - t0}ms`);
 
   if (!res.ok) {
     const err = await res.text();
     const parsed = parseGraphError(err);
     logGraphSendFailure(res.status, parsed.code, parsed.subcode);
+    console.error(`[fb-publish] HTTP ${res.status} error body:`, err);
     throw new Error(`Facebook publish failed (HTTP ${res.status}): ${err}`);
   }
 
   const data = (await res.json()) as { id: string; post_id?: string };
+  console.log(`[fb-publish] published OK — returned id=${data.id} post_id=${data.post_id}`);
   return data.post_id || data.id;
 }
 

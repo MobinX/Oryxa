@@ -157,6 +157,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     });
 
     if (existingReply) {
+      console.log(`[comment-runner] Idempotency catch: Comment ${current.externalId} already has a reply (${existingReply.externalId}). Marking comment done and skipping.`);
       emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
       await markCommentDone(current.id);
       clearedCount = 1;
@@ -243,6 +244,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           estimatedCostUsd: metrics.estimatedCostUsd,
         });
       } catch (metricErr) {
+        console.error('[comment-runner] failed to record token metrics:', metricErr);
         // The reply was still posted; only the usage row is missing, so the turn
         // never counts against the plan.
         emitAnomaly('token_metrics_unrecorded', { detail: metricErr });
@@ -250,6 +252,8 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       }
 
       if (sentCommentTexts.length === 0 && replyText && replyText.trim() !== 'SILENT') {
+        console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
+
         const existingFallbackReply = await db.query.comments.findFirst({
           where: and(
             eq(commentsSchema.commentThreadId, thread.id),
@@ -275,11 +279,13 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           });
           sentViaFallback = 1;
         } else {
+          console.log(`[comment-runner] fallback skipped: already replied to comment ${current.externalId}`);
           emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
           replyPreexisting = true;
         }
       }
     } catch (err) {
+      console.error('Comment agent run failed:', err);
       ok = false;
       runError = err;
       emit('error', errorFields(err), { dedupe: null });
@@ -289,6 +295,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     clearedCount = 1;
     current = null;
   } catch (err) {
+    console.error('Comment agent run failed:', err);
     ok = false;
     runError = err;
     emit('error', errorFields(err), { dedupe: null });
@@ -297,6 +304,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         await markCommentDone(current.id);
         clearedCount = 1;
       } catch (markErr) {
+        console.error('Failed to mark comment done after runner error:', markErr);
         // The comment stays pending, so it is retried — but the thread state
         // below still goes to `done`.
         emit('error', errorFields(markErr), { dedupe: null });

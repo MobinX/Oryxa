@@ -10,6 +10,15 @@ import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { tagContext } from '@api/lib/ctx';
 
+/** The webhook's own narration, on stdout, next to the event stream. */
+function fbLog(message: string, data?: unknown): void {
+  if (data === undefined) {
+    console.log(`[fb-webhook] ${message}`);
+    return;
+  }
+  console.log(`[fb-webhook] ${message}`, data);
+}
+
 type MessagingEvent = {
   sender?: { id?: string };
   message?: { text?: string; mid?: string; is_echo?: boolean };
@@ -94,7 +103,10 @@ function stateAgeMs(stateAt: Date): number {
 }
 
 async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
-  if (process.env.TESTING !== 'true') return null;
+  if (process.env.TESTING !== 'true') {
+    fbLog('[TESTING] Testing mode not enabled');
+    return null;
+  }
 
   const targetUrl = 'https://api.oryxa.us/webhooks/facebook';
   const queryStr = c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : '';
@@ -102,6 +114,7 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
 
   // The forwarded query carries hub.verify_token, so the URL is never logged.
   emit('webhook', { event: 'testing_forward' });
+  fbLog(`[TESTING] Forwarding webhook ${method} request to: ${targetUrl}`);
 
   if (method === 'GET') {
     try {
@@ -109,6 +122,7 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
       const text = await res.text();
       return c.text(text, res.status as any);
     } catch (err) {
+      console.error('[TESTING] Failed to forward GET verification:', err);
       emit('error', errorFields(err), { dedupe: null });
       return c.text('Error forwarding', 500);
     }
@@ -128,14 +142,15 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
     headers,
     body: rawBody,
   }).catch((err) => {
+    console.error('[TESTING] Failed to forward POST webhook in background:', err);
     emit('error', errorFields(err), { dedupe: null });
   });
 
+  fbLog('[TESTING] Forwarded POST asynchronously (fire and forget) — acknowledging 200 OK');
   return c.text('EVENT_RECEIVED', 200);
 }
 
 export const fbWebhookRouter = new Hono();
-
 fbWebhookRouter.get('/facebook', async (c) => {
   const forwardRes = await handleTestingForward(c, 'GET');
   if (forwardRes) return forwardRes;
@@ -150,7 +165,20 @@ fbWebhookRouter.get('/facebook', async (c) => {
   // how a page silently stops delivering events — no error, no customer replies.
   emit('webhook', { event: 'verify', mode, verified, hasChallenge: Boolean(challenge) });
 
-  if (verified) return c.text(challenge ?? '');
+  fbLog('GET /facebook', {
+    url: c.req.url.split('?')[0],
+    mode,
+    verifyTokenMatch: verified,
+    hasChallenge: Boolean(challenge),
+    challengeLength: challenge?.length ?? 0,
+  });
+
+  if (verified) {
+    fbLog('GET /facebook verify OK — returning challenge');
+    return c.text(challenge ?? '');
+  }
+
+  fbLog('GET /facebook verify rejected', { mode, verifyTokenMatch: false });
   return c.text('Forbidden', 403);
 });
 
@@ -176,21 +204,42 @@ fbWebhookRouter.post('/facebook', async (c) => {
   const forwardRes = await handleTestingForward(c, 'POST');
   if (forwardRes) return forwardRes;
 
+  const signature256 = c.req.header('x-hub-signature-256');
+  const signature = c.req.header('x-hub-signature');
+
+  fbLog('POST /facebook received', {
+    'x-hub-signature-256': signature256 ?? null,
+    'x-hub-signature': signature ?? null,
+    contentType: c.req.header('content-type') ?? null,
+    userAgent: c.req.header('user-agent') ?? null,
+  });
+
   const raw = await c.req.text();
-  const signatureValid = await verifyWebhookSignature(
-    raw,
-    c.req.header('x-hub-signature-256') ?? c.req.header('x-hub-signature'),
-  );
+  fbLog('POST /facebook raw body', raw);
+
+  const signatureValid = await verifyWebhookSignature(raw, signature256 ?? signature);
+  fbLog('POST /facebook signature verification', { valid: signatureValid });
+
+  if (!signatureValid) {
+    fbLog('POST /facebook rejected — invalid signature but will go through still');
+  }
 
   let body: WebhookBody;
   try {
     body = JSON.parse(raw) as WebhookBody;
-  } catch {
+  } catch (err) {
+    fbLog('POST /facebook rejected — malformed JSON', err);
     emit('webhook', { event: 'delivery', signatureValid });
     return c.text('Malformed JSON', 400);
   }
 
+  fbLog('POST /facebook parsed body', body);
+
   if (body.object !== 'page' || !Array.isArray(body.entry)) {
+    fbLog('POST /facebook rejected — unhandled shape', {
+      object: body.object,
+      entryIsArray: Array.isArray(body.entry),
+    });
     emit('webhook', deliveryEventFields(body, signatureValid));
     return c.text('Unhandled or malformed webhook', 400);
   }
@@ -200,7 +249,15 @@ fbWebhookRouter.post('/facebook', async (c) => {
   // real Meta traffic has been measured, so a config mistake cannot drop events.
   emit('webhook', deliveryEventFields(body, signatureValid));
 
-  const work = processEntries(body.entry);
+  fbLog('POST /facebook ack — processing entries', {
+    entryCount: body.entry.length,
+    pageIds: body.entry.map((e) => e.id),
+    vercelInline: Boolean(process.env.VERCEL),
+  });
+
+  const work = processEntries(body.entry).catch((err) => {
+    console.error('[fb-webhook] background processing failed', err);
+  });
 
   // Hono's Vercel adapter does not provide executionCtx.waitUntil, so background
   // work was being killed as soon as the 200 ack returned. On Vercel, process
@@ -221,18 +278,40 @@ fbWebhookRouter.post('/facebook', async (c) => {
  * per page.
  */
 async function processEntries(entries: WebhookEntry[]): Promise<void> {
+  fbLog('processEntries start', { entryCount: entries.length });
+
   for (const entry of entries) {
     const messaging = entry.messaging ?? [];
     const changes = entry.changes ?? [];
-    if (messaging.length === 0 && changes.length === 0) continue;
+
+    fbLog('processEntries entry', {
+      pageId: entry.id,
+      messagingCount: messaging.length,
+      changesCount: changes.length,
+      messaging: entry.messaging,
+      changes: entry.changes,
+    });
+
+    if (messaging.length === 0 && changes.length === 0) {
+      fbLog('processEntries skip entry — no messaging or changes', { pageId: entry.id });
+      continue;
+    }
 
     const channel = await getChannelByPageId(entry.id);
     if (!channel) {
       // Every event for this page is dropped behind a 200 ack: a disconnected
       // channel is indistinguishable from a quiet one until this says so.
+      fbLog('processEntries skip entry — unknown page (no channel)', { pageId: entry.id });
       emitAnomaly('webhook_unknown_page', { detail: entry.id });
       continue;
     }
+
+    fbLog('processEntries channel resolved', {
+      pageId: entry.id,
+      channelId: channel.id,
+      businessId: channel.businessId,
+      agentId: channel.agentId ?? null,
+    });
 
     // Stamped onto every later event of this invocation instead of repeated on
     // each one; deliveries carry a single page in practice.
@@ -245,6 +324,8 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
       await processCommentChanges(channel, entry.id, changes);
     }
   }
+
+  fbLog('processEntries done');
 }
 
 /** Messenger DM events: dedup on mid, skip echoes + non-text/postback, trigger agent, enrich profile. */
@@ -252,12 +333,23 @@ async function processMessagingEvents(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   events: MessagingEvent[],
 ): Promise<void> {
-  for (const ev of events) {
+  fbLog('processMessagingEvents start', { channelId: channel.id, eventCount: events.length });
+
+  for (const [index, ev] of events.entries()) {
+    fbLog('processMessagingEvents event', { index, event: ev });
+
     const inbound = inboundTextFromMessagingEvent(ev);
     if (!inbound) {
       // An echo or a read receipt is not a customer, so it stays silent. A real
       // message with no text (attachment, sticker, audio) is a customer who will
       // not be answered, and that is the only skipped case worth an event.
+      fbLog('processMessagingEvents skip event — not actionable text/postback', {
+        index,
+        isEcho: ev.message?.is_echo ?? false,
+        hasText: Boolean(ev.message?.text),
+        hasPostback: Boolean(ev.postback?.payload),
+        senderId: ev.sender?.id ?? null,
+      });
       if (ev.message && !ev.message.is_echo && !ev.message.text) {
         emit('webhook_item', { kind: 'message', externalId: ev.message.mid, outcome: 'unsupported_content' });
       }
@@ -265,6 +357,7 @@ async function processMessagingEvents(
     }
 
     const { senderId, text, externalId } = inbound;
+    fbLog('processMessagingEvents inbound', { index, senderId, text, externalId: externalId ?? null });
 
     const { conversationId, priorStatus, inserted, needsProfile, priorStateAt } =
       await processInboundMessage(
@@ -274,8 +367,18 @@ async function processMessagingEvents(
         externalId,
       );
 
+    fbLog('processMessagingEvents persisted', {
+      index,
+      conversationId,
+      priorStatus,
+      inserted,
+      needsProfile,
+    });
+
     if (inserted && needsProfile) {
+      fbLog('processMessagingEvents enriching profile', { index, conversationId, senderId });
       const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      fbLog('processMessagingEvents profile result', { index, conversationId, profile });
       await setConversationProfileIfMissing(conversationId, profile);
     }
 
@@ -292,31 +395,80 @@ async function processMessagingEvents(
       // redelivery is treated as a recovery signal too — but only for a lock that
       // has genuinely gone stale, never for the duplicate of a live delivery.
       outcome = 'redelivered';
+      fbLog('processMessagingEvents redelivered mid — already stored', { index, conversationId, priorStatus });
       if (channel.agentId && inFlight) {
         ageMs = stateAgeMs(priorStateAt);
-        if (await resetStaleConversation(conversationId, staleBefore())) {
-          await triggerAgentRun(conversationId);
-          outcome = 'redelivered_stale_recovered';
+        const stale = ageMs > STALE_RUNNER_MS;
+        fbLog('processMessagingEvents redelivery stale check', {
+          index,
+          conversationId,
+          priorStatus,
+          ageMs,
+          staleThresholdMs: STALE_RUNNER_MS,
+          isStale: stale,
+        });
+        if (stale) {
+          fbLog('processMessagingEvents recovering stale runner', { index, conversationId, ageMs });
+          if (await resetStaleConversation(conversationId, staleBefore())) {
+            fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
+            await triggerAgentRun(conversationId);
+            outcome = 'redelivered_stale_recovered';
+          } else {
+            fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });
+          }
+        } else {
+          fbLog('processMessagingEvents runner still fresh — no extra trigger needed', { index, conversationId, ageMs });
         }
       }
     } else if (priorStatus === 'done' && channel.agentId) {
+      fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
       await triggerAgentRun(conversationId);
       outcome = 'agent_triggered';
     } else if (inFlight && channel.agentId) {
       ageMs = stateAgeMs(priorStateAt);
-      if (await resetStaleConversation(conversationId, staleBefore())) {
-        await triggerAgentRun(conversationId);
-        outcome = 'stale_runner_recovered';
+      const stale = ageMs > STALE_RUNNER_MS;
+      fbLog('processMessagingEvents stale check', {
+        index,
+        conversationId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: stale,
+      });
+      if (stale) {
+        // Prior execution is presumed dead. Reset the lock and fire a fresh run
+        // so the new message (and any others that piled up) get processed.
+        fbLog('processMessagingEvents recovering stale runner', { index, conversationId, ageMs });
+        if (await resetStaleConversation(conversationId, staleBefore())) {
+          fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
+          await triggerAgentRun(conversationId);
+          outcome = 'stale_runner_recovered';
+        } else {
+          fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });
+          outcome = 'waited_for_live_runner';
+        }
       } else {
-        // The prior runner took the lock recently enough to still be working.
+        fbLog('processMessagingEvents runner still fresh — no extra trigger needed', { index, conversationId, ageMs });
         outcome = 'waited_for_live_runner';
       }
     } else if (!channel.agentId) {
       // A customer answered by nobody: the channel has no agent attached. The
       // runner names the same invariant from its side when a run is attempted.
       outcome = 'no_agent';
+      fbLog('processMessagingEvents no agent trigger', {
+        index,
+        inserted,
+        priorStatus,
+        hasAgent: Boolean(channel.agentId),
+      });
     } else {
       outcome = 'not_triggered';
+      fbLog('processMessagingEvents no agent trigger', {
+        index,
+        inserted,
+        priorStatus,
+        hasAgent: Boolean(channel.agentId),
+      });
     }
 
     emit('webhook_item', {
@@ -328,6 +480,8 @@ async function processMessagingEvents(
       ageMs,
     });
   }
+
+  fbLog('processMessagingEvents done', { channelId: channel.id });
 }
 
 /**
@@ -341,11 +495,25 @@ async function processCommentChanges(
   pageId: string,
   changes: WebhookChange[],
 ): Promise<void> {
-  for (const change of changes) {
-    if (change.field !== 'feed') continue;
+  fbLog('processCommentChanges start', { channelId: channel.id, pageId, changeCount: changes.length });
+
+  for (const [index, change] of changes.entries()) {
+    fbLog('processCommentChanges change', { index, change });
+
+    if (change.field !== 'feed') {
+      fbLog('processCommentChanges skip — not feed field', { index, field: change.field ?? null });
+      continue;
+    }
 
     const value = change.value;
-    if (value?.item !== 'comment' || value.verb !== 'add') continue;
+    if (value?.item !== 'comment' || value.verb !== 'add') {
+      fbLog('processCommentChanges skip — not new comment', {
+        index,
+        item: value?.item ?? null,
+        verb: value?.verb ?? null,
+      });
+      continue;
+    }
 
     const commentId = value.comment_id;
     const text = value.message;
@@ -355,6 +523,12 @@ async function processCommentChanges(
     if (!commentId || !text || !fromId) {
       // A new comment we cannot route. If Meta changes the shape, or a comment
       // arrives with only an attachment, this is the only trace of it.
+      fbLog('processCommentChanges skip — missing comment fields', {
+        index,
+        commentId: commentId ?? null,
+        hasText: Boolean(text),
+        fromId: fromId ?? null,
+      });
       emit('webhook_item', {
         kind: 'comment',
         commentId,
@@ -365,7 +539,19 @@ async function processCommentChanges(
       continue;
     }
 
-    if (fromId === pageId) continue; // the page's own comment — an echo, not a customer
+    if (fromId === pageId) {
+      fbLog('processCommentChanges skip — page own comment (echo)', { index, commentId, fromId });
+      continue; // the page's own comment — an echo, not a customer
+    }
+
+    fbLog('processCommentChanges inbound comment', {
+      index,
+      commentId,
+      fromId,
+      fromName: value.from?.name ?? null,
+      postId: value.post_id ?? null,
+      text,
+    });
 
     const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
       await processInboundComment(
@@ -378,8 +564,18 @@ async function processCommentChanges(
         parentId,
       );
 
+    fbLog('processCommentChanges persisted', {
+      index,
+      threadId,
+      priorStatus,
+      inserted,
+      needsProfile,
+    });
+
     if (inserted && needsProfile) {
+      fbLog('processCommentChanges enriching avatar', { index, threadId, fromId });
       const profile = await getFacebookUserProfile(channel.apiToken, fromId);
+      fbLog('processCommentChanges profile result', { index, threadId, profile });
       await setCommentThreadProfileIfMissing(threadId, profile);
     }
 
@@ -391,28 +587,77 @@ async function processCommentChanges(
       // A re-delivered comment id: Meta is still waiting for an answer, so the
       // runner it waited on is a candidate for recovery just as above.
       outcome = 'redelivered';
+      fbLog('processCommentChanges redelivered comment — already stored', { index, threadId, priorStatus });
       if (channel.agentId && inFlight) {
         ageMs = stateAgeMs(priorStateAt);
-        if (await resetStaleCommentThread(threadId, staleBefore())) {
-          await triggerCommentRun(threadId);
-          outcome = 'redelivered_stale_recovered';
+        const stale = ageMs > STALE_RUNNER_MS;
+        fbLog('processCommentChanges redelivery stale check', {
+          index,
+          threadId,
+          priorStatus,
+          ageMs,
+          staleThresholdMs: STALE_RUNNER_MS,
+          isStale: stale,
+        });
+        if (stale) {
+          fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
+          if (await resetStaleCommentThread(threadId, staleBefore())) {
+            fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
+            await triggerCommentRun(threadId);
+            outcome = 'redelivered_stale_recovered';
+          } else {
+            fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
+          }
+        } else {
+          fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
         }
       }
     } else if (priorStatus === 'done' && channel.agentId) {
+      fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
       await triggerCommentRun(threadId);
       outcome = 'comment_run_triggered';
     } else if (inFlight && channel.agentId) {
       ageMs = stateAgeMs(priorStateAt);
-      if (await resetStaleCommentThread(threadId, staleBefore())) {
-        await triggerCommentRun(threadId);
-        outcome = 'stale_runner_recovered';
+      const stale = ageMs > STALE_RUNNER_MS;
+      fbLog('processCommentChanges stale check', {
+        index,
+        threadId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: stale,
+      });
+      if (stale) {
+        // Prior execution is presumed dead. Reset the lock and fire a fresh run.
+        fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
+        if (await resetStaleCommentThread(threadId, staleBefore())) {
+          fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
+          await triggerCommentRun(threadId);
+          outcome = 'stale_runner_recovered';
+        } else {
+          fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
+          outcome = 'waited_for_live_runner';
+        }
       } else {
+        fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
         outcome = 'waited_for_live_runner';
       }
     } else if (!channel.agentId) {
       outcome = 'no_agent';
+      fbLog('processCommentChanges no agent trigger', {
+        index,
+        inserted,
+        priorStatus,
+        hasAgent: Boolean(channel.agentId),
+      });
     } else {
       outcome = 'not_triggered';
+      fbLog('processCommentChanges no agent trigger', {
+        index,
+        inserted,
+        priorStatus,
+        hasAgent: Boolean(channel.agentId),
+      });
     }
 
     emit('webhook_item', {
@@ -426,4 +671,6 @@ async function processCommentChanges(
       ageMs,
     });
   }
+
+  fbLog('processCommentChanges done', { channelId: channel.id });
 }
