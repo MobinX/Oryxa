@@ -78,6 +78,21 @@ type WebhookBody = {
   entry?: WebhookEntry[];
 };
 
+/**
+ * A lock untouched since this instant is orphaned rather than slow: the process
+ * that took it is gone, and nothing will ever release it. Passing the instant to
+ * the reset keeps that judgement inside the statement that acts on it, so a
+ * recovery can never hand a live run's conversation to a second runner.
+ */
+function staleBefore(): Date {
+  return new Date(Date.now() - STALE_RUNNER_MS);
+}
+
+/** How long the state the inbound write found had already been sitting. */
+function stateAgeMs(stateAt: Date): number {
+  return Date.now() - stateAt.getTime();
+}
+
 async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
   if (process.env.TESTING !== 'true') return null;
 
@@ -251,48 +266,49 @@ async function processMessagingEvents(
 
     const { senderId, text, externalId } = inbound;
 
-    const { conversationId, priorStatus, inserted, needsProfile } = await processInboundMessage(
-      { id: channel.id, businessId: channel.businessId },
-      senderId,
-      text,
-      externalId,
-    );
+    const { conversationId, priorStatus, inserted, needsProfile, priorStateAt } =
+      await processInboundMessage(
+        { id: channel.id, businessId: channel.businessId },
+        senderId,
+        text,
+        externalId,
+      );
 
     if (inserted && needsProfile) {
       const profile = await getFacebookUserProfile(channel.apiToken, senderId);
       await setConversationProfileIfMissing(conversationId, profile);
     }
 
+    // An in-flight conversation is one whose runner may still be alive — or may
+    // have died and left the lock behind. Both cases answer to the same test, so
+    // they share the same recovery call rather than two copies of it.
+    const inFlight = priorStatus === 'working' || priorStatus === 'pending';
     let outcome: string;
-    let staleAgeMs: number | undefined;
+    let ageMs: number | undefined;
 
     if (!inserted) {
-      // Meta re-delivers the same mid; the message was already stored.
+      // Meta re-delivers the same mid because it never saw an answer. That is
+      // precisely when the run it waited on is most likely to have died, so the
+      // redelivery is treated as a recovery signal too — but only for a lock that
+      // has genuinely gone stale, never for the duplicate of a live delivery.
       outcome = 'redelivered';
+      if (channel.agentId && inFlight) {
+        ageMs = stateAgeMs(priorStateAt);
+        if (await resetStaleConversation(conversationId, staleBefore())) {
+          await triggerAgentRun(conversationId);
+          outcome = 'redelivered_stale_recovered';
+        }
+      }
     } else if (priorStatus === 'done' && channel.agentId) {
       await triggerAgentRun(conversationId);
       outcome = 'agent_triggered';
-    } else if ((priorStatus === 'working' || priorStatus === 'pending') && channel.agentId) {
-      // The conversation was already in-flight. Check whether the prior runner
-      // is still alive or has gone stale (crashed / cold-start / Vercel timeout).
-      const { getConversationWithHistory } = await import('@repo/db/crud/conversation');
-      const conv = await getConversationWithHistory(conversationId);
-      const ageMs = conv?.lastStateAt
-        ? Date.now() - new Date(conv.lastStateAt).getTime()
-        : Infinity;
-      staleAgeMs = Number.isFinite(ageMs) ? ageMs : undefined;
-
-      if (ageMs > STALE_RUNNER_MS) {
-        // Prior execution is presumed dead. Reset the lock and fire a fresh run
-        // so the new message (and any others that piled up) get processed.
-        const recovered = await resetStaleConversation(conversationId);
-        if (recovered) {
-          await triggerAgentRun(conversationId);
-          outcome = 'stale_runner_recovered';
-        } else {
-          outcome = 'stale_reset_race';
-        }
+    } else if (inFlight && channel.agentId) {
+      ageMs = stateAgeMs(priorStateAt);
+      if (await resetStaleConversation(conversationId, staleBefore())) {
+        await triggerAgentRun(conversationId);
+        outcome = 'stale_runner_recovered';
       } else {
+        // The prior runner took the lock recently enough to still be working.
         outcome = 'waited_for_live_runner';
       }
     } else if (!channel.agentId) {
@@ -309,7 +325,7 @@ async function processMessagingEvents(
       inserted,
       priorStatus,
       outcome,
-      ageMs: staleAgeMs,
+      ageMs,
     });
   }
 }
@@ -351,48 +367,45 @@ async function processCommentChanges(
 
     if (fromId === pageId) continue; // the page's own comment — an echo, not a customer
 
-    const { threadId, priorStatus, inserted, needsProfile } = await processInboundComment(
-      { id: channel.id, businessId: channel.businessId },
-      fromId,
-      value.from?.name,
-      value.post_id ?? '',
-      text,
-      commentId,
-      parentId,
-    );
+    const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
+      await processInboundComment(
+        { id: channel.id, businessId: channel.businessId },
+        fromId,
+        value.from?.name,
+        value.post_id ?? '',
+        text,
+        commentId,
+        parentId,
+      );
 
     if (inserted && needsProfile) {
       const profile = await getFacebookUserProfile(channel.apiToken, fromId);
       await setCommentThreadProfileIfMissing(threadId, profile);
     }
 
+    const inFlight = priorStatus === 'working' || priorStatus === 'pending';
     let outcome: string;
-    let staleAgeMs: number | undefined;
+    let ageMs: number | undefined;
 
     if (!inserted) {
+      // A re-delivered comment id: Meta is still waiting for an answer, so the
+      // runner it waited on is a candidate for recovery just as above.
       outcome = 'redelivered';
+      if (channel.agentId && inFlight) {
+        ageMs = stateAgeMs(priorStateAt);
+        if (await resetStaleCommentThread(threadId, staleBefore())) {
+          await triggerCommentRun(threadId);
+          outcome = 'redelivered_stale_recovered';
+        }
+      }
     } else if (priorStatus === 'done' && channel.agentId) {
       await triggerCommentRun(threadId);
       outcome = 'comment_run_triggered';
-    } else if ((priorStatus === 'working' || priorStatus === 'pending') && channel.agentId) {
-      // The thread was already in-flight. Check whether the prior comment runner
-      // is stale (crashed / cold-start / Vercel timeout).
-      const { getCommentThreadWithChannel } = await import('@repo/db/crud/comment');
-      const thread = await getCommentThreadWithChannel(threadId);
-      const ageMs = thread?.lastStateAt
-        ? Date.now() - new Date(thread.lastStateAt).getTime()
-        : Infinity;
-      staleAgeMs = Number.isFinite(ageMs) ? ageMs : undefined;
-
-      if (ageMs > STALE_RUNNER_MS) {
-        // Prior execution is presumed dead. Reset the lock and fire a fresh run.
-        const recovered = await resetStaleCommentThread(threadId);
-        if (recovered) {
-          await triggerCommentRun(threadId);
-          outcome = 'stale_runner_recovered';
-        } else {
-          outcome = 'stale_reset_race';
-        }
+    } else if (inFlight && channel.agentId) {
+      ageMs = stateAgeMs(priorStateAt);
+      if (await resetStaleCommentThread(threadId, staleBefore())) {
+        await triggerCommentRun(threadId);
+        outcome = 'stale_runner_recovered';
       } else {
         outcome = 'waited_for_live_runner';
       }
@@ -410,7 +423,7 @@ async function processCommentChanges(
       inserted,
       priorStatus,
       outcome,
-      ageMs: staleAgeMs,
+      ageMs,
     });
   }
 }

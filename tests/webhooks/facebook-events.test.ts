@@ -256,6 +256,36 @@ describe('one webhook delivery states each fact once', () => {
     expect(triggerAgentRunMock).not.toHaveBeenCalled();
   });
 
+  it('recovers the orphaned lock a redelivery is waiting on', async () => {
+    const seed = await seedTestWorld();
+    const { db } = await import('@db/client');
+    const { conversations } = await import('@db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    const event = text(seed.conversation.customerPlatformId, 'hello?', 'mid-orphan');
+    await deliver({ object: 'page', entry: [entry(seed.pageChannelId, [event])] });
+
+    // The run that took the lock died with it: 'working', and untouched for
+    // longer than any live runner could have held it.
+    await db
+      .update(conversations)
+      .set({ lastMessageState: 'working', lastStateAt: new Date(Date.now() - 60_000) })
+      .where(eq(conversations.id, seed.conversation.id));
+    triggerAgentRunMock.mockClear();
+
+    // Meta, having never seen an answer, sends the same mid again.
+    await deliver({ object: 'page', entry: [entry(seed.pageChannelId, [event])] });
+
+    const items = of('webhook_item');
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({
+      inserted: false,
+      priorStatus: 'working',
+      outcome: 'redelivered_stale_recovered',
+    });
+    expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
+  });
+
   it('still acks a malformed body with one delivery event', async () => {
     const body = 'not-json';
     const res = await app.request('http://localhost/webhooks/facebook', {
