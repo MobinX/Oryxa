@@ -126,7 +126,9 @@ describe('one event per request', () => {
     await call(probeApp(), '/boom');
     const errors = events().filter((e) => e.evt === 'error');
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({ name: 'Error', message: 'kaboom' });
+    expect(errors[0]).toMatchObject({ name: 'Error' });
+    // `message` is the human-readable line, which carries the text it replaced.
+    expect(String(errors[0].message)).toContain('kaboom');
     expect(errors[0]).not.toHaveProperty('path');
     expect(errors[0]).not.toHaveProperty('status');
     expect(events().filter((e) => e.evt === 'req')).toHaveLength(1);

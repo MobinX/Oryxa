@@ -174,7 +174,8 @@ describe('agent run outcome logging', () => {
     ]);
     expect(of(events, 'tool_result')).toHaveLength(0);
     expect(of(events, 'error')).toHaveLength(1);
-    expect(of(events, 'error')[0]).toMatchObject({ name: 'Error', message: 'graph send failed' });
+    expect(of(events, 'error')[0]).toMatchObject({ name: 'Error' });
+    expect(String(of(events, 'error')[0].message)).toContain('graph send failed');
     expect(kinds(events)).toEqual(['error_state_done', 'tool_call_unresolved']);
     // The invariant catalogue carries no stack; the one error event does.
     expect(of(events, 'anomaly').every((a) => a.stack === undefined)).toBe(true);

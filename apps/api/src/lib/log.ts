@@ -59,6 +59,180 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
   log_dropped: ['droppedEvents'],
 };
 
+/**
+ * The one line a person reads in Axiom: who acted, what came of it, then the
+ * numbers that explain it. Built from the fields that already survived
+ * `filterFields`, so anything the content policy dropped is simply absent here.
+ */
+function describeEvent(evt: Evt, f: Fields): string {
+  const parts: string[] = [];
+  const add = (...bit: unknown[]): void => {
+    const line = bit
+      .filter((piece) => piece !== undefined && piece !== null && piece !== '')
+      .map((piece) => String(piece))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (line) parts.push(line);
+  };
+  const state = (value: unknown): string => (value === true ? 'yes' : value === false ? 'no' : '');
+
+  switch (evt) {
+    case 'req':
+      add(text(f.method) || '?', text(f.routePath) || text(f.path) || '?', '→', f.status ?? '?', span(f.durationMs, 'in'));
+      break;
+    case 'not_found':
+      add('no route for', text(f.method) || '?', text(f.path) || '?');
+      break;
+    case 'error':
+      // Unbounded: `message` is being replaced by this line, and the value
+      // already left `filterFields` at the policy's own cap.
+      add('error:', text(f.name) ? `${text(f.name)} —` : '', text(f.message, 0) || '(no message)');
+      break;
+    case 'auth':
+      add('auth rejected:', text(f.reason) || 'no reason given', f.uid ? `uid ${text(f.uid)}` : '');
+      break;
+    case 'webhook':
+      add(
+        'webhook delivery',
+        f.pageId ? `for page ${text(f.pageId)}` : '',
+        f.object ? `object=${text(f.object)}` : '',
+        f.event ? `event=${text(f.event)}` : '',
+        f.entryCount !== undefined ? `${f.entryCount} entr${f.entryCount === 1 ? 'y' : 'ies'}` : '',
+        f.messagingCount !== undefined ? `${f.messagingCount} messaging` : '',
+        f.changesCount !== undefined ? `${f.changesCount} changes` : '',
+        f.signatureValid === false ? 'SIGNATURE INVALID' : f.signatureValid === true ? 'signature valid' : '',
+        f.mode ? `handshake mode=${text(f.mode)} verified=${state(f.verified) || 'unset'}` : '',
+      );
+      break;
+    case 'webhook_item':
+      add(
+        'webhook item',
+        text(f.kind) || 'unknown',
+        text(f.externalId) || (f.commentId ? `#${text(f.commentId)}` : ''),
+        f.verb ? `verb ${text(f.verb)}` : '',
+        f.inserted === undefined ? '' : f.inserted ? 'stored' : 'already there',
+        f.priorStatus ? `prior state ${text(f.priorStatus)}` : '',
+        f.ageMs !== undefined ? `lock age ${span(f.ageMs)}` : '',
+        f.outcome ? `→ ${text(f.outcome)}` : '',
+      );
+      break;
+    case 'http_out':
+      add(
+        text(f.service) || 'outbound call',
+        f.errorName ? `FAILED (${text(f.errorName)})` : `→ ${text(f.host) || '?'}${text(f.targetPath, 0)}`,
+        f.httpMethod ? `${text(f.httpMethod)}${f.status !== undefined ? ` ${f.status}` : ''}` : '',
+        span(f.durationMs, 'in'),
+        f.ok === false ? 'not ok' : '',
+      );
+      break;
+    case 'db':
+      add(
+        'db',
+        text(f.operation) || '?',
+        f.table ? `on ${text(f.table)}` : '',
+        f.errorName ? `FAILED (${text(f.errorName)})` : f.rowCount !== undefined ? `${f.rowCount} row${f.rowCount === 1 ? '' : 's'}` : '',
+        span(f.durationMs, 'in'),
+        f.slow ? 'slow' : '',
+      );
+      break;
+    case 'db_summary':
+      add(
+        'db rollup:',
+        f.count !== undefined ? `${f.count} quer${f.count === 1 ? 'y' : 'ies'}` : '',
+        f.table ? `on ${text(f.table)}` : '',
+        f.totalMs !== undefined ? `${span(f.totalMs)} total` : '',
+      );
+      break;
+    case 'agent_input':
+      add(
+        'agent handed',
+        f.historyLength !== undefined ? `${f.historyLength} turn${f.historyLength === 1 ? '' : 's'}` : '',
+        f.catalogCount !== undefined ? `and ${f.catalogCount} products` : '',
+        f.systemPromptLength !== undefined ? `· prompt ${f.systemPromptLength} chars` : '',
+      );
+      break;
+    case 'agent_run':
+      add(
+        'agent run',
+        f.ok === true ? 'ok' : f.ok === false ? 'FAILED' : '',
+        f.pendingClaimed !== undefined ? `${f.pendingClaimed} claimed` : '',
+        f.repliedCount !== undefined ? `${f.repliedCount} retired` : '',
+        f.sentViaTool !== undefined || f.sentViaFallback !== undefined
+          ? `${num(f.sentViaTool) + num(f.sentViaFallback)} sent (${num(f.sentViaTool)} by tool, ${num(f.sentViaFallback)} by fallback)`
+          : '',
+        f.toolCallCount !== undefined ? `${f.toolCallCount} tool call${f.toolCallCount === 1 ? '' : 's'}` : '',
+        f.stateSetTo ? `state → ${text(f.stateSetTo)}` : '',
+        f.totalTokens !== undefined ? `${f.totalTokens} tokens${f.cacheHitPercent !== undefined ? ` (${f.cacheHitPercent}% cache hit)` : ''}` : '',
+        f.estimatedCostUsd !== undefined ? `~$${f.estimatedCostUsd}` : '',
+        span(f.durationMs, 'in'),
+        f.reTriggered === undefined ? '' : f.reTriggered ? 're-triggered' : 'no follow-up',
+        f.externalId ? `· ${text(f.externalId, 24)}` : '',
+        f.replyText ? `— "${text(f.replyText, 90)}"` : '',
+      );
+      break;
+    case 'tool_call':
+      add('tool', text(f.tool) || '?', 'called with', text(f.args, 140) || '(no args)');
+      break;
+    case 'tool_result':
+      add(
+        'tool',
+        text(f.tool) || '?',
+        f.ok === false ? 'FAILED' : f.ok === true ? 'answered' : 'returned',
+        span(f.durationMs, 'in'),
+        f.result ? `→ ${text(f.result, 120)}` : '',
+      );
+      break;
+    case 'bg':
+      add(
+        'background task',
+        text(f.task) || '?',
+        f.ok === false ? 'failed' : 'finished',
+        span(f.durationMs, 'in'),
+        f.message ? `· ${text(f.name) ? `${text(f.name)}: ` : ''}${text(f.message, 0)}` : '',
+      );
+      break;
+    case 'anomaly':
+      add(
+        'INVARIANT BROKEN:',
+        text(f.kind) || 'unknown',
+        f.count !== undefined ? `(count ${f.count})` : '',
+        f.detail !== undefined ? `— ${text(f.detail, 140)}` : '',
+      );
+      break;
+    case 'log_dropped':
+      add(`${f.droppedEvents ?? 0} log events dropped before ingest`);
+      break;
+    default:
+      return text(f.message) || evt;
+  }
+
+  return parts.join(' · ');
+}
+
+/** Compact for reading: 1.16s rather than 1162.3, and nothing when absent. */
+function span(ms: unknown, lead = ''): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '';
+  const shown = ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms * 10) / 10}ms`;
+  return `${lead} ${shown}`.trim();
+}
+
+/** A count to arithmetic on; a field the policy dropped reads as zero, not `NaN`. */
+function num(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** One line, collapsed whitespace, bounded — a log message, not a transcript. */
+function text(value: unknown, max = 120): string {
+  if (value === undefined || value === null) return '';
+  const flat = (typeof value === 'string' ? value : JSON.stringify(value) ?? String(value))
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!flat) return '';
+  if (max === 0) return flat;
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
 /** Precomputed so `emit()` allocates nothing per event on the request path. */
 const ALLOWED = new Map<Evt, ReadonlySet<string>>(
   EVENTS.map((evt) => [evt, new Set(ALLOWLIST[evt])] as const),
@@ -278,7 +452,10 @@ export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | nu
     const key = dedupeKey(evt, fields, ctx, opts.dedupe);
     if (key && !markSeen(key)) return;
 
-    const event = { ...stamp(ctx), evt, ...filterFields(evt, fields, contentPolicy()) };
+    const event: Fields = { ...stamp(ctx), evt, ...filterFields(evt, fields, contentPolicy()) };
+    // One plain-English sentence per event, built from the fields that survived
+    // the content policy above, so it can never carry what the policy dropped.
+    event.message = describeEvent(evt, event);
 
     let line: string;
     try {
@@ -350,7 +527,9 @@ async function sendOnce(): Promise<void> {
   droppedEvents = 0;
   const events = queued.map((q) => q.event);
   if (dropped > 0) {
-    events.push({ ...stamp(undefined), evt: 'log_dropped', droppedEvents: dropped });
+    const lost: Fields = { ...stamp(undefined), evt: 'log_dropped', droppedEvents: dropped };
+    lost.message = describeEvent('log_dropped', lost);
+    events.push(lost);
   }
 
   try {
