@@ -1,26 +1,11 @@
 import { AxiomWithoutBatching } from '@axiomhq/js';
+import { LOG_EVENT_TYPES, type LogEventType } from '@repo/shared';
 import { currentContext, markSeen, type LogContext } from './ctx';
 
-export const EVENTS = [
-  'req',
-  'error',
-  'not_found',
-  'auth',
-  'webhook',
-  'webhook_item',
-  'http_out',
-  'db',
-  'db_summary',
-  'agent_run',
-  'agent_input',
-  'tool_call',
-  'tool_result',
-  'bg',
-  'anomaly',
-  'log_dropped',
-] as const;
+/** The vocabulary lives in @repo/shared so the logger, the query route and the UI agree. */
+export const EVENTS = LOG_EVENT_TYPES;
 
-export type Evt = (typeof EVENTS)[number];
+export type Evt = LogEventType;
 
 type Fields = Record<string, unknown>;
 
@@ -110,6 +95,10 @@ const FLUSH_BYTES = 256 * 1024;
 const MAX_EVENTS = 2000;
 const MAX_BYTES = 1024 * 1024;
 
+/** Upper bound of the in-process store that backs /api2/logs when ingest is off. */
+const STORE_EVENTS = 1000;
+const STORE_BYTES = 512 * 1024;
+
 type Sink = 'axiom' | 'stdout' | 'none';
 interface Queued {
   event: Fields;
@@ -131,6 +120,10 @@ let axiomClient: AxiomWithoutBatching | undefined;
 let forcedSink: Sink | undefined;
 let injectedIngest: ((events: Fields[]) => Promise<void>) | undefined;
 const warnedFields = new Set<string>();
+
+/** Oldest first; the queryable copy that exists while ingest is off. */
+let stored: Queued[] = [];
+let storedBytes = 0;
 
 function envFlag(name: string): string | undefined {
   const value = process.env[name];
@@ -155,6 +148,11 @@ function sink(): Sink {
 
 function dataset(): string {
   return envFlag('AXIOM_DATASET') ?? 'oryxa-events';
+}
+
+/** The dataset ingest writes to and the query route reads from — one source of truth. */
+export function logDataset(): string {
+  return dataset();
 }
 
 /** True when events are leaving via ingest, so callers must not also print them. */
@@ -275,7 +273,6 @@ function stamp(ctx: LogContext | undefined): Fields {
 export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | null } = {}): void {
   try {
     const target = sink();
-    if (target === 'none') return;
 
     const ctx = currentContext();
     const key = dedupeKey(evt, fields, ctx, opts.dedupe);
@@ -283,31 +280,53 @@ export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | nu
 
     const event = { ...stamp(ctx), evt, ...filterFields(evt, fields, contentPolicy()) };
 
-    if (target === 'stdout') {
-      console.log(JSON.stringify(event));
-      return;
-    }
-
-    let size: number;
+    let line: string;
     try {
-      size = JSON.stringify(event).length;
+      line = JSON.stringify(event);
     } catch {
       droppedEvents++;
       return;
     }
-    queue.push({ event, size });
-    queueBytes += size;
-    const maxEvents = envInt('LOG_MAX_EVENTS', MAX_EVENTS);
-    while (queue.length > maxEvents || (queueBytes > MAX_BYTES && queue.length > 0)) {
-      const dropped = queue.shift();
-      if (!dropped) break;
-      queueBytes -= dropped.size;
-      droppedEvents++;
+
+    if (target === 'axiom') {
+      queue.push({ event, size: line.length });
+      queueBytes += line.length;
+      const maxEvents = envInt('LOG_MAX_EVENTS', MAX_EVENTS);
+      while (queue.length > maxEvents || (queueBytes > MAX_BYTES && queue.length > 0)) {
+        const dropped = queue.shift();
+        if (!dropped) break;
+        queueBytes -= dropped.size;
+        droppedEvents++;
+      }
+      if (queue.length >= FLUSH_EVENTS || queueBytes >= FLUSH_BYTES) void flush();
+      return;
     }
-    if (queue.length >= FLUSH_EVENTS || queueBytes >= FLUSH_BYTES) void flush();
+
+    // Axiom holds the events while ingest is on; this process holds them while it
+    // is not, so the same fact is never queryable from two places at once.
+    recordStored(event, line.length);
+    if (target === 'stdout') console.log(line);
   } catch {
     // A logging fault must never reach the caller or change a response.
   }
+}
+
+function recordStored(event: Fields, size: number): void {
+  stored.push({ event, size });
+  storedBytes += size;
+  const max = envInt('LOG_STORE_MAX_EVENTS', STORE_EVENTS);
+  while (stored.length > 1 && (stored.length > max || storedBytes > STORE_BYTES)) {
+    const dropped = stored.shift();
+    if (!dropped) break;
+    storedBytes -= dropped.size;
+  }
+}
+
+/** Newest first, and a copy: a query must not be able to mutate what is buffered. */
+export function storedEvents(): Fields[] {
+  const out: Fields[] = [];
+  for (let i = stored.length - 1; i >= 0; i--) out.push(stored[i].event);
+  return out;
 }
 
 function client(): AxiomWithoutBatching {
@@ -409,10 +428,13 @@ export const __testOnly = {
   queueSize: () => queue.length,
   queueBytes: () => queueBytes,
   droppedCount: () => droppedEvents,
+  storedSize: () => stored.length,
   reset() {
     queue = [];
     queueBytes = 0;
     droppedEvents = 0;
+    stored = [];
+    storedBytes = 0;
     flushChain = Promise.resolve();
     axiomClient = undefined;
     forcedSink = undefined;
