@@ -20,17 +20,31 @@ afterEach(() => {
 });
 
 /** Runs `work` inside one invocation context and returns every batch that went out. */
-async function captured(work: () => void | Promise<void>): Promise<{ batches: Event[][]; events: Event[] }> {
+async function captured(work: () => void | Promise<void>): Promise<{
+  batches: Event[][];
+  events: Event[];
+  lines: string[];
+}> {
   const batches: Event[][] = [];
+  const lines: string[] = [];
   __testOnly.setIngest((events) => {
     batches.push(events);
     return Promise.resolve();
   });
-  await withContext(startContext(), async () => {
-    await work();
-    await flush();
+  // Stdout mirroring is asserted on rather than printed, so a test that emits two
+  // hundred events does not put two hundred lines in the run output.
+  const log = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+    lines.push(String(args[0]));
   });
-  return { batches, events: batches.flat() };
+  try {
+    await withContext(startContext(), async () => {
+      await work();
+      await flush();
+    });
+  } finally {
+    log.mockRestore();
+  }
+  return { batches, events: batches.flat(), lines };
 }
 
 describe('constraint A — one ingest request per invocation', () => {
@@ -251,10 +265,10 @@ describe('a logging fault cannot become an application fault', () => {
     expect(dropped.droppedEvents).toBe(15);
   });
 
-  it('emits nothing to stdout when the sink is axiom', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    await captured(() => emit('webhook_item', { kind: 'x', externalId: '1' }));
-    expect(log).not.toHaveBeenCalled();
-    log.mockRestore();
+  it('prints each event to stdout as well as queueing it for ingest', async () => {
+    const { events, lines } = await captured(() => emit('webhook_item', { kind: 'x', externalId: '1' }));
+    expect(events).toHaveLength(1);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ evt: 'webhook_item', externalId: '1' });
   });
 });

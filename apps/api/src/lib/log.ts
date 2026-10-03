@@ -266,9 +266,9 @@ function stamp(ctx: LogContext | undefined): Fields {
 }
 
 /**
- * Queues an event for the next flush. Does no I/O and allocates no timer: all
- * network happens in flush(), so a request is never slowed by a log line, and a
- * repeated fact is dropped rather than sent twice.
+ * Prints an event and queues it for the next flush. Allocates no timer and makes
+ * no network call: all ingest happens in flush(), so a request is never slowed by
+ * a log line, and a repeated fact is dropped rather than sent twice.
  */
 export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | null } = {}): void {
   try {
@@ -288,6 +288,11 @@ export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | nu
       return;
     }
 
+    // The owner reads the deployment's own log stream next to the query console, so
+    // a line is printed whether or not it is also queued for ingest. Only the
+    // silent sink is allowed to say nothing.
+    if (target !== 'none') console.log(line);
+
     if (target === 'axiom') {
       queue.push({ event, size: line.length });
       queueBytes += line.length;
@@ -305,7 +310,6 @@ export function emit(evt: Evt, fields: Fields = {}, opts: { dedupe?: string | nu
     // Axiom holds the events while ingest is on; this process holds them while it
     // is not, so the same fact is never queryable from two places at once.
     recordStored(event, line.length);
-    if (target === 'stdout') console.log(line);
   } catch {
     // A logging fault must never reach the caller or change a response.
   }
