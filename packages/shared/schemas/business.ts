@@ -1,5 +1,6 @@
 import { z } from '@hono/zod-openapi';
 import { timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { storeThemeSchema } from '@shared/schemas/store';
 
 export const createBusinessInputSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'Acme Store' }),
@@ -10,6 +11,9 @@ export const createBusinessInputSchema = z.object({
   hasTaxLicense: z.boolean().default(false),
   phone: z.string().max(20).optional(),
   facebookPageLink: z.string().max(500).optional(),
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,253}[a-z0-9]$/, 'lowercase letters, numbers and hyphens').optional(),
+  storePublished: z.boolean().optional(),
+  storeTheme: storeThemeSchema.nullable().optional(),
 }).openapi('CreateBusinessInput');
 
 export const updateBusinessInputSchema = createBusinessInputSchema.partial();
@@ -18,6 +22,9 @@ export const selectBusinessSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
   name: z.string(),
+  slug: z.string().nullable().optional(),
+  storePublished: z.boolean().default(false),
+  storeTheme: storeThemeSchema.nullable().optional(),
   description: z.string().nullable().optional(),
   employeeCount: z.number().nullable().optional(),
   type: z.string().nullable().optional(),
