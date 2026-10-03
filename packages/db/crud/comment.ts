@@ -1,4 +1,4 @@
-import { eq, and, isNull, inArray, asc } from 'drizzle-orm';
+import { eq, and, or, lt, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { commentThreads, comments } from '@db/schema';
 
@@ -114,7 +114,13 @@ export async function processInboundComment(
   text: string,
   externalId: string,
   parentExternalId?: string,
-): Promise<{ threadId: string; priorStatus: string; inserted: boolean; needsProfile: boolean }> {
+): Promise<{
+  threadId: string;
+  priorStatus: string;
+  inserted: boolean;
+  needsProfile: boolean;
+  priorStateAt: Date;
+}> {
   // Avatar isn't known at insert time (the webhook payload has no picture); it's
   // enriched after via setCommentThreadProfileIfMissing, so create without it.
   const { thread } = await getOrCreateCommentThreadWithFlag(
@@ -142,7 +148,13 @@ export async function processInboundComment(
     .returning();
 
   if (inserted.length === 0) {
-    return { threadId: thread.id, priorStatus, inserted: false, needsProfile: false };
+    return {
+      threadId: thread.id,
+      priorStatus,
+      inserted: false,
+      needsProfile: false,
+      priorStateAt: thread.lastStateAt,
+    };
   }
 
   // Mark the thread needing attention, but only if it was idle — never downgrade
@@ -156,7 +168,13 @@ export async function processInboundComment(
   // done by the webhook). Cheap to signal here; the Graph call happens once.
   const needsProfile = !thread.commenterName || !thread.commenterAvatar;
 
-  return { threadId: thread.id, priorStatus, inserted: true, needsProfile };
+  return {
+    threadId: thread.id,
+    priorStatus,
+    inserted: true,
+    needsProfile,
+    priorStateAt: thread.lastStateAt,
+  };
 }
 
 /**
@@ -194,43 +212,58 @@ export async function setCommentThreadPostContext(
 }
 
 /**
- * Atomically transitions a comment thread from idle ('done' or 'pending') to
- * 'working'. The single race-free gate that prevents duplicate comment runs when
- * overlapping webhooks or the tail re-trigger fire at the same time. Different
- * threads (different commenters) are independent → parallel.
+ * Atomically transitions a comment thread to 'working'. The single race-free gate
+ * that prevents duplicate comment runs when overlapping webhooks or the tail
+ * re-trigger fire at the same time. Different threads (different commenters) are
+ * independent → parallel.
+ *
+ * `staleBefore` makes a lock older than that instant claimable: a run killed
+ * mid-flight leaves the thread in 'working' with no one to release it, and a gate
+ * that only accepts 'done'/'pending' then keeps every later comment unanswered.
  */
-export async function claimCommentThreadForRun(threadId: string): Promise<boolean> {
+export async function claimCommentThreadForRun(
+  threadId: string,
+  staleBefore?: Date,
+): Promise<boolean> {
+  const idle = inArray(commentThreads.lastCommentState, ['done', 'pending']);
+  const abandoned = staleBefore
+    ? and(
+        eq(commentThreads.lastCommentState, 'working'),
+        lt(commentThreads.lastStateAt, staleBefore),
+      )
+    : undefined;
   const claimed = await db
     .update(commentThreads)
     .set({ lastCommentState: 'working', lastStateAt: new Date() })
-    .where(
-      and(
-        eq(commentThreads.id, threadId),
-        inArray(commentThreads.lastCommentState, ['done', 'pending']),
-      ),
-    )
+    .where(and(eq(commentThreads.id, threadId), or(idle, abandoned)))
     .returning({ id: commentThreads.id });
   return claimed.length > 0;
 }
 
 /**
- * Atomically resets a comment thread that has been stuck in `working` or
- * `pending` for longer than the stale threshold back to `pending`, so that
- * the webhook can kick off a fresh comment agent run. Returns the thread id
- * when the reset happened (this caller owns recovery), or null otherwise.
+ * Atomically resets a stuck comment thread from `working` or `pending` back to
+ * `pending`, so the webhook can kick off a fresh comment agent run. Returns the
+ * thread id when the reset happened (this caller owns recovery), or null.
+ *
+ * Pass `olderThan` to put the age test in the statement rather than in the
+ * caller: only a lock left untouched since that instant is reset, so a recovery
+ * can never hand a live run's thread to a second runner. That is what lets a
+ * re-delivered comment recover a stuck thread in one query.
  */
 export async function resetStaleCommentThread(
   threadId: string,
+  olderThan?: Date,
 ): Promise<string | null> {
+  const conditions = [
+    eq(commentThreads.id, threadId),
+    inArray(commentThreads.lastCommentState, ['working', 'pending']),
+  ];
+  if (olderThan) conditions.push(lt(commentThreads.lastStateAt, olderThan));
+
   const reset = await db
     .update(commentThreads)
     .set({ lastCommentState: 'pending', lastStateAt: new Date() })
-    .where(
-      and(
-        eq(commentThreads.id, threadId),
-        inArray(commentThreads.lastCommentState, ['working', 'pending']),
-      ),
-    )
+    .where(and(...conditions))
     .returning({ id: commentThreads.id });
   return reset.length > 0 ? reset[0].id : null;
 }

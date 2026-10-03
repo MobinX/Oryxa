@@ -2,7 +2,7 @@ import type { TokenUsageMetrics } from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, outboundRunHeaders, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
-import { RUN_LOOP_DEPTH_THRESHOLD } from '@api/lib/config';
+import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
@@ -116,7 +116,10 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     return;
   }
 
-  const claimed = await claimCommentThreadForRun(thread.id);
+  const claimed = await claimCommentThreadForRun(
+    thread.id,
+    new Date(Date.now() - STALE_RUNNER_MS),
+  );
   if (!claimed) {
     // Another runner holds this thread: nothing was replied to here, and the
     // pending comments wait for whoever won the claim.

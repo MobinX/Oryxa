@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, inArray, asc } from 'drizzle-orm';
+import { eq, and, or, lt, desc, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 
@@ -148,45 +148,65 @@ export async function markMessagesDoneByIds(conversationId: string, ids: string[
 }
 
 /**
- * Atomically transitions a conversation from idle ('done' or 'pending') to
- * 'working'. Returns true if this caller won the claim — i.e. this caller
- * should run the agent. Concurrent callers (or a state already 'working') get
- * false and must not run, which prevents duplicate agent runs when Meta
- * delivers overlapping webhooks or the tail re-trigger races with a new inbound.
+ * Atomically transitions a conversation to 'working'. Returns true if this
+ * caller won the claim — i.e. this caller should run the agent. Concurrent
+ * callers get false and must not run, which prevents duplicate agent runs when
+ * Meta delivers overlapping webhooks or the tail re-trigger races with a new
+ * inbound.
+ *
+ * A run killed mid-flight — Vercel freezing the invocation, a crash, a deploy —
+ * leaves the row in 'working' with no one to release it, and a claim that only
+ * accepts 'done'/'pending' then fails forever: every later message is silently
+ * dropped on the floor. Pass `staleBefore` to make a lock older than that instant
+ * claimable, so the next message recovers the conversation instead of waiting for
+ * an owner that is gone.
  */
-export async function claimConversationForAgentRun(conversationId: string): Promise<boolean> {
+export async function claimConversationForAgentRun(
+  conversationId: string,
+  staleBefore?: Date,
+): Promise<boolean> {
+  const idle = inArray(conversations.lastMessageState, ['done', 'pending']);
+  const abandoned = staleBefore
+    ? and(
+        eq(conversations.lastMessageState, 'working'),
+        lt(conversations.lastStateAt, staleBefore),
+      )
+    : undefined;
   const claimed = await db
     .update(conversations)
     .set({ lastMessageState: 'working', lastStateAt: new Date() })
-    .where(
-      and(
-        eq(conversations.id, conversationId),
-        inArray(conversations.lastMessageState, ['done', 'pending']),
-      ),
-    )
+    .where(and(eq(conversations.id, conversationId), or(idle, abandoned)))
     .returning({ id: conversations.id });
   return claimed.length > 0;
 }
 
 /**
  * Atomically resets a conversation that has been stuck in `working` or
- * `pending` for longer than the stale threshold back to `pending`, so that
- * the webhook can kick off a fresh agent run. Returns the conversation id when
- * the reset happened (i.e. this caller owns the recovery), or null when the
- * conversation is already `done` or was reset by a concurrent caller.
+ * `pending` back to `pending`, so that the webhook can kick off a fresh agent
+ * run. Returns the conversation id when the reset happened (i.e. this caller
+ * owns the recovery), or null when the conversation is already `done` or was
+ * reset by a concurrent caller.
+ *
+ * Pass `olderThan` to put the age test in the statement rather than in the
+ * caller: only a lock left untouched since that instant is reset, so a reset
+ * can never hand a live run's conversation to a second runner. That is what
+ * lets a re-delivered message — Meta's copy of a delivery it never got an
+ * answer to — recover a stuck conversation in one query.
  */
 export async function resetStaleConversation(
   conversationId: string,
+  olderThan?: Date,
 ): Promise<string | null> {
+  const conditions = [
+    eq(conversations.id, conversationId),
+    inArray(conversations.lastMessageState, ['working', 'pending']),
+  ];
+  if (olderThan) conditions.push(lt(conversations.lastStateAt, olderThan));
+
   const reset = await db
     .update(conversations)
     .set({ lastMessageState: 'pending', lastStateAt: new Date() })
-    .where(
-      and(
-        eq(conversations.id, conversationId),
-        inArray(conversations.lastMessageState, ['working', 'pending']),
-      ),
-    )
+    .where(and(...conditions))
     .returning({ id: conversations.id });
   return reset.length > 0 ? reset[0].id : null;
 }
@@ -256,12 +276,24 @@ export async function deleteMessage(conversationId: string, messageId: string) {
   return { deleted: true };
 }
 
+/**
+ * `priorStateAt` is the instant the state the caller received was written. The
+ * webhook needs it to judge whether an in-flight run is orphaned, and taking it
+ * from the row this function already read costs a query the alternative — loading
+ * the conversation with its whole history — would not.
+ */
 export async function processInboundMessage(
   channel: { id: string; businessId: string },
   senderId: string,
   text: string,
   externalId?: string,
-): Promise<{ conversationId: string; priorStatus: string; inserted: boolean; needsProfile: boolean }> {
+): Promise<{
+  conversationId: string;
+  priorStatus: string;
+  inserted: boolean;
+  needsProfile: boolean;
+  priorStateAt: Date;
+}> {
   let conv = await db.query.conversations.findFirst({
     where: and(
       eq(conversations.channelId, channel.id),
@@ -298,7 +330,13 @@ export async function processInboundMessage(
       .returning();
 
     if (inserted.length === 0) {
-      return { conversationId: conv.id, priorStatus, inserted: false, needsProfile: false };
+      return {
+        conversationId: conv.id,
+        priorStatus,
+        inserted: false,
+        needsProfile: false,
+        priorStateAt: conv.lastStateAt,
+      };
     }
   } else {
     await db.insert(messages).values({
@@ -321,7 +359,13 @@ export async function processInboundMessage(
   // from the Graph API. Signal the webhook to do that once, only while missing.
   const needsProfile = !conv.customerName || !conv.customerAvatar;
 
-  return { conversationId: conv.id, priorStatus, inserted: true, needsProfile };
+  return {
+    conversationId: conv.id,
+    priorStatus,
+    inserted: true,
+    needsProfile,
+    priorStateAt: conv.lastStateAt,
+  };
 }
 
 /**

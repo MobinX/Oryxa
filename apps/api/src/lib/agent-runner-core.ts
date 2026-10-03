@@ -2,7 +2,7 @@ import type { SseEmitter, TokenUsageMetrics } from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
-import { RUN_LOOP_DEPTH_THRESHOLD } from '@api/lib/config';
+import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 
 export interface AgentRunOptions {
   /**
@@ -64,7 +64,12 @@ export async function runAgentCore(
   // Atomic claim: only one concurrent caller transitions idle→working and gets
   // to run the agent. This is the single race-free gate that prevents duplicate
   // runs when overlapping webhooks or the tail re-trigger fire at the same time.
-  const claimed = await claimConversationForAgentRun(conv.id);
+  // A lock older than the stale threshold is claimable too — the runner that set
+  // it is gone, and without that the conversation would stay locked unheld.
+  const claimed = await claimConversationForAgentRun(
+    conv.id,
+    new Date(Date.now() - STALE_RUNNER_MS),
+  );
   if (!claimed) {
     // Message-lock contention: another runner owns this conversation, so this
     // caller did nothing and the backlog waits for whichever run holds the lock.

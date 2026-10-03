@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { internalRunInputSchema, internalRunCommentInputSchema } from '@repo/shared';
 import { runAgentForConversation } from '@api/lib/agent-runner';
 import { runAgentForCommentThread } from '@api/lib/comment-runner';
-import { runInBackground } from '@api/lib/background';
+import { awaitOnVercel } from '@api/lib/background';
 import { testRunRouter } from '@api/routes/internal/test-run';
 
 export const internalRouter = new Hono();
@@ -19,9 +19,13 @@ internalRouter.post('/run', async (c) => {
     return c.text('Invalid payload', 400);
   }
 
-  // Run after the response is sent; on edge kept alive via waitUntil, on Node
-  // fire-and-forget, in tests drained via flushBackground.
-  runInBackground(c, runAgentForConversation(parsed.data.conversationId), 'agent-run');
+  // On Vercel the run is finished before this responds. Answering first and
+  // working afterwards hands the platform the choice of when to stop: the
+  // invocation is frozen once its response is flushed, which left conversations
+  // claimed as `working` with a half-finished reply and no runner alive.
+  // Elsewhere the 202 stays immediate — run after the response on edge via
+  // waitUntil, fire-and-forget on Node, drained by flushBackground in tests.
+  await awaitOnVercel(c, runAgentForConversation(parsed.data.conversationId), 'agent-run');
   return c.text('accepted', 202);
 });
 
@@ -37,9 +41,9 @@ internalRouter.post('/run-comment', async (c) => {
     return c.text('Invalid payload', 400);
   }
 
-  // Accept immediately so the webhook/previous run can return. The LLM work
-  // continues on THIS invocation via waitUntil — a fresh serverless maxDuration.
-  runInBackground(c, runAgentForCommentThread(parsed.data.commentThreadId), 'comment-run');
+  // Same rule as /run: the comment agent gets the request's own lifetime rather
+  // than whatever the platform allows after the response.
+  await awaitOnVercel(c, runAgentForCommentThread(parsed.data.commentThreadId), 'comment-run');
   return c.text('accepted', 202);
 });
 
