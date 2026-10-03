@@ -26,8 +26,21 @@ export function createCommentAgentTools(
   },
   onSent?: (text: string) => void,
 ) {
+  /**
+   * Claimed before the first await: the model can emit two reply_comment calls
+   * in one turn and they run concurrently, so only a check that precedes the
+   * Graph POST keeps a duplicated reply off the public thread.
+   */
+  let replyClaimed = false;
+
   const replyCommentTool = tool(
     async ({ text }) => {
+      if (replyClaimed) {
+        console.log(`[agent-tool] reply_comment rejected — a reply is already in flight for this turn`);
+        return 'Error: The reply to this comment is already posted. Do not call reply_comment again. Stop calling tools and end the turn.';
+      }
+      replyClaimed = true;
+
       context.emitSse?.('tool_call', { name: 'reply_comment', args: { text } });
       console.log(`[agent-tool] reply_comment called — text="${text}"`);
 

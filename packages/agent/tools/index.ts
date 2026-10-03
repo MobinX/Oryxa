@@ -219,6 +219,11 @@ export function createAgentTools(
       context.emitSse?.('tool_call', { name: 'send_message', args: { text } });
       console.log(`[agent-tool] send_message called — text="${text}"`);
 
+      // Claimed before the first await: the model can emit two send_message
+      // calls in one turn, and they run concurrently — counting after the send
+      // let both pass the guard above and post the same reply twice.
+      sentCount++;
+
       // Send to Messenger (or test override), then persist the EXACT text that
       // was sent as the self message. This is the single source of truth for
       // what the customer received.
@@ -229,7 +234,6 @@ export function createAgentTools(
         content: text,
         state: 'done',
       });
-      sentCount++;
       onSent?.(text);
 
       console.log(`[agent-tool] send_message done — message persisted`);

@@ -21,6 +21,9 @@ export async function getOrCreateCommentThreadWithFlag(
 
   if (existing) return { thread: existing, created: false };
 
+  // Two deliveries of a commenter's first comment race the same way messages
+  // do, and a conflict used to surface as a unique-index error that dropped the
+  // delivery. Insert nothing on conflict and carry on with the row that won.
   const [created] = await db
     .insert(commentThreads)
     .values({
@@ -31,9 +34,22 @@ export async function getOrCreateCommentThreadWithFlag(
       commenterName,
       commenterAvatar,
     })
+    .onConflictDoNothing()
     .returning();
 
-  return { thread: created, created: true };
+  if (created) return { thread: created, created: true };
+
+  const winner = await db.query.commentThreads.findFirst({
+    where: and(
+      eq(commentThreads.channelId, channelId),
+      eq(commentThreads.platformItemId, platformItemId),
+      eq(commentThreads.commenterPlatformId, commenterPlatformId),
+    ),
+  });
+  if (!winner) {
+    throw new Error(`no comment thread for channel=${channelId} item=${platformItemId} after a conflict`);
+  }
+  return { thread: winner, created: false };
 }
 
 export async function getOrCreateCommentThread(

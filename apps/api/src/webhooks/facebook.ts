@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
-import { processInboundMessage, setConversationProfileIfMissing, resetStaleConversation } from '@repo/db/crud/conversation';
-import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread } from '@repo/db/crud/comment';
+import { processInboundMessage, setConversationProfileIfMissing, resetStaleConversation, checkPendingMessages } from '@repo/db/crud/conversation';
+import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { runInBackground } from '@api/lib/background';
@@ -419,6 +419,18 @@ async function processMessagingEvents(
         } else {
           fbLog('processMessagingEvents runner still fresh — no extra trigger needed', { index, conversationId, ageMs });
         }
+      } else if (channel.agentId && (await checkPendingMessages(conversationId))) {
+        // The delivery that stored this message committed the row and then died
+        // before it could run — which is exactly why Meta is redelivering it.
+        // Nothing is in flight, so this copy runs the reply instead of ending
+        // the conversation unanswered.
+        fbLog('processMessagingEvents redelivery found an unanswered backlog — triggering agent', {
+          index,
+          conversationId,
+          priorStatus,
+        });
+        await triggerAgentRun(conversationId);
+        outcome = 'redelivered_pending_drained';
       }
     } else if (priorStatus === 'done' && channel.agentId) {
       fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
@@ -611,6 +623,16 @@ async function processCommentChanges(
         } else {
           fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
         }
+      } else if (channel.agentId && (await checkPendingComments(threadId))) {
+        // Same safety net as the messenger path: the delivery that stored this
+        // comment died after committing it, so this redelivery runs the reply.
+        fbLog('processCommentChanges redelivery found an unanswered backlog — triggering comment agent', {
+          index,
+          threadId,
+          priorStatus,
+        });
+        await triggerCommentRun(threadId);
+        outcome = 'redelivered_pending_drained';
       }
     } else if (priorStatus === 'done' && channel.agentId) {
       fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });

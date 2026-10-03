@@ -303,6 +303,10 @@ export async function processInboundMessage(
   });
 
   if (!conv) {
+    // Meta can deliver a customer's first message twice at the same time: both
+    // readers see no conversation and both insert, so the loser used to raise
+    // the unique index and take its whole delivery — message and reply — down.
+    // Inserting nothing on conflict hands it the row the other one created.
     const [created] = await db
       .insert(conversations)
       .values({
@@ -310,8 +314,19 @@ export async function processInboundMessage(
         channelId: channel.id,
         customerPlatformId: senderId,
       })
+      .onConflictDoNothing()
       .returning();
-    conv = created;
+    conv =
+      created ??
+      (await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.channelId, channel.id),
+          eq(conversations.customerPlatformId, senderId),
+        ),
+      }));
+    if (!conv) {
+      throw new Error(`no conversation for channel=${channel.id} customer=${senderId} after a conflict`);
+    }
   }
 
   const priorStatus = conv.lastMessageState;

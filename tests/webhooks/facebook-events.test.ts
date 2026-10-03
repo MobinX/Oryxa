@@ -286,6 +286,36 @@ describe('one webhook delivery states each fact once', () => {
     expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
   });
 
+  it('runs the reply a lost delivery left pending when Meta asks again', async () => {
+    const seed = await seedTestWorld();
+    const { db } = await import('@db/client');
+    const { messages } = await import('@db/schema');
+
+    // A delivery that committed this message and then died: the row is pending
+    // and the conversation is back to `done`, so no runner is working it.
+    await db.insert(messages).values({
+      conversationId: seed.conversation.id,
+      from: 'customer',
+      content: 'unanswered',
+      state: 'pending',
+      externalId: 'mid-lost',
+    });
+    triggerAgentRunMock.mockClear();
+
+    // Meta never saw an answer, so it sends the same mid again.
+    await deliver({
+      object: 'page',
+      entry: [entry(seed.pageChannelId, [text(seed.conversation.customerPlatformId, 'unanswered', 'mid-lost')])],
+    });
+
+    expect(of('webhook_item')[0]).toMatchObject({
+      inserted: false,
+      priorStatus: 'done',
+      outcome: 'redelivered_pending_drained',
+    });
+    expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
+  });
+
   it('still acks a malformed body with one delivery event', async () => {
     const body = 'not-json';
     const res = await app.request('http://localhost/webhooks/facebook', {
