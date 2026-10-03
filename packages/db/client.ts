@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from '@db/schema';
+import { instrumentSql } from './query-log';
 
 export type Database = NeonHttpDatabase<typeof schema>;
 
@@ -20,7 +21,9 @@ function getDb(): Database {
     throw new Error('DATABASE_URL is not set');
   }
 
-  const sql = neon(connectionString);
+  // Instrumented at the one place every query passes through; inert until the API
+  // wires a sink, so this package on its own changes nothing.
+  const sql = instrumentSql(neon(connectionString));
   _db = drizzle(sql, { schema });
   return _db;
 }

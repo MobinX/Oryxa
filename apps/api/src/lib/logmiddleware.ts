@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { startContext, withContext, tagContext, RUN_ID_HEADER, RUN_DEPTH_HEADER } from './ctx';
 import { emit, flush, logsToAxiom } from './log';
+import { emitDbSummary } from './db-log';
 import { runInBackground } from './background';
 
 const RUN_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -50,6 +51,10 @@ export const logRequest: MiddlewareHandler = async (c, next) => {
       if (c.error) {
         emit('error', { name: c.error.name, message: c.error.message, stack: c.error.stack });
       }
+
+      // Queries are counted per request, so the rollup leaves here rather than
+      // from the database layer, which has no idea when a request ends.
+      emitDbSummary();
 
       // A preflight carries no application outcome worth a row, and a 404 with no
       // matched route is already reported by the notFound handler — one event each.

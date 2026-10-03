@@ -11,8 +11,15 @@ export interface LogContext {
   commentThreadId?: string;
   /** Set by the notFound handler so the request middleware stays the single owner of this request. */
   notFoundHandled: boolean;
+  /** Queries counted per table for the one `evt=db_summary` this invocation reports. */
+  dbTally?: Map<string, DbTallyRow>;
   /** `evt:key` already emitted in this invocation; backs the "every log is unique" rule. */
   seen: Set<string>;
+}
+
+export interface DbTallyRow {
+  count: number;
+  totalMs: number;
 }
 
 const storage = new AsyncLocalStorage<LogContext>();
@@ -58,6 +65,32 @@ export function markSeen(key: string): boolean {
   if (ctx.seen.has(key)) return false;
   ctx.seen.add(key);
   return true;
+}
+
+/**
+ * Counts a query against its table. Outside a request context there is nothing to
+ * count them for, so a script run costs nothing here.
+ */
+export function tallyDbCall(table: string, durationMs: number): void {
+  const ctx = storage.getStore();
+  if (!ctx) return;
+  const tally = (ctx.dbTally ??= new Map<string, DbTallyRow>());
+  const row = tally.get(table);
+  if (row) {
+    row.count += 1;
+    row.totalMs += durationMs;
+    return;
+  }
+  tally.set(table, { count: 1, totalMs: durationMs });
+}
+
+/** Emptied on read, so a context can only ever report its rollup once. */
+export function drainDbTally(): Array<[string, DbTallyRow]> {
+  const ctx = storage.getStore();
+  if (!ctx?.dbTally) return [];
+  const rows = [...ctx.dbTally.entries()];
+  ctx.dbTally.clear();
+  return rows;
 }
 
 /** Carried across the internal re-trigger hop; read only by the request middleware. */

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./index.ts",
     "./client": "./client.ts",
+    "./query-log": "./query-log.ts",
     "./schema": "./schema.ts",
     "./crud/*": "./crud/*.ts"
   },
