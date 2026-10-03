@@ -142,7 +142,6 @@ export class Agent {
       .filter(Boolean)
       .join('\n');
 
-    console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length}`);
     emitSse?.('agent_start', {
       conversationId: this.config.conversationId,
       business: this.config.business.name,
@@ -209,7 +208,6 @@ export class Agent {
       estimatedCostUsd,
     };
 
-    console.log(`[agent] run complete — sentTexts=${sentTexts.length} totalTokens=${totalTokens} cacheHit%=${cacheHitPercent}% finalReply="${replyText.slice(0, 120)}${replyText.length > 120 ? '…' : ''}"`);
     emitSse?.('reply', { text: replyText });
 
     return {
