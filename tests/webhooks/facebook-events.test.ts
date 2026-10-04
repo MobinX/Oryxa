@@ -121,7 +121,7 @@ describe('one webhook delivery states each fact once', () => {
     expect(of('webhook')[0].channelId).toBeUndefined();
   });
 
-  it('never carries the customer text, the sender id or the signature', async () => {
+  it('names the customer and their words, but never the signature', async () => {
     const seed = await seedTestWorld();
     const body = JSON.stringify({
       object: 'page',
@@ -137,11 +137,31 @@ describe('one webhook delivery states each fact once', () => {
     await flush();
 
     const wire = JSON.stringify(events());
-    for (const leaked of ['my card number is 4242', 'PSID_SECRET_1', 'sha256=', 'x-hub-signature']) {
+    // The delivery is read as a story: who wrote what, and what became of it.
+    expect(wire).toContain('my card number is 4242');
+    expect(wire).toContain('PSID_SECRET_1');
+    expect(wire).toContain('mid-secret');
+    // What Meta signed, and the signature itself, stay out of the store.
+    for (const leaked of ['sha256=', 'x-hub-signature', 'test-app-secret']) {
       expect(wire).not.toContain(leaked);
     }
-    // The id that is a fact about the delivery is the message id, and it is kept.
-    expect(wire).toContain('mid-secret');
+  });
+
+  it('drops the customer text once the content dial is closed, and keeps the ids', async () => {
+    process.env.LOG_CONTENT = 'none';
+    try {
+      const seed = await seedTestWorld();
+      await deliver({
+        object: 'page',
+        entry: [entry(seed.pageChannelId, [text('PSID_DIAL_1', 'the answer is 42', 'mid-dial')])],
+      });
+
+      const item = of('webhook_item')[0];
+      expect(item.senderId).toBe('PSID_DIAL_1');
+      expect(JSON.stringify(item)).not.toContain('the answer is 42');
+    } finally {
+      delete process.env.LOG_CONTENT;
+    }
   });
 
   it('records the verify handshake without the verify token', async () => {

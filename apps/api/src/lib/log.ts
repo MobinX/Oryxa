@@ -24,7 +24,7 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
   // The handshake itself: `evt=req` already carries method/path/status, so this
   // says only what a Meta subscription failure looks like from the inside.
   webhook: ['event', 'object', 'pageId', 'entryCount', 'messagingCount', 'changesCount', 'signatureValid', 'mode', 'verified', 'hasChallenge'],
-  webhook_item: ['kind', 'externalId', 'commentId', 'parentId', 'verb', 'inserted', 'priorStatus', 'outcome', 'ageMs'],
+  webhook_item: ['kind', 'externalId', 'commentId', 'parentId', 'verb', 'inserted', 'priorStatus', 'outcome', 'ageMs', 'senderId', 'fromId', 'fromName', 'text'],
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
   db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
   db_summary: ['table', 'count', 'totalMs'],
@@ -60,10 +60,54 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
 };
 
 /**
- * The one line a person reads in Axiom: who acted, what came of it, then the
- * numbers that explain it. Built from the fields that already survived
- * `filterFields`, so anything the content policy dropped is simply absent here.
+ * The one line a person reads in Axiom. It says who is speaking, what happened,
+ * then the numbers — so a Messenger turn reads as a story: `[webhook]` the
+ * delivery, `[webhook]` the message stored and the run it started, `[db]` the
+ * write, `[agent]` what the model was shown, `[tool]` what it decided to send,
+ * `[agent]` how the run ended.
+ *
+ * Built from the fields that already survived `filterFields`, so anything the
+ * content policy dropped is simply absent here.
  */
+
+/** Which part of the system is speaking, so one lane can be filtered at a glance. */
+const LANE: Record<Evt, string> = {
+  req: '[api]',
+  error: '[error]',
+  not_found: '[api]',
+  auth: '[auth]',
+  webhook: '[webhook]',
+  webhook_item: '[webhook]',
+  http_out: '[net]',
+  db: '[db]',
+  db_summary: '[db]',
+  agent_input: '[agent]',
+  agent_run: '[agent]',
+  tool_call: '[tool]',
+  tool_result: '[tool]',
+  bg: '[bg]',
+  anomaly: '[alert]',
+  log_dropped: '[log]',
+};
+
+/** The webhook's outcome codes, in the words an owner reads rather than the code. */
+const OUTCOME: Record<string, string> = {
+  agent_triggered: 'starting the agent run',
+  comment_run_triggered: 'starting the comment agent run',
+  redelivered: 'Meta re-sent one we already have',
+  redelivered_stale_recovered: 'the run it waited on is dead — lock reset, run restarted',
+  stale_runner_recovered: 'the run holding the lock is dead — lock reset, run restarted',
+  redelivered_pending_drained: 'an unanswered backlog is waiting — starting a run',
+  waited_for_live_runner: 'another run already holds this conversation',
+  no_agent: 'NO AGENT ATTACHED — nobody will answer this customer',
+  not_triggered: 'no run started',
+  unsupported_content: 'nothing to answer (attachment, sticker or audio)',
+  incomplete_payload: 'payload has no id or text — cannot be routed',
+};
+
+/** How much of the transcript fits in the line before the structured field is the better read. */
+const HISTORY_IN_LINE = 900;
+
 function describeEvent(evt: Evt, f: Fields): string {
   const parts: string[] = [];
   const add = (...bit: unknown[]): void => {
@@ -75,7 +119,8 @@ function describeEvent(evt: Evt, f: Fields): string {
       .trim();
     if (line) parts.push(line);
   };
-  const state = (value: unknown): string => (value === true ? 'yes' : value === false ? 'no' : '');
+  const plural = (value: unknown, one: string, many: string): string =>
+    typeof value === 'number' ? `${value} ${value === 1 ? one : many}` : '';
 
   switch (evt) {
     case 'req':
@@ -90,97 +135,136 @@ function describeEvent(evt: Evt, f: Fields): string {
       add('error:', text(f.name) ? `${text(f.name)} —` : '', text(f.message, 0) || '(no message)');
       break;
     case 'auth':
-      add('auth rejected:', text(f.reason) || 'no reason given', f.uid ? `uid ${text(f.uid)}` : '');
+      add('rejected:', text(f.reason) || 'no reason given', f.uid ? `uid ${text(f.uid)}` : '');
       break;
-    case 'webhook':
-      add(
-        'webhook delivery',
-        f.pageId ? `for page ${text(f.pageId)}` : '',
-        f.object ? `object=${text(f.object)}` : '',
-        f.event ? `event=${text(f.event)}` : '',
-        f.entryCount !== undefined ? `${f.entryCount} entr${f.entryCount === 1 ? 'y' : 'ies'}` : '',
-        f.messagingCount !== undefined ? `${f.messagingCount} messaging` : '',
-        f.changesCount !== undefined ? `${f.changesCount} changes` : '',
-        f.signatureValid === false ? 'SIGNATURE INVALID' : f.signatureValid === true ? 'signature valid' : '',
-        f.mode ? `handshake mode=${text(f.mode)} verified=${state(f.verified) || 'unset'}` : '',
-      );
+    case 'webhook': {
+      const kind = text(f.event);
+      if (kind === 'verify') {
+        add(
+          'Meta is setting up the subscription',
+          f.mode ? `mode ${text(f.mode)}` : '',
+          f.verified === true ? 'VERIFY OK — challenge sent back' : 'VERIFY REJECTED — verify token did not match',
+          f.hasChallenge === false ? 'and no challenge was sent' : '',
+        );
+      } else if (kind === 'testing_forward') {
+        add('testing mode — passing this delivery on to the live webhook');
+      } else if (f.entryCount === undefined) {
+        add('Meta POSTed a body that would not parse as JSON', f.signatureValid === false ? 'and the signature did not verify' : '');
+      } else {
+        const carried = [
+          plural(f.messagingCount, 'messaging event', 'messaging events'),
+          plural(f.changesCount, 'comment change', 'comment changes'),
+        ]
+          .filter(Boolean)
+          .join(' + ');
+        add(
+          'Meta delivered',
+          carried || 'nothing actionable',
+          f.pageId ? `for page ${text(f.pageId)}` : '',
+          f.object ? `(object ${text(f.object)})` : '',
+          f.signatureValid === false ? 'SIGNATURE INVALID — accepted anyway' : f.signatureValid === true ? 'signature valid' : '',
+        );
+      }
       break;
-    case 'webhook_item':
+    }
+    case 'webhook_item': {
+      const code = text(f.outcome);
+      const senderId = text(f.senderId) || text(f.fromId);
+      const who = [text(f.fromName, 60), senderId ? `id ${senderId}` : ''].filter(Boolean).join(' ');
+      const said = text(f.text, 160);
       add(
-        'webhook item',
-        text(f.kind) || 'unknown',
-        text(f.externalId) || (f.commentId ? `#${text(f.commentId)}` : ''),
+        text(f.kind) === 'comment' ? 'comment' : 'message',
+        said ? `"${said}"` : '(no text)',
+        who ? `from ${who}` : 'from an unidentified sender',
+        text(f.externalId) ? `mid ${text(f.externalId, 24)}` : f.commentId ? `comment #${text(f.commentId, 24)}` : '',
+        f.parentId ? `replying to #${text(f.parentId, 24)}` : '',
         f.verb ? `verb ${text(f.verb)}` : '',
-        f.inserted === undefined ? '' : f.inserted ? 'stored' : 'already there',
-        f.priorStatus ? `prior state ${text(f.priorStatus)}` : '',
-        f.ageMs !== undefined ? `lock age ${span(f.ageMs)}` : '',
-        f.outcome ? `→ ${text(f.outcome)}` : '',
+        f.inserted === undefined ? '' : f.inserted ? `written to the ${text(f.kind) === 'comment' ? 'comments' : 'messages'} table` : 'already in the database',
+        f.priorStatus ? `conversation was ${text(f.priorStatus)}` : '',
+        f.ageMs !== undefined ? `lock held for ${span(f.ageMs)}` : '',
+        code ? `→ ${OUTCOME[code] ?? code}` : '',
       );
       break;
+    }
     case 'http_out':
       add(
-        text(f.service) || 'outbound call',
-        f.errorName ? `FAILED (${text(f.errorName)})` : `→ ${text(f.host) || '?'}${text(f.targetPath, 0)}`,
-        f.httpMethod ? `${text(f.httpMethod)}${f.status !== undefined ? ` ${f.status}` : ''}` : '',
+        text(f.service) || 'an outbound call',
+        f.errorName ? `FAILED (${text(f.errorName)})` : `reached ${text(f.host) || '?'}${text(f.targetPath, 0)}`,
+        f.httpMethod ? `${text(f.httpMethod)}${f.status !== undefined ? ` → ${f.status}` : ''}` : '',
         span(f.durationMs, 'in'),
         f.ok === false ? 'not ok' : '',
       );
       break;
-    case 'db':
+    case 'db': {
+      const verb = text(f.operation) || 'query';
+      const writing = verb === 'insert' || verb === 'update' || verb === 'delete';
       add(
-        'db',
-        text(f.operation) || '?',
-        f.table ? `on ${text(f.table)}` : '',
-        f.errorName ? `FAILED (${text(f.errorName)})` : f.rowCount !== undefined ? `${f.rowCount} row${f.rowCount === 1 ? '' : 's'}` : '',
+        writing ? `writing (${verb})` : verb,
+        f.table ? `${writing ? 'to' : 'on'} ${text(f.table)}` : '',
+        f.errorName ? `FAILED (${text(f.errorName)})` : plural(f.rowCount, 'row', 'rows'),
         span(f.durationMs, 'in'),
         f.slow ? 'slow' : '',
       );
       break;
+    }
     case 'db_summary':
       add(
-        'db rollup:',
-        f.count !== undefined ? `${f.count} quer${f.count === 1 ? 'y' : 'ies'}` : '',
+        'rollup:',
+        plural(f.count, 'query', 'queries'),
         f.table ? `on ${text(f.table)}` : '',
         f.totalMs !== undefined ? `${span(f.totalMs)} total` : '',
       );
       break;
     case 'agent_input':
       add(
-        'agent handed',
-        f.historyLength !== undefined ? `${f.historyLength} turn${f.historyLength === 1 ? '' : 's'}` : '',
+        'run start — the model is shown',
+        plural(f.historyLength, 'turn', 'turns'),
         f.catalogCount !== undefined ? `and ${f.catalogCount} products` : '',
-        f.systemPromptLength !== undefined ? `· prompt ${f.systemPromptLength} chars` : '',
+        f.systemPromptLength !== undefined ? `prompt ${f.systemPromptLength} chars` : '',
       );
+      add(dialog(f.turns, HISTORY_IN_LINE));
       break;
-    case 'agent_run':
+    case 'agent_run': {
+      const byTool = num(f.sentViaTool);
+      const direct = num(f.sentViaFallback);
+      const sent =
+        f.sentViaTool === undefined && f.sentViaFallback === undefined
+          ? ''
+          : byTool + direct === 0
+            ? 'NOTHING SENT — this customer got no reply'
+            : direct > 0 && byTool > 0
+              ? `${byTool + direct} sent (${byTool} by tool, ${direct} written by the model itself)`
+              : direct > 0
+                ? `${direct} sent directly — the model replied without calling send_message`
+                : `${byTool} sent by send_message`;
       add(
-        'agent run',
-        f.ok === true ? 'ok' : f.ok === false ? 'FAILED' : '',
-        f.pendingClaimed !== undefined ? `${f.pendingClaimed} claimed` : '',
-        f.repliedCount !== undefined ? `${f.repliedCount} retired` : '',
-        f.sentViaTool !== undefined || f.sentViaFallback !== undefined
-          ? `${num(f.sentViaTool) + num(f.sentViaFallback)} sent (${num(f.sentViaTool)} by tool, ${num(f.sentViaFallback)} by fallback)`
-          : '',
-        f.toolCallCount !== undefined ? `${f.toolCallCount} tool call${f.toolCallCount === 1 ? '' : 's'}` : '',
+        f.ok === false ? 'run FAILED' : 'run over',
+        plural(f.pendingClaimed, 'message', 'messages'),
+        'claimed,',
+        plural(f.repliedCount, 'message', 'messages'),
+        'marked answered',
+        sent,
+        plural(f.toolCallCount, 'tool call', 'tool calls'),
         f.stateSetTo ? `state → ${text(f.stateSetTo)}` : '',
-        f.totalTokens !== undefined ? `${f.totalTokens} tokens${f.cacheHitPercent !== undefined ? ` (${f.cacheHitPercent}% cache hit)` : ''}` : '',
+        f.totalTokens !== undefined
+          ? `${f.totalTokens} tokens${f.cacheHitPercent !== undefined ? ` (${f.cacheHitPercent}% from cache)` : ''}`
+          : '',
         f.estimatedCostUsd !== undefined ? `~$${f.estimatedCostUsd}` : '',
         span(f.durationMs, 'in'),
-        f.reTriggered === undefined ? '' : f.reTriggered ? 're-triggered' : 'no follow-up',
-        f.externalId ? `· ${text(f.externalId, 24)}` : '',
-        f.replyText ? `— "${text(f.replyText, 90)}"` : '',
+        f.reTriggered === undefined ? '' : f.reTriggered ? 'more arrived — another run follows' : 'nothing left pending',
+        f.replyText ? `reply: "${text(f.replyText, 120)}"` : '',
       );
       break;
+    }
     case 'tool_call':
-      add('tool', text(f.tool) || '?', 'called with', text(f.args, 140) || '(no args)');
+      add('the model calls', text(f.tool) || 'a tool', argsLine(f.args, 220));
       break;
     case 'tool_result':
       add(
-        'tool',
-        text(f.tool) || '?',
+        text(f.tool) || 'a tool',
         f.ok === false ? 'FAILED' : f.ok === true ? 'answered' : 'returned',
         span(f.durationMs, 'in'),
-        f.result ? `→ ${text(f.result, 120)}` : '',
+        f.result ? `→ ${bodyOf(f.result, 160)}` : '',
       );
       break;
     case 'bg':
@@ -204,10 +288,61 @@ function describeEvent(evt: Evt, f: Fields): string {
       add(`${f.droppedEvents ?? 0} log events dropped before ingest`);
       break;
     default:
-      return text(f.message) || evt;
+      return `${LANE[evt]} ${text(f.message) || evt}`;
   }
 
-  return parts.join(' · ');
+  return `${LANE[evt]} ${parts.join(' · ')}`;
+}
+
+/** A JSON field the logger stringified, or `undefined` when it is not JSON at all. */
+function parsed(value: unknown): unknown {
+  if (typeof value !== 'string') return undefined;
+  const first = value.charAt(0);
+  if (first !== '[' && first !== '{') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/** What the model was shown, oldest turns dropped first — the newest ones explain the reply. */
+function dialog(value: unknown, max: number): string {
+  const turns = parsed(value);
+  if (!Array.isArray(turns)) return text(value, max);
+  const lines = turns.map((turn) => {
+    const row = (turn ?? {}) as Fields;
+    return `${text(row.from, 12) || '?'}: "${text(row.content, 160) || '(empty)'}"`;
+  });
+  for (let dropped = 0; dropped < lines.length; dropped++) {
+    const line = `${dropped ? `${dropped} earlier turn${dropped === 1 ? '' : 's'} · ` : ''}${lines.slice(dropped).join(' | ')}`;
+    if (line.length <= max || dropped === lines.length - 1) return line.length > max ? text(line, max) : line;
+  }
+  return '';
+}
+
+/** A tool's arguments, said as the reply text when that is what was passed. */
+function argsLine(value: unknown, max: number): string {
+  const args = parsed(value);
+  if (!args || Array.isArray(args) || typeof args !== 'object') {
+    const raw = text(value, max);
+    return raw ? `with ${raw}` : '(no args)';
+  }
+  const record = args as Fields;
+  const said = typeof record.text === 'string' ? `"${text(record.text, max)}"` : '';
+  const rest = Object.keys(record)
+    .filter((key) => key !== 'text')
+    .map((key) => `${key}=${text(record[key], 60)}`)
+    .join(' ');
+  const line = [said, rest].filter(Boolean).join(' ');
+  return line ? `with ${line}` : '(no args)';
+}
+
+/** A tool's return value, unwrapped when the logger stored it as a JSON string. */
+function bodyOf(value: unknown, max: number): string {
+  const structured = parsed(value);
+  if (typeof structured === 'string') return `"${text(structured, max)}"`;
+  return text(value, max);
 }
 
 /** Compact for reading: 1.16s rather than 1162.3, and nothing when absent. */
@@ -239,7 +374,7 @@ const ALLOWED = new Map<Evt, ReadonlySet<string>>(
 );
 
 /** Text that leaves the system because the owner asked to see it, gated by LOG_CONTENT. */
-const CUSTOMER_TEXT = new Set(['content', 'text', 'replyText', 'turns', 'args', 'result']);
+const CUSTOMER_TEXT = new Set(['content', 'text', 'replyText', 'turns', 'args', 'result', 'fromName']);
 /** Read as blobs rather than queried, so they get a wider cap than a chat line. */
 const WIDE_TEXT = new Set(['args', 'result', 'stack']);
 /**

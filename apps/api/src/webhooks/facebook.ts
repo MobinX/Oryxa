@@ -351,7 +351,12 @@ async function processMessagingEvents(
         senderId: ev.sender?.id ?? null,
       });
       if (ev.message && !ev.message.is_echo && !ev.message.text) {
-        emit('webhook_item', { kind: 'message', externalId: ev.message.mid, outcome: 'unsupported_content' });
+        emit('webhook_item', {
+          kind: 'message',
+          externalId: ev.message.mid,
+          senderId: ev.sender?.id,
+          outcome: 'unsupported_content',
+        });
       }
       continue;
     }
@@ -486,6 +491,8 @@ async function processMessagingEvents(
     emit('webhook_item', {
       kind: 'message',
       externalId,
+      senderId,
+      text,
       inserted,
       priorStatus,
       outcome,
@@ -546,6 +553,9 @@ async function processCommentChanges(
         commentId,
         parentId,
         verb: value.verb,
+        fromId,
+        fromName: value.from?.name,
+        text,
         outcome: 'incomplete_payload',
       });
       continue;
@@ -687,6 +697,9 @@ async function processCommentChanges(
       commentId,
       parentId,
       verb: value.verb,
+      fromId,
+      fromName: value.from?.name,
+      text,
       inserted,
       priorStatus,
       outcome,
