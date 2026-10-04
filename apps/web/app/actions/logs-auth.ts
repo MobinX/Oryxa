@@ -14,15 +14,15 @@ export async function logsSignInAction(formData: FormData) {
 
   // Configured only by env, so the answer is a state of the deployment, not a
   // secret about this account.
-  if (!logsOperatorPassword()) redirect('/logs/login?error=disabled');
+  if (!logsOperatorPassword()) redirect('/admin/login?error=disabled');
 
-  if (!operatorCredentialsMatch(user, password)) redirect('/logs/login?error=invalid');
+  if (!operatorCredentialsMatch(user, password)) redirect('/admin/login?error=invalid');
 
   await startLogsSession();
-  redirect('/logs');
+  redirect('/admin');
 }
 
 export async function logsSignOutAction() {
   await clearLogsSession();
-  redirect('/logs/login');
+  redirect('/admin/login');
 }
