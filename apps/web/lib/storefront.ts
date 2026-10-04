@@ -293,6 +293,27 @@ export function checkout(slug: string, body: CheckoutInput): Promise<CheckoutRes
   });
 }
 
+/* ------------------------------------------------------------------ visits */
+
+/**
+ * Fire-and-forget page view. A visit is instrumentation, not a feature: nothing
+ * awaits this, nothing retries, and every failure is swallowed, so a slow or dead
+ * API can never show up on a shopper's page. `keepalive` lets it survive the tab
+ * being closed right after a first paint.
+ */
+export function reportVisit(slug: string, path: string, visitor: string): void {
+  try {
+    void fetch(`${apiBase()}/api/v1/visits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, path, visitor }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // A blocked fetch is not worth a console line on someone's storefront.
+  }
+}
+
 /* ------------------------------------------------------------------ format */
 
 const currency = new Intl.NumberFormat('en-US', {

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { StorefrontShell } from '@/components/storefront/storefront-shell';
 import { StorefrontSkeleton } from '@/components/storefront/storefront-skeleton';
+import { VisitBeacon } from '@/components/storefront/visit-beacon';
 import { getStore } from '@/lib/storefront';
 import type { PublicStore } from '@/lib/storefront';
 
@@ -66,5 +67,10 @@ async function StorefrontFrame({
   const store = await loadStore(slug);
   if (!store) notFound();
 
-  return <StorefrontShell store={store}>{children}</StorefrontShell>;
+  return (
+    <>
+      <VisitBeacon slug={store.slug} />
+      <StorefrontShell store={store}>{children}</StorefrontShell>
+    </>
+  );
 }
