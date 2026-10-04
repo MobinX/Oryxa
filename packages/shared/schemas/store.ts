@@ -66,3 +66,18 @@ export const checkoutOutputSchema = z.object({
   total: z.number(),
   status: z.literal('pending'),
 }).openapi('CheckoutOutput');
+
+/**
+ * A storefront page view, reported by the browser once the page is on screen.
+ * Everything here arrives from a shopper, so only the shape is trusted: the slug is
+ * resolved against a published store before anything is written, and the path must
+ * at least look like a storefront path.
+ *
+ * `visitor` is the browser's anonymous id — it is hashed on the way in and never
+ * stored or logged as sent.
+ */
+export const visitInputSchema = z.object({
+  slug: z.string().min(1).max(255),
+  path: z.string().min('/store/'.length).max(500),
+  visitor: z.string().min(8).max(64).optional(),
+}).openapi('VisitInput');

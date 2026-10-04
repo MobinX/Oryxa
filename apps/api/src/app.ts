@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { usersRouter } from '@api/routes/users';
 import { businessesRouter } from '@api/routes/businesses';
 import { storeRouter } from '@api/routes/store';
+import { visitsRouter } from '@api/routes/visits';
 import { productsRouter } from '@api/routes/products';
 import { ordersRouter } from '@api/routes/orders';
 import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
@@ -12,6 +13,7 @@ import { postsRouter } from '@api/routes/posts';
 import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { logsRouter } from '@api/routes/logs';
+import { adminRouter } from '@api/routes/admin';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
@@ -51,6 +53,9 @@ app.get('/', (c) => c.json({ name: 'Oryxa API', version: '1.0.0' }));
 app.route('/api/v1/users', usersRouter);
 app.route('/api/v1/businesses', businessesRouter);
 app.route('/api/v1/store', storeRouter);
+// Its own router so nothing is added inside the handlers the Flutter client
+// already depends on; this is a new path, not a new branch in an old one.
+app.route('/api/v1', visitsRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);
@@ -63,6 +68,7 @@ app.route('/api/v1', tokenAnalyticsRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
 app.route('/api2', logsRouter);
+app.route('/api2', adminRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 

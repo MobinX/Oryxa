@@ -382,3 +382,30 @@ export const hourlyTokenAnalyticsRelations = relations(hourlyTokenAnalytics, ({ 
   business: one(businesses, { fields: [hourlyTokenAnalytics.businessId], references: [businesses.id] }),
 }));
 
+/**
+ * One row per person per store per UTC day — a daily-unique visit, not a page view.
+ * Nothing personal is stored: no IP, no user-agent, no cookie value. `visitor` is a
+ * hash over the browser's anonymous id joined with this store and this day, so a row
+ * can say "this browser opened this store today" and nothing about who they were,
+ * what they read after that, or which other stores they opened. The day is in the
+ * hash, so the same person tomorrow is a different row and cannot be followed.
+ *
+ * `path` is the first page that visitor opened that day, which is how people arrive
+ * rather than where they go. Because a repeat visit writes nothing, the only cost of
+ * hammering this endpoint is one indexed read.
+ */
+export const visits = pgTable('visits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  visitor: varchar('visitor', { length: 64 }).notNull(),
+  path: varchar('path', { length: 500 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  timeIdx: index('visits_created_at_idx').on(t.createdAt),
+  businessTimeIdx: index('visits_business_created_at_idx').on(t.businessId, t.createdAt),
+}));
+
+export const visitRelations = relations(visits, ({ one }) => ({
+  business: one(businesses, { fields: [visits.businessId], references: [businesses.id] }),
+}));
+
