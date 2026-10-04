@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 
 type RawParams = Record<string, string | string[] | undefined>;
 
+/** See the `/logs` shim: a prerendered redirect never reaches the browser as a redirect. */
+export const dynamic = 'force-dynamic';
+
 /** Sign-in moved to `/admin/login`; `?error=` still has to reach the form. */
 export default async function LegacyLogsLoginPage({
   searchParams,

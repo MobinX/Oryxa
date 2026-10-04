@@ -35,6 +35,11 @@ type PageOrError = { page?: LogQueryResult; error?: string; status?: number };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
+export const metadata = {
+  title: 'Event log — admin',
+  description: 'Every request, webhook, agent run and error the Oryxa API recorded.',
+};
+
 function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }

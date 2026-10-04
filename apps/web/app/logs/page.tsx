@@ -2,6 +2,14 @@ import { redirect } from 'next/navigation';
 
 type RawParams = Record<string, string | string[] | undefined>;
 
+/**
+ * Without this the route is statically prerendered, `redirect()` runs once at build
+ * time and the browser is served the prerendered shell with a 200 — so the forward
+ * silently does nothing. Reading the query already makes it dynamic in principle;
+ * saying so keeps it that way whatever the cache does.
+ */
+export const dynamic = 'force-dynamic';
+
 function queryString(params: RawParams): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
