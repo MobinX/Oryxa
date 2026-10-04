@@ -37,6 +37,22 @@ describe('the APL the query route sends', () => {
     expect(buildApl(filter({ evt: 'agent_run' }))).toContain("| where evt == 'agent_run' |");
   });
 
+  it('excludes the reasons a rejection count must not count, in the grammar the store accepts', () => {
+    process.env.AXIOM_DATASET = 'oryxa-prod';
+    // `and` is asserted against the live dataset: `&&` answers HTTP 400.
+    expect(buildApl(filter({ evt: 'auth', notReasons: ['logs_operator', 'dev_bypass'] }))).toBe(
+      "['oryxa-prod'] | where evt == 'auth' and reason != 'logs_operator' and reason != 'dev_bypass' | sort by _time desc | limit 50",
+    );
+  });
+
+  it('escapes a reason that tries to close the string', () => {
+    process.env.AXIOM_DATASET = 'oryxa-prod';
+    const apl = buildApl(filter({ evt: 'auth', notReasons: ["x' | count | '"] }));
+    expect(apl).toBe(
+      "['oryxa-prod'] | where evt == 'auth' and reason != 'x\\' | count | \\'' | sort by _time desc | limit 50",
+    );
+  });
+
   it('interpolates nothing but the dataset name and the enum member', () => {
     process.env.AXIOM_DATASET = "odd\\'name";
     const apl = buildApl(filter({ evt: 'req', limit: 7 }));
@@ -144,6 +160,29 @@ describe('the memory store behind the route', () => {
       expect(page.events.every((row) => row.evt === 'db')).toBe(true);
       expect(page.window).toEqual(WINDOW);
     });
+  });
+
+  /**
+   * The dashboard counts auth *rejections*, and every operator page load writes an
+   * auth row saying they were let in — so the exclusion has to happen in the store
+   * read, not after it, or the cap silently fills with successes.
+   */
+  it('leaves out the reasons the caller excludes', async () => {
+    for (const [minutes, reason] of [
+      [5, 'logs_operator'],
+      [10, 'logs_not_allowlisted'],
+      [15, 'dev_bypass'],
+    ] as const) {
+      vi.setSystemTime(at(minutes));
+      withContext(startContext({ requestId: `seed-${minutes}` }), () => emit('auth', { reason }));
+    }
+    vi.setSystemTime(at(NOW));
+
+    const page = await queryLogs(filter({ evt: 'auth', notReasons: ['logs_operator', 'dev_bypass'] }));
+    expect(page.events.map((row) => row.fields.reason)).toEqual(['logs_not_allowlisted']);
+
+    const everything = await queryLogs(filter({ evt: 'auth' }));
+    expect(everything.events).toHaveLength(3);
   });
 
   it('lifts the time it stamps into the row and out of the fields', async () => {

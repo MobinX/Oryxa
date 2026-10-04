@@ -41,6 +41,15 @@ const ANOMALY_CAP = 50;
 /** The log store keeps about a month, so a wider range asks only the last retained day of it. */
 const LOG_RETENTION_MS = 30 * DAY_MS;
 
+/**
+ * `evt=auth` rows that mean someone was let in. The health card counts rejections, so
+ * these are left out of the query: an operator opening this very dashboard writes an
+ * auth row for the request that serves it, and a count of every auth row would report
+ * the console's own page loads as failures. 82 of the last 100 auth rows in production
+ * were exactly that.
+ */
+const AUTH_SUCCESS_REASONS = ['logs_operator', 'dev_bypass'];
+
 const getAdminStatsRoute = createRoute({
   method: 'get',
   path: '/admin/stats',
@@ -135,7 +144,7 @@ async function countAnomalies(range: AdminRange): Promise<AdminStatsResponse['an
   try {
     const [errors, auth] = await Promise.all([
       queryLogs({ ...filter, evt: 'error' }),
-      queryLogs({ ...filter, evt: 'auth' }),
+      queryLogs({ ...filter, evt: 'auth', notReasons: AUTH_SUCCESS_REASONS }),
     ]);
     return { errors: errors.events.length, authRejections: auth.events.length, cap: ANOMALY_CAP };
   } catch (err) {

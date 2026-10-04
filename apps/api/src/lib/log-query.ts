@@ -6,6 +6,13 @@ type Fields = Record<string, unknown>;
 
 export interface LogFilter {
   evt?: Evt;
+  /**
+   * Reasons to leave out of the match. Only meaningful beside `evt: 'auth'`, the one
+   * type whose rows always carry a `reason` — the log console counts *rejections*,
+   * and an operator opening the console writes an `auth` row that says they were
+   * let in, so a count of every auth row counts the dashboard's own page loads.
+   */
+  notReasons?: string[];
   /** ISO instants. Both are always resolved: a log store without a window is unbounded. */
   startTime: string;
   endTime: string;
@@ -64,11 +71,25 @@ export function queryToken(): string | undefined {
 
 /** The single place the APL grammar is asserted; a live mismatch is fixed here. */
 export function buildApl(filter: LogFilter): string {
-  const dataset = logDataset().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const parts = [`['${dataset}']`];
-  if (filter.evt) parts.push(`where evt == '${filter.evt}'`);
+  const conditions: string[] = [];
+  if (filter.evt) conditions.push(`evt == ${aplValue(filter.evt)}`);
+  for (const reason of filter.notReasons ?? []) {
+    conditions.push(`reason != ${aplValue(reason)}`);
+  }
+
+  const parts = [`[${aplValue(logDataset())}]`];
+  if (conditions.length > 0) parts.push(`where ${conditions.join(' and ')}`);
   parts.push('sort by _time desc', `limit ${filter.limit}`);
   return parts.join(' | ');
+}
+
+/**
+ * One APL string literal. `and` is what the live grammar accepts (`&&` answers 400),
+ * and every value is escaped here rather than at the call site, so nothing that ever
+ * reaches this function can close the literal and append a clause.
+ */
+function aplValue(raw: string): string {
+  return `'${raw.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
 export async function queryLogs(filter: LogFilter): Promise<LogQueryResponse> {
@@ -110,6 +131,7 @@ function queryMemory(filter: LogFilter): LogQueryResponse {
     const at = Date.parse(time);
     if (Number.isNaN(at) || at < from || at >= to) continue;
     if (filter.evt && event.evt !== filter.evt) continue;
+    if (filter.notReasons?.includes(String(event.reason ?? ''))) continue;
     rows.push(toRow(time, event));
   }
 
