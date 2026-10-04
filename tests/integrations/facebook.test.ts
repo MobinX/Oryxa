@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { signMetaWebhook } from '../helpers/meta-sign';
 
 describe('Facebook Integration', () => {
+  type Send = { message: { text: string }; messaging_type: string; tag?: string };
+
   const originalFetch = globalThis.fetch;
   const originalAppSecret = process.env.META_APP_SECRET;
 
@@ -47,6 +49,41 @@ describe('Facebook Integration', () => {
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body.message.text).toBe('Hello');
     expect(body.messaging_type).toBe('RESPONSE');
+  });
+
+  /** Graph's request bodies in the order they were sent. */
+  async function postsOf(text: string, options?: { humanAgent?: boolean }): Promise<Send[]> {
+    const posts: Send[] = [];
+    globalThis.fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      posts.push(JSON.parse(String(init?.body)) as Send);
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const { sendMessage } = await import('@repo/integrations/facebook');
+    await sendMessage('page-token', 'recipient-1', text, options);
+    return posts;
+  }
+
+  it('splits a reply over Meta’s ceiling into ordered posts', async () => {
+    const paragraph = 'A queue this size needs idempotent workers, because a retry redelivers the same job over and over.';
+    const long = `${paragraph}\n\n`.repeat(30).trim();
+    const posts = await postsOf(long);
+
+    expect(posts.length).toBeGreaterThan(1);
+    expect(posts.every((post) => Array.from(post.message.text).length <= 2000)).toBe(true);
+    expect(posts.map((post) => post.message.text).join('\n\n')).toBe(long);
+    expect(posts.every((post) => post.messaging_type === 'RESPONSE')).toBe(true);
+  });
+
+  it('cuts an unbroken block at the ceiling instead of losing the tail', async () => {
+    const posts = await postsOf('a'.repeat(4500));
+    expect(posts.map((post) => Array.from(post.message.text).length)).toEqual([2000, 2000, 500]);
+  });
+
+  it('keeps every part of a human-agent reply under the same tag', async () => {
+    const posts = await postsOf(`${'word '.repeat(500)}\n\n${'tail '.repeat(500)}`, { humanAgent: true });
+    expect(posts.length).toBeGreaterThan(1);
+    expect(posts.every((post) => post.messaging_type === 'MESSAGE_TAG' && post.tag === 'HUMAN_AGENT')).toBe(true);
   });
 
   it('senderAction posts a sender_action without a message', async () => {

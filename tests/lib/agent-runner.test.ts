@@ -68,13 +68,20 @@ describe('Agent Runner', () => {
     expect(messagesAfter?.length).toBe(messagesBefore?.length);
   });
 
-  it('runAgentForConversation re-triggers when pending messages remain', async () => {
+  it('runAgentForConversation re-triggers for a message it never claimed', async () => {
     const seed = await seedTestWorld();
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const conversationCrud = await import('@repo/db/crud/conversation');
-    const pendingSpy = vi.spyOn(conversationCrud, 'checkPendingMessages').mockResolvedValue(true);
+    await conversationCrud.createMessage({ conversationId: seed.conversation.id, from: 'customer', content: 'first' });
+    const backlog = await conversationCrud.listPendingCustomerMessages(seed.conversation.id);
+    const arrivedMidRun = { ...backlog[0], id: '11111111-1111-4111-8111-811111111111' };
+    const pendingSpy = vi
+      .spyOn(conversationCrud, 'listPendingCustomerMessages')
+      .mockResolvedValue(backlog)
+      .mockResolvedValueOnce(backlog)
+      .mockResolvedValueOnce([...backlog, arrivedMidRun]);
 
     await runAgentForConversation(seed.conversation.id);
     await new Promise((r) => setTimeout(r, 50));
@@ -84,6 +91,28 @@ describe('Agent Runner', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     pendingSpy.mockRestore();
+    vi.unstubAllGlobals();
+  }, 30_000);
+
+  it('runAgentForConversation does not hand back the backlog its own failure left', async () => {
+    // The runaway a too-long Messenger reply produced: every run failed on the
+    // same pending messages, then handed those same messages to a fresh run —
+    // three LLM calls, three rejected sends, and no reply either time.
+    const seed = await seedTestWorld();
+    const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const conversationCrud = await import('@repo/db/crud/conversation');
+    await conversationCrud.createMessage({ conversationId: seed.conversation.id, from: 'customer', content: 'unanswerable' });
+
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockRejectedValue(new Error('Messenger rejected the reply'));
+
+    await runAgentForConversation(seed.conversation.id);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/internal/run'), expect.anything());
+    runSpy.mockRestore();
     vi.unstubAllGlobals();
   }, 30_000);
 

@@ -206,6 +206,70 @@ type SendPayload = {
   tag?: 'HUMAN_AGENT';
 };
 
+/** Meta answers 400 (graph code 100) for a `message[text`] longer than this. */
+const MESSENGER_TEXT_LIMIT = 2000;
+const SENTENCE_BOUNDARY = /(?<=[.!?。！？])\s/;
+
+/** Code points, because the limit is in characters and an emoji is one. */
+function chars(value: string): string[] {
+  return Array.from(value);
+}
+
+function lengthOf(value: string): number {
+  return chars(value).length;
+}
+
+/** No usable boundary left: cut exactly at the ceiling so nothing is dropped. */
+function hardSplit(value: string, limit: number): string[] {
+  const pieces = chars(value);
+  const out: string[] = [];
+  for (let i = 0; i < pieces.length; i += limit) out.push(pieces.slice(i, i + limit).join(''));
+  return out;
+}
+
+/** Pack whole sentences until the next one would cross the limit. */
+function splitSentences(para: string, limit: number): string[] {
+  const out: string[] = [];
+  let current = '';
+  for (const sentence of para.split(SENTENCE_BOUNDARY)) {
+    if (sentence === '') continue;
+    for (const part of lengthOf(sentence) <= limit ? [sentence] : hardSplit(sentence, limit)) {
+      if (current !== '' && lengthOf(current) + 1 + lengthOf(part) > limit) {
+        out.push(current);
+        current = part;
+      } else {
+        current = current === '' ? part : `${current} ${part}`;
+      }
+    }
+  }
+  if (current !== '') out.push(current);
+  return out;
+}
+
+/**
+ * The reply the agent wrote, cut into posts the platform accepts. Paragraphs are
+ * kept whole and glued back together where they fit, so a customer reading three
+ * bubbles still reads one answer in the order it was written.
+ */
+export function messengerChunks(text: string, limit = MESSENGER_TEXT_LIMIT): string[] {
+  const paragraphs = text.split(/\n{2,}/).filter((para) => para.trim() !== '');
+  if (paragraphs.length === 0) return [text];
+
+  const out: string[] = [];
+  for (const para of paragraphs) {
+    const units = lengthOf(para) <= limit ? [para] : splitSentences(para, limit);
+    for (const unit of units) {
+      const last = out[out.length - 1];
+      if (last !== undefined && lengthOf(last) + 2 + lengthOf(unit) <= limit) {
+        out[out.length - 1] = `${last}\n\n${unit}`;
+      } else {
+        out.push(unit);
+      }
+    }
+  }
+  return out;
+}
+
 async function postMessengerSend(pageToken: string, payload: SendPayload): Promise<void> {
   const res = await loggedFetch(`${GRAPH_API}/me/messages?access_token=${pageToken}`, {
     method: 'POST',
@@ -267,25 +331,22 @@ export async function sendMessage(
   options?: SendMessageOptions,
 ): Promise<void> {
   const recipient = { id: recipientId };
-  const message = { text };
-
-  if (options?.humanAgent) {
-    await postMessengerSend(pageToken, {
-      recipient,
-      message,
-      messaging_type: 'MESSAGE_TAG',
-      tag: 'HUMAN_AGENT',
-    });
-    return;
-  }
+  const messagingType = options?.humanAgent
+    ? ({ messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' } as const)
+    : ({ messaging_type: 'RESPONSE' } as const);
 
   // TESTING: skip typing_off so the typing bubble stays until Meta clears it.
   // await senderAction(pageToken, recipientId, 'typing_off');
-  await postMessengerSend(pageToken, {
-    recipient,
-    message,
-    messaging_type: 'RESPONSE',
-  });
+  // One post per chunk, in order: a single oversized block would be rejected
+  // outright and the customer would receive none of the answer, and posts sent
+  // in parallel can arrive shuffled — Messenger orders by arrival, not intent.
+  for (const chunk of messengerChunks(text)) {
+    await postMessengerSend(pageToken, {
+      recipient,
+      message: { text: chunk },
+      ...messagingType,
+    });
+  }
 }
 
 /**

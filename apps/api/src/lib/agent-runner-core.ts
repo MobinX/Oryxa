@@ -44,7 +44,6 @@ export async function runAgentCore(
     getConversationWithHistory,
     updateConversationState,
     createMessage,
-    checkPendingMessages,
     claimConversationForAgentRun,
     markMessagesDoneByIds,
     listPendingCustomerMessages,
@@ -238,9 +237,13 @@ export async function runAgentCore(
     emitAnomaly('backlog_claimed_but_unanswered', { count: clearedCount });
   }
 
-  // If new customer messages arrived while we were running (or were left
-  // pending), the tail re-trigger below handles them in a fresh invocation.
-  const hasPending = await checkPendingMessages(conv.id);
+  // Re-trigger only for a message this run never had the chance to answer — one
+  // that arrived while the agent was working. After a failed run the same backlog
+  // is still pending, and handing it to a fresh run repeats the identical failure
+  // as many times as there are fresh runs: three LLM calls, three rejected sends,
+  // and no reply either time.
+  const leftover = await listPendingCustomerMessages(conv.id);
+  const hasPending = leftover.some((message) => !repliedMessageIds.includes(message.id));
 
   // One outcome event per run, carrying what the runner used to narrate: the
   // claim, the backlog, the reply, the sends, the state and the token spend.

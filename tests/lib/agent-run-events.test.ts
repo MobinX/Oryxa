@@ -251,7 +251,13 @@ describe('agent run chain', () => {
     await createMessage({ conversationId: seed.conversation.id, from: 'customer', content: 'hi' });
 
     const conversationCrud = await import('@repo/db/crud/conversation');
-    const pendingSpy = vi.spyOn(conversationCrud, 'checkPendingMessages').mockResolvedValue(true);
+    const backlog = await conversationCrud.listPendingCustomerMessages(seed.conversation.id);
+    const arrivedMidRun = { ...backlog[0], id: '22222222-2222-4222-8222-822222222222' };
+    const pendingSpy = vi
+      .spyOn(conversationCrud, 'listPendingCustomerMessages')
+      .mockResolvedValue(backlog)
+      .mockResolvedValueOnce(backlog)
+      .mockResolvedValueOnce([...backlog, arrivedMidRun]);
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -290,7 +296,7 @@ describe('agent run chain', () => {
       return agentRunResult('ok', ['ok']);
     });
     const conversationCrud = await import('@repo/db/crud/conversation');
-    const pendingSpy = vi.spyOn(conversationCrud, 'checkPendingMessages').mockResolvedValue(false);
+    const pendingSpy = vi.spyOn(conversationCrud, 'listPendingCustomerMessages').mockResolvedValue([]);
 
     const { events } = await runAndCapture(seed.conversation.id, 7);
 
