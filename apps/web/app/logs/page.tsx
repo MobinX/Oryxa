@@ -1,10 +1,20 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { Suspense } from 'react';
 import { AlertTriangle, Info, LogOut, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
+import {
+  TZ_COOKIE,
+  clockInZone,
+  offsetLabel,
+  validZone,
+  zoneBoundToUtc,
+  zoneWallClock,
+} from '@/lib/logs-time';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
+import { TzProbe } from './tz-probe';
 import {
   ApiError,
   getLogEvents,
@@ -45,6 +55,19 @@ function readFilter(params: RawParams): LogFilter {
   };
 }
 
+/**
+ * The URL and the form speak the reader's wall clock; the route speaks UTC. Only
+ * this call is translated — a filter keeps what the browser sent, so the links
+ * this page builds round-trip through the same clock the inputs show.
+ */
+function queryFilterFor(filter: LogFilter, zone: string): LogFilter {
+  return {
+    ...filter,
+    ...(filter.start ? { start: zoneBoundToUtc(filter.start, zone) } : {}),
+    ...(filter.end ? { end: zoneBoundToUtc(filter.end, zone) } : {}),
+  };
+}
+
 function hrefFor(filter: LogFilter): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filter)) {
@@ -52,12 +75,6 @@ function hrefFor(filter: LogFilter): string {
   }
   const query = params.toString();
   return `/logs${query ? `?${query}` : ''}`;
-}
-
-/** UTC, because every stamped time and every naive bound is read as UTC. */
-function utc(iso: string): string {
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 /** The stamped envelope every row carries; it belongs in the detail, not the summary. */
@@ -157,13 +174,18 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
   const bearer = consoleBearer ?? (await getAuthToken());
   if (!bearer) redirect('/logs/login');
 
+  // The first visit renders on UTC because the server has no other clue; the probe
+  // below writes what the browser's clock says and refreshes, and every read after
+  // that is on the reader's own clock.
+  const zone = validZone((await cookies()).get(TZ_COOKIE)?.value);
+
   const filter = readFilter(await searchParams);
 
   const typesOrNone: Promise<LogEventTypeOption[]> = getLogEventTypes(bearer).then(
     (payload) => payload.types,
     () => [] as LogEventTypeOption[],
   );
-  const pageOrError: Promise<PageOrError> = getLogEvents(bearer, filter).then(
+  const pageOrError: Promise<PageOrError> = getLogEvents(bearer, queryFilterFor(filter, zone)).then(
     (page) => ({ page }),
     (err: unknown): PageOrError =>
       err instanceof ApiError
@@ -175,9 +197,11 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
   if (result.status === 401) redirect('/logs/login');
 
   const page = result.page;
+  const clock = offsetLabel(zone);
 
   return (
     <div className="space-y-6">
+      <TzProbe expected={zone} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
@@ -228,7 +252,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-muted-foreground">From (UTC)</span>
+            <span className="font-medium text-muted-foreground">From ({clock})</span>
             <input
               type="datetime-local"
               name="start"
@@ -239,7 +263,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-muted-foreground">To (UTC)</span>
+            <span className="font-medium text-muted-foreground">To ({clock})</span>
             <input
               type="datetime-local"
               name="end"
@@ -273,7 +297,11 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
               <Link
                 key={hours}
                 className="rounded-element border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                href={hrefFor({ type: filter.type, limit: filter.limit, start: lastHours(hours) })}
+                href={hrefFor({
+                  type: filter.type,
+                  limit: filter.limit,
+                  start: lastHours(hours, zone),
+                })}
               >
                 last {hours >= 24 ? `${Math.round(hours / 24)}d` : `${hours}h`}
               </Link>
@@ -312,7 +340,8 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
               size {page.limit} · open a row for its fields
             </span>
             <span>
-              {utc(page.window.startTime)} → {utc(page.window.endTime)} UTC · store:{' '}
+              {clockInZone(page.window.startTime, zone)} →{' '}
+              {clockInZone(page.window.endTime, zone)} · {zone} · store:{' '}
               <strong className="font-semibold text-foreground">{page.source}</strong>
               {page.source === 'memory' && ' (this process only, not history)'}
             </span>
@@ -326,7 +355,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
           ) : (
             <ul className="divide-y divide-border/40">
               {page.events.map((row, index) => (
-                <EventRow key={`${row.time}-${row.evt}-${index}`} row={row} />
+                <EventRow key={`${row.time}-${row.evt}-${index}`} row={row} zone={zone} />
               ))}
             </ul>
           )}
@@ -357,7 +386,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
   );
 }
 
-function EventRow({ row }: { row: LogEventRow }) {
+function EventRow({ row, zone }: { row: LogEventRow; zone: string }) {
   const lane = LANES[row.evt] ?? PLAIN_LANE;
   const { tag, text } = lineOf(row);
 
@@ -366,7 +395,7 @@ function EventRow({ row }: { row: LogEventRow }) {
       <details className="group">
         <summary className="flex cursor-pointer list-none items-start gap-x-3">
           <span className="shrink-0 pt-1 font-mono text-xs text-muted-foreground">
-            {utc(row.time)}
+            {clockInZone(row.time, zone)}
           </span>
           <span
             className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${lane.chip}`}
@@ -389,8 +418,8 @@ function EventRow({ row }: { row: LogEventRow }) {
 }
 
 /** The shortcut ranges are anchored on now, so the newest page is what they show. */
-function lastHours(hours: number): string {
-  return new Date(Date.now() - hours * 3_600_000).toISOString().slice(0, 16);
+function lastHours(hours: number, zone: string): string {
+  return zoneWallClock(new Date(Date.now() - hours * 3_600_000).toISOString(), zone);
 }
 
 function LogsSkeleton() {
