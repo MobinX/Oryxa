@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
-import { AlertTriangle, Info, LogOut, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { AlertTriangle, LogOut, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
 import {
@@ -15,11 +15,11 @@ import {
 } from '@/lib/logs-time';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { TzProbe } from '@/components/tz-probe';
+import { EventRow } from '@/components/log-event-row';
 import {
   ApiError,
   getLogEvents,
   getLogEventTypes,
-  type LogEventRow,
   type LogEventTypeOption,
   type LogFilter,
   type LogQueryResult,
@@ -75,83 +75,6 @@ function hrefFor(filter: LogFilter): string {
   }
   const query = params.toString();
   return `/admin/logs${query ? `?${query}` : ''}`;
-}
-
-/** The stamped envelope every row carries; it belongs in the detail, not the summary. */
-const ENVELOPE = new Set(['requestId', 'runId', 'runDepth', 'env', 'release', 'message']);
-
-/** Only for rows logged before the message field existed — then a few facts beat nothing. */
-function describe(row: LogEventRow): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(row.fields)) {
-    if (ENVELOPE.has(key)) continue;
-    if (typeof value === 'object' && value !== null) continue;
-    parts.push(`${key}=${String(value)}`);
-    if (parts.length === 4) break;
-  }
-  return parts.join(' · ') || '—';
-}
-
-type Lane = { chip: string; dot: string; text: string; row?: string };
-
-/**
- * One colour family per speaker, so a wall of rows separates by eye: the lanes
- * that describe ordinary traffic stay cool, the ones that describe a decision
- * turn violet, and the ones that mean something went wrong are the only rows
- * allowed to be red. Tailwind needs every class name written out, so each
- * family is spelled in full rather than built from the colour name.
- */
-const FAMILIES: Record<string, { chip: string; dot: string; text: string }> = {
-  sky: { chip: 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500', text: 'text-sky-800 dark:text-sky-200' },
-  cyan: { chip: 'border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300', dot: 'bg-cyan-500', text: 'text-cyan-800 dark:text-cyan-200' },
-  blue: { chip: 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300', dot: 'bg-blue-500', text: 'text-blue-800 dark:text-blue-200' },
-  indigo: { chip: 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300', dot: 'bg-indigo-500', text: 'text-indigo-800 dark:text-indigo-200' },
-  slate: { chip: 'border-slate-500/40 bg-slate-500/10 text-slate-700 dark:text-slate-300', dot: 'bg-slate-500', text: 'text-slate-700 dark:text-slate-300' },
-  stone: { chip: 'border-stone-500/40 bg-stone-500/10 text-stone-700 dark:text-stone-300', dot: 'bg-stone-500', text: 'text-stone-700 dark:text-stone-300' },
-  violet: { chip: 'border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300', dot: 'bg-violet-500', text: 'text-violet-800 dark:text-violet-200' },
-  purple: { chip: 'border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-300', dot: 'bg-purple-500', text: 'text-purple-800 dark:text-purple-200' },
-  fuchsia: { chip: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300', dot: 'bg-fuchsia-500', text: 'text-fuchsia-800 dark:text-fuchsia-200' },
-  teal: { chip: 'border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300', dot: 'bg-teal-500', text: 'text-teal-800 dark:text-teal-200' },
-  yellow: { chip: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300', dot: 'bg-yellow-500', text: 'text-yellow-800 dark:text-yellow-200' },
-  amber: { chip: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500', text: 'text-amber-800 dark:text-amber-200' },
-  orange: { chip: 'border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300', dot: 'bg-orange-500', text: 'text-orange-800 dark:text-orange-200' },
-  red: { chip: 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500', text: 'text-red-800 dark:text-red-200' },
-  rose: { chip: 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300', dot: 'bg-rose-500', text: 'text-rose-800 dark:text-rose-200' },
-};
-
-const LANES: Record<string, Lane> = {
-  req: FAMILIES.sky,
-  http_out: FAMILIES.cyan,
-  webhook: FAMILIES.blue,
-  webhook_item: FAMILIES.indigo,
-  db: FAMILIES.slate,
-  db_summary: FAMILIES.stone,
-  agent_input: FAMILIES.violet,
-  agent_run: FAMILIES.purple,
-  tool_call: FAMILIES.fuchsia,
-  tool_result: FAMILIES.teal,
-  bg: FAMILIES.yellow,
-  auth: { ...FAMILIES.amber, row: 'border-l-2 border-l-amber-500/60 bg-amber-500/5' },
-  not_found: { ...FAMILIES.orange, row: 'border-l-2 border-l-orange-500/60 bg-orange-500/5' },
-  error: { ...FAMILIES.red, row: 'border-l-2 border-l-destructive bg-destructive/5' },
-  anomaly: { ...FAMILIES.rose, row: 'border-l-2 border-l-destructive bg-destructive/5' },
-};
-
-const PLAIN_LANE: Lane = {
-  chip: 'border-border/40 bg-muted text-muted-foreground',
-  dot: 'bg-muted-foreground',
-  text: 'text-foreground',
-};
-
-/**
- * `[webhook] the sentence the logger wrote`. The tag becomes the coloured chip,
- * so the row itself says only what happened.
- */
-function lineOf(row: LogEventRow): { tag: string; text: string } {
-  const raw = typeof row.fields.message === 'string' ? row.fields.message.trim() : '';
-  const tagged = /^\[([a-z_]+)\]\s*(.*)$/s.exec(raw);
-  if (tagged) return { tag: tagged[1], text: tagged[2] || '—' };
-  return { tag: row.evt.replace(/_/g, ' '), text: raw || describe(row) };
 }
 
 export default function LogsPage({
@@ -383,37 +306,6 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
         </Card>
       )}
     </div>
-  );
-}
-
-function EventRow({ row, zone }: { row: LogEventRow; zone: string }) {
-  const lane = LANES[row.evt] ?? PLAIN_LANE;
-  const { tag, text } = lineOf(row);
-
-  return (
-    <li className={`px-6 py-2.5 ${lane.row ?? ''}`}>
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-start gap-x-3">
-          <span className="shrink-0 pt-1 font-mono text-xs text-muted-foreground">
-            {clockInZone(row.time, zone)}
-          </span>
-          <span
-            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${lane.chip}`}
-          >
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${lane.dot}`} />
-            {tag}
-          </span>
-          <span className={`line-clamp-2 min-w-0 flex-1 text-sm ${lane.text}`}>{text}</span>
-          <span className="shrink-0 pt-0.5 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground group-open:text-foreground">
-            <Info className="h-4 w-4" aria-hidden />
-            <span className="sr-only">Show the fields behind this line</span>
-          </span>
-        </summary>
-        <pre className="mt-2 max-h-96 overflow-auto rounded-element border border-border/40 bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap break-all">
-          {JSON.stringify({ time: row.time, evt: row.evt, ...row.fields }, null, 2)}
-        </pre>
-      </details>
-    </li>
   );
 }
 

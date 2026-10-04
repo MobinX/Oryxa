@@ -763,3 +763,70 @@ export const getLogEvents = (token: string, filter: LogFilter) => {
 export const getLogEventTypes = (token: string) =>
   apiFetch<{ types: LogEventTypeOption[] }>('/api2/logs/types', { token, signInPath: null });
 
+// Admin — the operator dashboard read, on /api2 beside the log query.
+export type AdminWindowMetrics = {
+  conversations: number;
+  messages: number;
+  inboundMessages: number;
+  outboundMessages: number;
+  orders: number;
+  revenue: number;
+  visits: number;
+  llmTokens: number;
+  estimatedCostUsd: number;
+  agentRuns: number;
+};
+
+/** Lifetime counts, so the dashboard never shows a delta against them. */
+export type AdminSnapshot = {
+  users: number;
+  businesses: number;
+  publishedStores: number;
+  channels: number;
+  products: number;
+};
+
+export type AdminDailyPoint = {
+  date: string;
+  visits: number;
+  conversations: number;
+  messagesIn: number;
+  messagesOut: number;
+  orders: number;
+  revenue: number;
+  tokens: number;
+  costUsd: number;
+};
+
+export type AdminTopBusiness = {
+  id: string;
+  name: string;
+  slug: string | null;
+  conversations: number;
+  messages: number;
+  orders: number;
+  revenue: number;
+};
+
+export type AdminStats = {
+  range: { days: number; tz: string; startTime: string; endTime: string };
+  snapshot: AdminSnapshot;
+  window: AdminWindowMetrics;
+  previous: AdminWindowMetrics;
+  daily: AdminDailyPoint[];
+  topBusinesses: AdminTopBusiness[];
+  /** `null` when the log store did not answer; every other number on the page still did. */
+  anomalies: { errors: number; authRejections: number; cap: number } | null;
+};
+
+export const getAdminStats = (token: string, filter: { days?: number; tz?: string } = {}) => {
+  const params = new URLSearchParams();
+  if (filter.days) params.set('days', String(filter.days));
+  if (filter.tz) params.set('tz', filter.tz);
+  const query = params.toString();
+  return apiFetch<AdminStats>(
+    `/api2/admin/stats${query ? `?${query}` : ''}`,
+    { token, signInPath: null },
+  );
+};
+
