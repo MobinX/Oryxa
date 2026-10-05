@@ -18,6 +18,8 @@ export const cacheTags = {
   publicPlans: () => 'public-plans',
   billing: (businessId: string) => `billing-${businessId}`,
   notifications: (businessId: string) => `notifications-${businessId}`,
+  customers: (businessId: string) => `customers-${businessId}`,
+  companies: () => 'companies',
   adminBusinessPlans: () => 'admin-business-plans',
 } as const;
 
@@ -80,4 +82,12 @@ export function expireBilling(businessId: string) {
 
 export function expireNotifications(businessId: string) {
   updateTag(cacheTags.notifications(businessId));
+}
+
+export function expireCustomers(businessId: string) {
+  updateTag(cacheTags.customers(businessId));
+}
+
+export function expireCompanies() {
+  updateTag(cacheTags.companies());
 }

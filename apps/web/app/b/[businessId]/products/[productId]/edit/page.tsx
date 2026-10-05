@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
-import { cachedCategories, cachedProduct } from '@/app/_cache/queries';
+import { cachedCategories, cachedCustomers, cachedProduct } from '@/app/_cache/queries';
 import { updateProductAction } from '@/app/actions/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantEditor } from '@/components/products/variant-editor';
 import { CategorySelect } from '@/components/products/category-select';
+import { CustomerSelect } from '@/components/products/customer-select';
 import EditProductSkeleton from './skeleton';
 
 export default function EditProductPage({
@@ -70,6 +71,7 @@ async function EditProductForm({
   }
 
   const categories = await cachedCategories(token, businessId);
+  const book = await cachedCustomers(token, businessId);
 
   const variantInitial = product.variants.map((v) => ({
     id: v.id,
@@ -86,6 +88,7 @@ async function EditProductForm({
     String(product.price),
     product.description ?? '',
     product.category?.id ?? '',
+    product.customer?.id ?? '',
     ...variantInitial.map((v) => `${v.id}:${v.name}:${v.stock}:${v.price ?? ''}:${v.imageKey ?? ''}`),
   ].join('|');
 
@@ -132,6 +135,10 @@ async function EditProductForm({
               defaultCategoryId={product.category?.id}
             />
           </div>
+          <CustomerSelect
+            customers={book.customers}
+            defaultCustomerId={product.customer?.id ?? product.customerId}
+          />
         </div>
 
         <VariantEditor initial={variantInitial} businessId={businessId} />

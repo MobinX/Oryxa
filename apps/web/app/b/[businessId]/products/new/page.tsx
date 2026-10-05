@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { cachedCategories } from '@/app/_cache/queries';
+import { cachedCategories, cachedCustomers } from '@/app/_cache/queries';
 import { createProductAction } from '@/app/actions/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantEditor } from '@/components/products/variant-editor';
 import { CategorySelect } from '@/components/products/category-select';
+import { CustomerSelect } from '@/components/products/customer-select';
 import NewProductSkeleton from './skeleton';
 
 export default function NewProductPage({
@@ -55,7 +56,10 @@ async function NewProductForm({
 }) {
   const { businessId } = await params;
   const token = await requireAuth();
-  const categories = await cachedCategories(token, businessId);
+  const [categories, book] = await Promise.all([
+    cachedCategories(token, businessId),
+    cachedCustomers(token, businessId),
+  ]);
 
   return (
     <Card className="mt-4 sm:mt-6">
@@ -84,6 +88,7 @@ async function NewProductForm({
           <div className="sm:col-span-2">
             <CategorySelect categories={categories} />
           </div>
+          <CustomerSelect customers={book.customers} />
         </div>
 
         <VariantEditor businessId={businessId} />

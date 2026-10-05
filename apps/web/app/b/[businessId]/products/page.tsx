@@ -97,6 +97,11 @@ async function ProductsContent({
         <div className="min-w-0">
           <p className="truncate font-medium">{product.name}</p>
           <p className="truncate text-xs text-[var(--muted-foreground)] md:hidden">{product.sku}</p>
+          {product.customerName && (
+            <p className="truncate text-xs text-[var(--muted-foreground)]">
+              for {product.customerName}
+            </p>
+          )}
         </div>
       </div>,
       product.sku,

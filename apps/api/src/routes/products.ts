@@ -26,6 +26,7 @@ import {
 } from '@repo/db/crud/product';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
+import { isCustomerInBusinessCompany } from '@repo/db/crud/customer';
 
 export const productsRouter = new OpenAPIHono();
 
@@ -92,12 +93,16 @@ const createProductRoute = createRoute({
   },
   responses: {
     201: { content: { 'application/json': { schema: createProductOutputSchema } }, description: 'Product created' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid customer link' },
   },
 });
 
 productsRouter.openapi(createProductRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const data = c.req.valid('json');
+  if (data.customerId && !(await isCustomerInBusinessCompany(data.customerId, businessId))) {
+    return c.json({ error: 'Customer not found for this business company' }, 400);
+  }
   const product = await createProduct({ ...data, businessId });
   return c.json(product, 201);
 });
@@ -174,6 +179,9 @@ productsRouter.openapi(updateProductRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const productId = c.req.param('productId');
   const data = c.req.valid('json');
+  if (data.customerId && !(await isCustomerInBusinessCompany(data.customerId, businessId))) {
+    return c.json({ error: 'Customer not found for this business company' }, 400);
+  }
   try {
     const result = await updateProduct(businessId, productId, data);
     if (!result) return c.json({ error: 'Product entity missing' }, 404);

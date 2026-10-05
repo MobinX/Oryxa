@@ -40,6 +40,7 @@ export async function createProduct(input: unknown) {
     .values({
       businessId: parsed.businessId,
       categoryId,
+      customerId: parsed.customerId ?? null,
       name: parsed.name,
       price: parsed.price.toFixed(2),
       slug,
@@ -74,6 +75,7 @@ export async function getProductById(businessId: string, productId: string) {
     where: and(eq(products.id, productId), eq(products.businessId, businessId), isNull(products.deletedAt)),
     with: {
       category: true,
+      customer: true,
       variants: {
         where: isNull(variants.deletedAt),
       },
@@ -100,6 +102,9 @@ export async function getProductById(businessId: string, productId: string) {
       product.category && !product.category.deletedAt
         ? { id: product.category.id, name: product.category.name }
         : null,
+    customer: product.customer
+      ? { id: product.customer.id, name: product.customer.name }
+      : null,
     variants: mappedVariants,
   };
 }
@@ -119,6 +124,7 @@ export async function listProducts(
     orderBy: [desc(products.createdAt)],
     with: {
       category: true,
+      customer: true,
       variants: {
         where: isNull(variants.deletedAt),
       },
@@ -141,6 +147,7 @@ export async function listProducts(
         id: p.id,
         businessId: p.businessId,
         categoryId: p.categoryId,
+        customerId: p.customerId,
         name: p.name,
         price: parseFloat(p.price),
         slug: p.slug,
@@ -148,6 +155,7 @@ export async function listProducts(
         description: p.description,
         createdAt: p.createdAt,
         categoryName: p.category && !p.category.deletedAt ? p.category.name : null,
+        customerName: p.customer?.name ?? null,
         variantCount: p.variants.length,
         thumbnailUrl,
       };
@@ -197,7 +205,8 @@ export async function updateProduct(businessId: string, productId: string, input
     productFields.price !== undefined ||
     productFields.sku !== undefined ||
     productFields.description !== undefined ||
-    categoryId !== undefined;
+    categoryId !== undefined ||
+    productFields.customerId !== undefined;
 
   if (hasProductUpdate) {
     await db

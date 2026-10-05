@@ -16,10 +16,12 @@ import {
   listPublicPlans,
   getBilling,
   listNotifications,
+  listCompanies,
+  listCustomers,
   adminListPlans,
   adminListBusinessPlans,
 } from '@/lib/api';
-import type { NotificationList, PublicPlan } from '@/lib/api';
+import type { Customer, NotificationList, PublicPlan } from '@/lib/api';
 import { cacheTags } from './tags';
 
 /** Cached user profile — stable for a session, not a live feed. */
@@ -221,5 +223,33 @@ export async function cachedNotifications(
     // down, and must never paint a dot that claims there is something to read. The one page
     // whose only job is this list reads `unavailable` and says so instead of "all quiet".
     return { notifications: [], unreadCount: 0, unavailable: true };
+  }
+}
+
+export async function cachedCompanies(token: string) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.companies());
+  return listCompanies(token);
+}
+
+/**
+ * The customer book is the company's, and most businesses have no company at all — the
+ * API answers that with a 400, which is a normal state here rather than an outage. A throw
+ * inside a `'use cache'` function surfaces as a prerender error the caller cannot catch, so
+ * "no book" is returned as an empty list with the flag that tells the form to hide itself.
+ */
+export async function cachedCustomers(
+  token: string,
+  businessId: string,
+): Promise<{ customers: Customer[]; hasCompany: boolean }> {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.customers(businessId));
+  try {
+    const { customers } = await listCustomers(token, businessId, undefined, 100);
+    return { customers, hasCompany: true };
+  } catch {
+    return { customers: [], hasCompany: false };
   }
 }

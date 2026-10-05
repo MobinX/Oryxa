@@ -47,7 +47,10 @@ export function AuthForm() {
       if (e?.message === 'NEXT_REDIRECT' || String(e).includes('NEXT_REDIRECT')) throw e;
       if (e?.code === 'auth/cancelled-popup-request' || e?.code === 'auth/popup-closed-by-user') return;
       if (e?.code === 'auth/unauthorized-domain') {
-        setError(`This domain (${window.location.hostname}) is not authorized in your Firebase project.`);
+        setError(
+          `This domain (${window.location.hostname}) is not authorized in Firebase. ` +
+            'Open Firebase Console → Authentication → Settings → Authorized domains and add it.',
+        );
       } else {
         setError(e?.message || 'Google sign-in failed. Check Firebase configuration.');
       }

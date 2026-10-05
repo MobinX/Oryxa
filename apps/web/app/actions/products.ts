@@ -92,6 +92,7 @@ export async function createProductAction(businessId: string, formData: FormData
   const description = String(formData.get('description') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const categoryName = String(formData.get('categoryName') ?? '').trim();
+  const customerId = String(formData.get('customerId') ?? '').trim();
 
   if (!name || !sku || !price) {
     redirect(`/b/${businessId}/products/new?error=required`);
@@ -107,6 +108,7 @@ export async function createProductAction(businessId: string, formData: FormData
     // Typed name wins over dropdown selection.
     categoryName: categoryName || undefined,
     categoryId: categoryName ? undefined : categoryId || undefined,
+    customerId: customerId || undefined,
     variants,
   });
 
@@ -128,6 +130,12 @@ export async function updateProductAction(
   const description = String(formData.get('description') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const categoryName = String(formData.get('categoryName') ?? '').trim();
+  // Absent means the form never showed a picker (a store with no company), so the
+  // link must be left alone; present-but-empty is the merchant choosing
+  // "— No customer —" and has to clear it.
+  const rawCustomerId = formData.get('customerId');
+  const customerId =
+    rawCustomerId === null ? undefined : String(rawCustomerId).trim() || null;
 
   const variants = await parseVariants(token, businessId, formData);
 
@@ -140,6 +148,7 @@ export async function updateProductAction(
       // Typed name wins over dropdown selection.
       categoryName: categoryName || undefined,
       categoryId: categoryName ? undefined : categoryId || undefined,
+      customerId,
       variants,
     });
   } catch (err) {

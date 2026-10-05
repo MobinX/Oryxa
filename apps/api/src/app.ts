@@ -19,6 +19,8 @@ import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
+import { companiesRouter } from '@api/routes/companies';
+import { customersRouter } from '@api/routes/customers';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
 import { emit } from '@api/lib/log';
 import { wireDatabaseLogging } from '@api/lib/db-log';
@@ -55,6 +57,7 @@ app.get('/', (c) => c.json({ name: 'Oryxa API', version: '1.0.0' }));
 
 app.route('/api/v1/users', usersRouter);
 app.route('/api/v1/businesses', businessesRouter);
+app.route('/api/v1/companies', companiesRouter);
 app.route('/api/v1/store', storeRouter);
 // Its own router so nothing is added inside the handlers the Flutter client
 // already depends on; this is a new path, not a new branch in an old one.
@@ -66,6 +69,7 @@ app.route('/api/v1', plansRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);
+app.route('/api/v1', customersRouter);
 app.route('/api/v1', ordersRouter);
 app.route('/api/v1', channelsRouter);
 app.route('/api/v1', conversationsRouter);

@@ -64,9 +64,32 @@ export const users = pgTable('users', {
   deletedAt: timestamp('deleted_at'),
 });
 
+export const companies = pgTable('companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  phone: varchar('phone', { length: 20 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const customers = pgTable('customers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  companyId: uuid('company_id').references(() => companies.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 20 }),
+  email: varchar('email', { length: 255 }),
+  address: text('address'),
+  avatar: varchar('avatar', { length: 500 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  idx: index('customers_company_idx').on(t.companyId, t.name),
+}));
+
 export const businesses = pgTable('businesses', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  companyId: uuid('company_id').references(() => companies.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }),
   storePublished: boolean('store_published').default(false).notNull(),
@@ -93,6 +116,7 @@ export const businesses = pgTable('businesses', {
 }, (t) => ({
   slugUniq: uniqueIndex('businesses_slug_idx').on(t.slug),
   planIdx: index('businesses_plan_id_idx').on(t.planId),
+  companyIdx: index('businesses_company_id_idx').on(t.companyId),
 }));
 
 export const categories = pgTable('categories', {
@@ -112,6 +136,7 @@ export const products = pgTable('products', {
   id: uuid('id').primaryKey().defaultRandom(),
   businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
   categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   price: numeric('price', { precision: 10, scale: 2 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull(),
@@ -123,6 +148,7 @@ export const products = pgTable('products', {
   uniq: uniqueIndex('products_business_slug_idx')
     .on(t.businessId, t.slug)
     .where(sql`${t.deletedAt} is null`),
+  customerIdx: index('products_customer_id_idx').on(t.customerId),
 }));
 
 export const variants = pgTable('variants', {
@@ -214,11 +240,24 @@ export const messages = pgTable('messages', {
 
 export const usersRelations = relations(users, ({ many }) => ({
   businesses: many(businesses),
+  companies: many(companies),
+}));
+
+export const companyRelations = relations(companies, ({ one, many }) => ({
+  user: one(users, { fields: [companies.userId], references: [users.id] }),
+  businesses: many(businesses),
+  customers: many(customers),
+}));
+
+export const customerRelations = relations(customers, ({ one, many }) => ({
+  company: one(companies, { fields: [customers.companyId], references: [companies.id] }),
+  products: many(products),
 }));
 
 export const businessRelations = relations(businesses, ({ one, many }) => ({
   user: one(users, { fields: [businesses.userId], references: [users.id] }),
   plan: one(plans, { fields: [businesses.planId], references: [plans.id] }),
+  company: one(companies, { fields: [businesses.companyId], references: [companies.id] }),
   products: many(products),
   orders: many(orders),
   channels: many(channels),
@@ -239,6 +278,7 @@ export const categoryRelations = relations(categories, ({ one, many }) => ({
 export const productRelations = relations(products, ({ one, many }) => ({
   business: one(businesses, { fields: [products.businessId], references: [businesses.id] }),
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
+  customer: one(customers, { fields: [products.customerId], references: [customers.id] }),
   variants: many(variants),
   orders: many(orders),
 }));
