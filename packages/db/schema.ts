@@ -23,6 +23,34 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'ai_post_generation',
   'ai_post_tuning',
 ]);
+export const planActorKindEnum = pgEnum('plan_actor_kind', ['operator', 'merchant', 'system']);
+
+/**
+ * What the operator sells. Limits are read at gate time and never copied onto the
+ * business, which is why editing a plan propagates to every business on it instantly.
+ *
+ * A NULL limit means that allowance is uncapped; 0 means zero replies are allowed.
+ * These are opposite things, so neither is a default here — see crud/billing.ts for how
+ * each is enforced, and /admin/plans for the warning that has to sit next to the 0.
+ */
+export const plans = pgTable('plans', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 80 }).notNull(),
+  slug: varchar('slug', { length: 64 }).notNull(),
+  priceCents: integer('price_cents').default(0).notNull(),
+  currency: varchar('currency', { length: 8 }).default('USD').notNull(),
+  messageLimit: integer('message_limit'),
+  commentLimit: integer('comment_limit'),
+  features: jsonb('features').$type<string[]>().default([]).notNull(),
+  position: integer('position').default(0).notNull(),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  slugUniq: uniqueIndex('plans_slug_idx').on(t.slug).where(sql`${t.deletedAt} is null`),
+  activePositionIdx: index('plans_active_position_idx').on(t.active, t.position),
+}));
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -51,10 +79,20 @@ export const businesses = pgTable('businesses', {
   hasTaxLicense: boolean('has_tax_license').default(false),
   facebookPageLink: varchar('facebook_page_link', { length: 500 }),
   phone: varchar('phone', { length: 20 }),
+  /** NULL = no plan = unlimited. The operator's per-business escape hatch. */
+  planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
+  /**
+   * The cycle anchor: 30-day allowances roll from this date, not from the 1st of a
+   * month. Set once, at the first assignment, and deliberately never moved afterwards —
+   * a re-anchor on plan switch would let a merchant zero their own counter by changing
+   * plans, which with self-serve and no payment rail is an unlimited-replies exploit.
+   */
+  planStartedAt: timestamp('plan_started_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   slugUniq: uniqueIndex('businesses_slug_idx').on(t.slug),
+  planIdx: index('businesses_plan_id_idx').on(t.planId),
 }));
 
 export const categories = pgTable('categories', {
@@ -180,6 +218,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const businessRelations = relations(businesses, ({ one, many }) => ({
   user: one(users, { fields: [businesses.userId], references: [users.id] }),
+  plan: one(plans, { fields: [businesses.planId], references: [plans.id] }),
   products: many(products),
   orders: many(orders),
   channels: many(channels),
@@ -407,5 +446,87 @@ export const visits = pgTable('visits', {
 
 export const visitRelations = relations(visits, ({ one }) => ({
   business: one(businesses, { fields: [visits.businessId], references: [businesses.id] }),
+}));
+
+/**
+ * One row per business per 30-day cycle. `period` is the cycle's start date as a
+ * 'YYYY-MM-DD' label computed in Node from businesses.plan_started_at — never by SQL
+ * date maths — so a string comparison decides which row is "now", and the reset is a
+ * key rotation rather than a job. No row for the current period simply means 0 used.
+ *
+ * Nothing here is soft-deletable: a counter is a fact. The atomic spend lives in
+ * crud/billing.ts as a single conditional upsert, because the neon-http driver cannot
+ * transact and two statements would let two concurrent runs both see room to spare.
+ */
+export const quotaUsage = pgTable('quota_usage', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  period: varchar('period', { length: 10 }).notNull(),
+  messagesUsed: integer('messages_used').default(0).notNull(),
+  commentsUsed: integer('comments_used').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  businessPeriodUniq: uniqueIndex('quota_usage_business_period_uniq_idx').on(t.businessId, t.period),
+}));
+
+/**
+ * Merchant-facing notices. kind is a varchar rather than an enum so a new notice
+ * ('plan_changed', 'welcome') is one INSERT away instead of a ALTER TYPE migration, while
+ * the wire stays strict: shared/schemas/plan.ts validates a closed z.enum at the boundary.
+ *
+ * The unique (business_id, kind, period) is what makes a notice fire exactly once per
+ * cycle without a read-then-write, and NULL periods never collide in Postgres, so a
+ * notice that belongs to no cycle stays unconstrained by the same index.
+ */
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  kind: varchar('kind', { length: 40 }).notNull(),
+  period: varchar('period', { length: 10 }),
+  title: varchar('title', { length: 120 }).notNull(),
+  body: text('body').notNull(),
+  link: varchar('link', { length: 300 }),
+  readAt: timestamp('read_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  businessKindPeriodUniq: uniqueIndex('notifications_business_kind_period_uniq_idx').on(t.businessId, t.kind, t.period),
+  businessUnreadIdx: index('notifications_business_unread_idx').on(t.businessId, t.readAt, t.createdAt),
+}));
+
+/**
+ * Append-only history of who put which business on which plan. Not a subscriptions
+ * table — the live pointer is businesses.plan_id — just the record that pointer
+ * overwrites. plan_id NULL is a revoke. actor_user_id has no FK on purpose: tests
+ * hard-delete user rows, and an audit row should outlive the account that acted.
+ */
+export const planAssignments = pgTable('plan_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
+  previousPlanId: uuid('previous_plan_id').references(() => plans.id, { onDelete: 'set null' }),
+  actorKind: planActorKindEnum('actor_kind').notNull(),
+  actorUserId: uuid('actor_user_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  businessTimeIdx: index('plan_assignments_business_time_idx').on(t.businessId, t.createdAt),
+  planIdx: index('plan_assignments_plan_idx').on(t.planId),
+}));
+
+export const plansRelations = relations(plans, ({ many }) => ({
+  businesses: many(businesses),
+}));
+
+export const quotaUsageRelations = relations(quotaUsage, ({ one }) => ({
+  business: one(businesses, { fields: [quotaUsage.businessId], references: [businesses.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  business: one(businesses, { fields: [notifications.businessId], references: [businesses.id] }),
+}));
+
+export const planAssignmentsRelations = relations(planAssignments, ({ one }) => ({
+  business: one(businesses, { fields: [planAssignments.businessId], references: [businesses.id] }),
+  plan: one(plans, { fields: [planAssignments.planId], references: [plans.id], relationName: 'assignmentPlan' }),
+  previousPlan: one(plans, { fields: [planAssignments.previousPlanId], references: [plans.id], relationName: 'previousPlan' }),
 }));
 

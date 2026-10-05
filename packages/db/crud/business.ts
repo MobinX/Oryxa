@@ -2,6 +2,10 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses } from '@db/schema';
 import { createBusinessInputSchema, updateBusinessInputSchema } from '@repo/shared';
+import { assignPlan, getPlanBySlug } from '@repo/db/crud/plans';
+
+/** The plan every new store starts on. Seeded by migration 0012. */
+const DEFAULT_PLAN_SLUG = 'free';
 
 export async function createBusiness(userId: string, input: unknown) {
   const parsed = createBusinessInputSchema.parse(input);
@@ -9,6 +13,15 @@ export async function createBusiness(userId: string, input: unknown) {
     .insert(businesses)
     .values({ ...parsed, userId })
     .returning();
+
+  // A signup must not be unlimited by accident: `plan_id IS NULL` means unlimited, so a
+  // business created without a plan would get free replies forever. Two awaited
+  // statements on the path that runs when somebody joins — not one per message. If the
+  // seeded plan is missing or retired the business is left unassigned, which is what it
+  // was before plans existed.
+  const starter = await getPlanBySlug(DEFAULT_PLAN_SLUG);
+  if (starter?.active) await assignPlan(business.id, starter.id, { actorKind: 'system' });
+
   return business;
 }
 
