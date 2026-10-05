@@ -256,9 +256,9 @@ describe('the admin plan catalogue', () => {
     const forOver = rows.filter((row) => row.businessId === over);
     const forNear = rows.filter((row) => row.businessId === near);
     expect(forOver).toHaveLength(1);
-    expect(forOver[0].kind).toBe('quota_100');
+    expect(forOver[0].kind).toBe('message_quota_100');
     expect(forOver[0].link).toBe(`/b/${over}/billing`);
-    expect(forNear.map((row) => row.kind).sort()).toEqual(['quota_100', 'quota_80']);
+    expect(forNear.map((row) => row.kind).sort()).toEqual(['message_quota_100', 'message_quota_80']);
   });
 
   it('lists the fleet with the revoked businesses visible', async () => {
@@ -474,13 +474,36 @@ describe('the merchant billing page', () => {
     ).toBe(400);
   });
 
+  /**
+   * Rows like this exist in production: they were written before the budget became part of
+   * the key. The wire has to keep reading them, because a closed enum that rejects its own
+   * history turns the notifications page of the one merchant who needs it into an error card.
+   */
+  it('still lists a notice whose kind predates the per-budget key', async () => {
+    const businessId = await devBusiness('legacy-kind');
+    await db.insert(notifications).values({
+      businessId,
+      kind: 'quota_100',
+      period: null,
+      title: 'Your messenger replies are used up',
+      body: 'The agent has stopped replying.',
+      link: `/b/${businessId}/billing`,
+    });
+
+    const list = await json<NotificationListResponse>(
+      await app.request(`http://localhost/api/v1/${businessId}/notifications`, { headers: authHeaders() }),
+    );
+    expect(list.notifications).toHaveLength(1);
+    expect(list.notifications[0].kind).toBe('quota_100');
+  });
+
   it('lights the bell and lets the merchant put it out', async () => {
     const businessId = await devBusiness('bell');
     const status = await putOnPlan(businessId, (await seededPlan('free')).id);
     await use(businessId, status.cycle.period, 1_000);
     await db.insert(notifications).values({
       businessId,
-      kind: 'quota_100',
+      kind: 'message_quota_100',
       period: status.cycle.period,
       title: 'Your messenger replies are used up',
       body: 'The agent has stopped replying.',
@@ -491,7 +514,7 @@ describe('the merchant billing page', () => {
 
     const list = await json<NotificationListResponse>(await bell(''));
     expect(list.unreadCount).toBe(1);
-    expect(list.notifications[0].kind).toBe('quota_100');
+    expect(list.notifications[0].kind).toBe('message_quota_100');
     expect(list.notifications[0].readAt).toBeNull();
 
     const read = await app.request(`http://localhost/api/v1/${businessId}/notifications/read`, {

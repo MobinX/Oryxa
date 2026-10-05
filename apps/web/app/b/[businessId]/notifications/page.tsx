@@ -6,7 +6,10 @@ import { markNotificationsReadAction } from '@/app/actions/billing';
 import { Card } from '@/components/ui/card';
 
 function noticeTitle(kind: string): string {
-  return kind === 'quota_100' ? 'Allowance used up' : 'Allowance almost gone';
+  const unit = kind.startsWith('comment') ? 'comment' : 'messenger';
+  return kind.endsWith('_100')
+    ? `Your ${unit} replies are used up`
+    : `You have used 80% of your ${unit} replies`;
 }
 
 export default async function NotificationsPage({

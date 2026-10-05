@@ -906,7 +906,12 @@ export type BillingOverview = {
 
 export type NotificationItem = {
   id: string;
-  kind: 'quota_80' | 'quota_100' | (string & {});
+  kind:
+    | 'message_quota_80'
+    | 'message_quota_100'
+    | 'comment_quota_80'
+    | 'comment_quota_100'
+    | (string & {});
   period: string | null;
   title: string;
   body: string;

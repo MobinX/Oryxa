@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { notificationKindSchema, uuidSchema } from '@shared/schemas/base';
+import { notificationKindSchema, quotaThresholdSchema, uuidSchema } from '@shared/schemas/base';
 import { planSchema } from '@shared/schemas/plan';
 
 /** The two budgets. Messenger replies spend `message`, comment replies spend `comment`. */
@@ -82,3 +82,4 @@ export type BillingOverview = z.infer<typeof billingOverviewSchema>;
 export type NotificationItem = z.infer<typeof notificationItemSchema>;
 export type NotificationListResponse = z.infer<typeof notificationListResponseSchema>;
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
+export type QuotaThreshold = z.infer<typeof quotaThresholdSchema>;

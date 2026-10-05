@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, commentThreads, conversations, notifications, plans, quotaUsage } from '@db/schema';
-import type { NotificationItem, NotificationKind, QuotaCycle, QuotaKind, QuotaStatus } from '@repo/shared';
+import type { NotificationItem, NotificationKind, QuotaCycle, QuotaKind, QuotaStatus, QuotaThreshold } from '@repo/shared';
 
 /**
  * Allowances, the gate's read, and the atomic counter.
@@ -210,11 +210,21 @@ export async function cycleUsageOnPlan(planId: string, now: Date = new Date()): 
 }
 
 /**
- * Which notice, if any, this number earns. Kept separate from the write so the operator's
- * console can say how many businesses an edit just crossed before it writes anything.
+ * Which notice, if any, this number earns. The threshold only: which budget earned it is
+ * carried by `noticeKind`, and the two together are the row's uniqueness key. Kept separate
+ * from the write so the operator's console can say how many businesses an edit just crossed
+ * before it writes anything.
  */
-export function crossedThreshold(used: number, limit: number): NotificationKind | null {
+export function crossedThreshold(used: number, limit: number): QuotaThreshold | null {
   return used >= limit ? 'quota_100' : used * 5 >= limit * 4 ? 'quota_80' : null;
+}
+
+/**
+ * The stored kind, per budget. `quota_100` alone would make one business ring its bell
+ * once per cycle and then go silent about the other allowance running out.
+ */
+function noticeKind(kind: QuotaKind, crossed: QuotaThreshold): `${QuotaKind}_${QuotaThreshold}` {
+  return `${kind}_${crossed}`;
 }
 
 /**
@@ -224,7 +234,7 @@ export function crossedThreshold(used: number, limit: number): NotificationKind 
  */
 function noticeCopy(
   kind: QuotaKind,
-  crossed: NotificationKind,
+  crossed: QuotaThreshold,
   used: number,
   limit: number,
   resetsAt: string,
@@ -262,7 +272,7 @@ export async function ensureQuotaNotice(
     .insert(notifications)
     .values({
       businessId,
-      kind: crossed,
+      kind: noticeKind(kind, crossed),
       period,
       ...noticeCopy(kind, crossed, used, limit, resetsAt),
       link: `/b/${businessId}/billing`,
@@ -293,7 +303,7 @@ export async function ensurePlanNotices(
       if (!crossed) continue;
       values.push({
         businessId: row.businessId,
-        kind: crossed,
+        kind: noticeKind(cap.kind, crossed),
         period: row.period,
         ...noticeCopy(cap.kind, crossed, used, cap.limit, row.resetsAt),
         link: `/b/${row.businessId}/billing`,

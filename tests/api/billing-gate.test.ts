@@ -140,6 +140,9 @@ describe('the quota gate', () => {
 
   it('enforces nothing on a business with no plan, however much it has used', async () => {
     const seed = await seedTestWorld();
+    // A new store starts on the seeded free plan, so this case has to be handed back
+    // explicitly — the same revoke the operator console makes.
+    await assignPlan(seed.business.id, null, { actorKind: 'operator' });
     const status = await getQuotaStatus(seed.business.id);
     if (!status) throw new Error('the seeded business is gone');
     expect(status.assigned).toBe(false);
@@ -185,11 +188,27 @@ describe('the quota gate', () => {
     expect(await quotaGate('message', seed.conversation.id, { businessId: seed.business.id })).toBe('blocked');
     const after = await listNotifications(seed.business.id);
     expect(after).toHaveLength(1);
-    expect(after[0]?.kind).toBe('quota_100');
+    expect(after[0]?.kind).toBe('message_quota_100');
     expect(after[0]?.link).toBe(`/b/${seed.business.id}/billing`);
 
     expect(await quotaGate('message', seed.conversation.id, { businessId: seed.business.id })).toBe('blocked');
     expect(await listNotifications(seed.business.id)).toHaveLength(1);
+  });
+
+  /**
+   * Both allowances can run out in one cycle, and the merchant has to hear about each:
+   * the bell is unique per (business, kind, period), so a kind that left out the budget
+   * would let the messenger wall swallow the comment one for the whole cycle.
+   */
+  it('rings once per budget, not once per cycle', async () => {
+    const { seed, status } = await world('both-budgets', 2, 2);
+    await spend(seed.business.id, status.cycle.period, 2, 2);
+
+    expect(await quotaGate('message', seed.conversation.id, { businessId: seed.business.id })).toBe('blocked');
+    expect(await quotaGate('comment', 'thread-both', { businessId: seed.business.id })).toBe('blocked');
+
+    const kinds = (await listNotifications(seed.business.id)).map((row) => row.kind).sort();
+    expect(kinds).toEqual(['comment_quota_100', 'message_quota_100']);
   });
 
   it('starts no run at all when the gate blocks: nothing reaches the runner', async () => {

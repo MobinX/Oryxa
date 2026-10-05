@@ -245,7 +245,7 @@ describe('notices', () => {
 
     await spendQuotaUnit(business.id, 'message', at(ANCHOR, 8));
     const [after80] = await noticesFor(business.id);
-    expect(after80).toMatchObject({ kind: 'quota_80', period: '2026-09-05' });
+    expect(after80).toMatchObject({ kind: 'message_quota_80', period: '2026-09-05' });
     expect(after80.title).toMatch(/80%/);
     expect(after80.link).toBe(`/b/${business.id}/billing`);
 
@@ -254,7 +254,7 @@ describe('notices', () => {
 
     await spendQuotaUnit(business.id, 'message', at(ANCHOR, 10));
     const kinds = (await noticesFor(business.id)).map((n) => n.kind).sort();
-    expect(kinds).toEqual(['quota_100', 'quota_80']);
+    expect(kinds).toEqual(['message_quota_100', 'message_quota_80']);
   });
 
   it('does not retract when a unit is refunded', async () => {
@@ -265,7 +265,7 @@ describe('notices', () => {
     await refundQuotaUnit(business.id, 'message', bought.period);
 
     const rows = await noticesFor(business.id);
-    expect(rows.map((r) => r.kind)).toEqual(['quota_100']);
+    expect(rows.map((r) => r.kind)).toEqual(['message_quota_100']);
   });
 
   it('is exactly-once per cycle even when the same threshold is crossed again', async () => {

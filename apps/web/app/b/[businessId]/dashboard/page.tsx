@@ -23,7 +23,7 @@ import {
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
 import { cachedBilling, cachedNotifications } from '@/app/_cache/queries';
-import type { QuotaStatus } from '@/lib/api';
+import type { NotificationItem, QuotaStatus } from '@/lib/api';
 
 const sparklinePaths = {
   products: 'M5 22C20 22 25 12 40 12C55 12 60 25 75 25C90 25 95 8 110 8',
@@ -207,6 +207,8 @@ async function DashboardContent({
 
       {/* Row 0: what the agent may still answer this cycle */}
       <QuotaStrip quota={quota} businessId={businessId} />
+
+      <RecentNotices businessId={businessId} notices={notices.notifications} />
 
       {/* Row 1: Four Statistics Cards */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -539,5 +541,62 @@ function QuotaStrip({ quota, businessId }: { quota: QuotaStatus | null; business
           : `resets in ${quota.cycle.daysLeft} ${quota.cycle.daysLeft === 1 ? 'day' : 'days'}`}
       </span>
     </Link>
+  );
+}
+
+/**
+ * The three newest notices, on the page the merchant actually opens. A used-up allowance
+ * is written by the webhook that refuses to start the agent, so without this the only
+ * proof the bot went quiet is a bell they have to think to click. Silence here is deliberate:
+ * an empty card on every dashboard would cost more attention than the notices themselves.
+ */
+function RecentNotices({
+  businessId,
+  notices,
+}: {
+  businessId: string;
+  notices: NotificationItem[];
+}) {
+  if (notices.length === 0) return null;
+
+  return (
+    <Card className="border-border/60 p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4.5 w-4.5 text-primary" />
+          <h3 className="font-geist text-sm font-bold text-foreground">Notifications</h3>
+        </div>
+        <Link
+          href={`/b/${businessId}/notifications`}
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          View all
+        </Link>
+      </div>
+
+      <div className="mt-4 space-y-3.5">
+        {notices.slice(0, 3).map((notice) => (
+          <Link
+            key={notice.id}
+            href={notice.link ?? `/b/${businessId}/notifications`}
+            className="flex items-start gap-3.5"
+          >
+            <span
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notice.readAt ? 'bg-border' : 'bg-primary'}`}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{notice.title}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
+                {notice.body}
+              </p>
+            </div>
+            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
+              {formatTimeAgo(new Date(notice.createdAt))}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
