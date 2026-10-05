@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
+import { cachedBilling, cachedNotifications } from '@/app/_cache/queries';
+import type { QuotaStatus } from '@/lib/api';
 
 const sparklinePaths = {
   products: 'M5 22C20 22 25 12 40 12C55 12 60 25 75 25C90 25 95 8 110 8',
@@ -51,10 +53,14 @@ async function DashboardContent({
   const { businessId } = await params;
   const token = await requireAuth();
 
-  const [business, analytics, me] = await Promise.all([
+  const [business, analytics, me, quota, notices] = await Promise.all([
     cachedBusiness(token, businessId),
     cachedAnalytics(token, businessId, 7),
     cachedMe(token),
+    // The strip is one line of the dashboard, not its subject: a billing outage (or a
+    // business the signed-in account does not own) must still leave the four cards.
+    cachedBilling(token, businessId).then((overview) => overview.quota, () => null),
+    cachedNotifications(token, businessId),
   ]);
 
   const stats = analytics.totals;
@@ -159,10 +165,16 @@ async function DashboardContent({
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <ThemeToggle />
 
-          <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card hover:bg-muted transition-colors">
+          <Link
+            href={`/b/${businessId}/notifications`}
+            aria-label={`Notifications${notices.unreadCount > 0 ? ` (${notices.unreadCount} unread)` : ''}`}
+            className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card hover:bg-muted transition-colors"
+          >
             <Bell className="h-5 w-5 text-muted-foreground" />
-            <span className="absolute top-2.5 right-2.5 flex h-2 w-2 rounded-full bg-primary" />
-          </button>
+            {notices.unreadCount > 0 && (
+              <span className="absolute top-2.5 right-2.5 flex h-2 w-2 rounded-full bg-primary" />
+            )}
+          </Link>
 
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20">
             {userInitial}
@@ -192,6 +204,9 @@ async function DashboardContent({
           />
         </div>
       </div>
+
+      {/* Row 0: what the agent may still answer this cycle */}
+      <QuotaStrip quota={quota} businessId={businessId} />
 
       {/* Row 1: Four Statistics Cards */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -468,4 +483,61 @@ function formatTimeAgo(date: Date): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+/**
+ * The allowance line. `No plan — unlimited replies` is reserved for the genuinely revoked
+ * business, because every other business has a real number behind it and implying
+ * otherwise is how a merchant discovers the cap only when the agent stops.
+ */
+function QuotaStrip({ quota, businessId }: { quota: QuotaStatus | null; businessId: string }) {
+  if (!quota) return null;
+
+  const budget = (used: number, limit: number | null, blocked: boolean) => {
+    if (limit === null) return { text: 'uncapped', tone: 'muted', full: false };
+    if (blocked) return { text: `${used.toLocaleString()} / 0 left`, tone: 'red', full: true };
+    return {
+      text: `${used.toLocaleString()} / ${limit.toLocaleString()}`,
+      tone: limit > 0 && used / limit >= 0.8 ? 'amber' : 'muted',
+      full: false,
+    };
+  };
+
+  const messenger = budget(quota.messagesUsed, quota.messageLimit, quota.messageBlocked);
+  const comments = budget(quota.commentsUsed, quota.commentLimit, quota.commentBlocked);
+  const stopped = quota.messageBlocked || quota.commentBlocked;
+  const nearlyGone = messenger.tone === 'amber' || comments.tone === 'amber';
+
+  const tone = stopped
+    ? 'border-destructive/50 bg-destructive/5 text-destructive'
+    : nearlyGone
+      ? 'border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400'
+      : 'border-border/60 bg-card text-foreground';
+
+  return (
+    <Link
+      href={`/b/${businessId}/billing`}
+      className={`flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-element border px-4 py-3 text-sm transition-colors hover:bg-muted/40 ${tone}`}
+    >
+      <span className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <strong className="font-geist font-bold">
+          {quota.assigned ? quota.planName : 'No plan — unlimited replies'}
+        </strong>
+        <span>
+          <span className="text-muted-foreground">Messenger</span>{' '}
+          <span className="font-medium tabular-nums">{messenger.text}</span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">Comments</span>{' '}
+          <span className="font-medium tabular-nums">{comments.text}</span>
+        </span>
+      </span>
+
+      <span className="text-xs text-muted-foreground">
+        {stopped
+          ? 'The agent is stopped until the cycle resets'
+          : `resets in ${quota.cycle.daysLeft} ${quota.cycle.daysLeft === 1 ? 'day' : 'days'}`}
+      </span>
+    </Link>
+  );
 }

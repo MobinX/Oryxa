@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { cachedAnalytics, cachedBusiness, cachedMe, cachedTokenAnalytics, cachedTokenLogs } from '@/app/_cache/queries';
+import { cachedAnalytics, cachedBilling, cachedBusiness, cachedMe, cachedNotifications, cachedTokenAnalytics, cachedTokenLogs } from '@/app/_cache/queries';
 import AnalyticsSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { DropdownSelect } from '@/components/ui/dropdown-select';
@@ -50,12 +51,14 @@ async function AnalyticsContent({
   const hours = sParams.hours ? parseInt(sParams.hours, 10) : 24;
   const token = await requireAuth();
 
-  const [business, analytics, tokenAnalytics, tokenLogs, me] = await Promise.all([
+  const [business, analytics, tokenAnalytics, tokenLogs, me, quota, notices] = await Promise.all([
     cachedBusiness(token, businessId),
     cachedAnalytics(token, businessId, days),
     cachedTokenAnalytics(token, businessId, hours),
     cachedTokenLogs(token, businessId, 30),
     cachedMe(token),
+    cachedBilling(token, businessId).then((overview) => overview.quota, () => null),
+    cachedNotifications(token, businessId),
   ]);
 
   const stats = analytics.totals;
@@ -106,10 +109,16 @@ async function AnalyticsContent({
         <div className="flex items-center gap-3 shrink-0">
           <ThemeToggle />
 
-          <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card hover:bg-muted transition-colors">
+          <Link
+            href={`/b/${businessId}/notifications`}
+            aria-label={`Notifications${notices.unreadCount > 0 ? ` (${notices.unreadCount} unread)` : ''}`}
+            className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card hover:bg-muted transition-colors"
+          >
             <Bell className="h-5 w-5 text-muted-foreground" />
-            <span className="absolute top-2.5 right-2.5 flex h-2 w-2 rounded-full bg-primary" />
-          </button>
+            {notices.unreadCount > 0 && (
+              <span className="absolute top-2.5 right-2.5 flex h-2 w-2 rounded-full bg-primary" />
+            )}
+          </Link>
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-md shadow-primary/20">
             {userInitial}
           </div>
@@ -232,6 +241,50 @@ async function AnalyticsContent({
               <strong className="text-foreground">{avgResponseTime}s</strong>
             </div>
           </Card>
+
+          {/* Card 5: Agent replies left in this 30-day cycle */}
+          {quota && (
+            <Card className="border-border/60 p-5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Replies Left This Cycle
+                </span>
+                <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Layers className="h-4 w-4" />
+                </div>
+              </div>
+              <h4
+                className={`font-geist text-3xl font-extrabold tracking-tight mt-3 ${
+                  quota.messageBlocked
+                    ? 'text-destructive'
+                    : quota.messageLimit !== null && quota.messagesUsed / quota.messageLimit >= 0.8
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-foreground'
+                }`}
+              >
+                {quota.messageLimit === null
+                  ? 'Uncapped'
+                  : Math.max(0, quota.messageLimit - quota.messagesUsed).toLocaleString()}
+              </h4>
+              <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground border-t border-border/40 pt-2.5">
+                <span>
+                  Comments:{' '}
+                  <strong className="text-foreground">
+                    {quota.commentLimit === null
+                      ? 'uncapped'
+                      : Math.max(0, quota.commentLimit - quota.commentsUsed).toLocaleString()}
+                  </strong>
+                </span>
+                <span>{quota.cycle.daysLeft}d to reset</span>
+              </div>
+              <Link
+                href={`/b/${businessId}/billing`}
+                className="mt-2 block text-xs font-medium text-primary hover:underline"
+              >
+                {quota.assigned ? quota.planName : 'No plan — unlimited'} →
+              </Link>
+            </Card>
+          )}
         </div>
       </div>
 

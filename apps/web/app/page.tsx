@@ -280,17 +280,9 @@ export default function Home() {
             <Link href="/solutions" className="flex items-center gap-1 font-geist font-semibold text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer group">
               Solutions <ChevronDown className="h-4 w-4 stroke-[2] transition-transform group-hover:translate-y-0.5" />
             </Link>
-            <button
-              onClick={() => {
-                const element = document.getElementById('pricing');
-                if (element) {
-                  element.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              className="font-geist font-semibold text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
+            <Link href="/pricing" className="font-geist font-semibold text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
               Pricing
-            </button>
+            </Link>
             <Link href="/developers" className="flex items-center gap-1 font-geist font-semibold text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer group">
               Developers <ChevronDown className="h-4 w-4 stroke-[2] transition-transform group-hover:translate-y-0.5" />
             </Link>
@@ -335,15 +327,13 @@ export default function Home() {
             <div className="flex flex-col gap-3.5">
               <Link href="/features" className="font-geist font-semibold text-sm text-muted-foreground py-1.5 border-b border-border/10">Features</Link>
               <Link href="/solutions" className="font-geist font-semibold text-sm text-muted-foreground py-1.5 border-b border-border/10">Solutions</Link>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
-                }}
+              <Link
+                href="/pricing"
+                onClick={() => setMobileMenuOpen(false)}
                 className="font-geist font-semibold text-sm text-muted-foreground text-left py-1.5 border-b border-border/10 cursor-pointer animate-none"
               >
                 Pricing
-              </button>
+              </Link>
               <Link href="/developers" className="font-geist font-semibold text-sm text-muted-foreground py-1.5 border-b border-border/10">Developers</Link>
               <Link href="/docs" className="font-geist font-semibold text-sm text-muted-foreground py-1.5 border-b border-border/10">Docs</Link>
             </div>
@@ -1043,7 +1033,7 @@ export default function Home() {
               <ul className="space-y-3.5 text-xs text-muted-foreground font-medium font-inter border-t border-border/10 pt-6">
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  Up to 1,000 monthly conversations
+                  Up to 1,000 agent replies per 30 days
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
@@ -1086,7 +1076,7 @@ export default function Home() {
               <ul className="space-y-3.5 text-xs text-muted-foreground font-medium font-inter border-t border-border/10 pt-6">
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  Up to 10,000 monthly conversations
+                  Up to 10,000 agent replies per 30 days
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
@@ -1127,7 +1117,7 @@ export default function Home() {
               <ul className="space-y-3.5 text-xs text-muted-foreground font-medium font-inter border-t border-border/10 pt-6">
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  Unlimited monthly conversations
+                  Unlimited agent replies
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
@@ -1195,12 +1185,7 @@ export default function Home() {
             <div className="flex flex-col gap-2">
               <Link href="/features" className="hover:text-foreground transition-colors font-medium">Features</Link>
               <Link href="/solutions" className="hover:text-foreground transition-colors font-medium">Solutions</Link>
-              <button 
-                onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
-                className="hover:text-foreground transition-colors font-medium text-left cursor-pointer"
-              >
-                Pricing
-              </button>
+              <Link href="/pricing" className="hover:text-foreground transition-colors font-medium">Pricing</Link>
             </div>
           </div>
 

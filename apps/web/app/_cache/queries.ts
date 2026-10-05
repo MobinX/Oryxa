@@ -13,7 +13,13 @@ import {
   getPost,
   listPosts,
   listProducts,
+  listPublicPlans,
+  getBilling,
+  listNotifications,
+  adminListPlans,
+  adminListBusinessPlans,
 } from '@/lib/api';
+import type { NotificationList } from '@/lib/api';
 import { cacheTags } from './tags';
 
 /** Cached user profile — stable for a session, not a live feed. */
@@ -154,4 +160,61 @@ export async function cachedPost(token: string, businessId: string, postId: stri
   cacheTag(cacheTags.post(postId));
   cacheTag(cacheTags.posts(businessId));
   return getPost(token, businessId, postId);
+}
+
+/**
+ * The public price list. This throws when the API is unreachable rather than caching an
+ * empty answer, because a cached empty list would keep `/pricing` blank for an hour after
+ * the API came back. The page catches it and renders its static teaser cards instead.
+ */
+export async function cachedPublicPlans() {
+  'use cache';
+  cacheLife('hours');
+  cacheTag(cacheTags.publicPlans());
+  return listPublicPlans();
+}
+
+export async function cachedPlans(token: string) {
+  'use cache';
+  cacheLife('hours');
+  cacheTag(cacheTags.plans());
+  return adminListPlans(token);
+}
+
+export async function cachedAdminBusinessPlans(token: string) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.adminBusinessPlans());
+  cacheTag(cacheTags.plans());
+  return adminListBusinessPlans(token);
+}
+
+/**
+ * The meters on a business's own billing page. Stale by design by a few minutes: the
+ * counters move inside the webhook and the agent runner, outside this app, so nothing can
+ * `updateTag` them when they change. The API is the authority and the hard stop is
+ * enforced server-side, so staleness here can cost at most one reply.
+ */
+export async function cachedBilling(token: string, businessId: string) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.billing(businessId));
+  return getBilling(token, businessId);
+}
+
+export async function cachedNotifications(
+  token: string,
+  businessId: string,
+): Promise<NotificationList & { unavailable?: boolean }> {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.notifications(businessId));
+  try {
+    return await listNotifications(token, businessId);
+  } catch {
+    // The bell is decoration on top of the dashboard; a notice outage must not take the page
+    // down, and must never paint a dot that claims there is something to read. The one page
+    // whose only job is this list reads `unavailable` and says so instead of "all quiet".
+    return { notifications: [], unreadCount: 0, unavailable: true };
+  }
 }

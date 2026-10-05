@@ -6,6 +6,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /**
+     * The parsed error body. Most failures only carry `error`, and the message is enough —
+     * but a 409 that names the rows in the way puts that list beside the message, not in it.
+     */
+    public body?: unknown,
   ) {
     super(message);
   }
@@ -30,11 +35,13 @@ export async function apiFetch<T>(
     if (res.status === 401) {
       // `null` says the caller signs the redirect itself: a route with its own
       // sign-in page must not bounce the reader to the app's.
-      if (signInPath === null) throw new ApiError(err.error ?? 'Request failed', res.status);
+      if (signInPath === null) throw new ApiError(err.error ?? 'Request failed', res.status, err);
       redirect(signInPath ?? '/login?clear=true');
     }
-    throw new ApiError(err.error ?? 'Request failed', res.status);
+    throw new ApiError(err.error ?? 'Request failed', res.status, err);
   }
+  // A 204 has no body to parse, and `res.json()` on it rejects rather than returning null.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -829,4 +836,201 @@ export const getAdminStats = (token: string, filter: { days?: number; tz?: strin
     { token, signInPath: null },
   );
 };
+
+// Plans, allowances and notifications. `messageLimit` null and 0 are different things on
+// every surface: null is uncapped, 0 stops the agent. Nothing here re-implements that.
+export type PublicPlan = {
+  name: string;
+  slug: string;
+  priceCents: number;
+  currency: string;
+  priceLabel: string;
+  messageLimitLabel: string;
+  commentLimitLabel: string;
+  features: string[];
+};
+
+export type Plan = {
+  id: string;
+  name: string;
+  slug: string;
+  priceCents: number;
+  currency: string;
+  messageLimit: number | null;
+  commentLimit: number | null;
+  features: string[];
+  position: number;
+  active: boolean;
+};
+
+export type PlanInput = Omit<Plan, 'id'>;
+export type UpdatePlanInput = Partial<PlanInput>;
+
+/** A plan row plus the blast radius of editing it. */
+export type AdminPlanRow = Plan & { businessCount: number };
+
+export type AdminPlanEditResult = { plan: AdminPlanRow; notified: number };
+
+export type DeletePlanConflict = {
+  error: string;
+  businesses: Array<{ id: string; name: string }>;
+};
+
+export type QuotaCycle = {
+  period: string;
+  startedAt: string;
+  resetsAt: string;
+  daysLeft: number;
+};
+
+export type QuotaStatus = {
+  /** False when no plan is assigned — which means unlimited, not zero. */
+  assigned: boolean;
+  planId: string | null;
+  planName: string | null;
+  cycle: QuotaCycle;
+  messageLimit: number | null;
+  commentLimit: number | null;
+  messagesUsed: number;
+  commentsUsed: number;
+  messageBlocked: boolean;
+  commentBlocked: boolean;
+};
+
+export type BillingOverview = {
+  businessId: string;
+  quota: QuotaStatus;
+  plan: Plan | null;
+  options: Plan[];
+};
+
+export type NotificationItem = {
+  id: string;
+  kind: 'quota_80' | 'quota_100' | (string & {});
+  period: string | null;
+  title: string;
+  body: string;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationList = {
+  notifications: NotificationItem[];
+  unreadCount: number;
+};
+
+export type AdminBusinessPlan = {
+  businessId: string;
+  businessName: string;
+  planId: string | null;
+  planName: string | null;
+  /** The cycle anchor: set at first assignment, never moved by a plan switch. */
+  planStartedAt: string | null;
+  period: string;
+  messagesUsed: number;
+  commentsUsed: number;
+  messageLimit: number | null;
+  commentLimit: number | null;
+};
+
+export type PlanAssignment = {
+  id: string;
+  businessId: string;
+  planId: string | null;
+  planName: string | null;
+  previousPlanId: string | null;
+  previousPlanName: string | null;
+  actorKind: 'operator' | 'merchant' | 'system';
+  actorUserId: string | null;
+  createdAt: string;
+};
+
+export const listPublicPlans = () =>
+  apiFetch<PublicPlan[]>('/api/v1/plans', { signInPath: null });
+
+export const getBilling = (token: string, businessId: string) =>
+  apiFetch<BillingOverview>(`/api/v1/${businessId}/billing`, { token });
+
+/** Answers 409 with the merchant-readable reason when the plan is smaller than this cycle. */
+export const switchPlan = (token: string, businessId: string, planId: string) =>
+  apiFetch<Plan>(`/api/v1/${businessId}/billing/plan`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify({ planId }),
+  });
+
+export const listNotifications = (
+  token: string,
+  businessId: string,
+  filter: { unreadOnly?: boolean } = {},
+) =>
+  apiFetch<NotificationList>(
+    `/api/v1/${businessId}/notifications${filter.unreadOnly ? '?unread=true' : ''}`,
+    { token },
+  );
+
+export const markNotificationsRead = (
+  token: string,
+  businessId: string,
+  input: { ids?: string[]; all?: boolean },
+) =>
+  apiFetch<{ updated: number }>(`/api/v1/${businessId}/notifications/read`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(input),
+  });
+
+// The operator surface. Every call below carries the log console's bearer, exactly like
+// /api2/admin/stats, so a merchant's own token is never what authorises a plan edit.
+export const adminListPlans = (token: string) =>
+  apiFetch<AdminPlanRow[]>('/api2/admin/plans', { token, signInPath: null });
+
+export const adminCreatePlan = (token: string, input: PlanInput) =>
+  apiFetch<AdminPlanEditResult>('/api2/admin/plans', {
+    method: 'POST',
+    token,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminUpdatePlan = (token: string, id: string, input: UpdatePlanInput) =>
+  apiFetch<AdminPlanEditResult>(`/api2/admin/plans/${id}`, {
+    method: 'PATCH',
+    token,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+/** Resolves to the conflict body while businesses are still on the plan; undefined means deleted. */
+export const adminDeletePlan = (token: string, id: string) =>
+  apiFetch<DeletePlanConflict | undefined>(`/api2/admin/plans/${id}`, {
+    method: 'DELETE',
+    token,
+    signInPath: null,
+  });
+
+export const adminListBusinessPlans = (token: string) =>
+  apiFetch<AdminBusinessPlan[]>('/api2/admin/plans/businesses', { token, signInPath: null });
+
+export const adminAssignPlan = (token: string, businessId: string, planId: string | null) =>
+  apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/plan`, {
+    method: 'PUT',
+    token,
+    signInPath: null,
+    body: JSON.stringify({ planId }),
+  });
+
+export const adminResetCycle = (token: string, businessId: string) =>
+  apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/plan/reset`, {
+    method: 'POST',
+    token,
+    signInPath: null,
+  });
+
+export const adminListAssignments = (token: string, businessId: string) =>
+  apiFetch<PlanAssignment[]>(`/api2/admin/businesses/${businessId}/assignments`, {
+    token,
+    signInPath: null,
+  });
 

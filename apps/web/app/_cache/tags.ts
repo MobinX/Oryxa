@@ -14,6 +14,11 @@ export const cacheTags = {
   agents: (businessId: string) => `agents-${businessId}`,
   posts: (businessId: string) => `posts-${businessId}`,
   post: (postId: string) => `post-${postId}`,
+  plans: () => 'plans',
+  publicPlans: () => 'public-plans',
+  billing: (businessId: string) => `billing-${businessId}`,
+  notifications: (businessId: string) => `notifications-${businessId}`,
+  adminBusinessPlans: () => 'admin-business-plans',
 } as const;
 
 export function expireBusinesses() {
@@ -51,4 +56,28 @@ export function expireChannelPage(businessId: string) {
 export function expirePosts(businessId: string, postId?: string) {
   updateTag(cacheTags.posts(businessId));
   if (postId) updateTag(cacheTags.post(postId));
+}
+
+/**
+ * Editing a plan is a fleet-wide action: the caps are read from the plan at gate time and
+ * never copied, so every business on it gains or loses allowance the moment this saves.
+ * The callers pass those business ids in, because only they can see the roster.
+ */
+export function expirePlans(affectedBusinessIds: string[] = []) {
+  updateTag(cacheTags.plans());
+  updateTag(cacheTags.publicPlans());
+  updateTag(cacheTags.adminBusinessPlans());
+  for (const businessId of affectedBusinessIds) {
+    updateTag(cacheTags.billing(businessId));
+    updateTag(cacheTags.analytics(businessId));
+  }
+}
+
+export function expireBilling(businessId: string) {
+  updateTag(cacheTags.billing(businessId));
+  updateTag(cacheTags.analytics(businessId));
+}
+
+export function expireNotifications(businessId: string) {
+  updateTag(cacheTags.notifications(businessId));
 }

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ScrollText } from 'lucide-react';
+import { CreditCard, LayoutDashboard, ScrollText } from 'lucide-react';
 
 const TABS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { href: '/admin/plans', label: 'Plans', icon: CreditCard, exact: true },
   { href: '/admin/logs', label: 'Event log', icon: ScrollText, exact: false },
 ];
 

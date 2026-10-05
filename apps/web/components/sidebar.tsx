@@ -20,6 +20,7 @@ import {
   LogOut,
   Terminal,
   LayoutList,
+  CreditCard,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ const nav = [
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
   { href: 'playground', label: 'Playground', icon: Terminal },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { href: 'billing', label: 'Billing', icon: CreditCard },
   { href: 'settings', label: 'Settings', icon: Settings },
 ];
 
