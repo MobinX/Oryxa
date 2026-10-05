@@ -19,7 +19,7 @@ import {
   adminListPlans,
   adminListBusinessPlans,
 } from '@/lib/api';
-import type { NotificationList } from '@/lib/api';
+import type { NotificationList, PublicPlan } from '@/lib/api';
 import { cacheTags } from './tags';
 
 /** Cached user profile — stable for a session, not a live feed. */
@@ -163,15 +163,20 @@ export async function cachedPost(token: string, businessId: string, postId: stri
 }
 
 /**
- * The public price list. This throws when the API is unreachable rather than caching an
- * empty answer, because a cached empty list would keep `/pricing` blank for an hour after
- * the API came back. The page catches it and renders its static teaser cards instead.
+ * The public price list. A failure is a value here, never a throw: the API and this app
+ * deploy from the same push and build in parallel, so the list can genuinely not exist at
+ * the moment this page is prerendered, and a marketing page must not be able to abort a
+ * deploy over it. `unavailable` makes the page say so instead of trusting the fallback.
  */
-export async function cachedPublicPlans() {
+export async function cachedPublicPlans(): Promise<{ plans: PublicPlan[]; unavailable?: boolean }> {
   'use cache';
   cacheLife('hours');
   cacheTag(cacheTags.publicPlans());
-  return listPublicPlans();
+  try {
+    return { plans: await listPublicPlans() };
+  } catch {
+    return { plans: [], unavailable: true };
+  }
 }
 
 export async function cachedPlans(token: string) {

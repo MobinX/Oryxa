@@ -114,14 +114,9 @@ function PlanCard({ plan, popular }: { plan: PublicPlan; popular: boolean }) {
 
 export default async function PricingPage() {
   // Live data when the API answers; the identical list written down when it does not.
-  let plans = STATIC_PLANS;
-  let live = true;
-  try {
-    const fetched = await cachedPublicPlans();
-    if (fetched.length > 0) plans = fetched;
-  } catch {
-    live = false;
-  }
+  const listed = await cachedPublicPlans();
+  const plans = listed.unavailable || listed.plans.length === 0 ? STATIC_PLANS : listed.plans;
+  const live = !listed.unavailable && listed.plans.length > 0;
 
   return (
     <div className="flex min-h-screen flex-col justify-between bg-background font-inter text-foreground transition-colors duration-300">
