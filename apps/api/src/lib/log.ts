@@ -99,6 +99,7 @@ const OUTCOME: Record<string, string> = {
   stale_runner_recovered: 'the run holding the lock is dead — lock reset, run restarted',
   redelivered_pending_drained: 'an unanswered backlog is waiting — starting a run',
   waited_for_live_runner: 'another run already holds this conversation',
+  quota_exhausted: 'ALLOWANCE USED UP — the agent was not started',
   no_agent: 'NO AGENT ATTACHED — nobody will answer this customer',
   not_triggered: 'no run started',
   unsupported_content: 'nothing to answer (attachment, sticker or audio)',
@@ -723,6 +724,8 @@ export const ANOMALY_KINDS = [
   'duplicate_reply_prevented',
   'webhook_unknown_page',
   'graph_send_failed',
+  'quota_exhausted',
+  'quota_gate_failed',
 ] as const;
 
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];

@@ -4,6 +4,7 @@ import { processInboundMessage, setConversationProfileIfMissing, resetStaleConve
 import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
+import { readQuota, type QuotaRead, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
 import { runInBackground } from '@api/lib/background';
 import { verifyWebhookSignature, getFacebookUserProfile } from '@repo/integrations/facebook';
 import { STALE_RUNNER_MS } from '@api/lib/config';
@@ -100,6 +101,24 @@ function staleBefore(): Date {
 /** How long the state the inbound write found had already been sitting. */
 function stateAgeMs(stateAt: Date): number {
   return Date.now() - stateAt.getTime();
+}
+
+/**
+ * The budget, read at most once per delivery and only if some event in it is about to
+ * start a run. A delivery that ends as `no_agent`, a duplicate, or an unsupported payload
+ * never pays for the query.
+ */
+function forTrigger(businessId: string): () => Promise<TriggerOptions> {
+  let read: Promise<QuotaRead> | undefined;
+  return async () => {
+    read ??= readQuota(businessId);
+    return { businessId, quota: await read };
+  };
+}
+
+/** A trigger that was refused for want of budget is a different fact from the one it tried. */
+function outcomeOf(verdict: TriggerVerdict, otherwise: string): string {
+  return verdict === 'blocked' ? 'quota_exhausted' : otherwise;
 }
 
 async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
@@ -334,6 +353,7 @@ async function processMessagingEvents(
   events: MessagingEvent[],
 ): Promise<void> {
   fbLog('processMessagingEvents start', { channelId: channel.id, eventCount: events.length });
+  const budget = forTrigger(channel.businessId);
 
   for (const [index, ev] of events.entries()) {
     fbLog('processMessagingEvents event', { index, event: ev });
@@ -416,8 +436,7 @@ async function processMessagingEvents(
           fbLog('processMessagingEvents recovering stale runner', { index, conversationId, ageMs });
           if (await resetStaleConversation(conversationId, staleBefore())) {
             fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
-            await triggerAgentRun(conversationId);
-            outcome = 'redelivered_stale_recovered';
+            outcome = outcomeOf(await triggerAgentRun(conversationId, await budget()), 'redelivered_stale_recovered');
           } else {
             fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });
           }
@@ -434,13 +453,11 @@ async function processMessagingEvents(
           conversationId,
           priorStatus,
         });
-        await triggerAgentRun(conversationId);
-        outcome = 'redelivered_pending_drained';
+        outcome = outcomeOf(await triggerAgentRun(conversationId, await budget()), 'redelivered_pending_drained');
       }
     } else if (priorStatus === 'done' && channel.agentId) {
       fbLog('processMessagingEvents triggering agent', { index, conversationId, agentId: channel.agentId });
-      await triggerAgentRun(conversationId);
-      outcome = 'agent_triggered';
+      outcome = outcomeOf(await triggerAgentRun(conversationId, await budget()), 'agent_triggered');
     } else if (inFlight && channel.agentId) {
       ageMs = stateAgeMs(priorStateAt);
       const stale = ageMs > STALE_RUNNER_MS;
@@ -458,8 +475,7 @@ async function processMessagingEvents(
         fbLog('processMessagingEvents recovering stale runner', { index, conversationId, ageMs });
         if (await resetStaleConversation(conversationId, staleBefore())) {
           fbLog('processMessagingEvents stale reset succeeded — re-triggering agent', { index, conversationId });
-          await triggerAgentRun(conversationId);
-          outcome = 'stale_runner_recovered';
+          outcome = outcomeOf(await triggerAgentRun(conversationId, await budget()), 'stale_runner_recovered');
         } else {
           fbLog('processMessagingEvents stale reset lost race — another caller recovered', { index, conversationId });
           outcome = 'waited_for_live_runner';
@@ -515,6 +531,7 @@ async function processCommentChanges(
   changes: WebhookChange[],
 ): Promise<void> {
   fbLog('processCommentChanges start', { channelId: channel.id, pageId, changeCount: changes.length });
+  const budget = forTrigger(channel.businessId);
 
   for (const [index, change] of changes.entries()) {
     fbLog('processCommentChanges change', { index, change });
@@ -625,8 +642,7 @@ async function processCommentChanges(
           fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
           if (await resetStaleCommentThread(threadId, staleBefore())) {
             fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-            await triggerCommentRun(threadId);
-            outcome = 'redelivered_stale_recovered';
+            outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_stale_recovered');
           } else {
             fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
           }
@@ -641,13 +657,11 @@ async function processCommentChanges(
           threadId,
           priorStatus,
         });
-        await triggerCommentRun(threadId);
-        outcome = 'redelivered_pending_drained';
+        outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_pending_drained');
       }
     } else if (priorStatus === 'done' && channel.agentId) {
       fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
-      await triggerCommentRun(threadId);
-      outcome = 'comment_run_triggered';
+      outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'comment_run_triggered');
     } else if (inFlight && channel.agentId) {
       ageMs = stateAgeMs(priorStateAt);
       const stale = ageMs > STALE_RUNNER_MS;
@@ -664,8 +678,7 @@ async function processCommentChanges(
         fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
         if (await resetStaleCommentThread(threadId, staleBefore())) {
           fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-          await triggerCommentRun(threadId);
-          outcome = 'stale_runner_recovered';
+          outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'stale_runner_recovered');
         } else {
           fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
           outcome = 'waited_for_live_runner';

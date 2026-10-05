@@ -2,6 +2,8 @@ import type { TokenUsageMetrics } from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, outboundRunHeaders, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
+import { quotaGate, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
+import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
@@ -12,7 +14,13 @@ const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
  * Only waits for that endpoint to accept (202). The LLM run continues there with
  * its own serverless maxDuration — this caller does not wait for agent.run().
  */
-export async function triggerCommentRun(commentThreadId: string): Promise<void> {
+export async function triggerCommentRun(
+  commentThreadId: string,
+  options: TriggerOptions = {},
+): Promise<TriggerVerdict> {
+  const verdict = await quotaGate('comment', commentThreadId, options);
+  if (verdict === 'blocked') return verdict;
+
   try {
     const res = await fetch(`${AGENT_RUNNER_URL}/internal/run-comment`, {
       method: 'POST',
@@ -30,6 +38,7 @@ export async function triggerCommentRun(commentThreadId: string): Promise<void> 
   } catch (err) {
     console.error('Failed to trigger comment run:', err);
   }
+  return verdict;
 }
 
 const COMMENT_REPLY_GUIDANCE = [
@@ -264,20 +273,52 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         });
 
         if (!existingFallbackReply) {
-          const newCommentId = await replyToFacebookComment(
-            thread.channel.apiToken,
-            graphReplyToId,
-            replyText,
-          );
-          await createComment({
-            commentThreadId: thread.id,
-            from: 'self',
-            content: replyText,
-            externalId: newCommentId,
-            parentExternalId: current.externalId!,
-            state: 'done',
-          });
-          sentViaFallback = 1;
+          // The comment tool never ran, so this is the reply: one unit of the comment
+          // budget, charged before the POST for the same reason the tool is, and only
+          // here — a duplicate the check above refused costs nothing, and SILENT never
+          // reaches this branch at all.
+          let chargedPeriod: string | null = null;
+          let allowed = true;
+          try {
+            const budget = await spendQuotaUnit(thread.businessId, 'comment');
+            if (budget.spent) chargedPeriod = budget.period;
+            else allowed = false;
+          } catch (err) {
+            // Fails open like the gate: the reply is posted uncharged rather than lost.
+            console.error('[comment-runner] quota spend failed, posting uncharged:', err);
+          }
+
+          if (!allowed) {
+            console.log(`[comment-runner] fallback not posted — the comment allowance is used up`);
+            emitAnomaly('quota_exhausted', { detail: thread.businessId });
+          } else {
+            let newCommentId: string;
+            try {
+              newCommentId = await replyToFacebookComment(
+                thread.channel.apiToken,
+                graphReplyToId,
+                replyText,
+              );
+            } catch (err) {
+              if (chargedPeriod) {
+                try {
+                  await refundQuotaUnit(thread.businessId, 'comment', chargedPeriod);
+                } catch (refundErr) {
+                  console.error('[comment-runner] quota refund failed:', refundErr);
+                }
+              }
+              throw err;
+            }
+            await createComment({
+              commentThreadId: thread.id,
+              from: 'self',
+              content: replyText,
+              externalId: newCommentId,
+              parentExternalId: current.externalId!,
+              state: 'done',
+            });
+            sentViaFallback = 1;
+          }
         } else {
           console.log(`[comment-runner] fallback skipped: already replied to comment ${current.externalId}`);
           emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
@@ -362,7 +403,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     });
 
     if (hasPending) {
-      await triggerCommentRun(commentThreadId);
+      // Fresh read, not the budget as it was when this run started: this run has just
+      // spent part of it, and the next one should be gated on the number after that.
+      await triggerCommentRun(commentThreadId, { businessId: thread.businessId });
     }
   }
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { searchProducts } from '@repo/db/crud/product';
 import { createOrder, getOrderById, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
+import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { sendMessage as fbSendMessage } from '@repo/integrations/facebook';
 import type { SseEmitter } from '@agent/Agent';
 
@@ -224,10 +225,46 @@ export function createAgentTools(
       // let both pass the guard above and post the same reply twice.
       sentCount++;
 
+      // One reply that actually reaches Messenger is one unit of the message budget.
+      // Charged here, beside the guard, for the same reason. Never charged for the test
+      // override — it persists a row but puts nothing on the wire — and never for SILENT,
+      // which is not a reply. A merchant typing in the inbox is not this code path at all.
+      const chargeable = !context.sendMessageOverride && text.trim() !== 'SILENT';
+      let chargedPeriod: string | null = null;
+      if (chargeable) {
+        try {
+          const budget = await spendQuotaUnit(context.businessId, 'message');
+          if (!budget.spent) {
+            console.log(`[agent-tool] send_message refused — the message allowance is used up`);
+            const result = "This cycle's replies are used up and the owner has been notified. Do not try again, and do not send anything else. End the turn.";
+            context.emitSse?.('tool_result', { name: 'send_message', result });
+            return result;
+          }
+          chargedPeriod = budget.period;
+        } catch (err) {
+          // Fails open, exactly like the gate: a database that will not answer must not
+          // mute the agent, so this one reply goes out uncharged.
+          console.error('[agent-tool] quota spend failed, sending uncharged:', err);
+        }
+      }
+
       // Send to Messenger (or test override), then persist the EXACT text that
       // was sent as the self message. This is the single source of truth for
       // what the customer received.
-      await sendFn(context.pageToken, context.customerPlatformId, text);
+      try {
+        await sendFn(context.pageToken, context.customerPlatformId, text);
+      } catch (err) {
+        if (chargedPeriod) {
+          try {
+            await refundQuotaUnit(context.businessId, 'message', chargedPeriod);
+          } catch (refundErr) {
+            // The send failure is the fact that matters; a unit left behind is one reply
+            // short for this cycle, and it cannot grant a second one.
+            console.error('[agent-tool] quota refund failed:', refundErr);
+          }
+        }
+        throw err;
+      }
       await createMessage({
         conversationId: context.conversationId,
         from: 'self',

@@ -3,6 +3,7 @@ import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
+import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 
 export interface AgentRunOptions {
   /**
@@ -119,9 +120,10 @@ export async function runAgentCore(
   // Everything the model is about to see, before it decides anything.
   emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt: conv.channel.agent.systemPrompt }));
 
-  // Resolve the real sendMessage function here; the override (if any) is
-  // injected into the Agent so the same path is exercised whether or not we
-  // are in test mode.
+  // Resolve the real sendMessage function here; the override (if any) is injected into
+  // the Agent so the same path is exercised whether or not we are in test mode. The raw
+  // value goes to the tools, not the resolved one: a tool reads "override present" as
+  // "nothing reaches the wire", which is how the message budget knows not to charge.
   const resolvedSendMessage = sendMessageOverride ?? sendMessage;
 
   const agent = new Agent({
@@ -134,7 +136,7 @@ export async function runAgentCore(
     customerName: conv.customerName,
     catalogSummary,
     emitSse,
-    sendMessageOverride: resolvedSendMessage,
+    sendMessageOverride,
   });
 
   const started = performance.now();
@@ -183,15 +185,50 @@ export async function runAgentCore(
     // the agent never called send_message (so the customer still gets a reply).
     if (agent.sentTexts.length === 0 && replyText) {
       console.log(`[agent-runner-core] fallback: agent did not call send_message, sending final reply directly`);
-      emitSse('message_sent', { text: replyText, fallback: true });
-      await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
-      await createMessage({
-        conversationId: conv.id,
-        from: 'self',
-        content: replyText,
-        state: 'done',
-      });
-      sentViaFallback = 1;
+
+      // The same charge as the tool path, because this is a reply the customer receives:
+      // the tool simply never ran. A test override puts nothing on the wire and pays
+      // nothing; SILENT is not a reply and pays nothing, though it is still sent as it
+      // always has been.
+      const chargeable = !sendMessageOverride && replyText.trim() !== 'SILENT';
+      let chargedPeriod: string | null = null;
+      let allowed = true;
+      if (chargeable) {
+        try {
+          const budget = await spendQuotaUnit(conv.businessId, 'message');
+          if (budget.spent) chargedPeriod = budget.period;
+          else allowed = false;
+        } catch (err) {
+          // Fails open like the gate: the reply goes out uncharged rather than muted.
+          console.error('[agent-runner-core] quota spend failed, sending uncharged:', err);
+        }
+      }
+
+      if (!allowed) {
+        console.log(`[agent-runner-core] fallback not sent — the message allowance is used up`);
+        emitAnomaly('quota_exhausted', { detail: conv.businessId });
+      } else {
+        emitSse('message_sent', { text: replyText, fallback: true });
+        try {
+          await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
+        } catch (err) {
+          if (chargedPeriod) {
+            try {
+              await refundQuotaUnit(conv.businessId, 'message', chargedPeriod);
+            } catch (refundErr) {
+              console.error('[agent-runner-core] quota refund failed:', refundErr);
+            }
+          }
+          throw err;
+        }
+        await createMessage({
+          conversationId: conv.id,
+          from: 'self',
+          content: replyText,
+          state: 'done',
+        });
+        sentViaFallback = 1;
+      }
     }
 
     // Clear only the messages the agent actually replied to; anything that
@@ -269,6 +306,8 @@ export async function runAgentCore(
     // (background on Bun, waitUntil on Vercel). Import lazily to keep this
     // module free of circular deps.
     const { triggerAgentRun } = await import('@api/lib/agent-runner');
-    await triggerAgentRun(conversationId);
+    // No `quota` here on purpose: this run has just spent part of the allowance, so the
+    // next one is gated on a fresh read rather than on whatever was known when it started.
+    await triggerAgentRun(conversationId, { businessId: conv.businessId });
   }
 }

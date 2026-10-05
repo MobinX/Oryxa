@@ -12,8 +12,11 @@ import { conversationsRouter } from '@api/routes/conversations';
 import { postsRouter } from '@api/routes/posts';
 import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
+import { plansRouter } from '@api/routes/plans';
+import { billingRouter } from '@api/routes/billing';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
+import { adminPlansRouter } from '@api/routes/admin-plans';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
@@ -56,6 +59,10 @@ app.route('/api/v1/store', storeRouter);
 // Its own router so nothing is added inside the handlers the Flutter client
 // already depends on; this is a new path, not a new branch in an old one.
 app.route('/api/v1', visitsRouter);
+// Same reason, and it has to be *before* the routers below: their
+// `use('/:businessId/*')` matches a single-segment path too, so a price list mounted
+// after them would answer 401 to the shoppers who have not signed up yet.
+app.route('/api/v1', plansRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
 app.route('/api/v1', productsRouter);
@@ -65,10 +72,14 @@ app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
 app.route('/api/v1', uploadsRouter);
 app.route('/api/v1', tokenAnalyticsRouter);
+// Registered last of the `/api/v1` routers so its own `/:businessId/*` auth
+// middleware can never run on a route that shipped before it.
+app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
 app.route('/api2', logsRouter);
 app.route('/api2', adminRouter);
+app.route('/api2', adminPlansRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
 
