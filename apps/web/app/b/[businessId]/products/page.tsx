@@ -25,13 +25,14 @@ const headers: DataTableHeader[] = [
   { key: 'variantCount', header: 'Variants', className: 'hidden sm:table-cell' },
 ];
 
-export default function ProductsPage({
+export default async function ProductsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ q?: string; categoryId?: string }>;
 }) {
+  const { businessId } = await params;
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -48,7 +49,7 @@ export default function ProductsPage({
           <Suspense fallback={<div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />}>
             <ProductCsv params={params} searchParams={searchParams} />
           </Suspense>
-          <Link href="new">
+          <Link href={`/b/${businessId}/products/new`}>
             <Button>Add product</Button>
           </Link>
         </div>

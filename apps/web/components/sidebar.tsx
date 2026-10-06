@@ -30,7 +30,6 @@ import { SignOutForm } from '@/components/sign-out-button';
 const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: 'products', label: 'Products', icon: Package },
-  { href: 'products', label: 'Products', icon: Package },
   { href: 'customers', label: 'Customers', icon: Users },
   { href: 'companies', label: 'Companies', icon: Building2 },
   { href: 'orders', label: 'Orders', icon: ShoppingCart },

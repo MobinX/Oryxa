@@ -71,11 +71,12 @@ function orderRowActions(businessId: string, order: OrderListItem) {
   );
 }
 
-export default function OrdersPage({
+export default async function OrdersPage({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
+  const { businessId } = await params;
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -91,7 +92,7 @@ export default function OrdersPage({
           <Suspense fallback={<div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />}>
             <OrderCsv params={params} />
           </Suspense>
-          <Link href="new">
+          <Link href={`/b/${businessId}/orders/new`}>
             <Button>New order</Button>
           </Link>
         </div>
