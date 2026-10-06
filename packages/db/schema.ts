@@ -9,6 +9,7 @@ export type StoreTheme = {
   logoUrl?: string;
   layout?: 'grid' | 'featured';
   preset?: 'gallery' | 'pine' | 'terracotta' | 'petrol' | 'atelier';
+  structure?: 'classic' | 'editorial' | 'market' | 'terminal' | 'atelier';
 };
 
 export const orderStateEnum = pgEnum('order_state', ['pending', 'acknowledged', 'onDelivery', 'done']);

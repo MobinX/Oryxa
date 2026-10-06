@@ -1,18 +1,18 @@
 import { cn } from '@/lib/utils';
 
 function Bar({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse bg-[#EFEBE6]', className)} />;
+  return <div className={cn('animate-pulse bg-[var(--store-plate)]', className)} />;
 }
 
 /** Full-page placeholder shown while the store shell resolves. */
 export function StorefrontSkeleton() {
   return (
-    <div className="min-h-screen bg-[#FBFAF8] px-5 py-8 sm:px-8 lg:px-12">
+    <div className="min-h-screen bg-[var(--store-paper)] px-5 py-8 sm:px-8 lg:px-12">
       <div className="mx-auto flex w-full max-w-[1560px] items-center justify-between">
         <Bar className="h-4 w-32" />
         <Bar className="h-4 w-20" />
       </div>
-      <div className="mx-auto mt-10 w-full max-w-[1560px] border border-[#E4E1DB] bg-white">
+      <div className="mx-auto mt-10 w-full max-w-[1560px] border border-[var(--store-line)] bg-[var(--store-surface)]">
         <div className="px-6 py-20 sm:py-28">
           <Bar className="h-2.5 w-24" />
           <Bar className="mt-6 h-10 w-full max-w-xl" />

@@ -23,8 +23,8 @@ type AddToCartProps = {
 const TONE = {
   band: 'bg-[var(--store-accent)] text-[var(--store-accent-fg)] border border-[var(--store-accent)] hover:opacity-90',
   outline:
-    'border border-[#1a1a1a]/25 bg-white/85 text-[#141414] hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]',
-  quiet: 'border border-transparent bg-transparent text-[#141414] hover:text-[var(--store-accent)]',
+    'border border-[var(--store-ink)]/25 bg-[var(--store-surface)]/85 text-[var(--store-ink)] hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]',
+  quiet: 'border border-transparent bg-transparent text-[var(--store-ink)] hover:text-[var(--store-accent)]',
 } as const;
 
 export function AddToCart({

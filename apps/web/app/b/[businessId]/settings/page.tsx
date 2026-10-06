@@ -8,7 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { updateBusinessAction, updateStoreAction } from '@/app/actions/business';
 import { DeleteDataDialog } from '@/components/delete-data-dialog';
+import type { StoreStructure } from '@/lib/storefront';
 import SettingsSkeleton from './skeleton';
+
+/** The five templates, named the way the Storefront page names their presets. */
+const TEMPLATE_OPTIONS: [StoreStructure, string][] = [
+  ['classic', 'Classic gallery — warm paper, black ink, square cards'],
+  ['editorial', 'Editorial — olive paper, serif masthead, ruled cards'],
+  ['market', 'Market — cream and clay, rounded tiles, centred hero'],
+  ['terminal', 'Terminal — dark ink, boxed square tiles, uppercase'],
+  ['atelier', 'Atelier — espresso and gold, centred captions'],
+];
 
 export default function SettingsPage({
   params,
@@ -136,6 +146,29 @@ async function SettingsContent({
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Template</label>
+              <input type="hidden" name="preset" defaultValue={business.storeTheme?.preset ?? ''} />
+              <select
+                name="structure"
+                defaultValue={business.storeTheme?.structure ?? 'classic'}
+                className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900"
+              >
+                {TEMPLATE_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                The template paints the whole store — paper, ink and how a product card is framed.
+                Or pick one with a live preview on{' '}
+                <Link href={`/b/${businessId}/storefront`} className="text-[var(--primary)] hover:underline">
+                  Storefront
+                </Link>
+                .
+              </p>
+            </div>
             <div className="sm:col-span-2">
               <label className="text-sm font-medium">Tagline</label>
               <Input name="tagline" defaultValue={business.storeTheme?.tagline ?? ''} placeholder="Quality books, delivered fast" className="mt-1" />

@@ -35,7 +35,7 @@ export function CartDrawer({ slug }: CartDrawerProps) {
       <div
         onClick={closeCart}
         className={cn(
-          'fixed inset-0 z-[70] bg-[#141414]/30 transition-opacity duration-500',
+          'fixed inset-0 z-[70] bg-[#0b0b0b]/40 transition-opacity duration-500',
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
       />
@@ -46,21 +46,21 @@ export function CartDrawer({ slug }: CartDrawerProps) {
         aria-label="Shopping bag"
         inert={!isOpen}
         className={cn(
-          'fixed inset-y-0 right-0 z-[71] flex w-full max-w-[26.5rem] flex-col bg-[#FBFAF8]',
+          'fixed inset-y-0 right-0 z-[71] flex w-full max-w-[26.5rem] flex-col bg-[var(--store-paper)]',
           'shadow-[0_30px_80px_-30px_rgba(20,20,20,0.45)]',
           'transition-transform duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        <header className="flex items-center justify-between border-b border-[#E4E1DB] px-5 py-4 sm:px-6">
+        <header className="flex items-center justify-between border-b border-[var(--store-line)] px-5 py-4 sm:px-6">
           <div className="flex items-baseline gap-3">
             <h2
-              className="text-[17px] tracking-[0.02em] text-[#141414]"
+              className="text-[17px] tracking-[0.02em] text-[var(--store-ink)]"
               style={{ fontFamily: 'var(--store-font)' }}
             >
               Shopping bag
             </h2>
-            <span className="text-[10px] uppercase tracking-[0.24em] text-[#8f8b85]">
+            <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-2)]">
               {count} {count === 1 ? 'item' : 'items'}
             </span>
           </div>
@@ -68,7 +68,7 @@ export function CartDrawer({ slug }: CartDrawerProps) {
             type="button"
             onClick={closeCart}
             aria-label="Close shopping bag"
-            className="grid h-9 w-9 place-items-center text-[#6b6b6b] transition-colors hover:text-[#141414]"
+            className="grid h-9 w-9 place-items-center text-[var(--store-ink-2)] transition-colors hover:text-[var(--store-ink)]"
           >
             <X className="h-4 w-4" strokeWidth={1.5} />
           </button>
@@ -77,23 +77,23 @@ export function CartDrawer({ slug }: CartDrawerProps) {
         <div className="flex-1 overflow-y-auto px-5 sm:px-6">
           {items.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-16 text-center">
-              <ShoppingBag className="h-7 w-7 text-[#c9c5be]" strokeWidth={1.25} />
-              <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-[#6b6b6b]">
+              <ShoppingBag className="h-7 w-7 text-[var(--store-ink-3)]" strokeWidth={1.25} />
+              <p className="mt-5 text-[11px] uppercase tracking-[0.26em] text-[var(--store-ink-2)]">
                 Your bag is empty
               </p>
-              <p className="mt-3 max-w-[15rem] text-sm leading-relaxed text-[#8f8b85]">
+              <p className="mt-3 max-w-[15rem] text-sm leading-relaxed text-[var(--store-ink-2)]">
                 Discover the pieces we have selected for you.
               </p>
               <button
                 type="button"
                 onClick={closeCart}
-                className="mt-7 border border-[#141414] px-6 py-2.5 text-[10px] uppercase tracking-[0.24em] text-[#141414] transition-colors duration-300 hover:bg-[#141414] hover:text-[#FBFAF8]"
+                className="mt-7 border border-[var(--store-ink)] px-6 py-2.5 text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink)] transition-colors duration-300 hover:bg-[var(--store-ink)] hover:text-[var(--store-paper)]"
               >
                 Continue shopping
               </button>
             </div>
           ) : (
-            <ul className="divide-y divide-[#E4E1DB]">
+            <ul className="divide-y divide-[var(--store-line)]">
               {items.map((line) => (
                 <li key={line.key} className="flex gap-4 py-5">
                   <Link
@@ -114,15 +114,15 @@ export function CartDrawer({ slug }: CartDrawerProps) {
                         <Link
                           href={`/store/${slug}/${line.productId}`}
                           onClick={closeCart}
-                          className="block truncate text-[13px] text-[#141414] transition-colors hover:text-[var(--store-accent)]"
+                          className="block truncate text-[13px] text-[var(--store-ink)] transition-colors hover:text-[var(--store-accent)]"
                         >
                           {line.name}
                         </Link>
                         {line.variantName ? (
-                          <p className="mt-1 truncate text-[11px] text-[#8f8b85]">{line.variantName}</p>
+                          <p className="mt-1 truncate text-[11px] text-[var(--store-ink-2)]">{line.variantName}</p>
                         ) : null}
                       </div>
-                      <p className="shrink-0 text-[13px] tabular-nums text-[#141414]">
+                      <p className="shrink-0 text-[13px] tabular-nums text-[var(--store-ink)]">
                         {formatPrice(line.price * line.qty)}
                       </p>
                     </div>
@@ -134,13 +134,13 @@ export function CartDrawer({ slug }: CartDrawerProps) {
                         compact
                       />
                       <div className="flex items-center gap-4">
-                        <span className="text-[11px] tabular-nums text-[#8f8b85]">
+                        <span className="text-[11px] tabular-nums text-[var(--store-ink-2)]">
                           {formatPrice(line.price)} ea.
                         </span>
                         <button
                           type="button"
                           onClick={() => remove(line.key)}
-                          className="text-[10px] uppercase tracking-[0.2em] text-[#a29d96] underline-offset-4 transition-colors hover:text-[#141414] hover:underline"
+                          className="text-[10px] uppercase tracking-[0.2em] text-[var(--store-ink-3)] underline-offset-4 transition-colors hover:text-[var(--store-ink)] hover:underline"
                         >
                           Remove
                         </button>
@@ -153,17 +153,17 @@ export function CartDrawer({ slug }: CartDrawerProps) {
           )}
         </div>
 
-        <footer className="border-t border-[#E4E1DB] bg-white px-5 py-5 sm:px-6">
+        <footer className="border-t border-[var(--store-line)] bg-[var(--store-surface)] px-5 py-5 sm:px-6">
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] uppercase tracking-[0.26em] text-[#8f8b85]">Subtotal</span>
+            <span className="text-[10px] uppercase tracking-[0.26em] text-[var(--store-ink-2)]">Subtotal</span>
             <span
-              className="text-lg tabular-nums text-[#141414]"
+              className="text-lg tabular-nums text-[var(--store-ink)]"
               style={{ fontFamily: 'var(--store-font)' }}
             >
               {formatPrice(subtotal)}
             </span>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-[#a29d96]">
+          <p className="mt-2 text-[11px] leading-relaxed text-[var(--store-ink-3)]">
             Shipping and taxes calculated at checkout.
           </p>
           <Link

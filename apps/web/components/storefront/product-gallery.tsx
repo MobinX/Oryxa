@@ -54,7 +54,7 @@ export function ProductGallery({ product }: { product: PublicProduct }) {
               className={cn(
                 'relative w-[74px] shrink-0 overflow-hidden transition-all duration-300',
                 index === active
-                  ? 'ring-1 ring-[#141414] ring-offset-2 ring-offset-[#FBFAF8]'
+                  ? 'ring-1 ring-[var(--store-ink)] ring-offset-2 ring-offset-[var(--store-paper)]'
                   : 'opacity-70 hover:opacity-100',
               )}
             >

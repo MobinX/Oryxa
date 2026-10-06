@@ -47,7 +47,7 @@ export function FilterBar({
         event.preventDefault();
         onCommit();
       }}
-      className="border-y border-[#E4E1DB] bg-[#FBFAF8]/60"
+      className="border-y border-[var(--store-line)] bg-[var(--store-paper)]/60"
     >
       <div className="mx-auto w-full max-w-[1560px] px-5 py-5 sm:px-8 lg:px-12">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -68,7 +68,7 @@ export function FilterBar({
               ))}
             </div>
           ) : (
-            <p className="text-[10px] uppercase tracking-[0.28em] text-[#a29d96]">Browse the collection</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-[var(--store-ink-3)]">Browse the collection</p>
           )}
 
           <div className="flex flex-wrap items-center gap-3">
@@ -80,8 +80,8 @@ export function FilterBar({
               className="w-full sm:w-56"
             />
 
-            <div className="flex items-center gap-1.5 border border-[#DFDCD6] bg-white px-3">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-[#a29d96]">$</span>
+            <div className="flex items-center gap-1.5 border border-[var(--store-line)] bg-[var(--store-surface)] px-3">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--store-ink-3)]">$</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -90,9 +90,9 @@ export function FilterBar({
                 onChange={(event) => onChange({ min: event.target.value })}
                 placeholder="Min"
                 aria-label="Minimum price"
-                className="h-9 w-14 bg-transparent text-[12px] text-[#141414] outline-none placeholder:text-[#b7b2aa] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                className="h-9 w-14 bg-transparent text-[12px] text-[var(--store-ink)] outline-none placeholder:text-[var(--store-ink-3)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <span className="text-[#c9c5be]">–</span>
+              <span className="text-[var(--store-ink-3)]">–</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -101,7 +101,7 @@ export function FilterBar({
                 onChange={(event) => onChange({ max: event.target.value })}
                 placeholder="Max"
                 aria-label="Maximum price"
-                className="h-9 w-14 bg-transparent text-[12px] text-[#141414] outline-none placeholder:text-[#b7b2aa] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                className="h-9 w-14 bg-transparent text-[12px] text-[var(--store-ink)] outline-none placeholder:text-[var(--store-ink-3)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
 
@@ -111,9 +111,9 @@ export function FilterBar({
                 onChange={(event) => onChange({ sort: event.target.value as ProductSort })}
                 aria-label="Sort products"
                 className={cn(
-                  'h-9 appearance-none border border-[#DFDCD6] bg-white pl-3 pr-8',
-                  'text-[11px] uppercase tracking-[0.16em] text-[#3d3d3d] outline-none',
-                  'transition-colors duration-300 hover:border-[#141414] focus:border-[#141414]',
+                  'h-9 appearance-none border border-[var(--store-line)] bg-[var(--store-surface)] pl-3 pr-8',
+                  'text-[11px] uppercase tracking-[0.16em] text-[var(--store-ink-2)] outline-none',
+                  'transition-colors duration-300 hover:border-[var(--store-ink)] focus:border-[var(--store-ink)]',
                 )}
               >
                 {(Object.keys(SORT_LABELS) as ProductSort[]).map((value) => (
@@ -123,14 +123,14 @@ export function FilterBar({
                 ))}
               </select>
               <ChevronDown
-                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8f8b85]"
+                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--store-ink-2)]"
                 strokeWidth={1.5}
               />
             </div>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.22em] text-[#8f8b85]">
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.22em] text-[var(--store-ink-2)]">
           <span className={cn('transition-opacity duration-300', loading && 'opacity-40')}>
             {resultCount} {resultCount === 1 ? 'piece' : 'pieces'}
             {filtered ? ` of ${totalCount}` : ''}
@@ -139,7 +139,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={onClear}
-              className="border-b border-transparent text-[#141414] transition-colors hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
+              className="border-b border-transparent text-[var(--store-ink)] transition-colors hover:border-[var(--store-accent)] hover:text-[var(--store-accent)]"
             >
               Clear filters
             </button>
@@ -169,7 +169,7 @@ function Chip({
         'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         active
           ? 'border-[var(--store-accent-line)] bg-[var(--store-accent-soft)] text-[var(--store-accent)]'
-          : 'border-[#DFDCD6] bg-white text-[#6b6b6b] hover:border-[#141414] hover:text-[#141414]',
+          : 'border-[var(--store-line)] bg-[var(--store-surface)] text-[var(--store-ink-2)] hover:border-[var(--store-ink)] hover:text-[var(--store-ink)]',
       )}
     >
       {children}

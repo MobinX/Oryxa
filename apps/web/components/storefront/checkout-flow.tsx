@@ -91,28 +91,28 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
           {store.name}
         </p>
         <h1
-          className="mt-4 text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.02] tracking-[-0.02em] text-[#141414]"
+          className="mt-4 text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.02] tracking-[-0.02em] text-[var(--store-ink)]"
           style={{ fontFamily: 'var(--store-font)' }}
         >
           Checkout
         </h1>
-        <p className="mt-5 text-[13.5px] leading-[1.8] text-[#6b6b6b]">
+        <p className="mt-5 text-[13.5px] leading-[1.8] text-[var(--store-ink-2)]">
           Leave your details and the boutique will confirm your order and arrange delivery. Payment
           is handled on delivery — online payment is coming soon.
         </p>
       </header>
 
       {!ready ? (
-        <div className="mt-12 animate-pulse border border-[#E4E1DB] bg-white px-6 py-16 text-center text-[11px] uppercase tracking-[0.26em] text-[#a29d96]">
+        <div className="mt-12 animate-pulse border border-[var(--store-line)] bg-[var(--store-surface)] px-6 py-16 text-center text-[11px] uppercase tracking-[0.26em] text-[var(--store-ink-3)]">
           Loading your bag
         </div>
       ) : items.length === 0 ? (
-        <div className="mt-12 flex flex-col items-center border border-dashed border-[#DFDCD6] bg-white/50 px-6 py-20 text-center">
-          <ShoppingBag className="h-6 w-6 text-[#c9c5be]" strokeWidth={1.25} />
-          <h2 className="mt-6 text-[11px] uppercase tracking-[0.28em] text-[#6b6b6b]">
+        <div className="mt-12 flex flex-col items-center border border-dashed border-[var(--store-line)] bg-[var(--store-surface)]/50 px-6 py-20 text-center">
+          <ShoppingBag className="h-6 w-6 text-[var(--store-ink-3)]" strokeWidth={1.25} />
+          <h2 className="mt-6 text-[11px] uppercase tracking-[0.28em] text-[var(--store-ink-2)]">
             Your bag is empty
           </h2>
-          <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#8f8b85]">
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--store-ink-2)]">
             Add a piece from the collection and it will appear here, ready to check out.
           </p>
           <Link
@@ -127,7 +127,7 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
         <div className="mt-12 grid gap-x-16 gap-y-12 lg:grid-cols-12">
           {/* Details */}
           <form onSubmit={placeOrder} className="lg:col-span-7">
-            <h2 className="text-[10px] uppercase tracking-[0.28em] text-[#a29d96]">
+            <h2 className="text-[10px] uppercase tracking-[0.28em] text-[var(--store-ink-3)]">
               Contact &amp; delivery
             </h2>
 
@@ -186,7 +186,7 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
                   <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
                 ) : null}
               </button>
-              <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-[#a29d96]">
+              <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-[var(--store-ink-3)]">
                 <Lock className="h-3 w-3" strokeWidth={1.5} />
                 No card required
               </p>
@@ -195,17 +195,17 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
 
           {/* Summary */}
           <aside className="lg:col-span-5">
-            <div className="sticky top-28 border border-[#E4E1DB] bg-white">
-              <div className="flex items-baseline justify-between border-b border-[#E4E1DB] px-5 py-4 sm:px-6">
-                <h2 className="text-[10px] uppercase tracking-[0.28em] text-[#a29d96]">
+            <div className="sticky top-28 border border-[var(--store-line)] bg-[var(--store-surface)]">
+              <div className="flex items-baseline justify-between border-b border-[var(--store-line)] px-5 py-4 sm:px-6">
+                <h2 className="text-[10px] uppercase tracking-[0.28em] text-[var(--store-ink-3)]">
                   Order summary
                 </h2>
-                <span className="text-[11px] tracking-[0.08em] text-[#6b6b6b]">
+                <span className="text-[11px] tracking-[0.08em] text-[var(--store-ink-2)]">
                   {count} {count === 1 ? 'item' : 'items'}
                 </span>
               </div>
 
-              <ul className="divide-y divide-[#EDEAE4] px-5 sm:px-6">
+              <ul className="divide-y divide-[var(--store-plate)] px-5 sm:px-6">
                 {items.map((line) => (
                   <li key={line.key} className="flex gap-4 py-5">
                     <Link href={`/store/${slug}/${line.productId}`} className="w-[68px] shrink-0">
@@ -213,13 +213,13 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
                     </Link>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="truncate text-[13px] text-[#141414]">{line.name}</p>
-                        <p className="shrink-0 text-[13px] tabular-nums text-[#141414]">
+                        <p className="truncate text-[13px] text-[var(--store-ink)]">{line.name}</p>
+                        <p className="shrink-0 text-[13px] tabular-nums text-[var(--store-ink)]">
                           {formatPrice(line.price * line.qty)}
                         </p>
                       </div>
                       {line.variantName ? (
-                        <p className="mt-1 truncate text-[11px] text-[#8f8b85]">{line.variantName}</p>
+                        <p className="mt-1 truncate text-[11px] text-[var(--store-ink-2)]">{line.variantName}</p>
                       ) : null}
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <QuantityStepper
@@ -230,7 +230,7 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
                         <button
                           type="button"
                           onClick={() => remove(line.key)}
-                          className="text-[10px] uppercase tracking-[0.2em] text-[#a29d96] underline-offset-4 transition-colors hover:text-[#141414] hover:underline"
+                          className="text-[10px] uppercase tracking-[0.2em] text-[var(--store-ink-3)] underline-offset-4 transition-colors hover:text-[var(--store-ink)] hover:underline"
                         >
                           Remove
                         </button>
@@ -240,19 +240,19 @@ export function CheckoutFlow({ store }: { store: CheckoutStore }) {
                 ))}
               </ul>
 
-              <div className="border-t border-[#E4E1DB] px-5 py-5 sm:px-6">
+              <div className="border-t border-[var(--store-line)] px-5 py-5 sm:px-6">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[10px] uppercase tracking-[0.26em] text-[#a29d96]">
+                  <span className="text-[10px] uppercase tracking-[0.26em] text-[var(--store-ink-3)]">
                     Subtotal
                   </span>
                   <span
-                    className="text-xl tabular-nums text-[#141414]"
+                    className="text-xl tabular-nums text-[var(--store-ink)]"
                     style={{ fontFamily: 'var(--store-font)' }}
                   >
                     {formatPrice(subtotal)}
                   </span>
                 </div>
-                <p className="mt-3 text-[11px] leading-relaxed text-[#a29d96]">
+                <p className="mt-3 text-[11px] leading-relaxed text-[var(--store-ink-3)]">
                   Shipping and taxes are agreed with the boutique at confirmation.
                 </p>
               </div>
@@ -276,16 +276,16 @@ function Field({
   multiline = false,
 }: FieldProps) {
   const shared = cn(
-    'w-full border-b bg-transparent pb-3 text-[14px] text-[#141414] outline-none',
-    'placeholder:text-[11px] placeholder:uppercase placeholder:tracking-[0.18em] placeholder:text-[#b7b2aa]',
-    'border-[#DFDCD6] transition-colors duration-300 focus:border-[#141414]',
+    'w-full border-b bg-transparent pb-3 text-[14px] text-[var(--store-ink)] outline-none',
+    'placeholder:text-[11px] placeholder:uppercase placeholder:tracking-[0.18em] placeholder:text-[var(--store-ink-3)]',
+    'border-[var(--store-line)] transition-colors duration-300 focus:border-[var(--store-ink)]',
   );
 
   return (
     <div>
       <label
         htmlFor={id}
-        className="flex items-baseline justify-between text-[10px] uppercase tracking-[0.24em] text-[#6b6b6b]"
+        className="flex items-baseline justify-between text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-2)]"
       >
         <span>
           {label}
@@ -313,7 +313,7 @@ function Field({
           className={cn(shared, 'mt-2')}
         />
       )}
-      {hint ? <p className="mt-2 text-[11px] text-[#a29d96]">{hint}</p> : null}
+      {hint ? <p className="mt-2 text-[11px] text-[var(--store-ink-3)]">{hint}</p> : null}
     </div>
   );
 }
@@ -334,48 +334,48 @@ function OrderConfirmation({
 
   return (
     <div className="mx-auto w-full max-w-[52rem] px-5 py-20 sm:px-8 md:py-28">
-      <div className="border border-[#E4E1DB] bg-white px-6 py-14 text-center sm:px-14">
+      <div className="border border-[var(--store-line)] bg-[var(--store-surface)] px-6 py-14 text-center sm:px-14">
         <span className="mx-auto grid h-12 w-12 place-items-center border border-[var(--store-accent-line)] bg-[var(--store-accent-soft)] text-[var(--store-accent)]">
           <Check className="h-5 w-5" strokeWidth={1.5} />
         </span>
 
-        <p className="mt-8 text-[10px] uppercase tracking-[0.3em] text-[#a29d96]">
+        <p className="mt-8 text-[10px] uppercase tracking-[0.3em] text-[var(--store-ink-3)]">
           Order received
         </p>
         <h1
-          className="mt-5 text-[clamp(1.8rem,4vw,2.75rem)] leading-[1.08] tracking-[-0.015em] text-[#141414]"
+          className="mt-5 text-[clamp(1.8rem,4vw,2.75rem)] leading-[1.08] tracking-[-0.015em] text-[var(--store-ink)]"
           style={{ fontFamily: 'var(--store-font)' }}
         >
           Thank you{firstName ? `, ${firstName}` : ''}
         </h1>
-        <p className="mx-auto mt-5 max-w-[42ch] text-[13.5px] leading-[1.8] text-[#6b6b6b]">
+        <p className="mx-auto mt-5 max-w-[42ch] text-[13.5px] leading-[1.8] text-[var(--store-ink-2)]">
           {storeName} has your order and will be in touch to confirm the details and delivery.
         </p>
 
-        <dl className="mx-auto mt-10 grid max-w-md gap-y-4 border-t border-[#EDEAE4] pt-8 text-[12px]">
+        <dl className="mx-auto mt-10 grid max-w-md gap-y-4 border-t border-[var(--store-plate)] pt-8 text-[12px]">
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="uppercase tracking-[0.22em] text-[#a29d96]">Total</dt>
-            <dd className="text-lg tabular-nums text-[#141414]">{formatPrice(result.total)}</dd>
+            <dt className="uppercase tracking-[0.22em] text-[var(--store-ink-3)]">Total</dt>
+            <dd className="text-lg tabular-nums text-[var(--store-ink)]">{formatPrice(result.total)}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="uppercase tracking-[0.22em] text-[#a29d96]">Reference</dt>
-            <dd className="truncate font-mono text-[11px] tracking-[0.06em] text-[#5c5c5c]">
+            <dt className="uppercase tracking-[0.22em] text-[var(--store-ink-3)]">Reference</dt>
+            <dd className="truncate font-mono text-[11px] tracking-[0.06em] text-[var(--store-ink-2)]">
               {reference ? reference.slice(0, 8).toUpperCase() : '—'}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="uppercase tracking-[0.22em] text-[#a29d96]">Status</dt>
+            <dt className="uppercase tracking-[0.22em] text-[var(--store-ink-3)]">Status</dt>
             <dd className="uppercase tracking-[0.16em] text-[var(--store-accent)]">{result.status}</dd>
           </div>
           {result.orderIds.length > 1 ? (
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="uppercase tracking-[0.22em] text-[#a29d96]">Lines</dt>
-              <dd className="tabular-nums text-[#5c5c5c]">{result.orderIds.length} orders</dd>
+              <dt className="uppercase tracking-[0.22em] text-[var(--store-ink-3)]">Lines</dt>
+              <dd className="tabular-nums text-[var(--store-ink-2)]">{result.orderIds.length} orders</dd>
             </div>
           ) : null}
         </dl>
 
-        <p className="mx-auto mt-10 max-w-sm border border-dashed border-[#DFDCD6] px-4 py-3 text-[11px] leading-relaxed text-[#8f8b85]">
+        <p className="mx-auto mt-10 max-w-sm border border-dashed border-[var(--store-line)] px-4 py-3 text-[11px] leading-relaxed text-[var(--store-ink-2)]">
           Payment on delivery — secure online payment is coming soon.
         </p>
 

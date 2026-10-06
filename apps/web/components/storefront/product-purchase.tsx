@@ -30,14 +30,14 @@ export function ProductPurchase({ product }: { product: PublicProduct }) {
 
   return (
     <div className="mt-8">
-      <div className="flex items-end justify-between gap-6 border-b border-[#E4E1DB] pb-6">
+      <div className="flex items-end justify-between gap-6 border-b border-[var(--store-line)] pb-6">
         <p
-          className="text-[clamp(1.35rem,2.4vw,1.85rem)] leading-none tabular-nums text-[#141414]"
+          className="text-[clamp(1.35rem,2.4vw,1.85rem)] leading-none tabular-nums text-[var(--store-ink)]"
           style={{ fontFamily: 'var(--store-font)' }}
         >
           {formatPrice(price)}
         </p>
-        <p className="text-[10px] uppercase tracking-[0.24em] text-[#a29d96]">
+        <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-3)]">
           {soldOut ? 'Currently unavailable' : 'Included in the bag'}
         </p>
       </div>
@@ -45,11 +45,11 @@ export function ProductPurchase({ product }: { product: PublicProduct }) {
       {variants.length > 0 ? (
         <div className="mt-8">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[10px] uppercase tracking-[0.26em] text-[#a29d96]">
+            <p className="text-[10px] uppercase tracking-[0.26em] text-[var(--store-ink-3)]">
               {variants.length > 1 ? 'Select an option' : 'Option'}
             </p>
             {selected ? (
-              <p className="text-[11px] tracking-[0.06em] text-[#6b6b6b]">
+              <p className="text-[11px] tracking-[0.06em] text-[var(--store-ink-2)]">
                 {selected.name}
                 {selected.stock > 0 ? ` · ${selected.stock} available` : ' · sold out'}
               </p>
@@ -69,12 +69,12 @@ export function ProductPurchase({ product }: { product: PublicProduct }) {
                     'min-w-[3.75rem] border px-4 py-2.5 text-[11.5px] tracking-[0.08em]',
                     'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
                     active
-                      ? 'border-[#141414] bg-[#141414] text-[#FBFAF8]'
-                      : 'border-[#DFDCD6] bg-white text-[#141414] hover:border-[#141414]',
-                    !isPurchasable(variant) && !active && 'text-[#b7b2aa] hover:border-[#DFDCD6]',
+                      ? 'border-[var(--store-ink)] bg-[var(--store-ink)] text-[var(--store-paper)]'
+                      : 'border-[var(--store-line)] bg-[var(--store-surface)] text-[var(--store-ink)] hover:border-[var(--store-ink)]',
+                    !isPurchasable(variant) && !active && 'text-[var(--store-ink-3)] hover:border-[var(--store-line)]',
                   )}
                 >
-                  <span className={cn(!isPurchasable(variant) && 'line-through decoration-[#c9c5be]')}>
+                  <span className={cn(!isPurchasable(variant) && 'line-through decoration-[var(--store-ink-3)]')}>
                     {variant.name}
                   </span>
                   {variant.price != null && variant.price !== product.price ? (
@@ -109,11 +109,11 @@ export function ProductPurchase({ product }: { product: PublicProduct }) {
       </div>
 
       {soldOut ? (
-        <p className="mt-5 border border-[#E4E1DB] bg-white px-4 py-3 text-[12px] leading-relaxed text-[#6b6b6b]">
+        <p className="mt-5 border border-[var(--store-line)] bg-[var(--store-surface)] px-4 py-3 text-[12px] leading-relaxed text-[var(--store-ink-2)]">
           This piece is currently sold out. Explore the rest of the collection for similar options.
         </p>
       ) : (
-        <p className="mt-5 text-[11px] leading-relaxed tracking-[0.04em] text-[#a29d96]">
+        <p className="mt-5 text-[11px] leading-relaxed tracking-[0.04em] text-[var(--store-ink-3)]">
           Quantity limited to {maxQty === 1 ? 'the last piece in stock' : `${maxQty} available`}.
         </p>
       )}

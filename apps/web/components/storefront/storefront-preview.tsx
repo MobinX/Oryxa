@@ -4,7 +4,7 @@ import { EmptyState, ProductGrid } from '@/components/storefront/product-grid';
 import { StorefrontHeader } from '@/components/storefront/storefront-header';
 import { StorefrontHero } from '@/components/storefront/storefront-hero';
 import { STORE_CSS } from '@/components/storefront/storefront-shell';
-import { themeVars } from '@/lib/storefront';
+import { isDarkStructure, storeStructure, themeVars } from '@/lib/storefront';
 import type { PublicStore } from '@/lib/storefront';
 import { cn } from '@/lib/utils';
 
@@ -58,11 +58,16 @@ export function StorefrontPreview({
 
   return (
     <div
+      data-structure={storeStructure(theme)}
       className={cn(
-        'store-root bg-[#FBFAF8] text-[#141414] antialiased',
+        'store-root bg-[var(--store-paper)] text-[var(--store-ink)] antialiased',
         frame === 'phone' && 'store-phone',
       )}
-      style={{ ...themeVars(theme), fontFamily: 'var(--store-font-ui)', colorScheme: 'light' }}
+      style={{
+        ...themeVars(theme),
+        fontFamily: 'var(--store-font-ui)',
+        colorScheme: isDarkStructure(theme) ? 'dark' : 'light',
+      }}
     >
       <style
         dangerouslySetInnerHTML={{ __html: frame === 'phone' ? `${STORE_CSS}${PHONE_CSS}` : STORE_CSS }}
@@ -106,7 +111,7 @@ export function StorefrontPreview({
               )}
 
               {theme?.layout === 'featured' && !showFeatured ? (
-                <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-[#a29d96]">
+                <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-[var(--store-ink-3)]">
                   Featured layout appears on your store once you have 4+ products.
                 </p>
               ) : null}

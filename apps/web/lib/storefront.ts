@@ -19,6 +19,7 @@ function apiBase(): string {
 export type StoreFont = 'sans' | 'serif' | 'mono';
 export type StoreLayout = 'grid' | 'featured';
 export type StorePreset = 'gallery' | 'pine' | 'terracotta' | 'petrol' | 'atelier';
+export type StoreStructure = 'classic' | 'editorial' | 'market' | 'terminal' | 'atelier';
 
 export type StoreTheme = {
   accentColor?: string | null;
@@ -29,6 +30,8 @@ export type StoreTheme = {
   layout?: StoreLayout | null;
   /** Which named bundle produced these values, or absent once they were edited by hand. */
   preset?: StorePreset | null;
+  /** The template the store is drawn with; see STORE_STRUCTURES below. */
+  structure?: StoreStructure | null;
 } | null;
 
 export type PublicVariant = {
@@ -351,6 +354,80 @@ export const SANS_STACK =
 export const ACCENT_FALLBACK = '#111111';
 
 /**
+ * Five templates, not five accent colors. Each one carries its own paper, ink and line
+ * palette plus a radius, and the storefront components branch on the id for the parts a
+ * color cannot express — how a product card is framed, whether prices sit on a rule, how
+ * the hero is composed. `classic` reproduces the values these components were written
+ * against, so a store that never picked a theme is painted exactly as before.
+ */
+export const STORE_STRUCTURES = {
+  classic: {
+    paper: '#FBFAF8',
+    surface: '#FFFFFF',
+    plate: '#F2F0EC',
+    ink: '#141414',
+    ink2: '#6b6b6b',
+    ink3: '#a29d96',
+    line: '#E4E1DB',
+    radius: '0px',
+  },
+  editorial: {
+    paper: '#F4F2EC',
+    surface: '#FFFFFF',
+    plate: '#E9EAE2',
+    ink: '#1B2A24',
+    ink2: '#5C6A62',
+    ink3: '#93A099',
+    line: '#D6D9CE',
+    radius: '0px',
+  },
+  market: {
+    paper: '#FFF7F1',
+    surface: '#FFFFFF',
+    plate: '#FBEAD9',
+    ink: '#3A241A',
+    ink2: '#8A6A58',
+    ink3: '#C3A793',
+    line: '#F2DDCD',
+    radius: '16px',
+  },
+  terminal: {
+    paper: '#0F1A1E',
+    surface: '#152429',
+    plate: '#1B2C32',
+    ink: '#DDEAEE',
+    ink2: '#8FA6AE',
+    ink3: '#5E767E',
+    line: '#26383F',
+    radius: '0px',
+  },
+  atelier: {
+    paper: '#141210',
+    surface: '#1D1A15',
+    plate: '#221F19',
+    ink: '#F2EADC',
+    ink2: '#B8AC95',
+    ink3: '#8C8270',
+    line: '#2E2A22',
+    radius: '0px',
+  },
+} satisfies Record<StoreStructure, Record<string, string>>;
+
+/** The template in play. Anything unknown, absent or hand-edited falls back to classic. */
+export function storeStructure(theme: StoreTheme): StoreStructure {
+  return theme?.structure && theme.structure in STORE_STRUCTURES ? theme.structure : 'classic';
+}
+
+export const isStoreStructure = (value: unknown): value is StoreStructure =>
+  typeof value === 'string' && value in STORE_STRUCTURES;
+
+/** Two of the five templates are dark; the browser scrollbars and form controls must agree. */
+export function isDarkStructure(theme: StoreTheme): boolean {
+  const structure = storeStructure(theme);
+  return structure === 'terminal' || structure === 'atelier';
+}
+
+/**
  * Maps the store theme onto CSS custom properties consumed by the storefront
  * shell. Inline values are sanitised: only `#hex`, `rgb()/hsl()` colors and a
  * small set of named colors are allowed through, so a malformed theme value can
@@ -358,11 +435,26 @@ export const ACCENT_FALLBACK = '#111111';
  */
 export function themeVars(theme: StoreTheme): Record<string, string> {
   const accent = sanitizeColor(theme?.accentColor);
+  const palette = STORE_STRUCTURES[storeStructure(theme)];
   return {
-    '--store-accent': accent ?? ACCENT_FALLBACK,
-    '--store-accent-fg': readableOn(accent),
-    '--store-accent-soft': accent ? `color-mix(in srgb, ${accent} 12%, #ffffff)` : '#f1f0ee',
-    '--store-accent-line': accent ? `color-mix(in srgb, ${accent} 32%, #ffffff)` : '#c9c7c3',
+    '--store-accent': accent ?? palette.ink,
+    '--store-accent-fg': readableOn(accent ?? (isDarkStructure(theme) ? palette.paper : null)),
+    '--store-accent-soft': accent
+      ? `color-mix(in srgb, ${accent} 12%, ${palette.paper})`
+      : palette.plate,
+    '--store-accent-line': accent
+      ? `color-mix(in srgb, ${accent} 32%, ${palette.paper})`
+      : palette.line,
+    '--store-paper': palette.paper,
+    '--store-surface': palette.surface,
+    '--store-plate': palette.plate,
+    '--store-ink': palette.ink,
+    '--store-ink-2': palette.ink2,
+    '--store-ink-3': palette.ink3,
+    '--store-line': palette.line,
+    /** The image frame's inner rule: `--store-line` is for paper, this is for photography. */
+    '--store-hairline': `color-mix(in srgb, ${palette.ink} 8%, transparent)`,
+    '--store-radius': palette.radius,
     '--store-font': fontStack(theme?.font),
     '--store-font-ui': SANS_STACK,
   };

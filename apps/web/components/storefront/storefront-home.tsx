@@ -106,8 +106,8 @@ export function StorefrontHome({
 
         <section className="mx-auto w-full max-w-[1560px] px-5 py-14 sm:px-8 md:py-20 lg:px-12">
           {failure ? (
-            <div className="mb-10 flex flex-wrap items-center justify-between gap-4 border border-[#E4E1DB] bg-white px-5 py-4">
-              <p className="text-[13px] text-[#6b6b6b]">{failure}</p>
+            <div className="mb-10 flex flex-wrap items-center justify-between gap-4 border border-[var(--store-line)] bg-[var(--store-surface)] px-5 py-4">
+              <p className="text-[13px] text-[var(--store-ink-2)]">{failure}</p>
               <button
                 type="button"
                 onClick={() => void run(filters)}
@@ -133,7 +133,7 @@ export function StorefrontHome({
                   <button
                     type="button"
                     onClick={() => setFilters(EMPTY_FILTERS)}
-                    className="inline-flex h-11 items-center border border-[#141414] px-8 text-[10.5px] uppercase tracking-[0.26em] text-[#141414] transition-colors duration-300 hover:bg-[#141414] hover:text-[#FBFAF8]"
+                    className="inline-flex h-11 items-center border border-[var(--store-ink)] px-8 text-[10.5px] uppercase tracking-[0.26em] text-[var(--store-ink)] transition-colors duration-300 hover:bg-[var(--store-ink)] hover:text-[var(--store-paper)]"
                   >
                     Clear filters
                   </button>

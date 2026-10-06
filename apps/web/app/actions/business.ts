@@ -6,6 +6,7 @@ import { expireBusiness, expireBusinesses } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import { createBusiness, getBusiness, updateBusiness, deleteBusiness, hardDeleteBusiness } from '@/lib/api';
 import { isStorePresetId, presetTheme, findPreset } from '@/lib/storefront-presets';
+import { isStoreStructure } from '@/lib/storefront';
 
 
 export async function createBusinessAction(formData: FormData) {
@@ -69,12 +70,18 @@ export async function updateStoreAction(businessId: string, formData: FormData) 
   const logoUrl = String(formData.get('logoUrl') ?? '').trim();
   const font = String(formData.get('font') ?? '').trim();
   const layout = String(formData.get('layout') ?? '').trim();
+  const structure = String(formData.get('structure') ?? '').trim();
+  const preset = String(formData.get('preset') ?? '').trim();
   if (tagline) theme.tagline = tagline.slice(0, 280);
   if (/^#[0-9a-fA-F]{3,8}$/.test(accentColor)) theme.accentColor = accentColor;
   if (heroImageUrl) theme.heroImageUrl = heroImageUrl.slice(0, 1000);
   if (logoUrl) theme.logoUrl = logoUrl.slice(0, 1000);
   if (font === 'sans' || font === 'serif' || font === 'mono') theme.font = font;
   if (layout === 'grid' || layout === 'featured') theme.layout = layout;
+  // updateBusiness replaces the whole storeTheme column, so anything this form does not
+  // resend is deleted — the template and the preset it came from have to travel with it.
+  if (isStoreStructure(structure)) theme.structure = structure;
+  if (isStorePresetId(preset)) theme.preset = preset;
   payload.storeTheme = theme;
 
   await updateBusiness(token, businessId, payload);

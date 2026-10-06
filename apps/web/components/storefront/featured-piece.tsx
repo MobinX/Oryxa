@@ -15,7 +15,7 @@ export function FeaturedPiece({ slug, product, label = 'Featured piece' }: Featu
   const href = `/store/${slug}/${product.id}`;
 
   return (
-    <section className="border-b border-[#E4E1DB] bg-white">
+    <section data-store-featured className="border-b border-[var(--store-line)] bg-[var(--store-surface)]">
       <div className="mx-auto grid w-full max-w-[1560px] gap-10 px-5 py-16 sm:px-8 md:grid-cols-12 md:gap-14 md:py-20 lg:px-12">
         <div className="md:col-span-7 lg:col-span-8">
           <Link href={href} className="group block">
@@ -33,23 +33,23 @@ export function FeaturedPiece({ slug, product, label = 'Featured piece' }: Featu
           <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--store-accent)]">{label}</p>
           <h2
             data-store-featured-title
-            className="mt-5 text-[clamp(1.6rem,3vw,2.4rem)] leading-[1.1] tracking-[-0.01em] text-[#141414]"
+            className="mt-5 text-[clamp(1.6rem,3vw,2.4rem)] leading-[1.1] tracking-[-0.01em] text-[var(--store-ink)]"
             style={{ fontFamily: 'var(--store-font)' }}
           >
             <Link href={href} className="transition-colors duration-300 hover:text-[var(--store-accent)]">
               {product.name}
             </Link>
           </h2>
-          <p className="mt-4 text-[15px] tabular-nums text-[#141414]">{formatPrice(product.price)}</p>
+          <p className="mt-4 text-[15px] tabular-nums text-[var(--store-ink)]">{formatPrice(product.price)}</p>
 
           {product.description ? (
-            <p className="mt-6 max-w-[46ch] text-[13.5px] leading-[1.8] text-[#6b6b6b]">
+            <p className="mt-6 max-w-[46ch] text-[13.5px] leading-[1.8] text-[var(--store-ink-2)]">
               {product.description.length > 240 ? `${product.description.slice(0, 240).trimEnd()}…` : product.description}
             </p>
           ) : null}
 
           {product.variants.length > 0 ? (
-            <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-[#a29d96]">
+            <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-[var(--store-ink-3)]">
               {product.variants.slice(0, 6).map((v) => v.name).join(' · ')}
             </p>
           ) : null}
@@ -64,7 +64,7 @@ export function FeaturedPiece({ slug, product, label = 'Featured piece' }: Featu
             />
             <Link
               href={href}
-              className="nav-rule inline-flex h-11 items-center gap-2 text-[10.5px] uppercase tracking-[0.26em] text-[#6b6b6b] transition-colors duration-300 hover:text-[#141414]"
+              className="nav-rule inline-flex h-11 items-center gap-2 text-[10.5px] uppercase tracking-[0.26em] text-[var(--store-ink-2)] transition-colors duration-300 hover:text-[var(--store-ink)]"
             >
               View details
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />

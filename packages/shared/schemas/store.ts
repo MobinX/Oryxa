@@ -9,6 +9,13 @@ import { uuidSchema } from '@shared/schemas/base';
  */
 export const storePresetSchema = z.enum(['gallery', 'pine', 'terracotta', 'petrol', 'atelier']);
 
+/**
+ * Which template the store is drawn with. A theme stores the *name* of its look, never the
+ * palette: `themeVars` in the web layer expands a structure into paper, ink, line and radius
+ * values, so a new template is one palette and one branch instead of a migration.
+ */
+export const storeStructureSchema = z.enum(['classic', 'editorial', 'market', 'terminal', 'atelier']);
+
 export const storeThemeSchema = z.object({
   accentColor: z.string().max(32).optional(),
   font: z.enum(['sans', 'serif', 'mono']).optional(),
@@ -17,6 +24,7 @@ export const storeThemeSchema = z.object({
   logoUrl: z.string().max(1000).optional(),
   layout: z.enum(['grid', 'featured']).optional(),
   preset: storePresetSchema.optional(),
+  structure: storeStructureSchema.optional(),
 }).partial();
 
 export const publicStoreVariantSchema = z.object({

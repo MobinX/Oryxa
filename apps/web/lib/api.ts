@@ -72,6 +72,7 @@ export type Business = {
     logoUrl?: string;
     layout?: 'grid' | 'featured';
     preset?: 'gallery' | 'pine' | 'terracotta' | 'petrol' | 'atelier';
+    structure?: 'classic' | 'editorial' | 'market' | 'terminal' | 'atelier';
   } | null;
   description?: string | null;
   employeeCount?: number | null;

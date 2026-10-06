@@ -40,7 +40,7 @@ export function ProductImage({
   const showImage = Boolean(src) && !failed;
 
   return (
-    <div className={cn('relative overflow-hidden bg-[#F2F0EC]', className)}>
+    <div className={cn('relative overflow-hidden bg-[var(--store-plate)]', className)}>
       {showImage ? (
         <img
           src={src ?? undefined}
@@ -62,7 +62,7 @@ export function ProductImage({
         data-store-monogram
         className={cn(
           'pointer-events-none absolute inset-0 flex items-center justify-center',
-          '[font-family:var(--store-font)] text-[clamp(1.75rem,5vw,4rem)] leading-none tracking-[0.14em] text-[#d6d2ca]',
+          '[font-family:var(--store-font)] text-[clamp(1.75rem,5vw,4rem)] leading-none tracking-[0.14em] text-[var(--store-ink-3)]/60',
           showImage && 'invisible',
         )}
       >
@@ -70,7 +70,7 @@ export function ProductImage({
       </span>
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(20,20,20,0.05)]"
+        className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_var(--store-hairline)]"
       />
     </div>
   );

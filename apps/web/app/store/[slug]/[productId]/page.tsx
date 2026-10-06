@@ -59,11 +59,11 @@ async function ProductView({ params }: { params: ProductParams }) {
     <>
       <nav
         aria-label="Breadcrumb"
-        className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center gap-x-2.5 gap-y-1 px-5 py-5 text-[10px] uppercase tracking-[0.22em] text-[#a29d96] sm:px-8 lg:px-12"
+        className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center gap-x-2.5 gap-y-1 px-5 py-5 text-[10px] uppercase tracking-[0.22em] text-[var(--store-ink-3)] sm:px-8 lg:px-12"
       >
         <Link
           href={`/store/${slug}`}
-          className="transition-colors hover:text-[#141414]"
+          className="transition-colors hover:text-[var(--store-ink)]"
         >
           {store?.name ?? 'Store'}
         </Link>
@@ -72,14 +72,14 @@ async function ProductView({ params }: { params: ProductParams }) {
           <>
             <Link
               href={`/store/${slug}?category=${encodeURIComponent(product.categoryName)}`}
-              className="transition-colors hover:text-[#141414]"
+              className="transition-colors hover:text-[var(--store-ink)]"
             >
               {product.categoryName}
             </Link>
             <span aria-hidden>/</span>
           </>
         ) : null}
-        <span className="truncate text-[#5c5c5c]">{product.name}</span>
+        <span className="truncate text-[var(--store-ink-2)]">{product.name}</span>
       </nav>
 
       <article className="mx-auto grid w-full max-w-[1560px] gap-10 px-5 pb-16 sm:px-8 lg:grid-cols-12 lg:gap-16 lg:px-12">
@@ -90,7 +90,7 @@ async function ProductView({ params }: { params: ProductParams }) {
         <div className="lg:col-span-5 lg:pt-2">
           <Link
             href={`/store/${slug}`}
-            className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-[#a29d96] transition-colors hover:text-[#141414]"
+            className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-3)] transition-colors hover:text-[var(--store-ink)]"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
             Back to collection
@@ -106,20 +106,20 @@ async function ProductView({ params }: { params: ProductParams }) {
           ) : null}
 
           <h1
-            className="mt-4 text-[clamp(1.9rem,3.6vw,3.1rem)] leading-[1.06] tracking-[-0.015em] text-[#141414]"
+            className="mt-4 text-[clamp(1.9rem,3.6vw,3.1rem)] leading-[1.06] tracking-[-0.015em] text-[var(--store-ink)]"
             style={{ fontFamily: 'var(--store-font)' }}
           >
             {product.name}
           </h1>
 
           {!product.inStock ? (
-            <p className="mt-5 inline-flex border border-[#141414] px-3 py-1.5 text-[10px] uppercase tracking-[0.24em] text-[#141414]">
+            <p className="mt-5 inline-flex border border-[var(--store-ink)] px-3 py-1.5 text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink)]">
               Out of stock
             </p>
           ) : null}
 
           {product.description ? (
-            <div className="mt-7 space-y-4 text-[13.5px] leading-[1.85] text-[#5c5c5c]">
+            <div className="mt-7 space-y-4 text-[13.5px] leading-[1.85] text-[var(--store-ink-2)]">
               {product.description
                 .split('\n')
                 .map((paragraph) => paragraph.trim())
@@ -129,7 +129,7 @@ async function ProductView({ params }: { params: ProductParams }) {
                 ))}
             </div>
           ) : (
-            <p className="mt-7 text-[13.5px] leading-[1.85] text-[#8f8b85]">
+            <p className="mt-7 text-[13.5px] leading-[1.85] text-[var(--store-ink-2)]">
               Details for this piece are on their way. Enquire with the boutique for measurements
               and availability.
             </p>
@@ -140,18 +140,18 @@ async function ProductView({ params }: { params: ProductParams }) {
       </article>
 
       {related.length > 0 ? (
-        <section className="border-t border-[#E4E1DB] bg-white">
+        <section className="border-t border-[var(--store-line)] bg-[var(--store-surface)]">
           <div className="mx-auto w-full max-w-[1560px] px-5 py-16 sm:px-8 md:py-20 lg:px-12">
             <div className="mb-10 flex items-end justify-between gap-6">
               <h2
-                className="text-[clamp(1.25rem,2vw,1.65rem)] tracking-[-0.01em] text-[#141414]"
+                className="text-[clamp(1.25rem,2vw,1.65rem)] tracking-[-0.01em] text-[var(--store-ink)]"
                 style={{ fontFamily: 'var(--store-font)' }}
               >
                 Complete the look
               </h2>
               <Link
                 href={`/store/${slug}`}
-                className="nav-rule text-[10px] uppercase tracking-[0.24em] text-[#6b6b6b] transition-colors hover:text-[#141414]"
+                className="nav-rule text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-2)] transition-colors hover:text-[var(--store-ink)]"
               >
                 All pieces
               </Link>

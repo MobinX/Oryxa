@@ -27,6 +27,7 @@ export function ProductCard({ slug, product, featured = false, eager = false, cl
 
   return (
     <article
+      data-store-card
       className={cn(
         'group relative flex flex-col',
         featured && 'md:pb-2',
@@ -34,8 +35,9 @@ export function ProductCard({ slug, product, featured = false, eager = false, cl
       )}
     >
       <div
+        data-store-card-media
         className={cn(
-          'relative overflow-hidden bg-[#F2F0EC]',
+          'relative overflow-hidden bg-[var(--store-plate)]',
           featured ? 'aspect-[4/5] sm:aspect-[3/4]' : 'aspect-[4/5]',
         )}
       >
@@ -53,12 +55,13 @@ export function ProductCard({ slug, product, featured = false, eager = false, cl
         />
 
         {!product.inStock ? (
-          <span className="absolute left-0 top-0 z-20 bg-white/90 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[#6b6b6b]">
+          <span className="absolute left-0 top-0 z-20 bg-[var(--store-surface)]/90 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--store-ink-2)]">
             Sold out
           </span>
         ) : null}
 
         <div
+          data-store-card-cta
           className={cn(
             'absolute inset-x-0 bottom-0 z-20 p-2 sm:p-3',
             'transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
@@ -75,14 +78,17 @@ export function ProductCard({ slug, product, featured = false, eager = false, cl
         </div>
       </div>
 
-      <div className={cn('flex items-start justify-between gap-4', featured ? 'mt-5' : 'mt-4')}>
+      <div
+        data-store-card-foot
+        className={cn('flex items-start justify-between gap-4', featured ? 'mt-5' : 'mt-4')}
+      >
         <div className="min-w-0">
           {product.categoryName ? (
-            <p className="text-[10px] uppercase tracking-[0.24em] text-[#8f8b85]">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--store-ink-3)]">
               {product.categoryName}
             </p>
           ) : null}
-          <h3 className={cn('mt-1.5 leading-snug text-[#141414]', featured ? 'text-base' : 'text-[13.5px]')}>
+          <h3 className={cn('mt-1.5 leading-snug text-[var(--store-ink)]', featured ? 'text-base' : 'text-[13.5px]')}>
             <Link
               href={href}
               className="transition-colors duration-300 hover:text-[var(--store-accent)]"
@@ -91,16 +97,17 @@ export function ProductCard({ slug, product, featured = false, eager = false, cl
             </Link>
           </h3>
           {variantNames.length > 0 ? (
-            <p className="mt-1 truncate text-[11px] tracking-wide text-[#9a968f]">
+            <p className="mt-1 truncate text-[11px] tracking-wide text-[var(--store-ink-3)]">
               {variantNames.slice(0, 4).join(' · ')}
               {variantNames.length > 4 ? ` +${variantNames.length - 4}` : ''}
             </p>
           ) : null}
         </div>
         <p
+          data-store-card-price
           className={cn(
             'shrink-0 whitespace-nowrap tabular-nums',
-            featured ? 'text-base text-[#141414]' : 'text-[13px] text-[#3d3d3d]',
+            featured ? 'text-base text-[var(--store-ink)]' : 'text-[13px] text-[var(--store-ink-2)]',
           )}
           style={{ fontFamily: 'var(--store-font)' }}
         >

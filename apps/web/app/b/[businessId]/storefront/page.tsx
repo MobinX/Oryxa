@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StorefrontPreview } from '@/components/storefront/storefront-preview';
 import { buildPreviewStore } from '@/lib/storefront-preview-data';
+import { STORE_STRUCTURES } from '@/lib/storefront';
 import {
   STORE_PRESETS,
   isStorePresetId,
@@ -106,7 +107,10 @@ async function Studio({
     : undefined;
   const chosen: StorePresetDef = requested ?? saved ?? STORE_PRESETS[0];
   const frame: Frame = frameParam === 'phone' ? 'phone' : 'wide';
-  const store = buildPreviewStore(business, presetTheme(chosen), listed.products);
+  // A hand-edited theme matches no preset. Preview what the store actually renders instead
+  // of snapping the merchant back to Gallery just because they tuned an accent by hand.
+  const previewTheme = requested || saved ? presetTheme(chosen) : business.storeTheme ?? presetTheme(chosen);
+  const store = buildPreviewStore(business, previewTheme, listed.products);
 
   const linkFor = (id: string) => `/b/${businessId}/storefront?preset=${id}&frame=${frame}`;
   const frameLink = (value: Frame) =>
@@ -132,14 +136,25 @@ async function Studio({
                     : 'border-[var(--border)] hover:bg-[var(--muted)]',
                 )}
               >
+                {/* Five bands, not one: the tile previews the whole palette, because a
+                    theme is a paper, an ink and a layout — not a button color. */}
                 <span
-                  className="block h-6 rounded-md"
-                  style={{ backgroundColor: preset.accentColor }}
+                  className="flex h-8 overflow-hidden rounded-md border border-[var(--border)]"
+                  style={{ borderRadius: STORE_STRUCTURES[preset.structure].radius }}
                   aria-hidden
-                />
+                >
+                  <span className="flex-1" style={{ background: STORE_STRUCTURES[preset.structure].paper }} />
+                  <span className="flex-1" style={{ background: STORE_STRUCTURES[preset.structure].surface }} />
+                  <span className="flex-1" style={{ background: STORE_STRUCTURES[preset.structure].plate }} />
+                  <span className="flex-1" style={{ background: STORE_STRUCTURES[preset.structure].ink }} />
+                  <span className="w-4" style={{ background: preset.accentColor }} />
+                </span>
                 <span className="mt-2 block text-sm font-medium">{preset.name}</span>
                 <span className="mt-0.5 block text-xs leading-snug text-[var(--muted-foreground)]">
                   {preset.blurb}
+                </span>
+                <span className="mt-1.5 block text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  {preset.structure} · {preset.font} · {preset.layout}
                 </span>
                 {preset.id === saved?.id ? (
                   <span className="mt-2 inline-block rounded-full bg-[var(--primary)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-white">

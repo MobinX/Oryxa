@@ -29,8 +29,8 @@ export function QuantityStepper({
   };
 
   const buttonClass = cn(
-    'grid place-items-center text-[#4a4a4a] transition-colors duration-200',
-    'hover:bg-[#F4F2EE] hover:text-[var(--store-accent)]',
+    'grid place-items-center text-[var(--store-ink-2)] transition-colors duration-200',
+    'hover:bg-[var(--store-plate)] hover:text-[var(--store-accent)]',
     'disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent',
     compact ? 'h-8 w-8' : 'h-11 w-11',
   );
@@ -38,7 +38,7 @@ export function QuantityStepper({
   return (
     <div
       className={cn(
-        'inline-flex items-center border border-[#DFDCD6] bg-white',
+        'inline-flex items-center border border-[var(--store-line)] bg-[var(--store-surface)]',
         compact ? 'h-8' : 'h-11',
         className,
       )}
@@ -55,7 +55,7 @@ export function QuantityStepper({
       <span
         aria-live="polite"
         className={cn(
-          'grid place-items-center tabular-nums text-[#141414]',
+          'grid place-items-center tabular-nums text-[var(--store-ink)]',
           compact ? 'w-8 text-xs' : 'w-10 text-sm',
         )}
       >
