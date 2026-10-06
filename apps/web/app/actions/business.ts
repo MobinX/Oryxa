@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { expireBusiness, expireBusinesses } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
-import { createBusiness, updateBusiness, deleteBusiness, hardDeleteBusiness } from '@/lib/api';
+import { createBusiness, getBusiness, updateBusiness, deleteBusiness, hardDeleteBusiness } from '@/lib/api';
+import { isStorePresetId, presetTheme, findPreset } from '@/lib/storefront-presets';
 
 
 export async function createBusinessAction(formData: FormData) {
@@ -108,4 +109,41 @@ export async function deleteBusinessesBulkAction(formData: FormData) {
   revalidatePath('/businesses');
   expireBusinesses();
   for (const id of ids) expireBusiness(id);
+}
+
+/**
+ * Applies one of the five storefront presets.
+ *
+ * `store_theme` is replaced whole on write (`packages/db/crud/business.ts`), so this reads
+ * the live business and merges over it — otherwise picking a theme would silently delete a
+ * tagline, hero photo or logo saved minutes earlier. It reads through `getBusiness` rather
+ * than the cached helper because that cache lives for hours, and a stale copy here is data
+ * loss rather than a slightly old picture.
+ *
+ * Only `storeTheme` is sent: the update schema is `.partial()`, so absent columns keep their
+ * values. `slug` in particular must not be echoed back, because a merchant who never filled
+ * it in has `null`, and the create-side slug regex rejects that.
+ */
+export async function applyPresetAction(businessId: string, presetId: string) {
+  const token = await requireAuth();
+  if (!isStorePresetId(presetId)) {
+    redirect(`/b/${businessId}/storefront?error=unknown-theme`);
+  }
+
+  const preset = findPreset(presetId);
+  if (!preset) redirect(`/b/${businessId}/storefront?error=unknown-theme`);
+
+  const current = await getBusiness(token, businessId).catch(() => null);
+  if (!current) redirect(`/b/${businessId}/storefront?error=store-unavailable`);
+
+  await updateBusiness(token, businessId, {
+    storeTheme: { ...(current.storeTheme ?? {}), ...presetTheme(preset) },
+  });
+
+  revalidatePath(`/b/${businessId}/storefront`);
+  revalidatePath(`/b/${businessId}/settings`);
+  expireBusiness(businessId);
+  // The theme survives as `preset`, so reloads light up the right tile even after the
+  // values themselves have been tuned by hand somewhere else.
+  redirect(`/b/${businessId}/storefront?preset=${preset.id}&frame=wide&saved=1`);
 }

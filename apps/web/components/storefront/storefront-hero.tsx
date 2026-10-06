@@ -20,6 +20,7 @@ export function StorefrontHero({ store, total }: StorefrontHeroProps) {
 
   return (
     <section
+      data-store-hero
       className={cn(
         'relative isolate overflow-hidden border-b border-[#E4E1DB]',
         heroUrl ? 'bg-[#141414]' : 'store-plate bg-[#FBFAF8]',
@@ -57,6 +58,7 @@ export function StorefrontHero({ store, total }: StorefrontHeroProps) {
           </p>
 
           <h1
+            data-store-hero-title
             className={cn(
               'store-fade mt-5 max-w-[16ch] text-[clamp(2.6rem,8.5vw,7rem)] leading-[0.94] tracking-[-0.015em]',
               heroUrl ? 'text-white' : 'text-[#141414]',

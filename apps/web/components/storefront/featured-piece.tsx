@@ -32,6 +32,7 @@ export function FeaturedPiece({ slug, product, label = 'Featured piece' }: Featu
         <div className="flex flex-col justify-center md:col-span-5 lg:col-span-4">
           <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--store-accent)]">{label}</p>
           <h2
+            data-store-featured-title
             className="mt-5 text-[clamp(1.6rem,3vw,2.4rem)] leading-[1.1] tracking-[-0.01em] text-[#141414]"
             style={{ fontFamily: 'var(--store-font)' }}
           >

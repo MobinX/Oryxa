@@ -114,7 +114,12 @@ async function SettingsContent({
       <Card>
         <h2 className="text-lg font-semibold">Public storefront</h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Give your store a link customers can visit to browse your products.
+          Give your store a link customers can visit to browse your products. For colours,
+          typefaces and a live preview, use the{' '}
+          <Link href={`/b/${businessId}/storefront`} className="text-[var(--primary)] hover:underline">
+            Storefront
+          </Link>{' '}
+          page.
         </p>
         <form action={updateStoreAction.bind(null, businessId)} className="mt-4 space-y-4">
           <div>

@@ -71,6 +71,7 @@ export type Business = {
     heroImageUrl?: string;
     logoUrl?: string;
     layout?: 'grid' | 'featured';
+    preset?: 'gallery' | 'pine' | 'terracotta' | 'petrol' | 'atelier';
   } | null;
   description?: string | null;
   employeeCount?: number | null;

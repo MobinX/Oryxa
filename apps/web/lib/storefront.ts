@@ -18,6 +18,7 @@ function apiBase(): string {
 
 export type StoreFont = 'sans' | 'serif' | 'mono';
 export type StoreLayout = 'grid' | 'featured';
+export type StorePreset = 'gallery' | 'pine' | 'terracotta' | 'petrol' | 'atelier';
 
 export type StoreTheme = {
   accentColor?: string | null;
@@ -26,6 +27,8 @@ export type StoreTheme = {
   heroImageUrl?: string | null;
   logoUrl?: string | null;
   layout?: StoreLayout | null;
+  /** Which named bundle produced these values, or absent once they were edited by hand. */
+  preset?: StorePreset | null;
 } | null;
 
 export type PublicVariant = {

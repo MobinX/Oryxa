@@ -1,6 +1,14 @@
 import { z } from '@hono/zod-openapi';
 import { uuidSchema } from '@shared/schemas/base';
 
+/**
+ * Named look-and-feel bundles a merchant picks on the Storefront page. The preset
+ * itself is a marker only — the server expands it into accentColor/font/layout before
+ * writing, so the API stays theme-blind and `/api/v1/store/:slug` keeps returning the
+ * resolved values a client needs.
+ */
+export const storePresetSchema = z.enum(['gallery', 'pine', 'terracotta', 'petrol', 'atelier']);
+
 export const storeThemeSchema = z.object({
   accentColor: z.string().max(32).optional(),
   font: z.enum(['sans', 'serif', 'mono']).optional(),
@@ -8,6 +16,7 @@ export const storeThemeSchema = z.object({
   heroImageUrl: z.string().max(1000).optional(),
   logoUrl: z.string().max(1000).optional(),
   layout: z.enum(['grid', 'featured']).optional(),
+  preset: storePresetSchema.optional(),
 }).partial();
 
 export const publicStoreVariantSchema = z.object({

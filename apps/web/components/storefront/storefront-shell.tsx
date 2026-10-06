@@ -6,7 +6,8 @@ import { themeVars } from '@/lib/storefront';
 import type { PublicStore } from '@/lib/storefront';
 import type { ReactNode } from 'react';
 
-const STORE_CSS = `
+/** Exported so the merchant-facing preview styles the exact same shell markup. */
+export const STORE_CSS = `
   .nav-rule { position: relative; }
   .nav-rule::after {
     content: '';

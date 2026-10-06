@@ -59,6 +59,7 @@ export function ProductImage({
       ) : null}
       <span
         aria-hidden
+        data-store-monogram
         className={cn(
           'pointer-events-none absolute inset-0 flex items-center justify-center',
           '[font-family:var(--store-font)] text-[clamp(1.75rem,5vw,4rem)] leading-none tracking-[0.14em] text-[#d6d2ca]',
