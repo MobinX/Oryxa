@@ -4,6 +4,11 @@ import { loggedFetch, logGraphSendFailure } from './http-log';
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const encoder = new TextEncoder();
 
+/** Bounds on the portfolio lookup: it runs inline in the OAuth redirect, so it crawls a
+ * fixed ceiling of portfolios and Pages rather than the whole asset tree. */
+const PORTFOLIO_LOOKUP_LIMIT = 5;
+const PAGES_PER_PORTFOLIO_LIMIT = 25;
+
 function toHex(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let hex = '';
@@ -31,7 +36,17 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export function getFacebookOAuthUrl(state: string): string {
+/**
+ * `portfolio` is the caller's explicit answer to the connector's "where are your Pages?"
+ * choice: true asks for `business_management`, false deliberately does not. Left undefined,
+ * the env flag decides — so a link that never went through the choice keeps whatever the
+ * deployment is configured for.
+ *
+ * A Live app that asks for a permission Meta has not approved stops the whole login for that
+ * user, not just for the permission — so the portfolio scope stays switched off until
+ * Advanced Access is granted, and one env var turns it on once it is.
+ */
+export function getFacebookOAuthUrl(state: string, portfolio?: boolean): string {
   const appId = process.env.META_APP_ID;
   const redirectUri = process.env.META_REDIRECT_URI;
   const scopes = [
@@ -42,8 +57,11 @@ export function getFacebookOAuthUrl(state: string): string {
     'pages_read_engagement',   // receive comment webhooks, post context
     'pages_manage_engagement', // reply to comments
     'pages_manage_posts',
-  ].join(',');
-  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes}&state=${encodeURIComponent(state)}`;
+  ];
+  if (portfolio ?? process.env.META_BUSINESS_MANAGEMENT === 'true') {
+    scopes.push('business_management');
+  }
+  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes.join(',')}&state=${encodeURIComponent(state)}`;
 }
 
 export async function exchangeCodeForToken(code: string): Promise<string> {
@@ -67,6 +85,69 @@ export async function getUserPages(userToken: string) {
     data: Array<{ id: string; name: string; access_token: string }>;
   };
   return data.data;
+}
+
+/**
+ * The scopes Meta actually granted for this token. `pages_show_list` being absent is the
+ * difference between "you have no Pages" and "Facebook gave this app no Page access", and
+ * nothing else in the flow can tell them apart.
+ */
+export async function getGrantedPermissions(userToken: string): Promise<string[]> {
+  const res = await loggedFetch(
+    `${GRAPH_API}/me/permissions?access_token=${encodeURIComponent(userToken)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch permissions: ${await res.text()}`);
+  const data = (await res.json()) as { data?: Array<{ permission?: string }> };
+  return (data.data ?? []).map((p) => p.permission ?? '').filter(Boolean);
+}
+
+export type PortfolioPage = {
+  id: string;
+  name: string;
+  /** Absent when the person's portfolio role does not carry a Page token for this app. */
+  accessToken?: string;
+  businessName: string;
+};
+
+/**
+ * Pages reached through a Meta Business Portfolio rather than a personal admin role, so
+ * `/me/accounts` never names them. Best-effort by construction: a portfolio whose Page list
+ * cannot be read is skipped, because a partial answer still beats the wrong "no Pages"
+ * message, and one unbounded crawl must not stall the OAuth redirect.
+ */
+export async function getPortfolioPages(userToken: string): Promise<PortfolioPage[]> {
+  const token = encodeURIComponent(userToken);
+  const res = await loggedFetch(`${GRAPH_API}/me/businesses?fields=id,name&limit=${PORTFOLIO_LOOKUP_LIMIT}&access_token=${token}`);
+  if (!res.ok) throw new Error(`Failed to fetch businesses: ${await res.text()}`);
+  const businesses = ((await res.json()) as {
+    data?: Array<{ id?: string; name?: string }>;
+  }).data ?? [];
+
+  const pages: PortfolioPage[] = [];
+  for (const business of businesses.slice(0, PORTFOLIO_LOOKUP_LIMIT)) {
+    if (!business.id) continue;
+    try {
+      const pageRes = await loggedFetch(
+        `${GRAPH_API}/${encodeURIComponent(business.id)}/pages?fields=id,name,access_token&limit=${PAGES_PER_PORTFOLIO_LIMIT}&access_token=${token}`,
+      );
+      if (!pageRes.ok) continue;
+      const data = (await pageRes.json()) as {
+        data?: Array<{ id?: string; name?: string; access_token?: string }>;
+      };
+      for (const page of data.data ?? []) {
+        if (!page.id) continue;
+        pages.push({
+          id: page.id,
+          name: page.name ?? page.id,
+          accessToken: page.access_token,
+          businessName: business.name ?? 'Business Portfolio',
+        });
+      }
+    } catch {
+      continue;
+    }
+  }
+  return pages;
 }
 
 /** Webhook fields subscribed when a Facebook Page is connected in Oryxa. */
@@ -463,16 +544,19 @@ export async function verifyWebhookSignature(
  * authenticated user and business. Replaces passing the raw businessId, which
  * let anyone complete OAuth against an arbitrary business.
  *
- * Format: `businessId.userId.exp.sig` (UUIDs contain no `.`).
+ * Format: `businessId.userId.exp[.p].sig` — the `p` segment carries the connector's
+ * portfolio choice, and stays absent when the caller had no choice to make.
  */
 export async function createOAuthState(
-  payload: { businessId: string; userId: string },
+  payload: { businessId: string; userId: string; portfolio?: boolean },
   ttlSeconds = 600,
 ): Promise<string> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret) throw new Error('INTERNAL_KEY is required to start Facebook OAuth');
   const exp = Date.now() + ttlSeconds * 1000;
-  const body = `${payload.businessId}.${payload.userId}.${exp}`;
+  const body = [payload.businessId, payload.userId, exp, payload.portfolio ? 'p' : null]
+    .filter((part) => part !== null)
+    .join('.');
   const sig = await hmacHex(secret, body);
   return `${body}.${sig}`;
 }
@@ -480,23 +564,31 @@ export async function createOAuthState(
 /** Verifies a `state` returned by Meta; returns the bound ids or null. */
 export async function verifyOAuthState(
   state: string | undefined,
-): Promise<{ businessId: string; userId: string } | null> {
+): Promise<{ businessId: string; userId: string; portfolio: boolean } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !state) return null;
   const parts = state.split('.');
-  if (parts.length !== 4) return null;
-  const [businessId, userId, expStr, sig] = parts;
+  if (parts.length !== 4 && parts.length !== 5) return null;
+  const [businessId, userId, expStr, flagOrSig] = parts;
+  const portfolio = parts.length === 5;
+  const sig = portfolio ? parts[4] : flagOrSig;
   const exp = Number(expStr);
   if (!businessId || !userId || !Number.isFinite(exp) || exp < Date.now()) return null;
-  const expected = await hmacHex(secret, `${businessId}.${userId}.${expStr}`);
+  if (portfolio && parts[3] !== 'p') return null;
+  const expected = await hmacHex(
+    secret,
+    portfolio ? `${businessId}.${userId}.${expStr}.p` : `${businessId}.${userId}.${expStr}`,
+  );
   if (!timingSafeEqual(sig, expected)) return null;
-  return { businessId, userId };
+  return { businessId, userId, portfolio };
 }
 
 export type FacebookPageOption = {
   id: string;
   name: string;
   access_token: string;
+  /** Set when the Page came from a Business Portfolio instead of the personal Page list. */
+  business?: string;
 };
 
 function toBase64Url(bytes: Uint8Array): string {

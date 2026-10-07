@@ -3,11 +3,17 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { app } from '@api/app';
 import { listChannels } from '@repo/db/crud/channel';
-import { createOAuthState, createFacebookPagesSelectionToken } from '@repo/integrations/facebook';
+import {
+  createOAuthState,
+  createFacebookPagesSelectionToken,
+  verifyFacebookPagesSelectionToken,
+} from '@repo/integrations/facebook';
 
 const exchangeCodeForTokenMock = vi.fn();
 const getUserPagesMock = vi.fn();
 const subscribeFacebookPageToWebhooksMock = vi.fn();
+const getGrantedPermissionsMock = vi.fn();
+const getPortfolioPagesMock = vi.fn();
 
 vi.mock('@repo/integrations/facebook', async () => {
   const actual = await import('../../packages/integrations/facebook');
@@ -17,18 +23,31 @@ vi.mock('@repo/integrations/facebook', async () => {
     getUserPages: (...args: unknown[]) => getUserPagesMock(...args),
     subscribeFacebookPageToWebhooks: (...args: unknown[]) =>
       subscribeFacebookPageToWebhooksMock(...args),
+    getGrantedPermissions: (...args: unknown[]) => getGrantedPermissionsMock(...args),
+    getPortfolioPages: (...args: unknown[]) => getPortfolioPagesMock(...args),
   };
 });
 
-async function stateFor(businessId: string, userId: string) {
-  return createOAuthState({ businessId, userId });
+async function stateFor(businessId: string, userId: string, portfolio?: boolean) {
+  return createOAuthState({ businessId, userId, portfolio });
 }
 
+/**
+ * One PGlite for the whole file: each `withPglite()` call replays the migration set on its own
+ * database, and two of them in one file is enough to blow the hook timeout on this box.
+ */
+withPglite({ timeoutMs: 300_000 });
+
 describe('Facebook OAuth callback', () => {
-  withPglite();
   beforeEach(() => {
     exchangeCodeForTokenMock.mockReset();
     getUserPagesMock.mockReset();
+    getGrantedPermissionsMock.mockReset();
+    getPortfolioPagesMock.mockReset();
+    // Default: Meta did grant the Page permission and the account holds no portfolio Pages,
+    // so an empty /me/accounts means what it says.
+    getGrantedPermissionsMock.mockResolvedValue(['pages_show_list', 'pages_messaging']);
+    getPortfolioPagesMock.mockResolvedValue([]);
     process.env.WEB_URL = 'http://localhost:3400';
   });
 
@@ -72,7 +91,68 @@ describe('Facebook OAuth callback', () => {
     expect(channels.find((c) => c.platformChannelId === 'OAUTH_PAGE_1')).toBeUndefined();
   });
 
-  it('returns 302 redirect when user has no Facebook pages', async () => {
+  it('merges portfolio pages into the picker when the login was started as portfolio-aware', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([
+      { id: 'PERSONAL_1', name: 'Personal Page', access_token: 'personal-tok' },
+    ]);
+    getPortfolioPagesMock.mockResolvedValue([
+      // An admin Page shows up in both lists, and a Page without a token cannot be stored.
+      { id: 'PERSONAL_1', name: 'Personal Page', accessToken: 'personal-tok', businessName: 'North Star Brands' },
+      { id: 'PORT_PAGE_1', name: 'Portfolio Page', accessToken: 'port-tok-1', businessName: 'North Star Brands' },
+      { id: 'PORT_PAGE_2', name: 'Locked Page', businessName: 'North Star Brands' },
+    ]);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id, true)}`,
+      { redirect: 'manual' },
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('location')!);
+    expect(location.searchParams.get('error')).toBeNull();
+
+    const selection = await verifyFacebookPagesSelectionToken(location.searchParams.get('token')!);
+    expect(selection?.pages).toEqual([
+      { id: 'PERSONAL_1', name: 'Personal Page', access_token: 'personal-tok' },
+      { id: 'PORT_PAGE_1', name: 'Portfolio Page', access_token: 'port-tok-1', business: 'North Star Brands' },
+    ]);
+  });
+
+  it('keeps the personal list when a portfolio-aware login cannot read the portfolios', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([
+      { id: 'PERSONAL_1', name: 'Personal Page', access_token: 'personal-tok' },
+    ]);
+    getPortfolioPagesMock.mockRejectedValue(new Error('graph unreachable'));
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id, true)}`,
+      { redirect: 'manual' },
+    );
+    const location = new URL(res.headers.get('location')!);
+    expect(location.searchParams.get('error')).toBeNull();
+    const selection = await verifyFacebookPagesSelectionToken(location.searchParams.get('token')!);
+    expect(selection?.pages.map((page) => page.id)).toEqual(['PERSONAL_1']);
+  });
+
+  it('does not reach for portfolios on a login that never asked for them', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([
+      { id: 'PERSONAL_1', name: 'Personal Page', access_token: 'personal-tok' },
+    ]);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
+    );
+    expect(res.status).toBe(302);
+    expect(getPortfolioPagesMock).not.toHaveBeenCalled();
+  });
+
+  it('redirects with a named reason when Facebook returns no pages at all', async () => {
     const { user, business } = await seedTestWorld();
     exchangeCodeForTokenMock.mockResolvedValue('user-token');
     getUserPagesMock.mockResolvedValue([]);
@@ -83,7 +163,75 @@ describe('Facebook OAuth callback', () => {
     );
     expect(res.status).toBe(302);
     const location = res.headers.get('location') ?? '';
-    expect(location).toContain(`/b/${business.id}/channels/connect-facebook?error=no-pages-selected`);
+    expect(location).toContain(`/b/${business.id}/channels/connect-facebook?error=no-pages-on-account`);
+    expect(location).not.toContain('no-pages-selected');
+  });
+
+  it('offers portfolio pages in the picker when /me/accounts is empty but a portfolio has them', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([]);
+    getPortfolioPagesMock.mockResolvedValue([
+      { id: 'PORT_PAGE_1', name: 'Portfolio Page', accessToken: 'port-tok-1', businessName: 'North Star Brands' },
+    ]);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('location')!);
+    expect(location.searchParams.get('error')).toBeNull();
+
+    const selection = await verifyFacebookPagesSelectionToken(location.searchParams.get('token')!);
+    expect(selection?.pages).toEqual([
+      { id: 'PORT_PAGE_1', name: 'Portfolio Page', access_token: 'port-tok-1', business: 'North Star Brands' },
+    ]);
+  });
+
+  it('names the portfolio pages it cannot control instead of claiming the user has none', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([]);
+    getPortfolioPagesMock.mockResolvedValue([
+      { id: 'PORT_PAGE_2', name: 'Locked Page', businessName: 'North Star Brands' },
+    ]);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
+    );
+    const location = new URL(res.headers.get('location')!);
+    expect(location.searchParams.get('error')).toBe('pages-not-controllable');
+    expect(location.searchParams.get('detail')).toContain('Locked Page — North Star Brands');
+  });
+
+  it('says the permission was withheld when Facebook granted no page access at all', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([]);
+    getGrantedPermissionsMock.mockResolvedValue(['public_profile', 'email']);
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
+    );
+    expect(res.headers.get('location')).toContain('error=pages-permission-not-granted');
+  });
+
+  it('still redirects when the diagnosis calls themselves fail', async () => {
+    const { user, business } = await seedTestWorld();
+    exchangeCodeForTokenMock.mockResolvedValue('user-token');
+    getUserPagesMock.mockResolvedValue([]);
+    getGrantedPermissionsMock.mockRejectedValue(new Error('graph unreachable'));
+    getPortfolioPagesMock.mockRejectedValue(new Error('graph unreachable'));
+
+    const res = await app.request(
+      `/api/v1/auth/facebook/callback?code=auth-code&state=${await stateFor(business.id, user.id)}`,
+      { redirect: 'manual' },
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('error=no-pages-on-account');
   });
 
   it('returns 500 when token exchange fails', async () => {
@@ -99,8 +247,6 @@ describe('Facebook OAuth callback', () => {
 });
 
 describe('Facebook page selection API', () => {
-  withPglite();
-
   beforeEach(() => {
     subscribeFacebookPageToWebhooksMock.mockReset();
     subscribeFacebookPageToWebhooksMock.mockResolvedValue(undefined);

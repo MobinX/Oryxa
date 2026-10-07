@@ -370,13 +370,23 @@ export const deleteChannel = (token: string, businessId: string, channelId: stri
     token,
   });
 
-export const getFacebookAuthUrl = (token: string, businessId: string) =>
-  apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth`, { token });
+export const getFacebookAuthUrl = (
+  token: string,
+  businessId: string,
+  options?: { portfolio?: boolean },
+) => {
+  const choice =
+    options?.portfolio === undefined ? '' : `?portfolio=${String(options.portfolio)}`;
+  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${choice}`, {
+    token,
+  });
+};
 
 export type FacebookPendingPage = {
   id: string;
   name: string;
   connected: boolean;
+  business?: string | null;
 };
 
 export const listFacebookPendingPages = (

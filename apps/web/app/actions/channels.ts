@@ -97,9 +97,9 @@ export async function deleteChannelsBulkAction(businessId: string, formData: For
   redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
-export async function connectFacebookAction(businessId: string) {
+export async function connectFacebookAction(businessId: string, portfolio?: boolean) {
   const token = await requireAuth();
-  const { url } = await getFacebookAuthUrl(token, businessId);
+  const { url } = await getFacebookAuthUrl(token, businessId, { portfolio });
   redirect(url);
 }
 

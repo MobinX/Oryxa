@@ -5,17 +5,27 @@ import { connectFacebookAction } from '@/app/actions/channels';
 
 interface FacebookConnectButtonProps {
   businessId: string;
+  /**
+   * Whether this deployment asks Meta for business portfolio access at all. Off means the
+   * choice would only fail the login, so it is not offered.
+   */
+  portfolioAvailable?: boolean;
 }
 
 type Step = 'closed' | 'consent' | 'data-deletion';
+type PageSource = 'personal' | 'portfolio';
 
-export function FacebookConnectButton({ businessId }: FacebookConnectButtonProps) {
+export function FacebookConnectButton({
+  businessId,
+  portfolioAvailable = false,
+}: FacebookConnectButtonProps) {
   const [step, setStep] = useState<Step>('closed');
+  const [source, setSource] = useState<PageSource>('personal');
   const [isPending, startTransition] = useTransition();
 
   const handleConnect = () => {
     startTransition(async () => {
-      await connectFacebookAction(businessId);
+      await connectFacebookAction(businessId, portfolioAvailable ? source === 'portfolio' : undefined);
     });
   };
 
@@ -106,7 +116,69 @@ export function FacebookConnectButton({ businessId }: FacebookConnectButtonProps
                       </div>
                     </div>
                   ))}
+
+                  {portfolioAvailable && source === 'portfolio' && (
+                    <div className="flex gap-3 rounded-xl bg-[var(--muted)]/50 p-3 ring-1 ring-blue-200 dark:ring-blue-900">
+                      <span className="text-xl flex-shrink-0 mt-0.5">🏢</span>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--foreground)]">
+                          Read Pages in your business portfolios
+                        </p>
+                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                          Asked only because you chose the portfolio option below: it lets you pick
+                          Pages a Business Portfolio owns, not just the ones on your profile.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {portfolioAvailable && (
+                  <div className="rounded-xl border border-[var(--border)] p-4">
+                    <p className="text-sm font-semibold text-[var(--foreground)]">
+                      Where are the Pages you want to connect?
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {([
+                        {
+                          value: 'personal',
+                          title: 'Pages on my own profile',
+                          body: 'The Page list Facebook shows for your personal account.',
+                        },
+                        {
+                          value: 'portfolio',
+                          title: 'Pages inside a business portfolio',
+                          body: 'Also lists Pages owned by the portfolios you belong to — the ones a team, brand or agency set up in Business Manager.',
+                        },
+                      ] as const).map((option) => (
+                        <label
+                          key={option.value}
+                          className={`flex cursor-pointer gap-3 rounded-xl p-3 transition-colors ${
+                            source === option.value
+                              ? 'bg-[var(--primary)]/5 ring-1 ring-[var(--primary)]/40'
+                              : 'hover:bg-[var(--muted)]/40'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="facebook-page-source"
+                            checked={source === option.value}
+                            onChange={() => setSource(option.value)}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-[var(--foreground)]">
+                              {option.title}
+                            </span>
+                            <span className="block text-xs text-[var(--muted-foreground)] mt-0.5">
+                              {option.body}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
                   🔒 <strong>Your data is private.</strong> We never post anything without your agent configuration and never share your data with third parties.

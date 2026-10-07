@@ -11,6 +11,7 @@ describe('Facebook Integration', () => {
     process.env.META_APP_ID = 'app-id';
     process.env.META_APP_SECRET = 'app-secret';
     process.env.META_REDIRECT_URI = 'http://localhost/callback';
+    delete process.env.META_BUSINESS_MANAGEMENT;
     vi.resetModules();
   });
 
@@ -170,6 +171,101 @@ describe('Facebook Integration', () => {
     const { getUserPages } = await import('@repo/integrations/facebook');
     const pages = await getUserPages('user-token');
     expect(pages[0].id).toBe('p1');
+  });
+
+  it('getFacebookOAuthUrl asks for Page permissions and no portfolio scope while it is unapproved', async () => {
+    delete process.env.META_BUSINESS_MANAGEMENT;
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    const url = getFacebookOAuthUrl('business-state-123');
+    expect(url).toContain('pages_show_list');
+    expect(url).not.toContain('business_management');
+  });
+
+  it('getFacebookOAuthUrl asks for portfolio access once the flag turns it on', async () => {
+    process.env.META_BUSINESS_MANAGEMENT = 'true';
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    expect(getFacebookOAuthUrl('business-state-123')).toContain('business_management');
+  });
+
+  it('lets the caller’s own choice override the deployment flag', async () => {
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    expect(getFacebookOAuthUrl('s', true)).toContain('business_management');
+
+    process.env.META_BUSINESS_MANAGEMENT = 'true';
+    expect(getFacebookOAuthUrl('s', false)).not.toContain('business_management');
+  });
+
+  it('carries the portfolio choice through the signed state, and still reads a state without one', async () => {
+    const { createOAuthState, verifyOAuthState } = await import('@repo/integrations/facebook');
+
+    const flagged = await createOAuthState({ businessId: 'b1', userId: 'u1', portfolio: true });
+    expect(flagged.split('.')).toHaveLength(5);
+    expect(await verifyOAuthState(flagged)).toMatchObject({ businessId: 'b1', userId: 'u1', portfolio: true });
+
+    // A flow started before the choice existed must still complete.
+    const plain = await createOAuthState({ businessId: 'b1', userId: 'u1' });
+    expect(await verifyOAuthState(plain)).toMatchObject({ businessId: 'b1', userId: 'u1', portfolio: false });
+
+    const tampered = `${flagged.slice(0, flagged.lastIndexOf('.'))}.x`;
+    expect(await verifyOAuthState(tampered)).toBeNull();
+  });
+
+  it('getGrantedPermissions returns the scopes Meta named', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ data: [{ permission: 'pages_show_list' }, { permission: 'email' }] }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const { getGrantedPermissions } = await import('@repo/integrations/facebook');
+    expect(await getGrantedPermissions('user-token')).toEqual(['pages_show_list', 'email']);
+  });
+
+  it('getGrantedPermissions throws when Graph refuses', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    const { getGrantedPermissions } = await import('@repo/integrations/facebook');
+    await expect(getGrantedPermissions('bad-token')).rejects.toThrow('Failed to fetch permissions');
+  });
+
+  it('getPortfolioPages collects pages from every portfolio the person belongs to', async () => {
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/me/businesses')) {
+        return new Response(
+          JSON.stringify({ data: [{ id: 'biz-1', name: 'North Star' }, { id: 'biz-2', name: 'South Star' }] }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/biz-1/pages')) {
+        return new Response(
+          JSON.stringify({ data: [{ id: 'p1', name: 'Page One', access_token: 'tok-1' }] }),
+          { status: 200 },
+        );
+      }
+      // A portfolio this token cannot read must not sink the whole answer.
+      return new Response('forbidden', { status: 403 });
+    }) as unknown as typeof fetch;
+
+    const { getPortfolioPages } = await import('@repo/integrations/facebook');
+    expect(await getPortfolioPages('user-token')).toEqual([
+      { id: 'p1', name: 'Page One', accessToken: 'tok-1', businessName: 'North Star' },
+    ]);
+  });
+
+  it('getPortfolioPages keeps a page it found without a token, flagged as such', async () => {
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/me/businesses')) {
+        return new Response(JSON.stringify({ data: [{ id: 'biz-1', name: 'North Star' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: [{ id: 'p2', name: 'Page Two' }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const { getPortfolioPages } = await import('@repo/integrations/facebook');
+    const pages = await getPortfolioPages('user-token');
+    expect(pages[0].accessToken).toBeUndefined();
+    expect(pages[0].businessName).toBe('North Star');
   });
 
   it('subscribeFacebookPageToWebhooks posts subscribed_fields to Graph API', async () => {

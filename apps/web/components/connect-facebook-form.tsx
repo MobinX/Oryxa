@@ -6,7 +6,7 @@ import { connectSelectedFacebookPagesAction } from '@/app/actions/channels';
 interface ConnectFacebookFormProps {
   businessId: string;
   token: string;
-  pages: Array<{ id: string; name: string; connected: boolean }>;
+  pages: Array<{ id: string; name: string; connected: boolean; business?: string | null }>;
 }
 
 export function ConnectFacebookForm({ businessId, token, pages }: ConnectFacebookFormProps) {
@@ -27,6 +27,18 @@ export function ConnectFacebookForm({ businessId, token, pages }: ConnectFaceboo
     });
     setLocalError(null);
   };
+
+  // A Page a person administers themselves and a Page they only reach through a business
+  // portfolio are different kinds of access, and a merchant recognises the second one by
+  // the portfolio name rather than by the flat list it used to be buried in.
+  const sections: Array<{ label: string | null; pages: typeof pages }> = [];
+  const personal = pages.filter((page) => !page.business);
+  if (personal.length > 0) sections.push({ label: null, pages: personal });
+  for (const page of pages.filter((p) => p.business)) {
+    const section = sections.find((s) => s.label === page.business);
+    if (section) section.pages.push(page);
+    else sections.push({ label: page.business!, pages: [page] });
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,42 +62,51 @@ export function ConnectFacebookForm({ businessId, token, pages }: ConnectFaceboo
         </div>
       )}
 
-      <div className="rounded-2xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
+      <div className="rounded-2xl border border-[var(--border)] overflow-hidden">
         {pages.length === 0 ? (
           <p className="p-4 text-sm text-[var(--muted-foreground)]">No Facebook pages found on this account.</p>
         ) : (
-          pages.map((page) => (
-            <label
-              key={page.id}
-              className={`flex cursor-pointer items-start gap-3 p-4 hover:bg-[var(--muted)]/40 transition-colors ${
-                selected.has(page.id) ? 'bg-[var(--primary)]/5' : ''
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(page.id)}
-                onChange={() => toggle(page.id)}
-                disabled={isPending}
-                className="mt-1 h-4 w-4 shrink-0 accent-[var(--primary)]"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block font-medium">{page.name}</span>
-                <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                  Page ID: {page.id}
-                </span>
-                {page.connected && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    Already connected — select to refresh token
-                  </span>
-                )}
-              </span>
-              {selected.has(page.id) && (
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-bold">✓</span>
+          sections.map((section) => (
+            <div key={section.label ?? 'personal-pages'} className="divide-y divide-[var(--border)]">
+              {section.label && (
+                <p className="bg-[var(--muted)]/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Meta Business Portfolio · {section.label}
+                </p>
               )}
-            </label>
+              {section.pages.map((page) => (
+                <label
+                  key={page.id}
+                  className={`flex cursor-pointer items-start gap-3 p-4 hover:bg-[var(--muted)]/40 transition-colors ${
+                    selected.has(page.id) ? 'bg-[var(--primary)]/5' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(page.id)}
+                    onChange={() => toggle(page.id)}
+                    disabled={isPending}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--primary)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{page.name}</span>
+                    <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                      Page ID: {page.id}
+                    </span>
+                    {page.connected && (
+                      <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        Already connected — select to refresh token
+                      </span>
+                    )}
+                  </span>
+                  {selected.has(page.id) && (
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-bold">✓</span>
+                  )}
+                </label>
+              ))}
+            </div>
           ))
         )}
       </div>

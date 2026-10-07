@@ -192,7 +192,10 @@ async function ChannelsContent({
             Link your Facebook Page to enable AI-powered Messenger replies.
           </p>
           <div className="mt-4">
-            <FacebookConnectButton businessId={businessId} />
+            <FacebookConnectButton
+              businessId={businessId}
+              portfolioAvailable={process.env.META_BUSINESS_MANAGEMENT === 'true'}
+            />
           </div>
         </Card>
 

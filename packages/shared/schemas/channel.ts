@@ -59,10 +59,20 @@ export const facebookPendingPagesQuerySchema = z.object({
   token: z.string().min(1),
 });
 
+export const facebookAuthQuerySchema = z.object({
+  /**
+   * The connector's "where are your Pages" answer. Absent means the caller never chose —
+   * an old link, or an entry point without the choice — and the deployment decides instead.
+   */
+  portfolio: z.enum(['true', 'false']).optional(),
+});
+
 export const facebookPendingPageSchema = z.object({
   id: z.string(),
   name: z.string(),
   connected: z.boolean(),
+  /** Portfolio name when the Page was reached through a Meta Business Portfolio. */
+  business: z.string().nullable().optional(),
 });
 
 export const facebookConnectPagesInputSchema = z.object({

@@ -11,7 +11,7 @@ export default function ConnectFacebookPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ token?: string; error?: string }>;
+  searchParams: Promise<{ token?: string; error?: string; detail?: string }>;
 }) {
   return (
     <Suspense fallback={<ConnectFacebookSkeleton />}>
@@ -20,20 +20,47 @@ export default function ConnectFacebookPage({
   );
 }
 
+/**
+ * What an empty Page list meant, in Meta's own words from the callback: the old screen
+ * blamed the user for every case, and three of these are not the user's doing at all.
+ */
+const PAGE_DIAGNOSTICS: Record<string, { title: string; body: string; fix: string }> = {
+  'no-pages-on-account': {
+    title: 'This Facebook account has no Pages',
+    body: 'Oryxa asked Facebook for the Pages this account administers and got none back — including any business portfolio it belongs to.',
+    fix: 'Connect with the Facebook account that actually administers the Page, or create the Page first and try again.',
+  },
+  'pages-permission-not-granted': {
+    title: 'Facebook gave Oryxa no Page access for this account',
+    body: 'The login succeeded, but Facebook did not grant the permission that lists your Pages. This is an app-side setting, not something you declined.',
+    fix: 'Try connecting once more; if it repeats, the Meta app needs Page access approved for your account — tell us and we can add it as a tester.',
+  },
+  'pages-not-controllable': {
+    title: 'Your Pages are in a business portfolio we cannot act on',
+    body: 'Facebook listed Pages for your business portfolio but did not hand Oryxa the access token for any of them, so your account holds a portfolio role without Page control.',
+    fix: 'Ask a portfolio admin to give your account Full control of the Page (Business Suite → Page Settings → Page Access), then connect again.',
+  },
+  'no-pages-selected': {
+    title: 'No pages selected during Facebook login',
+    body: 'It looks like you didn’t select any Facebook Pages when granting access. This usually happens if you clicked "Edit Settings" during the Facebook login and unselected all pages, or if your Facebook account has no Pages.',
+    fix: 'Try connecting again and make sure to select at least one Page when Facebook asks which pages to give Oryxa access to.',
+  },
+};
+
 async function ConnectFacebookContent({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ token?: string; error?: string }>;
+  searchParams: Promise<{ token?: string; error?: string; detail?: string }>;
 }) {
   const { businessId } = await params;
-  const { token, error } = await searchParams;
+  const { token, error, detail } = await searchParams;
   const authToken = await requireAuth();
 
   if (!token) {
-    // Handle the "no pages selected" case from the OAuth callback
-    if (error === 'no-pages-selected') {
+    const diagnosis = error ? PAGE_DIAGNOSTICS[error] : undefined;
+    if (diagnosis) {
       return (
         <div className="mx-auto max-w-lg space-y-6">
           <div>
@@ -43,12 +70,15 @@ async function ConnectFacebookContent({
             </p>
           </div>
           <Card className="border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
-            <h3 className="font-semibold text-amber-800 dark:text-amber-200">No pages selected during Facebook login</h3>
-            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-              It looks like you didn&apos;t select any Facebook Pages when granting access. This usually happens if you clicked &quot;Edit Settings&quot; during the Facebook login and unselected all pages, or if your Facebook account has no Pages.
-            </p>
+            <h3 className="font-semibold text-amber-800 dark:text-amber-200">{diagnosis.title}</h3>
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{diagnosis.body}</p>
+            {detail && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                Found: {decodeURIComponent(detail)}
+              </p>
+            )}
             <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
-              <strong>To fix this:</strong> Try connecting again and make sure to select at least one Page when Facebook asks which pages to give Oryxa access to.
+              <strong>To fix this:</strong> {diagnosis.fix}
             </p>
             <div className="mt-4">
               <Link

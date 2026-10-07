@@ -12,6 +12,7 @@ import {
   updateChannelInputSchema,
   updateChannelOutputSchema,
   deleteChannelOutputSchema,
+  facebookAuthQuerySchema,
   facebookPendingPagesQuerySchema,
   facebookPendingPageSchema,
   facebookConnectPagesInputSchema,
@@ -43,6 +44,10 @@ import {
   verifyFacebookPagesSelectionToken,
   subscribeFacebookPageToWebhooks,
   unsubscribeFacebookPageFromWebhooks,
+  getGrantedPermissions,
+  getPortfolioPages,
+  type FacebookPageOption,
+  type PortfolioPage,
 } from '@repo/integrations/facebook';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
@@ -332,7 +337,10 @@ const fbAuthRoute = createRoute({
   path: '/{businessId}/channels/facebook/auth',
   tags: ['Channels'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: facebookAuthQuerySchema,
+  },
   responses: {
     200: { content: { 'application/json': { schema: z.object({ url: z.string() }) } }, description: 'OAuth URL' },
   },
@@ -341,11 +349,16 @@ const fbAuthRoute = createRoute({
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
+  const { portfolio } = c.req.valid('query');
+  // Meta echoes `state` back verbatim, so the user's answer survives the round trip inside
+  // the same signed token that binds the flow to this business — no second token, and a
+  // client cannot relabel someone else's flow as portfolio-aware.
+  const choice = portfolio === undefined ? undefined : portfolio === 'true';
   // state is a signed, short-lived token bound to this user + business, so the
   // OAuth callback can't be replayed to attach a page to a business the caller
   // doesn't own.
-  const state = await createOAuthState({ businessId, userId: user.id });
-  const url = getFacebookOAuthUrl(state);
+  const state = await createOAuthState({ businessId, userId: user.id, portfolio: choice });
+  const url = getFacebookOAuthUrl(state, choice);
   return c.json({ url });
 });
 
@@ -383,7 +396,7 @@ channelsRouter.openapi(fbPendingPagesRoute, async (c) => {
         'facebook',
         page.id,
       );
-      return { id: page.id, name: page.name, connected: !!existing };
+      return { id: page.id, name: page.name, connected: !!existing, business: page.business ?? null };
     }),
   );
   return c.json(pages);
@@ -501,33 +514,142 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   const state = c.req.query('state');
   if (!code || !state) return c.text('Missing code or state', 400);
 
-  // Verify the signed state (issued by the authed fbAuthRoute) before trusting
-  // the businessId it carries.
+  // Verify the signed state (issued by the authed fbAuthRoute) before trusting the
+  // businessId it carries.
   const verified = await verifyOAuthState(state);
   if (!verified) return c.text('Invalid or expired state', 400);
 
-  try {
-    const userToken = await exchangeCodeForToken(code);
-    const pages = await getUserPages(userToken);
-    if (pages.length === 0) {
-      const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
-      return c.redirect(
-        `${webUrl}/b/${verified.businessId}/channels/connect-facebook?error=no-pages-selected`,
-      );
-    }
-
+  const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+  const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,
       userId: verified.userId,
       pages,
     });
-
-    const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
     return c.redirect(
       `${webUrl}/b/${verified.businessId}/channels/connect-facebook?token=${encodeURIComponent(pagesToken)}`,
     );
+  };
+
+  const toError = (error: string, detail?: string) =>
+    c.redirect(
+      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?error=${error}${
+        detail ? `&detail=${encodeURIComponent(detail)}` : ''
+      }`,
+    );
+
+  try {
+    const userToken = await exchangeCodeForToken(code);
+    const pages = await getUserPages(userToken);
+    console.log('[fb-callback] /me/accounts returned pages', {
+      businessId: verified.businessId,
+      count: pages.length,
+    });
+
+    if (verified.portfolio) {
+      const combined = await withPortfolioPages(pages, userToken);
+      console.log('[fb-callback] portfolio lookup added pages', {
+        businessId: verified.businessId,
+        added: combined.length - pages.length,
+      });
+      if (combined.length > 0) return await toPicker(combined);
+    } else if (pages.length > 0) {
+      return await toPicker(pages);
+    }
+
+    const outcome = await diagnoseEmptyPageList(userToken);
+    if (Array.isArray(outcome)) return await toPicker(outcome);
+    return toError(outcome.error, outcome.detail);
   } catch (err) {
     console.error('Facebook OAuth error:', err);
     return c.text('OAuth failed', 500);
   }
 });
+
+/**
+ * Someone who said "my Pages are in a business portfolio" expects both lists in one picker:
+ * portfolio-admin Pages also show up in `/me/accounts`, so the personal list is kept and the
+ * portfolio Pages are appended behind it. Pages Meta handed no token for are left out here —
+ * `api_token` is NOT NULL, so there is nothing to store for them.
+ */
+async function withPortfolioPages(
+  pages: FacebookPageOption[],
+  userToken: string,
+): Promise<FacebookPageOption[]> {
+  let portfolioPages: PortfolioPage[];
+  try {
+    portfolioPages = await getPortfolioPages(userToken);
+  } catch (err) {
+    console.warn('[fb-callback] portfolio lookup failed', { error: String(err) });
+    return pages;
+  }
+
+  const seen = new Set(pages.map((page) => page.id));
+  const merged = [...pages];
+  for (const page of portfolioPages) {
+    if (!page.accessToken || seen.has(page.id)) continue;
+    seen.add(page.id);
+    merged.push(toPortfolioPageOption(page));
+  }
+  return merged;
+}
+
+function toPortfolioPageOption(page: PortfolioPage): FacebookPageOption {
+  return {
+    id: page.id,
+    name: page.name,
+    access_token: page.accessToken as string,
+    business: page.businessName,
+  };
+}
+
+type PageListDiagnosis = { error: string; detail?: string };
+
+/**
+ * `/me/accounts` answers 200 with an empty list for more than one reason, and the flow used
+ * to call every one of them "you didn't select any Pages" — advice the user cannot act on.
+ * Ask Meta instead: Pages that exist only inside a Business Portfolio are returned here so
+ * the picker can offer them, and the remaining cases are named separately so the screen can
+ * say whose problem it is. Best-effort throughout — a diagnosis that fails must still be a
+ * redirect, never a 500 on the way back from Facebook.
+ */
+async function diagnoseEmptyPageList(
+  userToken: string,
+): Promise<FacebookPageOption[] | PageListDiagnosis> {
+  const [permissions, portfolioPages] = await Promise.all([
+    getGrantedPermissions(userToken)
+      .then((granted) => granted as string[] | null)
+      .catch((err) => {
+        console.warn('[fb-callback] permission lookup failed', { error: String(err) });
+        return null;
+      }),
+    getPortfolioPages(userToken)
+      .then((pages) => pages as PortfolioPage[])
+      .catch((err) => {
+        console.warn('[fb-callback] portfolio lookup failed', { error: String(err) });
+        return [] as PortfolioPage[];
+      }),
+  ]);
+
+  const connectable = portfolioPages
+    .filter((page) => !!page.accessToken)
+    .map(toPortfolioPageOption);
+
+  if (connectable.length > 0) return connectable;
+
+  if (portfolioPages.length > 0) {
+    return {
+      error: 'pages-not-controllable',
+      detail: portfolioPages
+        .slice(0, 3)
+        .map((page) => `${page.name} — ${page.businessName}`)
+        .join('; '),
+    };
+  }
+  // A failed lookup is not evidence the permission was withheld, so it must not be reported
+  // as if it were — only a `pages_show_list` Meta actually answered without can say that.
+  if (permissions !== null && !permissions.includes('pages_show_list')) {
+    return { error: 'pages-permission-not-granted' };
+  }
+  return { error: 'no-pages-on-account' };
+}
