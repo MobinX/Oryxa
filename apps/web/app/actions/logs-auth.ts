@@ -37,8 +37,11 @@ export async function operatorSignInAction(idToken: string) {
   });
 
   // No password in env means no session this deployment can sign, which is a state of the host
-  // rather than a wrong answer from the person typing.
-  if (!(await startLogsSession())) redirect('/admin/login?error=disabled');
+  // rather than a wrong answer from the person typing. The cookie carries the account Google named,
+  // so it says who is reading the console and not merely that somebody knew the secret.
+  if (!(await startLogsSession(verified.email ?? operatorAccountEmail()))) {
+    redirect('/admin/login?error=disabled');
+  }
 
   await setAuthCookie(idToken);
   redirect('/admin');

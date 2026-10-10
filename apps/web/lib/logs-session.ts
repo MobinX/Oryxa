@@ -42,20 +42,24 @@ function sameSecret(candidate: string, expected: string): boolean {
 }
 
 /**
- * The HMAC key is the password, so rotating `LOGS_UI_PASSWORD` signs every issued
- * cookie out. The password itself never enters the cookie: what the browser holds
- * is a signature over an expiry, and the bearer for the API is read from env.
+ * The HMAC key is the password, so rotating `LOGS_UI_PASSWORD` signs every issued cookie out. The
+ * password itself never enters the cookie: what the browser holds is a signature over an expiry
+ * *and the account it was issued to*, and the bearer for the API is read from env. The account
+ * belongs in the signed payload because a signature over an expiry alone says only "somebody who
+ * knew the password" — it keeps saying that after the operator account is rotated, and it says it
+ * to every page for eight hours without asking who is reading.
  */
 function sign(payload: string, key: string): string {
   return createHmac('sha256', key).update(payload).digest('base64url');
 }
 
-export async function startLogsSession(): Promise<boolean> {
+/** @param as the operator account Google confirmed at sign-in, bound into the cookie. */
+export async function startLogsSession(as: string): Promise<boolean> {
   const key = logsOperatorPassword();
   if (!key) return false;
-  const expiry = String(Date.now() + SESSION_MS);
+  const payload = `${Date.now() + SESSION_MS}|${as}`;
   const store = await cookies();
-  store.set(LOGS_COOKIE, `${Buffer.from(expiry, 'utf8').toString('base64url')}.${sign(expiry, key)}`, {
+  store.set(LOGS_COOKIE, `${Buffer.from(payload, 'utf8').toString('base64url')}.${sign(payload, key)}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -70,7 +74,11 @@ export async function clearLogsSession(): Promise<void> {
   store.delete(LOGS_COOKIE);
 }
 
-/** True only for an unexpired cookie this process can still sign. */
+/**
+ * True only for an unexpired cookie this process can still sign, issued to the account this
+ * deployment considers the operator. Every admin page asks, so holding the console is a question
+ * re-answered on each read rather than something decided when the door was first opened.
+ */
 export async function hasLogsSession(): Promise<boolean> {
   const key = logsOperatorPassword();
   if (!key) return false;
@@ -81,16 +89,21 @@ export async function hasLogsSession(): Promise<boolean> {
   const [payload, signature] = raw.split('.');
   if (!payload || !signature) return false;
 
-  let expiry: string;
+  let decoded: string;
   try {
-    expiry = Buffer.from(payload, 'base64url').toString('utf8');
+    decoded = Buffer.from(payload, 'base64url').toString('utf8');
   } catch {
     return false;
   }
-  const at = Number(expiry);
-  if (!Number.isFinite(at) || at < Date.now()) return false;
 
-  return sameSecret(signature, sign(expiry, key));
+  // Integrity before content: nothing below this line trusts a byte the browser sent.
+  if (!sameSecret(signature, sign(decoded, key))) return false;
+
+  const [at, ...who] = decoded.split('|');
+  const time = Number(at);
+  if (!Number.isFinite(time) || time < Date.now()) return false;
+
+  return who.join('|').toLowerCase() === operatorAccountEmail().toLowerCase();
 }
 
 /**
