@@ -5,7 +5,6 @@ import {
   getMe,
   getOrder,
   getProduct,
-  listAgents,
   listBusinesses,
   listCategories,
   listChannels,
@@ -20,6 +19,8 @@ import {
   listCustomers,
   adminListPlans,
   adminListBusinessPlans,
+  getAdminTokenUsage,
+  getAdminTokenUsageDetail,
 } from '@/lib/api';
 import type { Customer, NotificationList, PublicPlan } from '@/lib/api';
 import { cacheTags } from './tags';
@@ -57,42 +58,29 @@ export async function cachedAnalytics(token: string, businessId: string, days: n
   return getBusinessAnalytics(token, businessId, days);
 }
 
-export async function cachedTokenAnalytics(token: string, businessId: string, hours: number = 24) {
+/**
+ * One month of the platform's token spend, store by store. The counters move inside the
+ * agent runner, outside this app, so nothing can `updateTag` them: they are stale by up to
+ * a few minutes by design, and the page says so. A failed read is left to throw, because
+ * the console page turns a 401 into a trip back to `/admin/login` — swallowing it here
+ * would strand the reader on an error card that cannot tell them to sign in again.
+ */
+export async function cachedAdminTokenUsage(token: string, month: string) {
   'use cache';
   cacheLife('minutes');
-  cacheTag(cacheTags.analytics(businessId));
-  try {
-    const { getTokenAnalytics } = await import('@/lib/api');
-    return await getTokenAnalytics(token, businessId, hours);
-  } catch {
-    return {
-      totals: {
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalTokens: 0,
-        totalCacheHitTokens: 0,
-        totalCacheMissTokens: 0,
-        totalRuns: 0,
-        avgTokensPerMessage: 0,
-        overallCacheHitPercent: 0,
-        totalEstimatedCostUsd: 0,
-      },
-      byIntegration: [],
-      hourlyGraphData: [],
-    };
-  }
+  cacheTag(cacheTags.adminTokenUsage(month));
+  return getAdminTokenUsage(token, month);
 }
 
-export async function cachedTokenLogs(token: string, businessId: string, limit: number = 50) {
+export async function cachedAdminTokenUsageDetail(
+  token: string,
+  businessId: string,
+  month: string,
+) {
   'use cache';
   cacheLife('minutes');
-  cacheTag(cacheTags.analytics(businessId));
-  try {
-    const { getTokenLogs } = await import('@/lib/api');
-    return await getTokenLogs(token, businessId, limit);
-  } catch {
-    return [];
-  }
+  cacheTag(cacheTags.adminTokenUsageBusiness(businessId, month));
+  return getAdminTokenUsageDetail(token, businessId, month);
 }
 
 export async function cachedProducts(
@@ -140,13 +128,6 @@ export async function cachedChannels(token: string, businessId: string) {
   cacheLife('hours');
   cacheTag(cacheTags.channels(businessId));
   return listChannels(token, businessId);
-}
-
-export async function cachedAgents(token: string, businessId: string) {
-  'use cache';
-  cacheLife('hours');
-  cacheTag(cacheTags.agents(businessId));
-  return listAgents(token, businessId);
 }
 
 export async function cachedPosts(token: string, businessId: string) {

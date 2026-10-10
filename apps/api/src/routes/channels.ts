@@ -8,7 +8,6 @@ import {
   deleteAgentOutputSchema,
   createChannelInputSchema,
   createChannelOutputSchema,
-  updateChannelAgentSchema,
   updateChannelInputSchema,
   updateChannelOutputSchema,
   deleteChannelOutputSchema,
@@ -26,7 +25,6 @@ import {
   deleteAgent,
   createChannel,
   listChannels,
-  updateChannelAgent,
   updateChannel,
   deleteChannel,
   getChannelById,
@@ -36,6 +34,7 @@ import {
   ChannelTakenError,
   ChannelAgentError,
 } from '@repo/db/crud/channel';
+import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
 import {
   getFacebookOAuthUrl,
   exchangeCodeForToken,
@@ -105,6 +104,33 @@ channelsRouter.openapi(listAgentsRoute, async (c) => {
       createdAt: a.createdAt.toISOString(),
     })),
   );
+});
+
+const getDefaultAgentRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/agents/default',
+  tags: ['Agents'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: selectAgentSchema } }, description: 'The agent answering this store' },
+  },
+});
+
+/**
+ * The single agent a store's channels answer with. Created on the spot if the store predates the
+ * default, which is why the playground can always show a prompt instead of an empty editor.
+ */
+channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const agent = await ensureDefaultAgent(businessId);
+  return c.json({
+    id: agent.id,
+    name: agent.name,
+    platformType: agent.platformType,
+    systemPrompt: agent.systemPrompt,
+    createdAt: agent.createdAt.toISOString(),
+  });
 });
 
 const getAgentRoute = createRoute({
@@ -196,7 +222,10 @@ channelsRouter.openapi(createChannelRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const data = c.req.valid('json');
   try {
-    const channel = await createChannel(businessId, data);
+    // The store's default agent, whatever the caller asked for: choosing which agent answers a
+    // Page was the part of this product that merchants got wrong, so it is no longer a decision.
+    const agent = await ensureDefaultAgent(businessId);
+    const channel = await createChannel(businessId, { ...data, agentId: agent.id });
     return c.json(channel, 201);
   } catch (err) {
     if (err instanceof ChannelTakenError) return c.json({ error: err.message }, 409);
@@ -256,35 +285,6 @@ channelsRouter.openapi(listChannelsRoute, async (c) => {
   );
 });
 
-const updateChannelAgentRoute = createRoute({
-  method: 'patch',
-  path: '/{businessId}/channels/{channelId}/agent',
-  tags: ['Channels'],
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: z.object({ businessId: z.string().uuid(), channelId: z.string().uuid() }),
-    body: { content: { 'application/json': { schema: updateChannelAgentSchema } } },
-  },
-  responses: {
-    200: { content: { 'application/json': { schema: z.object({ success: z.boolean() }) } }, description: 'Updated' },
-    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Agent belongs to another store' },
-  },
-});
-
-channelsRouter.openapi(updateChannelAgentRoute, async (c) => {
-  const businessId = c.req.param('businessId');
-  const channelId = c.req.param('channelId');
-  const { agentId } = c.req.valid('json');
-  try {
-    const result = await updateChannelAgent(channelId, businessId, agentId);
-    if (!result) return c.json({ error: 'Channel not found' }, 404);
-    return c.json(result);
-  } catch (err) {
-    if (err instanceof ChannelAgentError) return c.json({ error: err.message }, 400);
-    throw err;
-  }
-});
-
 const updateChannelRoute = createRoute({
   method: 'put',
   path: '/{businessId}/channels/{channelId}',
@@ -306,7 +306,8 @@ channelsRouter.openapi(updateChannelRoute, async (c) => {
   const channelId = c.req.param('channelId');
   const data = c.req.valid('json');
   try {
-    const result = await updateChannel(businessId, channelId, data);
+    const agent = await ensureDefaultAgent(businessId);
+    const result = await updateChannel(businessId, channelId, { ...data, agentId: agent.id });
     if (!result) return c.json({ error: 'Channel not found' }, 404);
     return c.json(result);
   } catch (err) {
@@ -463,6 +464,10 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
   const skipped: string[] = [];
   const failed: Array<{ pageId: string; error: string }> = [];
 
+  // Every Page this store connects answers with the store's default agent — there is nothing to
+  // pick any more, so the agent is resolved once for the whole batch.
+  const defaultAgent = await ensureDefaultAgent(businessId);
+
   for (const pageId of pageIds) {
     const page = pageById.get(pageId);
     if (!page) {
@@ -472,6 +477,7 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
 
     const channelPayload = {
       apiToken: page.access_token,
+      agentId: defaultAgent.id,
       extraInfo: JSON.stringify({ pageName: page.name }),
     };
 

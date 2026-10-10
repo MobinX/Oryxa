@@ -11,7 +11,6 @@ export const cacheTags = {
   orders: (businessId: string) => `orders-${businessId}`,
   order: (orderId: string) => `order-${orderId}`,
   channels: (businessId: string) => `channels-${businessId}`,
-  agents: (businessId: string) => `agents-${businessId}`,
   posts: (businessId: string) => `posts-${businessId}`,
   post: (postId: string) => `post-${postId}`,
   plans: () => 'plans',
@@ -21,6 +20,11 @@ export const cacheTags = {
   customers: (businessId: string) => `customers-${businessId}`,
   companies: () => 'companies',
   adminBusinessPlans: () => 'admin-business-plans',
+  // Keyed by month as well as store: an operator flipping the month selector should not
+  // have a finished month re-requested, and nothing writes these tags to expire them.
+  adminTokenUsage: (month: string) => `admin-token-usage-${month}`,
+  adminTokenUsageBusiness: (businessId: string, month: string) =>
+    `admin-token-usage-${businessId}-${month}`,
 } as const;
 
 export function expireBusinesses() {
@@ -51,7 +55,6 @@ export function expireOrders(businessId: string, orderId?: string) {
 
 export function expireChannelPage(businessId: string) {
   updateTag(cacheTags.channels(businessId));
-  updateTag(cacheTags.agents(businessId));
   updateTag(cacheTags.analytics(businessId));
 }
 

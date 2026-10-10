@@ -1,6 +1,7 @@
 import { eq, and, isNull, ne } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, channels } from '@db/schema';
+import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
 import {
   createAgentInputSchema,
   updateAgentInputSchema,
@@ -97,15 +98,17 @@ export async function updateAgent(businessId: string, agentId: string, input: un
 export async function deleteAgent(businessId: string, agentId: string) {
   const agent = await getAgentById(businessId, agentId);
   if (!agent) return null;
-  // Unbind any channels pointing at this agent first
-  await db
-    .update(channels)
-    .set({ agentId: null })
-    .where(eq(channels.agentId, agentId));
   await db
     .update(agents)
     .set({ deletedAt: new Date() })
     .where(eq(agents.id, agentId));
+  // Re-point the channels it was answering, rather than leaving them with no agent at all —
+  // a channel with no agent goes silent on its customers with nothing in the UI to explain it.
+  const replacement = await ensureDefaultAgent(businessId);
+  await db
+    .update(channels)
+    .set({ agentId: replacement.id })
+    .where(eq(channels.agentId, agentId));
   return { deleted: true };
 }
 
@@ -113,6 +116,10 @@ export async function createChannel(businessId: string, input: unknown) {
   const parsed = createChannelInputSchema.parse(input);
   await assertSoleLiveOwner(businessId, parsed.platform, parsed.platformChannelId);
   await assertAgentIsOwned(businessId, parsed.agentId);
+
+  // A channel without an agent is a Page that goes quiet on its owner, so the store's default
+  // agent is attached here rather than left to whoever remembered to pick one.
+  const agentId = parsed.agentId ?? (await ensureDefaultAgent(businessId)).id;
 
   // Check if a channel (active or soft-deleted) already exists for this business/platform channel
   const existing = await findChannelByBusinessPlatformChannelId(
@@ -128,7 +135,7 @@ export async function createChannel(businessId: string, input: unknown) {
       .set({
         deletedAt: null,
         apiToken: parsed.apiToken,
-        agentId: parsed.agentId ?? null,
+        agentId,
         extraInfo: parsed.extraInfo ?? null,
       })
       .where(eq(channels.id, existing.id))
@@ -138,7 +145,7 @@ export async function createChannel(businessId: string, input: unknown) {
 
   const [channel] = await db
     .insert(channels)
-    .values({ ...parsed, businessId })
+    .values({ ...parsed, agentId, businessId })
     .returning();
   return { id: channel.id, status: 'linked' as const };
 }

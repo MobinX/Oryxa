@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  listAgents,
-  createAgent,
+  getDefaultAgent,
   updateAgent,
   listChannels,
   createChannel,
   listConversations,
   listMessages,
   deleteConversation,
-  updateChannelAgent,
+  type Agent,
+  type Channel,
 } from '@/lib/api';
 import {
   Terminal as TerminalIcon,
@@ -20,15 +20,10 @@ import {
   Trash2,
   Send,
   RefreshCw,
-  Edit3,
   Check,
   User,
-  Settings,
   Shield,
   Activity,
-  ArrowRight,
-  Maximize2,
-  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,21 +41,13 @@ const MOCK_NAMES = [
   'Arthur Curry',
 ];
 
-interface Agent {
-  id: string;
-  name: string;
-  platformType: string;
-  systemPrompt?: string;
-  createdAt?: string;
-}
-
-interface Channel {
-  id: string;
-  platform: string;
-  platformChannelId: string;
-  agentId: string | null;
-  pageName?: string | null;
-}
+/**
+ * The page id a test chat runs on, so a test is never mistaken for a real customer thread.
+ * Namespaced by store: (platform, page id) is unique across live channels, so one shared id
+ * would be claimed by the first store that opened the playground and leave every other store —
+ * and the operator's sandbox — unable to create its own.
+ */
+const sandboxPageId = (businessId: string) => `mock-channel-${businessId}`;
 
 interface Conversation {
   id: string;
@@ -87,16 +74,17 @@ interface LogEvent {
 export function PlaygroundClient({
   token,
   businessId,
+  canEditPrompt = false,
 }: {
   token: string;
   businessId: string;
+  /** Only the operator console passes this: a store sees its prompt, it does not write it. */
+  canEditPrompt?: boolean;
 }) {
   // State
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const [agent, setAgent] = useState<Agent | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
-  const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -109,18 +97,12 @@ export function PlaygroundClient({
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
 
-  // Modals / Creating Agent
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newAgentName, setNewAgentName] = useState('');
-  const [newAgentPrompt, setNewAgentPrompt] = useState('');
-  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
-
   const logsEndRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load Initial Data
   useEffect(() => {
-    loadAgentsAndChannels();
+    loadSandbox();
   }, []);
 
   // Reload conversations when the active channel changes
@@ -152,44 +134,33 @@ export function PlaygroundClient({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking]);
 
-  async function loadAgentsAndChannels() {
+  async function loadSandbox() {
     try {
-      const [agentList, channelList] = await Promise.all([
-        listAgents(token, businessId),
+      const [agentRow, channelList] = await Promise.all([
+        getDefaultAgent(token, businessId),
         listChannels(token, businessId),
       ]);
 
-      setAgents(agentList);
-      setChannels(channelList);
+      setAgent(agentRow);
+      setSystemPrompt(agentRow.systemPrompt || '');
 
-      // Select first agent if available
-      if (agentList.length > 0) {
-        const first = agentList[0]!;
-        setSelectedAgentId(first.id);
-        setSystemPrompt(first.systemPrompt || '');
-      }
-
-      // Check if we have a Facebook channel connected, if not, create a mock one automatically
-      let fbChannel = channelList.find((c) => c.platform === 'facebook');
-      if (!fbChannel && agentList.length > 0) {
-        console.log('Seeding mock testing channel...');
+      // Test chats run on a sandbox page of their own, never on a Page that has customers on it.
+      const pageId = sandboxPageId(businessId);
+      let sandbox = channelList.find((c) => c.platformChannelId === pageId);
+      if (!sandbox) {
         const seeded = await createChannel(token, businessId, {
           platform: 'facebook',
           apiToken: 'mock-test-token',
-          platformChannelId: 'mock-channel-id',
-          agentId: agentList[0]!.id,
+          platformChannelId: pageId,
           extraInfo: JSON.stringify({ pageName: 'Sandbox Testing Page' }),
         });
-        const updatedChannels = await listChannels(token, businessId);
-        setChannels(updatedChannels);
-        fbChannel = updatedChannels.find((c) => c.platform === 'facebook');
+        const updated = await listChannels(token, businessId);
+        sandbox = updated.find((c) => c.id === seeded.id);
       }
 
-      if (fbChannel) {
-        setActiveChannel(fbChannel);
-      }
+      if (sandbox) setActiveChannel(sandbox);
     } catch (err) {
-      console.error('Failed to load agents/channels:', err);
+      console.error('Failed to load the playground sandbox:', err);
     }
   }
 
@@ -219,75 +190,17 @@ export function PlaygroundClient({
     }
   }
 
-  async function handleAgentChange(agentId: string) {
-    setSelectedAgentId(agentId);
-    const agent = agents.find((a) => a.id === agentId);
-    if (agent) {
-      setSystemPrompt(agent.systemPrompt || '');
-      // Link the active channel to this agent dynamically so the test run uses this agent configuration
-      if (activeChannel) {
-        try {
-          await updateChannelAgent(token, businessId, activeChannel.id, agent.id);
-          const updated = await listChannels(token, businessId);
-          setChannels(updated);
-          const currentFb = updated.find((c) => c.platform === 'facebook');
-          if (currentFb) setActiveChannel(currentFb);
-        } catch (err) {
-          console.error('Failed to link channel to agent:', err);
-        }
-      }
-    }
-  }
-
   async function handleSaveSystemPrompt() {
-    if (!selectedAgentId) return;
+    if (!agent) return;
     setIsUpdatingPrompt(true);
     try {
-      await updateAgent(token, businessId, selectedAgentId, {
-        systemPrompt,
-      });
-      // Update local state
-      setAgents((prev) =>
-        prev.map((a) => (a.id === selectedAgentId ? { ...a, systemPrompt } : a)),
-      );
-      // Add debug alert log
+      await updateAgent(token, businessId, agent.id, { systemPrompt });
+      setAgent({ ...agent, systemPrompt });
       addLog('system_prompt_updated', { systemPrompt });
     } catch (err) {
       console.error('Failed to update system prompt:', err);
     } finally {
       setIsUpdatingPrompt(false);
-    }
-  }
-
-  async function handleCreateAgent(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newAgentName || !newAgentPrompt) return;
-    setIsCreatingAgent(true);
-    try {
-      const res = await createAgent(token, businessId, {
-        name: newAgentName,
-        systemPrompt: newAgentPrompt,
-        platformType: 'facebook',
-      });
-      const updatedAgents = await listAgents(token, businessId);
-      setAgents(updatedAgents);
-      setSelectedAgentId(res.id);
-      setSystemPrompt(newAgentPrompt);
-      setShowCreateModal(false);
-      setNewAgentName('');
-      setNewAgentPrompt('');
-
-      if (activeChannel) {
-        await updateChannelAgent(token, businessId, activeChannel.id, res.id);
-        const updatedChannels = await listChannels(token, businessId);
-        setChannels(updatedChannels);
-        const currentFb = updatedChannels.find((c) => c.platform === 'facebook');
-        if (currentFb) setActiveChannel(currentFb);
-      }
-    } catch (err) {
-      console.error('Failed to create agent:', err);
-    } finally {
-      setIsCreatingAgent(false);
     }
   }
 
@@ -461,21 +374,16 @@ export function PlaygroundClient({
               Agent Playground
             </h1>
             <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              Create agents, modify system prompts live, chat with mock users, and inspect real-time tool calls & reasoning.
+              Chat as a mock customer against your sandbox page and watch every tool call, result and
+              reply stream in.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 active:scale-[0.98] transition-all"
-            >
-              <Plus className="h-4 w-4" /> Create Agent
-            </button>
-            <button
-              onClick={loadAgentsAndChannels}
+              onClick={loadSandbox}
               className="flex items-center justify-center h-10 w-10 rounded-xl bg-slate-800/80 border border-slate-700/50 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-              title="Reload Catalog & Configuration"
+              title="Reload sandbox"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
@@ -484,63 +392,50 @@ export function PlaygroundClient({
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        {/* Left Side: System Prompt Live Configuration (xl:col-span-4) */}
+        {/* Left Side: the assistant answering this store's pages (xl:col-span-4) */}
         <div className="xl:col-span-4 flex flex-col gap-6">
-          {/* Agent Selection & Prompt Editor */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-xl">
             <div className="flex items-center gap-2 mb-4">
               <Bot className="h-5 w-5 text-indigo-400" />
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                Select Agent
+                {agent?.name ?? 'Your Assistant'}
               </h2>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Active Agent
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                  System Prompt
                 </label>
-                <select
-                  value={selectedAgentId}
-                  onChange={(e) => handleAgentChange(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200 outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="" disabled>Select an agent...</option>
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} ({a.platformType})</option>
-                  ))}
-                </select>
+                <span className="text-[10px] font-medium text-slate-500">
+                  {canEditPrompt ? 'Applies to the next test message' : 'Managed by Oryxa'}
+                </span>
               </div>
-
-              {selectedAgentId && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                      Live System Prompt
-                    </label>
-                    <span className="text-[10px] font-medium text-slate-500">Auto-saved to Sandbox Channel</span>
-                  </div>
-                  <textarea
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    rows={12}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none focus:border-indigo-500 leading-relaxed resize-none"
-                    placeholder="Enter agent system prompt instructions..."
-                  />
-                  <button
-                    onClick={handleSaveSystemPrompt}
-                    disabled={isUpdatingPrompt}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 py-2.5 text-xs font-bold text-indigo-400 hover:bg-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50"
-                  >
-                    {isUpdatingPrompt ? (
-                      <>Saving...</>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4" /> Save System Prompt
-                      </>
-                    )}
-                  </button>
-                </div>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                readOnly={!canEditPrompt}
+                rows={12}
+                className={cn(
+                  'w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none leading-relaxed resize-none',
+                  canEditPrompt ? 'focus:border-indigo-500' : 'cursor-default opacity-80',
+                )}
+                placeholder="Your assistant's instructions..."
+              />
+              {canEditPrompt && (
+                <button
+                  onClick={handleSaveSystemPrompt}
+                  disabled={isUpdatingPrompt}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 py-2.5 text-xs font-bold text-indigo-400 hover:bg-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {isUpdatingPrompt ? (
+                    <>Saving...</>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" /> Save System Prompt
+                    </>
+                  )}
+                </button>
               )}
             </div>
           </div>
@@ -848,71 +743,6 @@ export function PlaygroundClient({
         </div>
       )}
 
-      {/* Create Agent Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowCreateModal(false)}
-          />
-          <form
-            onSubmit={handleCreateAgent}
-            className="relative w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-2xl text-slate-200 flex flex-col gap-4 animate-in zoom-in-95 duration-200"
-          >
-            <div>
-              <h3 className="text-base font-bold text-white">Create Sandbox Agent</h3>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Configure a new AI sales assistant. It will be automatically connected to your testing channel.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Agent Name
-              </label>
-              <input
-                type="text"
-                required
-                value={newAgentName}
-                onChange={(e) => setNewAgentName(e.target.value)}
-                placeholder="e.g. Sales Specialist, Order Support"
-                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors text-slate-200"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Initial System Prompt
-              </label>
-              <textarea
-                required
-                value={newAgentPrompt}
-                onChange={(e) => setNewAgentPrompt(e.target.value)}
-                rows={8}
-                placeholder="Give instructions to the agent on how to behave, what products to recommend..."
-                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs font-mono outline-none focus:border-indigo-500 leading-relaxed resize-none text-slate-300"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 mt-2 border-t border-slate-900 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="rounded-xl border border-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isCreatingAgent}
-                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50"
-              >
-                {isCreatingAgent ? 'Creating...' : 'Create Agent'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

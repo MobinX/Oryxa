@@ -16,6 +16,10 @@ import {
   resolveAdminRange,
   type AdminRange,
 } from '@repo/db/crud/admin-analytics';
+import {
+  getBusinessTokenUsageDetail,
+  listBusinessTokenUsage,
+} from '@repo/db/crud/admin-token-analytics';
 
 /**
  * The operator dashboard's data. Same gate as the log console — the console password
@@ -27,7 +31,7 @@ export const adminRouter = new OpenAPIHono({
   defaultHook: (result, c) =>
     result.success
       ? undefined
-      : c.json({ error: 'Invalid query — days must be a positive integer' }, 400),
+      : c.json({ error: 'Invalid request — days must be a positive integer and a business id a uuid' }, 400),
 });
 
 adminRouter.use('*', logsAuthMiddleware);
@@ -152,3 +156,199 @@ async function countAnomalies(range: AdminRange): Promise<AdminStatsResponse['an
     return null;
   }
 }
+
+/**
+ * Token usage, per store, for one calendar month. This used to be a merchant screen;
+ * the numbers are the platform's cost, so they live on the operator side now. The
+ * rollup they read is written by the agent either way, so nothing is gathered here that
+ * the store's own traffic did not already record.
+ */
+const usageRowSchema = z.object({
+  businessId: z.string(),
+  name: z.string(),
+  slug: z.string().nullable(),
+  totalTokens: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheHitTokens: z.number(),
+  cacheMissTokens: z.number(),
+  runCount: z.number(),
+  avgTokensPerRun: z.number(),
+  cacheHitPercent: z.number(),
+  estimatedCostUsd: z.number(),
+});
+
+const listTokenUsageResponseSchema = z.object({
+  month: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  platform: z.object({
+    businesses: z.number(),
+    totalTokens: z.number(),
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    cacheHitTokens: z.number(),
+    runCount: z.number(),
+    avgTokensPerRun: z.number(),
+    cacheHitPercent: z.number(),
+    estimatedCostUsd: z.number(),
+  }),
+  businesses: z.array(usageRowSchema),
+});
+
+const tokenUsageDetailResponseSchema = z.object({
+  month: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  business: z.object({ id: z.string(), name: z.string(), slug: z.string().nullable() }),
+  totals: z.object({
+    totalTokens: z.number(),
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    cacheHitTokens: z.number(),
+    cacheMissTokens: z.number(),
+    runCount: z.number(),
+    avgTokensPerRun: z.number(),
+    avgLatencyMs: z.number(),
+    cacheHitPercent: z.number(),
+    estimatedCostUsd: z.number(),
+  }),
+  byIntegration: z.array(
+    z.object({
+      integrationType: z.string(),
+      totalTokens: z.number(),
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      runCount: z.number(),
+      avgTokensPerRun: z.number(),
+      cacheHitPercent: z.number(),
+      estimatedCostUsd: z.number(),
+    }),
+  ),
+  daily: z.array(
+    z.object({
+      date: z.string(),
+      totalTokens: z.number(),
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      cacheHitTokens: z.number(),
+      runCount: z.number(),
+      estimatedCostUsd: z.number(),
+    }),
+  ),
+});
+
+const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * A calendar month in UTC, as `[start, end)`. The month arrives as `YYYY-MM` from the
+ * console's own selector; anything malformed is read as this month rather than refused,
+ * because a stale bookmark should show numbers, not an error page.
+ */
+function resolveMonthWindow(month: string | undefined, now = new Date()) {
+  const key = month && MONTH_KEY.test(month) ? month : now.toISOString().slice(0, 7);
+  const [year, numbered] = key.split('-').map(Number);
+  return {
+    month: key,
+    start: new Date(Date.UTC(year, numbered - 1, 1)),
+    end: new Date(Date.UTC(year, numbered, 1)),
+  };
+}
+
+const monthQuery = z.object({
+  // `optional()` and hand-parsed like `days`: an empty `<select>` sends `month=`.
+  month: z.string().optional(),
+});
+
+const listTokenUsageRoute = createRoute({
+  method: 'get',
+  path: '/admin/token-analytics/businesses',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: { query: monthQuery },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: listTokenUsageResponseSchema } },
+      description: 'Every store that used the agent this month, heaviest first',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not allowed to read the platform numbers',
+    },
+  },
+});
+
+adminRouter.openapi(listTokenUsageRoute, async (c) => {
+  const { start, end, month } = resolveMonthWindow(c.req.valid('query').month);
+  const businesses = await listBusinessTokenUsage(start, end);
+
+  const sum = (pick: (row: (typeof businesses)[number]) => number) =>
+    businesses.reduce((total, row) => total + pick(row), 0);
+  const inputTokens = sum((row) => row.inputTokens);
+  const totalTokens = sum((row) => row.totalTokens);
+  const runCount = sum((row) => row.runCount);
+
+  return c.json(
+    {
+      month,
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      platform: {
+        businesses: businesses.length,
+        totalTokens,
+        inputTokens,
+        outputTokens: sum((row) => row.outputTokens),
+        cacheHitTokens: sum((row) => row.cacheHitTokens),
+        runCount,
+        // Re-derived from the sums rather than averaged over each store's own average,
+        // which would weight a store with two runs the same as one with twenty thousand.
+        avgTokensPerRun: runCount ? Math.round((totalTokens / runCount) * 100) / 100 : 0,
+        cacheHitPercent: inputTokens
+          ? Math.round((sum((row) => row.cacheHitTokens) / inputTokens) * 10000) / 100
+          : 0,
+        estimatedCostUsd: sum((row) => row.estimatedCostUsd),
+      },
+      businesses,
+    },
+    200,
+  );
+});
+
+const tokenUsageDetailRoute = createRoute({
+  method: 'get',
+  path: '/admin/token-analytics/businesses/{businessId}',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid() }), query: monthQuery },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: tokenUsageDetailResponseSchema } },
+      description: "One store's month of usage: totals, per pipeline, per day",
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No live store with that id',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not allowed to read the platform numbers',
+    },
+  },
+});
+
+adminRouter.openapi(tokenUsageDetailRoute, async (c) => {
+  const businessId = c.req.valid('param').businessId;
+  const { start, end, month } = resolveMonthWindow(c.req.valid('query').month);
+  const detail = await getBusinessTokenUsageDetail(businessId, start, end);
+  if (!detail) return c.json({ error: 'Business not found' }, 404);
+
+  return c.json({ month, startTime: start.toISOString(), endTime: end.toISOString(), ...detail }, 200);
+});

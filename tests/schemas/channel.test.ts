@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   createAgentInputSchema,
   createChannelInputSchema,
-  updateChannelAgentSchema,
 } from '@shared/schemas/channel';
 
 describe('Channel & Agent Zod Schemas', () => {
@@ -31,9 +30,5 @@ describe('Channel & Agent Zod Schemas', () => {
       platformChannelId: 'page-1',
     });
     expect(result.success).toBe(false);
-  });
-
-  it('validates channel agent update with null', () => {
-    expect(updateChannelAgentSchema.safeParse({ agentId: null }).success).toBe(true);
   });
 });

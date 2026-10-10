@@ -3,9 +3,18 @@ import { db } from '@db/client';
 import { businesses } from '@db/schema';
 import { createBusinessInputSchema, updateBusinessInputSchema } from '@repo/shared';
 import { assignPlan, getPlanBySlug } from '@repo/db/crud/plans';
+import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
 
 /** The plan every new store starts on. Seeded by migration 0012. */
 const DEFAULT_PLAN_SLUG = 'free';
+
+/**
+ * The store the operator playground tests prompts against: real products, a real storefront,
+ * and no customer behind it. Owned by the operator's own account and created by
+ * `packages/db/scripts/seed-admin-sandbox.ts`, so a fresh database without that row simply
+ * shows the playground a "not seeded" message rather than failing.
+ */
+export const ADMIN_SANDBOX_SLUG = 'oryxa-sandbox';
 
 export async function createBusiness(userId: string, input: unknown) {
   const parsed = createBusinessInputSchema.parse(input);
@@ -21,6 +30,10 @@ export async function createBusiness(userId: string, input: unknown) {
   // was before plans existed.
   const starter = await getPlanBySlug(DEFAULT_PLAN_SLUG);
   if (starter?.active) await assignPlan(business.id, starter.id, { actorKind: 'system' });
+
+  // Every store ships with its assistant already written: channels are bound to this agent the
+  // moment they connect, so nobody has to author a prompt to start taking customer replies.
+  await ensureDefaultAgent(business.id);
 
   return business;
 }

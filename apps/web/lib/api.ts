@@ -114,12 +114,6 @@ export const getBusinessStats = (token: string, businessId: string) =>
 export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
 
-export const getTokenAnalytics = (token: string, businessId: string, hours: number = 24) =>
-  apiFetch<any>(`/api/v1/${businessId}/analytics/tokens?hours=${hours}`, { token });
-
-export const getTokenLogs = (token: string, businessId: string, limit: number = 50) =>
-  apiFetch<any[]>(`/api/v1/${businessId}/analytics/tokens/logs?limit=${limit}`, { token });
-
 export const searchBusiness = (token: string, businessId: string, query: string) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/search?q=${encodeURIComponent(query)}`, { token });
 
@@ -414,22 +408,9 @@ export const connectFacebookPages = (
     { method: 'POST', token, body: JSON.stringify(data) },
   );
 
-export const createAgent = (
-  token: string,
-  businessId: string,
-  data: { name: string; systemPrompt: string; platformType: string },
-) =>
-  apiFetch<{ id: string }>(`/api/v1/${businessId}/agents`, {
-    method: 'POST',
-    token,
-    body: JSON.stringify(data),
-  });
-
-export const listAgents = (token: string, businessId: string) =>
-  apiFetch<Agent[]>(`/api/v1/${businessId}/agents`, { token });
-
-export const getAgent = (token: string, businessId: string, agentId: string) =>
-  apiFetch<Agent>(`/api/v1/${businessId}/agents/${agentId}`, { token });
+/** The agent that answers this store's pages. Nobody picks it, so this is the only agent read. */
+export const getDefaultAgent = (token: string, businessId: string) =>
+  apiFetch<Agent>(`/api/v1/${businessId}/agents/default`, { token });
 
 export const updateAgent = (
   token: string,
@@ -441,24 +422,6 @@ export const updateAgent = (
     `/api/v1/${businessId}/agents/${agentId}`,
     { method: 'PUT', token, body: JSON.stringify(data) },
   );
-
-export const deleteAgent = (token: string, businessId: string, agentId: string) =>
-  apiFetch<{ deleted: boolean }>(`/api/v1/${businessId}/agents/${agentId}`, {
-    method: 'DELETE',
-    token,
-  });
-
-export const updateChannelAgent = (
-  token: string,
-  businessId: string,
-  channelId: string,
-  agentId: string | null,
-) =>
-  apiFetch<{ success: boolean }>(`/api/v1/${businessId}/channels/${channelId}/agent`, {
-    method: 'PATCH',
-    token,
-    body: JSON.stringify({ agentId }),
-  });
 
 // Conversations
 export type Conversation = {
@@ -856,6 +819,74 @@ export const getAdminStats = (token: string, filter: { days?: number; tz?: strin
     { token, signInPath: null },
   );
 };
+
+/**
+ * What the agent cost, per store. A merchant's own token usage is no longer a merchant
+ * screen — this is the operator's read of the same `hourly_token_analytics` rollup.
+ */
+export type AdminTokenUsageRow = {
+  businessId: string;
+  name: string;
+  slug: string | null;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+  runCount: number;
+  avgTokensPerRun: number;
+  cacheHitPercent: number;
+  estimatedCostUsd: number;
+};
+
+export type AdminTokenUsage = {
+  month: string;
+  startTime: string;
+  endTime: string;
+  platform: Omit<AdminTokenUsageRow, 'businessId' | 'name' | 'slug' | 'cacheMissTokens'> & {
+    businesses: number;
+  };
+  businesses: AdminTokenUsageRow[];
+};
+
+export type AdminTokenUsageDetail = {
+  month: string;
+  startTime: string;
+  endTime: string;
+  business: { id: string; name: string; slug: string | null };
+  totals: Omit<AdminTokenUsageRow, 'businessId' | 'name' | 'slug'> & { avgLatencyMs: number };
+  byIntegration: Array<{
+    integrationType: string;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    runCount: number;
+    avgTokensPerRun: number;
+    cacheHitPercent: number;
+    estimatedCostUsd: number;
+  }>;
+  daily: Array<{
+    date: string;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheHitTokens: number;
+    runCount: number;
+    estimatedCostUsd: number;
+  }>;
+};
+
+export const getAdminTokenUsage = (token: string, month?: string) =>
+  apiFetch<AdminTokenUsage>(
+    `/api2/admin/token-analytics/businesses${month ? `?month=${month}` : ''}`,
+    { token, signInPath: null },
+  );
+
+export const getAdminTokenUsageDetail = (token: string, businessId: string, month?: string) =>
+  apiFetch<AdminTokenUsageDetail>(
+    `/api2/admin/token-analytics/businesses/${businessId}${month ? `?month=${month}` : ''}`,
+    { token, signInPath: null },
+  );
 
 // Plans, allowances and notifications. `messageLimit` null and 0 are different things on
 // every surface: null is uncapped, 0 stops the agent. Nothing here re-implements that.

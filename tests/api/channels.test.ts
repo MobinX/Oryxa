@@ -78,15 +78,47 @@ describe('Channels & Agents API', () => {
     expect((await res.json()).length).toBeGreaterThan(0);
   });
 
-  it('PATCH /:businessId/channels/:channelId/agent updates agent binding', async () => {
+  it('PATCH /:businessId/channels/:channelId/agent is gone — merchants no longer pick agents', async () => {
     const seed = await seedTestWorld();
     const res = await app.request(`/api/v1/${seed.business.id}/channels/${seed.channel.id}/agent`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify({ agentId: seed.agent.id }),
     });
+    expect(res.status).toBe(404);
+  });
+
+  it('GET /:businessId/agents/default answers with the store\'s one agent', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/agents/default`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).success).toBe(true);
+    const agent = (await res.json()) as { id: string; systemPrompt: string };
+    expect(agent.id).toBeDefined();
+    expect(agent.systemPrompt.length).toBeGreaterThan(0);
+
+    // Asking twice must not mint a second agent.
+    const again = await app.request(`/api/v1/${business.id}/agents/default`, { headers: authHeaders() });
+    expect(((await again.json()) as { id: string }).id).toBe(agent.id);
+  });
+
+  it('a channel connected without an agent still gets one', async () => {
+    const { business } = await seedTestWorld();
+    const pageId = `NO_AGENT_PAGE_${Date.now()}`;
+    const res = await app.request(`/api/v1/${business.id}/channels`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        platform: 'facebook',
+        apiToken: 'manual-token',
+        platformChannelId: pageId,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string };
+
+    const listed = await app.request(`/api/v1/${business.id}/channels`, { headers: authHeaders() });
+    const rows = (await listed.json()) as Array<{ id: string; agentId: string | null }>;
+    expect(rows.find((r) => r.id === created.id)?.agentId).toBeTruthy();
   });
 
   it('GET /:businessId/channels/facebook/auth returns oauth url', async () => {

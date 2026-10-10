@@ -51,10 +51,6 @@ export const updateChannelOutputSchema = z.object({
 
 export const deleteChannelOutputSchema = z.object({ deleted: z.boolean() });
 
-export const updateChannelAgentSchema = z.object({
-  agentId: uuidSchema.nullable(),
-});
-
 export const facebookPendingPagesQuerySchema = z.object({
   token: z.string().min(1),
 });
