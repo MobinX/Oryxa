@@ -10,7 +10,6 @@ import {
   Eye,
   Globe,
   LayoutDashboard,
-  LogOut,
   MessageCircle,
   MessagesSquare,
   Package,
@@ -25,7 +24,6 @@ import {
 import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
 import { TZ_COOKIE, clockInZone, validZone } from '@/lib/logs-time';
-import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
 import { AdminSkeleton } from '@/components/admin-skeleton';
@@ -40,7 +38,6 @@ import {
 import { compact, deltaOf, money, whole, type Delta } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { SignOutForm } from '@/components/sign-out-button';
 
 const RANGES = [7, 30, 90];
 const DEFAULT_DAYS = 30;
@@ -136,16 +133,6 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
               Reload
             </Button>
           </Link>
-          {consoleBearer ? (
-            <SignOutForm
-              action={logsSignOutAction}
-              title="End this console session"
-              className="flex items-center gap-2 rounded-element border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign out</span>
-            </SignOutForm>
-          ) : null}
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
-import { AlertTriangle, LogOut, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
 import {
@@ -13,7 +13,6 @@ import {
   zoneBoundToUtc,
   zoneWallClock,
 } from '@/lib/logs-time';
-import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
 import {
@@ -26,7 +25,6 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { SignOutForm } from '@/components/sign-out-button';
 
 const LIMITS = [25, 50, 100, 200];
 const HOURS = [1, 6, 24, 72, 168];
@@ -148,16 +146,6 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
               Reload
             </Button>
           </Link>
-          {consoleBearer ? (
-            <SignOutForm
-              action={logsSignOutAction}
-              title="End this console session"
-              className="flex items-center gap-2 rounded-element border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign out</span>
-            </SignOutForm>
-          ) : null}
         </div>
       </div>
 

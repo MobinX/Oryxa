@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { LogOut } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { AdminTabs } from '@/components/admin-tabs';
+import { SignOutForm } from '@/components/sign-out-button';
+import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
 
@@ -25,6 +28,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div className="flex items-center gap-3">
             {signedIn ? <AdminTabs /> : null}
             <ThemeToggle />
+            {signedIn ? (
+              <SignOutForm
+                action={logsSignOutAction}
+                title="End this console session"
+                className="flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card px-3 text-sm font-medium text-muted-foreground shadow-sm transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95 disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4 stroke-[1.75]" />
+                <span className="hidden sm:inline">Sign out</span>
+              </SignOutForm>
+            ) : null}
           </div>
         </div>
       </header>
