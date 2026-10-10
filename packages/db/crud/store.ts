@@ -24,7 +24,7 @@ async function mapProduct(p: {
   price: string;
   description: string | null;
   createdAt: Date;
-  category: { name: string } | null;
+  category: { name: string; deletedAt: Date | null } | null;
   variants: Array<{
     id: string;
     name: string;
@@ -50,7 +50,7 @@ async function mapProduct(p: {
     name: p.name,
     price: parseFloat(p.price),
     description: p.description,
-    categoryName: p.category?.name ?? null,
+    categoryName: p.category && !p.category.deletedAt ? p.category.name : null,
     thumbnailUrl: await resolveStoredImageUrl(firstImage),
     inStock: p.variants.length === 0 ? true : p.variants.some((v) => v.isAvailable && v.stock > 0),
     variants: mappedVariants,

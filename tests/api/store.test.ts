@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { and, eq } from 'drizzle-orm';
 import { withPglite } from '../helpers/with-pglite';
 import { app } from '@api/index';
+import { db } from '@db/client';
+import { categories } from '@db/schema';
 import { syncUser } from '@repo/db/crud/user';
 import { createBusiness, updateBusiness } from '@repo/db/crud/business';
 import { createProduct } from '@repo/db/crud/product';
@@ -44,6 +47,23 @@ describe('Public Storefront API', () => {
     expect(body.name).toBe('Book Nook');
     expect(body.products.map((p: { name: string }) => p.name).sort()).toEqual(['Dune', 'Hamlet']);
     expect(body.categories.sort()).toEqual(['Fiction', 'Plays']);
+  });
+
+  it('never names a deleted category on the public storefront', async () => {
+    const { biz } = await makePublishedStore('shop-soft');
+    const [fiction] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.businessId, biz.id), eq(categories.name, 'Fiction')));
+    // The row is deleted while its product survives — the orphan state the storefront has to
+    // tolerate, since deleteCategory itself would have taken the product down with it.
+    await db.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, fiction.id));
+
+    const body = await (await app.request('/api/v1/store/shop-soft')).json();
+    const dune = body.products.find((p: { name: string }) => p.name === 'Dune');
+    expect(dune).toBeTruthy();
+    expect(dune.categoryName).toBeNull();
+    expect(body.categories).toEqual(['Plays']);
   });
 
   it('search, category, price filter and sort', async () => {

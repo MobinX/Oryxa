@@ -111,6 +111,12 @@ const createPostRoute = createRoute({
 postsRouter.openapi(createPostRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const body = c.req.valid('json');
+  // A post publishes through its channel's Page token, so the channel named in the body has to
+  // be the caller's own — otherwise one store's draft can be published onto another store's page.
+  const channel = await getChannelById(body.channelId);
+  if (!channel || channel.businessId !== businessId) {
+    return c.json({ error: 'Channel not found' }, 404);
+  }
   const mediaUrlsKeys = body.mediaUrls
     ? body.mediaUrls.map((url) => extractB2Key(url))
     : null;
@@ -226,6 +232,12 @@ const updatePostRoute = createRoute({
 postsRouter.openapi(updatePostRoute, async (c) => {
   const { businessId, postId } = c.req.valid('param');
   const body = c.req.valid('json');
+  if (body.channelId !== undefined) {
+    const target = await getChannelById(body.channelId);
+    if (!target || target.businessId !== businessId) {
+      return c.json({ error: 'Channel not found' }, 404);
+    }
+  }
   const mediaUrlsKeys = body.mediaUrls
     ? body.mediaUrls.map((url) => extractB2Key(url))
     : body.mediaUrls === null ? null : undefined;
@@ -496,7 +508,7 @@ postsRouter.openapi(generatePostRoute, async (c) => {
   }
 
   const channel = await getChannelById(channelId);
-  if (!channel) {
+  if (!channel || channel.businessId !== businessId) {
     return c.json({ error: 'Channel not found' }, 404);
   }
 

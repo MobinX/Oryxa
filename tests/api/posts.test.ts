@@ -33,6 +33,25 @@ vi.mock('@repo/integrations', () => ({
 describe('Posts API', () => {
   withPglite();
 
+  it('refuses a post aimed at another store\'s channel', async () => {
+    const mine = await seedTestWorld();
+    const victim = await seedTestWorld();
+
+    const create = await app.request(`/api/v1/${mine.business.id}/posts`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ channelId: victim.channel.id, content: 'Hello from elsewhere' }),
+    });
+    expect(create.status).toBe(404);
+
+    const generate = await app.request(`/api/v1/${mine.business.id}/posts/generate`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ channelId: victim.channel.id, productId: mine.product.id }),
+    });
+    expect(generate.status).toBe(404);
+  });
+
   it('can perform full posts lifecycle via API', async () => {
     const seed = await seedTestWorld();
 

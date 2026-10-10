@@ -403,6 +403,21 @@ export async function persistPageReply(opts: {
     threadId = parent?.commentThreadId ?? threadId;
   }
 
+  // The parent id arrived from a client-supplied Facebook comment id, so the thread it resolved to
+  // is not automatically ours. Writing here un-checked would drop a reply into another store's
+  // customer conversation and mark their pending comment done.
+  if (opts.channelId) {
+    const owned = await db.query.commentThreads.findFirst({
+      where: and(
+        eq(commentThreads.id, threadId),
+        eq(commentThreads.channelId, opts.channelId),
+        isNull(commentThreads.deletedAt),
+      ),
+      columns: { id: true },
+    });
+    if (!owned) return null;
+  }
+
   await db
     .insert(comments)
     .values({

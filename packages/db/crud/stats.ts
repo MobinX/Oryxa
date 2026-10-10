@@ -48,6 +48,9 @@ export async function getBusinessStats(businessId: string) {
         JOIN messages m2 ON m1.conversation_id = m2.conversation_id
         JOIN conversations c ON m1.conversation_id = c.id
         WHERE c.business_id = ${businessId}::uuid
+          AND c.deleted_at IS NULL
+          AND m1.deleted_at IS NULL
+          AND m2.deleted_at IS NULL
           AND m1.from = 'customer'
           AND m2.from = 'self'
           AND m2.time > m1.time
@@ -55,6 +58,7 @@ export async function getBusinessStats(businessId: string) {
             SELECT min(m3.time)
             FROM messages m3
             WHERE m3.conversation_id = m1.conversation_id
+              AND m3.deleted_at IS NULL
               AND m3.from = 'self'
               AND m3.time > m1.time
           )

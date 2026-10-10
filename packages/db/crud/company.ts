@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, isNull, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { companies, businesses } from '@db/schema';
 import { createCompanyInputSchema, updateCompanyInputSchema } from '@repo/shared';
@@ -50,7 +50,7 @@ export async function verifyCompanyOwnership(companyId: string, userId: string) 
 
 export async function listCompanyBusinesses(companyId: string) {
   return db.query.businesses.findMany({
-    where: eq(businesses.companyId, companyId),
+    where: and(eq(businesses.companyId, companyId), isNull(businesses.deletedAt)),
   });
 }
 

@@ -110,6 +110,9 @@ const getUserRoute = createRoute({
 usersRouter.use('/:id', authMiddleware);
 usersRouter.openapi(getUserRoute, async (c) => {
   const id = c.req.param('id');
+  const me = c.get('user');
+  // Every field here is private to one account, and the caller's uuid is not a capability.
+  if (id !== me.id) return c.json({ error: 'User not found' }, 404);
   const user = await getUserById(id);
   if (!user) return c.json({ error: 'User not found' }, 404);
   return c.json({
