@@ -10,6 +10,7 @@ export async function getOrCreateConversation(
 ) {
   const existing = await db.query.conversations.findFirst({
     where: and(
+      eq(conversations.businessId, businessId),
       eq(conversations.channelId, channelId),
       eq(conversations.customerPlatformId, customerPlatformId),
       isNull(conversations.deletedAt),
@@ -222,7 +223,10 @@ export async function listConversations(
   return db.query.conversations.findMany({
     where: and(...conditions),
     limit,
-    orderBy: [desc(conversations.createdAt)],
+    // lastStateAt moves when a thread gets a new message or its state changes; createdAt never
+    // moves, so ordering by it buries the threads an agent has just replied to under whatever
+    // happened to be created most recently.
+    orderBy: [desc(conversations.lastStateAt), desc(conversations.createdAt)],
     with: { channel: { columns: { extraInfo: true } } },
   });
 }
@@ -235,11 +239,14 @@ export async function listMessages(conversationId: string, businessId: string, l
 
   const msgs = await db.query.messages.findMany({
     where: and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)),
-    orderBy: [messages.time],
+    // Newest *window*, oldest-first output. `limit` without a direction keeps the oldest N
+    // rows, so in a thread longer than the page the reply that just arrived — and every
+    // message after the first 50 — can never be fetched at all.
+    orderBy: [desc(messages.time)],
     limit,
   });
 
-  return msgs.map((m) => ({
+  return msgs.reverse().map((m) => ({
     id: m.id,
     from: m.from,
     content: m.content,
