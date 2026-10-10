@@ -71,6 +71,11 @@ export const facebookPendingPageSchema = z.object({
   id: z.string(),
   name: z.string(),
   connected: z.boolean(),
+  /**
+   * A live channel for this Page exists in another store. The page can't be connected here until
+   * that store releases it — and the other store's identity is deliberately not returned.
+   */
+  heldByOtherStore: z.boolean().default(false),
   /** Portfolio name when the Page was reached through a Meta Business Portfolio. */
   business: z.string().nullable().optional(),
 });

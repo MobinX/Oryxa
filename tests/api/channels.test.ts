@@ -55,6 +55,22 @@ describe('Channels & Agents API', () => {
     expect((await res.json()).status).toBe('linked');
   });
 
+  it('POST /:businessId/channels refuses a page another store already holds', async () => {
+    const taken = await seedTestWorld();
+    const other = await seedTestWorld();
+    const res = await app.request(`/api/v1/${other.business.id}/channels`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        platform: 'facebook',
+        apiToken: 'steal-token',
+        platformChannelId: taken.pageChannelId,
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain('another store');
+  });
+
   it('GET /:businessId/channels lists channels', async () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/channels`, { headers: authHeaders() });

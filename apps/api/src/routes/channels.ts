@@ -30,9 +30,11 @@ import {
   updateChannel,
   deleteChannel,
   getChannelById,
-  getChannelByBusinessPlatformChannelId,
+  getLiveChannelOwnerBusinessId,
   findChannelByBusinessPlatformChannelId,
   reactivateChannel,
+  ChannelTakenError,
+  ChannelAgentError,
 } from '@repo/db/crud/channel';
 import {
   getFacebookOAuthUrl,
@@ -186,14 +188,21 @@ const createChannelRoute = createRoute({
   },
   responses: {
     201: { content: { 'application/json': { schema: createChannelOutputSchema } }, description: 'Channel linked' },
+    409: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Already connected to another store' },
   },
 });
 
 channelsRouter.openapi(createChannelRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const data = c.req.valid('json');
-  const channel = await createChannel(businessId, data);
-  return c.json(channel, 201);
+  try {
+    const channel = await createChannel(businessId, data);
+    return c.json(channel, 201);
+  } catch (err) {
+    if (err instanceof ChannelTakenError) return c.json({ error: err.message }, 409);
+    if (err instanceof ChannelAgentError) return c.json({ error: err.message }, 400);
+    throw err;
+  }
 });
 
 const listChannelsRoute = createRoute({
@@ -258,6 +267,7 @@ const updateChannelAgentRoute = createRoute({
   },
   responses: {
     200: { content: { 'application/json': { schema: z.object({ success: z.boolean() }) } }, description: 'Updated' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Agent belongs to another store' },
   },
 });
 
@@ -265,9 +275,14 @@ channelsRouter.openapi(updateChannelAgentRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const channelId = c.req.param('channelId');
   const { agentId } = c.req.valid('json');
-  const result = await updateChannelAgent(channelId, businessId, agentId);
-  if (!result) return c.json({ error: 'Channel not found' }, 404);
-  return c.json(result);
+  try {
+    const result = await updateChannelAgent(channelId, businessId, agentId);
+    if (!result) return c.json({ error: 'Channel not found' }, 404);
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof ChannelAgentError) return c.json({ error: err.message }, 400);
+    throw err;
+  }
 });
 
 const updateChannelRoute = createRoute({
@@ -282,6 +297,7 @@ const updateChannelRoute = createRoute({
   responses: {
     200: { content: { 'application/json': { schema: updateChannelOutputSchema } }, description: 'Updated' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+    409: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Already connected to another store' },
   },
 });
 
@@ -289,9 +305,15 @@ channelsRouter.openapi(updateChannelRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const channelId = c.req.param('channelId');
   const data = c.req.valid('json');
-  const result = await updateChannel(businessId, channelId, data);
-  if (!result) return c.json({ error: 'Channel not found' }, 404);
-  return c.json(result);
+  try {
+    const result = await updateChannel(businessId, channelId, data);
+    if (!result) return c.json({ error: 'Channel not found' }, 404);
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof ChannelTakenError) return c.json({ error: err.message }, 409);
+    if (err instanceof ChannelAgentError) return c.json({ error: err.message }, 400);
+    throw err;
+  }
 });
 
 const deleteChannelRoute = createRoute({
@@ -312,6 +334,9 @@ channelsRouter.openapi(deleteChannelRoute, async (c) => {
 
   // Fetch the channel first to access apiToken for webhook unsubscription
   const channelRow = await getChannelById(channelId);
+  if (!channelRow || channelRow.businessId !== businessId) {
+    return c.json({ error: 'Channel not found' }, 404);
+  }
 
   if (channelRow?.platform === 'facebook' && channelRow.apiToken) {
     try {
@@ -391,12 +416,16 @@ channelsRouter.openapi(fbPendingPagesRoute, async (c) => {
 
   const pages = await Promise.all(
     verified.pages.map(async (page) => {
-      const existing = await getChannelByBusinessPlatformChannelId(
-        businessId,
-        'facebook',
-        page.id,
-      );
-      return { id: page.id, name: page.name, connected: !!existing, business: page.business ?? null };
+      // The holder may be another store. Saying so is what the merchant needs; naming that store
+      // is not, so only "is it mine" survives the boundary.
+      const ownerId = await getLiveChannelOwnerBusinessId('facebook', page.id);
+      return {
+        id: page.id,
+        name: page.name,
+        connected: ownerId === businessId,
+        heldByOtherStore: !!ownerId && ownerId !== businessId,
+        business: page.business ?? null,
+      };
     }),
   );
   return c.json(pages);

@@ -99,6 +99,13 @@
       "when": 1791244800000,
       "tag": "0013_add_companies_customers",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0014_one_live_channel_per_platform_account",
+      "breakpoints": true
     }
   ]
 }

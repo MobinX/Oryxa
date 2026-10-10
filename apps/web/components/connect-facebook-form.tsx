@@ -6,13 +6,13 @@ import { connectSelectedFacebookPagesAction } from '@/app/actions/channels';
 interface ConnectFacebookFormProps {
   businessId: string;
   token: string;
-  pages: Array<{ id: string; name: string; connected: boolean; business?: string | null }>;
+  pages: Array<{ id: string; name: string; connected: boolean; heldByOtherStore?: boolean; business?: string | null }>;
 }
 
 export function ConnectFacebookForm({ businessId, token, pages }: ConnectFacebookFormProps) {
   const [selected, setSelected] = useState<Set<string>>(() => {
-    // Pre-select the only page if there's just one and it's not yet connected
-    if (pages.length === 1 && !pages[0].connected) return new Set([pages[0].id]);
+    // Pre-select the only page if there's just one and it's connectable here
+    if (pages.length === 1 && !pages[0].connected && !pages[0].heldByOtherStore) return new Set([pages[0].id]);
     return new Set();
   });
   const [isPending, startTransition] = useTransition();
@@ -76,7 +76,11 @@ export function ConnectFacebookForm({ businessId, token, pages }: ConnectFaceboo
               {section.pages.map((page) => (
                 <label
                   key={page.id}
-                  className={`flex cursor-pointer items-start gap-3 p-4 hover:bg-[var(--muted)]/40 transition-colors ${
+                  className={`flex items-start gap-3 p-4 transition-colors ${
+                    page.heldByOtherStore
+                      ? 'cursor-not-allowed opacity-70'
+                      : 'cursor-pointer hover:bg-[var(--muted)]/40'
+                  } ${
                     selected.has(page.id) ? 'bg-[var(--primary)]/5' : ''
                   }`}
                 >
@@ -84,7 +88,7 @@ export function ConnectFacebookForm({ businessId, token, pages }: ConnectFaceboo
                     type="checkbox"
                     checked={selected.has(page.id)}
                     onChange={() => toggle(page.id)}
-                    disabled={isPending}
+                    disabled={isPending || page.heldByOtherStore}
                     className="mt-1 h-4 w-4 shrink-0 accent-[var(--primary)]"
                   />
                   <span className="min-w-0 flex-1">
@@ -92,6 +96,14 @@ export function ConnectFacebookForm({ businessId, token, pages }: ConnectFaceboo
                     <span className="block truncate text-xs text-[var(--muted-foreground)]">
                       Page ID: {page.id}
                     </span>
+                    {page.heldByOtherStore && (
+                      <span className="mt-1 inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.257 7.586a1 1 0 111.414-1.414L10 7.086l.329-.914a1 1 0 111.886.678L11.414 8.5l.914.329a1 1 0 01-.678 1.886L10 10.414l-.329.914a1 1 0 11-1.886-.678l.914-.329-.914-.914z" clipRule="evenodd" />
+                        </svg>
+                        Already connected to another store — disconnect it there first
+                      </span>
+                    )}
                     {page.connected && (
                       <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">

@@ -386,6 +386,7 @@ export type FacebookPendingPage = {
   id: string;
   name: string;
   connected: boolean;
+  heldByOtherStore?: boolean;
   business?: string | null;
 };
 

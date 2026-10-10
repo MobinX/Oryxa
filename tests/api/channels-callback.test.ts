@@ -273,6 +273,40 @@ describe('Facebook page selection API', () => {
     expect(body.find((p) => p.id === 'PAGE_A')?.connected).toBe(false);
   });
 
+  it('marks a page another store holds as not connectable', async () => {
+    const taken = await seedTestWorld();
+    const other = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: other.business.id,
+      userId: other.user.id,
+      pages: [
+        { id: taken.pageChannelId, name: 'Taken Page', access_token: 'tok-taken' },
+        { id: 'FREE_PAGE', name: 'Free Page', access_token: 'tok-free' },
+      ],
+    });
+
+    const res = await app.request(
+      `/api/v1/${other.business.id}/channels/facebook/pending?token=${encodeURIComponent(token)}`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{
+      id: string;
+      connected: boolean;
+      heldByOtherStore: boolean;
+    }>;
+    expect(body.find((p) => p.id === taken.pageChannelId)).toMatchObject({
+      connected: false,
+      heldByOtherStore: true,
+    });
+    expect(body.find((p) => p.id === 'FREE_PAGE')).toMatchObject({
+      connected: false,
+      heldByOtherStore: false,
+    });
+    // Who holds it is not this caller's business.
+    expect(JSON.stringify(body)).not.toContain('Test Store');
+  });
+
   it('connects selected pages from a selection token', async () => {
     const { user, business } = await seedTestWorld();
     const token = await createFacebookPagesSelectionToken({
@@ -325,6 +359,35 @@ describe('Facebook page selection API', () => {
 
     const channels = await listChannels(business.id);
     expect(channels.some((c) => c.platformChannelId === 'FAIL_PAGE')).toBe(true);
+  });
+
+  it('will not connect a page another store already holds, and names the reason', async () => {
+    subscribeFacebookPageToWebhooksMock.mockClear();
+    const taken = await seedTestWorld();
+    // Both seeds share the test user, so this is one owner reaching for their own other
+    // store's page — ownership of the business is what the guard is about, not of the user.
+    const other = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: other.business.id,
+      userId: other.user.id,
+      pages: [{ id: taken.pageChannelId, name: 'ABCD Store', access_token: 'taken-tok' }],
+    });
+
+    const res = await app.request(`/api/v1/${other.business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: [taken.pageChannelId] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      connected: unknown[];
+      failed: Array<{ pageId: string; error: string }>;
+    };
+    expect(body.connected).toHaveLength(0);
+    expect(body.failed).toHaveLength(1);
+    expect(body.failed[0]?.pageId).toBe(taken.pageChannelId);
+    expect(body.failed[0]?.error).toContain('another store');
+    expect(subscribeFacebookPageToWebhooksMock).not.toHaveBeenCalled();
   });
 
   it('reactivates a soft-deleted channel instead of inserting a duplicate', async () => {

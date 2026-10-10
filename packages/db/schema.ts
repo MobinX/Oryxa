@@ -206,6 +206,11 @@ export const channels = pgTable('channels', {
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('channels_business_platform_channel_idx').on(t.businessId, t.platform, t.platformChannelId),
+  // One platform account, one live owner. Webhooks carry only the Page id, so two live rows
+  // for the same Page would silently route one tenant's customers into another's inbox.
+  liveUniq: uniqueIndex('channels_platform_channel_live_idx')
+    .on(t.platform, t.platformChannelId)
+    .where(sql`${t.deletedAt} is null`),
 }));
 
 export const conversations = pgTable('conversations', {
