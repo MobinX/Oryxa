@@ -105,7 +105,7 @@ async function DetailContent({
           <p className="mt-1 text-sm text-muted-foreground">{read.error ?? 'The console did not answer.'}</p>
           <p className="mt-2 text-sm text-muted-foreground">
             This page reads <code>/api2/admin/token-analytics/businesses/:businessId</code>, which
-            needs the console password from <code>/admin/login</code>, or an account named in{' '}
+            needs the console session from <code>/admin/login</code>, or an account named in{' '}
             <code>LOG_QUERY_USER_IDS</code>.
           </p>
         </Card>

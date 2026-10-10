@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireAuth } from '@/lib/auth';
 import { cachedBusinesses } from '@/app/_cache/queries';
 import { PlaygroundClient } from '@/components/playground-client';
+import { operatorAccountEmail } from '@/lib/logs-session';
 import { Card } from '@/components/ui/card';
 import { FlaskConical, AlertTriangle } from 'lucide-react';
 
@@ -17,9 +18,10 @@ export const metadata = {
 };
 
 export default async function AdminAgentPlaygroundPage() {
-  // The playground drives the merchant endpoints — sandbox channels, test conversations, the
-  // agent row — so it needs the account's own token, not the console password. An operator who
-  // only signed in at `/admin/login` is sent to sign in as the account that owns the sandbox.
+  // The playground drives the merchant endpoints — sandbox channels, test conversations, the agent
+  // row — so it needs an account token, which `/admin/login` now issues as the operator's Firebase
+  // account. That account is the one `create-operator.ts` gives the sandbox store, which is why
+  // opening the console and opening the playground are the same sign-in.
   const token = await requireAuth();
   const { businesses } = await cachedBusinesses(token);
   const sandbox = businesses.find((business) => business.slug === SANDBOX_SLUG);
@@ -39,12 +41,12 @@ export default async function AdminAgentPlaygroundPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             The playground tests prompts against a store that really exists, with the catalog
             filled in, so the agent has something to sell — <code>{SANDBOX_SLUG}</code>, owned by
-            whichever account ran <code>bun packages/db/scripts/seed-admin-sandbox.ts</code>. You
-            are signed in as an account that does not own it.
+            the operator account <code>{operatorAccountEmail()}</code>. Either that account does not
+            own a sandbox store on this database, or you are signed in as somebody else.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in with that account, or seed the sandbox: it creates the store, its default
-            products and its agent, and touches nothing else.
+            Seed it with <code>seed-admin-sandbox.ts</code>, then hand it to the operator with{' '}
+            <code>create-operator.ts</code>. Both only add and re-point, and both are re-runnable.
           </p>
           <Link
             href="/admin"

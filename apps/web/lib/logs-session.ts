@@ -15,6 +15,17 @@ export function logsOperatorUser(): string {
   return process.env.LOGS_UI_USER?.trim() || 'admin123';
 }
 
+/**
+ * The Firebase account the console signs in as. The local part is the same `LOGS_UI_USER` the
+ * password form already showed, so the operator types one word and this fills in the domain the
+ * account was created under (`apps/api/scripts/create-operator.ts`).
+ */
+export function operatorAccountEmail(): string {
+  const configured = process.env.ADMIN_SIGNIN_EMAIL?.trim();
+  if (configured) return configured;
+  return `${logsOperatorUser()}@${process.env.ADMIN_SIGNIN_DOMAIN?.trim() || 'oryxa.app'}`;
+}
+
 /** Undefined in production unless `LOGS_UI_PASSWORD` is set — no guessable default. */
 export function logsOperatorPassword(): string | undefined {
   const configured = process.env.LOGS_UI_PASSWORD?.trim();
@@ -37,12 +48,6 @@ function sameSecret(candidate: string, expected: string): boolean {
  */
 function sign(payload: string, key: string): string {
   return createHmac('sha256', key).update(payload).digest('base64url');
-}
-
-export function operatorCredentialsMatch(user: string, password: string): boolean {
-  const expected = logsOperatorPassword();
-  if (!expected) return false;
-  return sameSecret(user, logsOperatorUser()) && sameSecret(password, expected);
 }
 
 export async function startLogsSession(): Promise<boolean> {

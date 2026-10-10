@@ -77,7 +77,7 @@ async function UsageContent({ searchParams }: { searchParams: Promise<RawParams>
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             This page reads <code>/api2/admin/token-analytics/businesses</code>, which needs the
-            same key as the event log: the console password from <code>/admin/login</code>, or an
+            same key as the event log: the console session from <code>/admin/login</code>, or an
             account named in <code>LOG_QUERY_USER_IDS</code>.
           </p>
         </Card>

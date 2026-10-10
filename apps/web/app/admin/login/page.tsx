@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { logsSignInAction } from '@/app/actions/logs-auth';
-import { hasLogsSession, logsOperatorUser } from '@/lib/logs-session';
+import { AdminLoginForm } from '@/components/admin-login-form';
+import { hasLogsSession, logsOperatorUser, operatorAccountEmail } from '@/lib/logs-session';
 
 export const metadata = {
   title: 'Admin — sign in',
@@ -11,7 +11,7 @@ export const metadata = {
 const MESSAGES: Record<string, string> = {
   invalid: 'That user id and password do not match.',
   disabled:
-    'This deployment has no console password. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
+    'This deployment has no console secret. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
 };
 
 export default async function AdminLoginPage({
@@ -37,44 +37,24 @@ export default async function AdminLoginPage({
           </p>
         </div>
 
-        <form action={logsSignInAction} className="space-y-4">
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium">User id</span>
-            <input
-              name="user"
-              defaultValue={logsOperatorUser()}
-              autoComplete="username"
-              required
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium">Password</span>
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-            />
-          </label>
+        <AdminLoginForm
+          user={logsOperatorUser()}
+          domain={operatorAccountEmail().split('@')[1] ?? 'oryxa.app'}
+        />
 
-          {message ? (
-            <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {message}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            Sign in
-          </button>
-        </form>
+        {message ? (
+          <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {message}
+          </p>
+        ) : null}
 
         <p className="mt-5 text-center text-xs text-muted-foreground">
-          A customer account on this host signs in at{' '}
+          The console signs in as <code>{operatorAccountEmail()}</code> through Firebase, which is
+          also the account that owns the <code>oryxa-sandbox</code> store — so{' '}
+          <Link href="/admin/agent-playground" className="underline hover:text-foreground">
+            the playground
+          </Link>{' '}
+          works from here. A customer account signs in at{' '}
           <Link href="/login" className="underline hover:text-foreground">
             /login
           </Link>{' '}
