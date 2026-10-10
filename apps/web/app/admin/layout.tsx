@@ -4,13 +4,13 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { AdminTabs } from '@/components/admin-tabs';
 import { SignOutForm } from '@/components/sign-out-button';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
-import { getAuthToken } from '@/lib/auth';
 import { logsBearer } from '@/lib/logs-session';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The tabs are the chrome of a signed-in console, so the sign-in page does not
-  // offer a shortcut to a page the reader has not earned yet.
-  const signedIn = Boolean((await logsBearer()) ?? (await getAuthToken()));
+  // offer a shortcut to a page the reader has not earned yet. Only the console's own
+  // session counts as earned: an account token proves a merchant, not an operator.
+  const signedIn = Boolean(await logsBearer());
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-200">

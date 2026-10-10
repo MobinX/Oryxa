@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getAuthToken } from '@/lib/auth';
+import { logsBearer } from '@/lib/logs-session';
+import { operatorToken } from '@/lib/admin-access';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -11,8 +12,12 @@ function jsonError(status: number, error: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const token = await getAuthToken();
-  if (!token) return jsonError(401, 'Unauthorized');
+  // Two proofs, because this route spends real tokens: a console session for the admin panel,
+  // and an account token that Google says is the operator's. An account token alone used to be
+  // enough here, which made an admin-only endpoint available to every merchant who knew the URL.
+  if (!(await logsBearer())) return jsonError(401, 'Sign in to the admin console first');
+  const token = await operatorToken();
+  if (!token) return jsonError(403, 'This sign-in is not the operator account');
 
   let body: { businessId?: unknown; channelId?: unknown };
   try {

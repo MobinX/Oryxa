@@ -3,8 +3,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
 import { AlertTriangle, RefreshCw, ScrollText, Search } from 'lucide-react';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import {
   TZ_COOKIE,
   clockInZone,
@@ -93,12 +92,9 @@ export default function LogsPage({
 }
 
 async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> }) {
-  // Either key opens this page: the console's own session, or an account the API
-  // allowlist names. Holding neither is not an error to render — the reader
-  // belongs on the sign-in page.
-  const consoleBearer = await logsBearer();
-  const bearer = consoleBearer ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
+  // These rows hold other tenants' customer text, so the only key that opens this page
+  // is the console's own session — an account token proves a merchant, not an operator.
+  const bearer = await requireConsoleBearer();
 
   // The first visit renders on UTC because the server has no other clue; the probe
   // below writes what the browser's clock says and refreshes, and every read after

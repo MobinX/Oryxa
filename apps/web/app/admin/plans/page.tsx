@@ -1,15 +1,13 @@
 import { redirect } from 'next/navigation';
 import { AlertTriangle, CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import { cachedAdminBusinessPlans, cachedPlans } from '@/app/_cache/queries';
 import { ApiError } from '@/lib/api';
 import { PlansConsole } from './plans-table';
 
 export default async function AdminPlansPage() {
-  const bearer = (await logsBearer()) ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
+  const bearer = await requireConsoleBearer();
 
   const [plansRead, businessesRead] = await Promise.all([
     adminRead(() => cachedPlans(bearer)),

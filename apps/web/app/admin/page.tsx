@@ -21,8 +21,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import { TZ_COOKIE, clockInZone, validZone } from '@/lib/logs-time';
 import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
@@ -70,9 +69,7 @@ export default function AdminPage({
 }
 
 async function AdminContent({ searchParams }: { searchParams: Promise<RawParams> }) {
-  const consoleBearer = await logsBearer();
-  const bearer = consoleBearer ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
+  const bearer = await requireConsoleBearer();
 
   const zone = validZone((await cookies()).get(TZ_COOKIE)?.value);
   const days = readDays((await searchParams).days);

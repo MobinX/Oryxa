@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAuth } from '@/lib/auth';
+import { requireOperatorToken } from '@/lib/admin-access';
 import { cachedBusinesses } from '@/app/_cache/queries';
 import { PlaygroundClient } from '@/components/playground-client';
 import { operatorAccountEmail } from '@/lib/logs-session';
@@ -19,10 +19,11 @@ export const metadata = {
 
 export default async function AdminAgentPlaygroundPage() {
   // The playground drives the merchant endpoints — sandbox channels, test conversations, the agent
-  // row — so it needs an account token, which `/admin/login` now issues as the operator's Firebase
-  // account. That account is the one `create-operator.ts` gives the sandbox store, which is why
-  // opening the console and opening the playground are the same sign-in.
-  const token = await requireAuth();
+  // row — so it needs an account token, not just a console session. That token is checked against
+  // Google before it is used: it must belong to the operator account, because `create-operator.ts`
+  // hands the sandbox store to that account and a stranger's token would answer "not seeded" while
+  // quietly being a way to reach the merchant API through an admin page.
+  const token = await requireOperatorToken();
   const { businesses } = await cachedBusinesses(token);
   const sandbox = businesses.find((business) => business.slug === SANDBOX_SLUG);
 

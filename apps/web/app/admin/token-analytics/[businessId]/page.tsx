@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import {
   AlertTriangle,
@@ -13,8 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import { cachedAdminTokenUsageDetail } from '@/app/_cache/queries';
 import { adminRead, type Read } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
@@ -60,8 +58,7 @@ async function DetailContent({
   params: Promise<{ businessId: string }>;
   searchParams: Promise<RawParams>;
 }) {
-  const bearer = (await logsBearer()) ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
+  const bearer = await requireConsoleBearer();
 
   const { businessId } = await params;
   const month = readMonth((await searchParams).month);

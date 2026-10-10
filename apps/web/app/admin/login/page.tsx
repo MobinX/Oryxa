@@ -12,6 +12,8 @@ const MESSAGES: Record<string, string> = {
   invalid: 'That user id and password do not match.',
   disabled:
     'This deployment has no console secret. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
+  notoperator:
+    'The console is open, but this browser is not holding the operator account’s token — it belongs to somebody else, or it has expired. Sign in again to use the playground.',
 };
 
 export default async function AdminLoginPage({
@@ -19,9 +21,13 @@ export default async function AdminLoginPage({
 }: {
   searchParams: Promise<{ error?: string | string[] }>;
 }) {
-  if (await hasLogsSession()) redirect('/admin');
-
   const error = (await searchParams).error;
+
+  // Someone bounced out of the playground still has a valid session, and sending them back to
+  // /admin would hide both the reason they were turned out and the sign-in that replaces the
+  // hour-old token the playground needs.
+  if (!error && (await hasLogsSession())) redirect('/admin');
+
   const message = typeof error === 'string' ? MESSAGES[error] : undefined;
 
   return (

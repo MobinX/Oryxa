@@ -1,10 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { expirePlans } from '@/app/_cache/tags';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import {
   ApiError,
   adminAssignPlan,
@@ -18,14 +16,14 @@ import {
 } from '@/lib/api';
 
 /**
- * The console bearer, exactly as `/admin` resolves it. `signInPath: null` on every call
- * below means a plan edit can never bounce a reader to the merchant sign-in page — this is
- * the operator surface, and its own login is `/admin/login`.
+ * The console's own session, and nothing else. This used to fall back to the reader's account
+ * token, which let any signed-in merchant reach these writes — create, re-price and delete plans,
+ * assign a plan to another store, zero its counters. `signInPath: null` on every call below means
+ * a plan edit can never bounce a reader to the merchant sign-in page: this is the operator
+ * surface, and its own login is `/admin/login`.
  */
 async function operatorBearer(): Promise<string> {
-  const bearer = (await logsBearer()) ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
-  return bearer;
+  return requireConsoleBearer();
 }
 
 /** `null` is uncapped and `0` is a freeze, so an empty field must not become a zero. */
@@ -74,7 +72,7 @@ export type PlanSaveResult =
   | { ok: false; error: string };
 
 export async function createPlanAction(formData: FormData): Promise<PlanSaveResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   try {
     await adminCreatePlan(bearer, planFromFormData(formData));
   } catch (err) {
@@ -86,7 +84,7 @@ export async function createPlanAction(formData: FormData): Promise<PlanSaveResu
 }
 
 export async function updatePlanAction(id: string, formData: FormData): Promise<PlanSaveResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   let notified = 0;
   try {
     const result = await adminUpdatePlan(bearer, id, planFromFormData(formData));
@@ -110,7 +108,7 @@ export type PlanDeleteResult =
  * to retire the plan instead.
  */
 export async function deletePlanAction(id: string): Promise<PlanDeleteResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   let conflict: DeletePlanConflict | undefined;
   try {
     // 204 answers `undefined`; a refusal answers the 409 body, which is the row list.
@@ -132,7 +130,7 @@ export type AssignResult = { ok: true } | { ok: false; error: string };
 
 /** `null` revokes the plan: the business goes back to unlimited replies. */
 export async function assignPlanAction(businessId: string, planId: string | null): Promise<AssignResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   try {
     await adminAssignPlan(bearer, businessId, planId);
   } catch (err) {
@@ -145,7 +143,7 @@ export async function assignPlanAction(businessId: string, planId: string | null
 
 /** The manual top-up: zero this business's counters for the current cycle. */
 export async function resetCycleAction(businessId: string): Promise<AssignResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   try {
     await adminResetCycle(bearer, businessId);
   } catch (err) {
@@ -157,7 +155,7 @@ export async function resetCycleAction(businessId: string): Promise<AssignResult
 }
 
 export async function retirePlanAction(id: string): Promise<PlanSaveResult> {
-  const bearer = await operatorBearer();
+  const bearer = await requireConsoleBearer();
   let notified = 0;
   try {
     const result = await adminUpdatePlan(bearer, id, { active: false });

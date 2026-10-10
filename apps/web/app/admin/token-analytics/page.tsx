@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import {
   AlertTriangle,
@@ -12,8 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { getAuthToken } from '@/lib/auth';
-import { logsBearer } from '@/lib/logs-session';
+import { requireConsoleBearer } from '@/lib/admin-access';
 import { cachedAdminTokenUsage } from '@/app/_cache/queries';
 import { adminRead } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
@@ -41,8 +39,7 @@ export default function AdminTokenAnalyticsPage({
 }
 
 async function UsageContent({ searchParams }: { searchParams: Promise<RawParams> }) {
-  const bearer = (await logsBearer()) ?? (await getAuthToken());
-  if (!bearer) redirect('/admin/login');
+  const bearer = await requireConsoleBearer();
 
   const month = readMonth((await searchParams).month);
   const read = await adminRead(() => cachedAdminTokenUsage(bearer, month));
