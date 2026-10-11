@@ -280,12 +280,70 @@ function isOutsideWindow(code?: number, subcode?: number): boolean {
   return code === 10 && subcode != null && OUTSIDE_WINDOW_SUBCODES.has(subcode);
 }
 
+type MessengerAttachment =
+  | {
+      type: 'template';
+      payload: {
+        template_type: 'generic';
+        elements: Array<{
+          title: string;
+          subtitle: string;
+          image_url: string;
+          buttons: Array<{ type: 'postback'; title: string; data: string }>;
+        }>;
+      };
+    }
+  | {
+      type: 'template';
+      payload: {
+        template_type: 'button';
+        text: string;
+        buttons: Array<{ type: 'postback'; title: string; data: string }>;
+      };
+    };
+
 type SendPayload = {
   recipient: { id: string };
-  message: { text: string };
+  message: { text: string } | { attachment: MessengerAttachment };
   messaging_type: 'RESPONSE' | 'MESSAGE_TAG';
   tag?: 'HUMAN_AGENT';
 };
+
+/**
+ * One product, drawn as a Messenger card: a picture with a name, a price and a line of
+ * summary under it, and the button that starts the order. A list of these becomes the
+ * vertical stack a buyer scrolls and taps, which is why the button carries a payload
+ * rather than a URL — a tap has to reach the agent, not a web page the buyer may not open.
+ */
+export type MessengerCard = {
+  /** Meta shows roughly the first 30 characters of this. */
+  title: string;
+  subtitle: string;
+  /**
+   * Required by the generic template, and fetched by Meta's crawler — a signed link is
+   * fine while it is fresh, so these are built at send time rather than stored.
+   */
+  imageUrl: string;
+  button: { title: string; payload: string };
+};
+
+/** Ten is the ceiling Meta accepts; the eleventh product would reject the whole post. */
+const GENERIC_CARD_LIMIT = 10;
+
+function genericAttachment(cards: MessengerCard[]): MessengerAttachment {
+  return {
+    type: 'template',
+    payload: {
+      template_type: 'generic',
+      elements: cards.slice(0, GENERIC_CARD_LIMIT).map((card) => ({
+        title: card.title,
+        subtitle: card.subtitle,
+        image_url: card.imageUrl,
+        buttons: [{ type: 'postback', title: card.button.title, data: card.button.payload }],
+      })),
+    },
+  };
+}
 
 /** Meta answers 400 (graph code 100) for a `message[text`] longer than this. */
 const MESSENGER_TEXT_LIMIT = 2000;
@@ -408,7 +466,7 @@ export async function senderAction(
 export async function sendMessage(
   pageToken: string,
   recipientId: string,
-  text: string,
+  content: string | MessengerCard[],
   options?: SendMessageOptions,
 ): Promise<void> {
   const recipient = { id: recipientId };
@@ -416,18 +474,65 @@ export async function sendMessage(
     ? ({ messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' } as const)
     : ({ messaging_type: 'RESPONSE' } as const);
 
+  if (Array.isArray(content)) {
+    // An empty list is not a card with nothing on it, it is a post Meta would reject,
+    // so the caller that found nothing to show gets a silent no-op instead.
+    if (content.length === 0) return;
+    await postMessengerSend(pageToken, {
+      recipient,
+      message: { attachment: genericAttachment(content) },
+      ...messagingType,
+    });
+    return;
+  }
+
   // TESTING: skip typing_off so the typing bubble stays until Meta clears it.
   // await senderAction(pageToken, recipientId, 'typing_off');
   // One post per chunk, in order: a single oversized block would be rejected
   // outright and the customer would receive none of the answer, and posts sent
   // in parallel can arrive shuffled — Messenger orders by arrival, not intent.
-  for (const chunk of messengerChunks(text)) {
+  for (const chunk of messengerChunks(content)) {
     await postMessengerSend(pageToken, {
       recipient,
       message: { text: chunk },
       ...messagingType,
     });
   }
+}
+
+/** Three is the ceiling Meta accepts for a button template. */
+const BUTTON_LIMIT = 3;
+
+/**
+ * The one-button message: a line of text with the actions under it. Used for
+ * "Track order", where there is nothing to photograph — the buyer needs a door,
+ * not a display case.
+ */
+export async function sendButtons(
+  pageToken: string,
+  recipientId: string,
+  text: string,
+  buttons: Array<{ title: string; payload: string }>,
+): Promise<void> {
+  if (buttons.length === 0) return;
+  await postMessengerSend(pageToken, {
+    recipient: { id: recipientId },
+    message: {
+      attachment: {
+        type: 'template',
+        payload: {
+          template_type: 'button',
+          text,
+          buttons: buttons.slice(0, BUTTON_LIMIT).map((button) => ({
+            type: 'postback',
+            title: button.title,
+            data: button.payload,
+          })),
+        },
+      },
+    },
+    messaging_type: 'RESPONSE',
+  });
 }
 
 /**

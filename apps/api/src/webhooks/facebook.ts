@@ -26,6 +26,13 @@ type MessagingEvent = {
   postback?: { title?: string; payload?: string; mid?: string };
 };
 
+/**
+ * The payloads our own buttons attach, kept verbatim on the way in. A button labeled
+ * "Order" whose title is sent as the message would tell the agent only that the buyer
+ * tapped something, and it is the product id in the payload that turns a tap into an order.
+ */
+const COMMAND_PAYLOAD = /^(?:order|track)\s+\S/i;
+
 function inboundTextFromMessagingEvent(
   ev: MessagingEvent,
 ): { senderId: string; text: string; externalId?: string } | null {
@@ -39,9 +46,11 @@ function inboundTextFromMessagingEvent(
 
   const payload = ev.postback?.payload;
   if (payload) {
+    // A command payload is the tap; a title is decoration from a generic greeting button.
+    const text = COMMAND_PAYLOAD.test(payload) ? payload : (ev.postback?.title ?? payload);
     return {
       senderId,
-      text: ev.postback?.title ?? payload,
+      text,
       externalId: ev.postback?.mid,
     };
   }

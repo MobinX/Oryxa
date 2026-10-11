@@ -132,6 +132,119 @@ describe('Facebook Integration', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * Every body a send posted. `postsOf` above types a post as a text message; a template
+   * carries an attachment instead, so this one records the raw body and lets the test
+   * assert whichever shape it expects.
+   */
+  async function postedBodies(send: () => Promise<unknown>): Promise<string[]> {
+    const bodies: string[] = [];
+    globalThis.fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await send();
+    return bodies;
+  }
+
+  it('sendMessage renders a card list as a generic template, one postback per card', async () => {
+    const { sendMessage } = await import('@repo/integrations/facebook');
+    const bodies = await postedBodies(() =>
+      sendMessage('page-token', 'recipient-1', [
+        {
+          title: 'Test T-Shirt',
+          subtitle: '$29.99 — A comfortable cotton t-shirt',
+          imageUrl: 'https://cdn.test/shirt.jpg',
+          button: { title: 'Order', payload: 'order p-1 Test T-Shirt' },
+        },
+        {
+          title: 'Hoodie',
+          subtitle: '$59.00',
+          imageUrl: 'https://cdn.test/hoodie.jpg',
+          button: { title: 'Order', payload: 'order p-2 Hoodie' },
+        },
+      ]),
+    );
+
+    expect(bodies).toHaveLength(1);
+    expect(JSON.parse(bodies[0]!)).toEqual({
+      recipient: { id: 'recipient-1' },
+      message: {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'generic',
+            elements: [
+              {
+                title: 'Test T-Shirt',
+                subtitle: '$29.99 — A comfortable cotton t-shirt',
+                image_url: 'https://cdn.test/shirt.jpg',
+                buttons: [{ type: 'postback', title: 'Order', data: 'order p-1 Test T-Shirt' }],
+              },
+              {
+                title: 'Hoodie',
+                subtitle: '$59.00',
+                image_url: 'https://cdn.test/hoodie.jpg',
+                buttons: [{ type: 'postback', title: 'Order', data: 'order p-2 Hoodie' }],
+              },
+            ],
+          },
+        },
+      },
+      messaging_type: 'RESPONSE',
+    });
+  });
+
+  it('sendMessage sends nothing for an empty card list', async () => {
+    const { sendMessage } = await import('@repo/integrations/facebook');
+    expect(await postedBodies(() => sendMessage('page-token', 'recipient-1', []))).toEqual([]);
+  });
+
+  it('sendMessage keeps a card list inside the ten elements Meta accepts', async () => {
+    const cards = Array.from({ length: 14 }, (_, i) => ({
+      title: `Product ${i}`,
+      subtitle: `$${i}.00`,
+      imageUrl: `https://cdn.test/${i}.jpg`,
+      button: { title: 'Order', payload: `order p-${i}` },
+    }));
+
+    const { sendMessage } = await import('@repo/integrations/facebook');
+    const bodies = await postedBodies(() => sendMessage('page-token', 'recipient-1', cards));
+
+    expect(bodies).toHaveLength(1);
+    const payload = JSON.parse(bodies[0]!).message.attachment.payload as {
+      template_type: string;
+      elements: unknown[];
+    };
+    expect(payload.template_type).toBe('generic');
+    expect(payload.elements).toHaveLength(10);
+  });
+
+  it('sendButtons posts a button template whose data is the payload, not the title', async () => {
+    const { sendButtons } = await import('@repo/integrations/facebook');
+    const bodies = await postedBodies(() =>
+      sendButtons('page-token', 'recipient-1', 'Just placed — 1 × Test T-Shirt, $29.99', [
+        { title: 'Track order', payload: 'track o-1' },
+      ]),
+    );
+
+    expect(bodies).toHaveLength(1);
+    expect(JSON.parse(bodies[0]!)).toEqual({
+      recipient: { id: 'recipient-1' },
+      message: {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'button',
+            text: 'Just placed — 1 × Test T-Shirt, $29.99',
+            buttons: [{ type: 'postback', title: 'Track order', data: 'track o-1' }],
+          },
+        },
+      },
+      messaging_type: 'RESPONSE',
+    });
+  });
+
   it('exchangeCodeForToken throws on API error', async () => {
     globalThis.fetch = vi.fn(async () => new Response('bad request', { status: 400 })) as typeof fetch;
     const { exchangeCodeForToken } = await import('@repo/integrations/facebook');
