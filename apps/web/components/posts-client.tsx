@@ -44,6 +44,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Pulse } from '@/components/skeletons';
 import { PostsComposerSkeleton } from '@/components/posts-panel-skeleton';
+import { ReaderDate, ReaderTime } from '@/components/reader-clock';
 
 const CommentSection = dynamic(
   () => import('@/components/comments/comment-section').then((mod) => mod.CommentSection),
@@ -115,7 +116,13 @@ export function PostsClient({
   // Content edit state
   const [content, setContent] = useState(() => seededPost?.content ?? '');
   const [mediaUrls, setMediaUrls] = useState<string[]>(() => seededPost?.mediaUrls || []);
-  const [scheduledAt, setScheduledAt] = useState(() => scheduleInputValue(seededPost?.scheduledAt));
+  // While the server renders, nobody has asked the browser for its offset yet, so the
+  // field starts as the UTC wall clock both passes agree on and is rewritten to the
+  // reader's own clock once hydration is over.
+  const [scheduledAt, setScheduledAt] = useState(() => seededPost?.scheduledAt?.slice(0, 16) ?? '');
+  useEffect(() => {
+    setScheduledAt(scheduleInputValue(seededPost?.scheduledAt));
+  }, [seededPost?.scheduledAt]);
 
   // AI Generator state
   const [sourceMode, setSourceMode] = useState<'write' | 'ai'>('write');
@@ -560,10 +567,7 @@ export function PostsClient({
 
                   <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
                     <span>
-                      {new Date(post.createdAt).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+                      <ReaderDate at={post.createdAt} />
                     </span>
                     
                     {/* Hard Delete Button */}
@@ -776,7 +780,7 @@ export function PostsClient({
                         isOverLimit ? 'text-destructive font-bold' : 'text-muted-foreground',
                       )}
                     >
-                      {content.length.toLocaleString()} / {charLimit.toLocaleString()} chars
+                      {content.length.toLocaleString('en-US')} / {charLimit.toLocaleString('en-US')} chars
                     </span>
                   </div>
 
@@ -937,7 +941,7 @@ export function PostsClient({
                         <span className="text-[10px] text-muted-foreground">
                           Last synced:{' '}
                           {selectedPostDetail.latestSync
-                            ? new Date(selectedPostDetail.latestSync.syncedAt).toLocaleTimeString()
+                            ? <ReaderTime at={selectedPostDetail.latestSync.syncedAt} />
                             : 'Never'}
                         </span>
                       </div>
@@ -946,25 +950,25 @@ export function PostsClient({
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
                           <span className="text-[10px] font-bold text-muted-foreground block uppercase">Likes</span>
                           <span className="text-xl font-bold text-primary">
-                            {selectedPostDetail.latestSync?.likeCount.toLocaleString() ?? 0}
+                            {selectedPostDetail.latestSync?.likeCount.toLocaleString('en-US') ?? 0}
                           </span>
                         </div>
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
                           <span className="text-[10px] font-bold text-muted-foreground block uppercase">Comments</span>
                           <span className="text-xl font-bold text-primary">
-                            {(liveCommentCount ?? selectedPostDetail.latestSync?.commentCount ?? 0).toLocaleString()}
+                            {(liveCommentCount ?? selectedPostDetail.latestSync?.commentCount ?? 0).toLocaleString('en-US')}
                           </span>
                         </div>
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
                           <span className="text-[10px] font-bold text-muted-foreground block uppercase">Shares</span>
                           <span className="text-xl font-bold text-primary">
-                            {selectedPostDetail.latestSync?.shareCount.toLocaleString() ?? 0}
+                            {selectedPostDetail.latestSync?.shareCount.toLocaleString('en-US') ?? 0}
                           </span>
                         </div>
                         <div className="bg-card rounded-xl p-3 border border-border/40 text-center">
                           <span className="text-[10px] font-bold text-muted-foreground block uppercase">Reach</span>
                           <span className="text-xl font-bold text-primary">
-                            {selectedPostDetail.latestSync?.reachCount.toLocaleString() ?? 0}
+                            {selectedPostDetail.latestSync?.reachCount.toLocaleString('en-US') ?? 0}
                           </span>
                         </div>
                       </div>
