@@ -27,11 +27,16 @@ type MessagingEvent = {
 };
 
 /**
- * The payloads our own buttons attach, kept verbatim on the way in. A button labeled
- * "Order" whose title is sent as the message would tell the agent only that the buyer
- * tapped something, and it is the product id in the payload that turns a tap into an order.
+ * A postback payload is kept verbatim when it reads as a sentence, because our buttons now
+ * write the whole request into it — "place order with <id> and <name>", "please track order
+ * with id <id>" — which is what turns a tap into something the agent can act on and remember.
+ * A payload that is a single opaque token ("GET_STARTED") carries no meaning without the label
+ * the buyer actually saw, so there the title is the message.
  */
-const COMMAND_PAYLOAD = /^(?:order|track)\s+\S/i;
+function postbackMessage(postback: NonNullable<MessagingEvent['postback']>): string | undefined {
+  const payload = postback.payload?.trim();
+  return payload?.includes(' ') ? payload : (postback.title ?? payload);
+}
 
 function inboundTextFromMessagingEvent(
   ev: MessagingEvent,
@@ -46,17 +51,10 @@ function inboundTextFromMessagingEvent(
 
   const postback = ev.postback;
   if (postback) {
-    // A command payload is the tap. A title is what Meta sends when the button carried no
-    // payload at all — still a customer asking for something, so it is never dropped silently.
-    const text = postback.payload && COMMAND_PAYLOAD.test(postback.payload)
-      ? postback.payload
-      : (postback.title ?? postback.payload);
+    // A tap with neither payload nor title is still a tap: it must not vanish silently.
+    const text = postbackMessage(postback);
     if (!text) return null;
-    return {
-      senderId,
-      text,
-      externalId: postback.mid,
-    };
+    return { senderId, text, externalId: postback.mid };
   }
 
   return null;

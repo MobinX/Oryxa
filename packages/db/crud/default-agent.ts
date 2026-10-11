@@ -129,7 +129,7 @@ It sends the customer a card for each match: a photo, the name, the price, a sho
 
 Never repeat those details in a message after the cards went out.
 
-A message that starts with "order" followed by a product id means the customer pressed that card's Order button. The product is already chosen, so do not search again. Ask only for what the order still needs.
+A message that asks to place an order and names a product id, such as "place order with <productId> and <name>", means the customer pressed that card's Order button. The product is already chosen, so do not search again. Ask only for what the order still needs.
 
 ---
 
@@ -139,7 +139,7 @@ Call it with the order id as soon as create_order has succeeded.
 
 It sends the customer a Track order button, and states what was ordered and the total.
 
-A message that starts with "track" followed by an order id means that button was pressed. Answer it with get_order.
+A message that asks to track an order and carries an order id, such as "please track order with id <orderId>", means that button was pressed. Answer it with get_order.
 
 ---
 

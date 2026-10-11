@@ -170,14 +170,15 @@ describe('Facebook Webhook', () => {
     expect(msgs?.some((m) => m.content === 'Get Started')).toBe(true);
   });
 
-  it('sends a card button command to the agent as its payload, not its title', async () => {
+  it('sends a card button request to the agent as its payload, not its title', async () => {
     const seed = await seedTestWorld();
     const productId = crypto.randomUUID();
+    const tapped = `place order with ${productId} and Photo Hoodie`;
     const res = await postWebhook({
       object: 'page',
       entry: [
         pageEntry(seed.pageChannelId, [
-          postbackEvent('TAPPER', `order ${productId} Photo Hoodie`, 'Order', 'pb-2'),
+          postbackEvent('TAPPER', tapped, 'Order', 'pb-2'),
         ]),
       ],
     });
@@ -187,7 +188,7 @@ describe('Facebook Webhook', () => {
     const conv = convs.find((c) => c.customerPlatformId === 'TAPPER');
     const msgs = await listMessages(conv!.id, seed.business.id);
     // "Order" alone would leave the agent guessing which product the buyer tapped.
-    expect(msgs?.some((m) => m.content === `order ${productId} Photo Hoodie`)).toBe(true);
+    expect(msgs?.some((m) => m.content === tapped)).toBe(true);
     expect(msgs?.some((m) => m.content === 'Order')).toBe(false);
   });
 

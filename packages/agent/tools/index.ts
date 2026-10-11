@@ -441,7 +441,7 @@ export function createAgentTools(
           title,
           subtitle: summary ? `${price} — ${summary}` : price,
           imageUrl,
-          button: { title: 'Order', payload: `order ${product.id} ${title}` },
+          button: { title: 'Order', payload: `place order with ${product.id} and ${title}` },
         });
       }
 
@@ -522,7 +522,7 @@ export function createAgentTools(
         `${state} — ${order.count} × ${order.productName ?? 'your order'}, ${money(order.totalPrice)}`,
         160,
       );
-      const buttons = [{ title: 'Track order', payload: `track ${order.id}` }];
+      const buttons = [{ title: 'Track order', payload: `please track order with id ${order.id}` }];
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {

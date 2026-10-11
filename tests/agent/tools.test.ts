@@ -195,7 +195,7 @@ describe('Agent Tools', () => {
       imageUrl: 'https://cdn.test/hoodie.jpg',
     });
     expect(cards[0]!.button.title).toBe('Order');
-    expect(cards[0]!.button.payload).toMatch(/^order [0-9a-f-]{36} Photo Hoodie$/);
+    expect(cards[0]!.button.payload).toMatch(/^place order with [0-9a-f-]{36} and Photo Hoodie$/);
 
     // The thread keeps what the cards said, so the merchant inbox and the next
     // turn of history are not left reading an empty bubble.
@@ -271,7 +271,7 @@ describe('Agent Tools', () => {
       'page-tok',
       'fb-user-1',
       expect.stringMatching(/^Just placed — 2 × Test T-Shirt, \$59\.98$/),
-      [{ title: 'Track order', payload: `track ${order.id}` }],
+      [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     expect(messages?.at(-1)?.content).toContain(`Just placed — 2 × Test T-Shirt, $59.98`);
