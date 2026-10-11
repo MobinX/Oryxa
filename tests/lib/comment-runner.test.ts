@@ -11,6 +11,7 @@ const sendMessageMock = vi.fn(async () => undefined);
 const getFacebookPostContextMock = vi.fn(async () => null);
 vi.mock('@repo/integrations/facebook', () => ({
   replyToFacebookComment: (...args: unknown[]) => replyToFacebookCommentMock(...args),
+  sendCommenterMessage: vi.fn(async () => undefined),
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   getFacebookPostContext: (...args: unknown[]) => getFacebookPostContextMock(...args),
 }));

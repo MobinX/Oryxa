@@ -25,6 +25,7 @@ vi.mock('@repo/integrations/facebook', () => ({
   getFacebookUserProfile: vi.fn(async () => ({ name: 'Alice', avatar: 'https://img/alice.png' })),
   getFacebookPostContext: vi.fn(async () => null),
   replyToFacebookComment: vi.fn(async () => 'MOCK_REPLY_ID'),
+  sendCommenterMessage: vi.fn(async () => undefined),
   publishFacebookPost: vi.fn(async () => 'MOCK_POST_ID'),
   sendMessage: vi.fn(async () => 'MOCK_MSG_ID'),
   senderAction: vi.fn(async () => undefined),

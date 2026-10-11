@@ -303,7 +303,7 @@ type MessengerAttachment =
     };
 
 type SendPayload = {
-  recipient: { id: string };
+  recipient: { id: string } | { comment_id: string };
   message: { text: string } | { attachment: MessengerAttachment };
   messaging_type: 'RESPONSE' | 'MESSAGE_TAG';
   tag?: 'HUMAN_AGENT';
@@ -501,9 +501,28 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Delivers a Page message into the inbox of the person who wrote `commentId`. This is the
+ * only door from a public comment into a private thread, and Meta closes it when the
+ * commenter cannot be messaged — a refused send must never swallow the answer, so callers
+ * post the text publicly when this throws.
+ */
+export async function sendCommenterMessage(
+  pageToken: string,
+  commentId: string,
+  text: string,
+): Promise<void> {
+  for (const chunk of messengerChunks(text)) {
+    await postMessengerSend(pageToken, {
+      recipient: { comment_id: commentId },
+      message: { text: chunk },
+      messaging_type: 'RESPONSE',
+    });
+  }
+}
+
 /** Three is the ceiling Meta accepts for a button template. */
 const BUTTON_LIMIT = 3;
-
 /**
  * The one-button message: a line of text with the actions under it. Used for
  * "Track order", where there is nothing to photograph — the buyer needs a door,

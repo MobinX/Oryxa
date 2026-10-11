@@ -29,6 +29,7 @@ const replyMock = vi.fn(async (..._args: unknown[]) => `reply-${Math.random().to
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMock(...args),
   replyToFacebookComment: (...args: unknown[]) => replyMock(...args),
+  sendCommenterMessage: vi.fn(async () => undefined),
   getFacebookPostContext: vi.fn(async () => null),
   senderAction: vi.fn(async () => undefined),
   verifyWebhookSignature: vi.fn(async () => true),

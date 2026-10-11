@@ -47,7 +47,7 @@ const COMMENT_REPLY_GUIDANCE = [
   'Only reply if THIS comment is directed at the page/business — a question, a request, or an @mention of the page. If the commenter is talking to another user (user-to-user conversation), do NOT call reply_comment; stay silent.',
   'A NEW customer comment that is directed at the page still needs a reply even if the page already replied earlier in this thread.',
   'If you decide to stay silent, do NOT call any tools and output exactly the word "SILENT" as your final response.',
-  'When you should reply, use reply_comment to post a single, short, public-appropriate reply to this one comment.',
+  'When you should reply, call reply_comment once with the full answer. Your text is delivered privately into that commenter’s Messenger inbox, and a short public reply telling them to check Messenger is posted under their comment for you — so write what the customer actually needs (price, stock, sizes, how to order) and never write “check your inbox” as the answer.',
 ].join('\n');
 
 async function resolveGraphReplyTargetId(
@@ -210,6 +210,8 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         parentCommentExternalId: current.externalId!,
         graphReplyToId,
         customerName: thread.commenterName,
+        channelId: thread.channelId,
+        commenterPlatformId: thread.commenterPlatformId,
         emitSse: trace.emitSse,
       },
       (text) => sentCommentTexts.push(text),
