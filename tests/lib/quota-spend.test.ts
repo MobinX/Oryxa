@@ -19,17 +19,19 @@ import { createComment, processInboundComment } from '@repo/db/crud/comment';
  * The spend: one agent reply that reaches a customer is one unit, charged at the moment of
  * the send and given back if the send fails.
  *
- * Four sites — the two tools and the two fallbacks in the runners — and each is tested on
+ * Five sites — the three tools, the comment agent's private-message tool among them, and the
+ * two fallbacks in the runners — and each is tested on
  * its own, because a fallback that forgot to charge is exactly how an allowance becomes
  * unlimited without anybody editing a plan.
  */
 
 const sendMock = vi.fn(async (..._args: unknown[]) => undefined);
 const replyMock = vi.fn(async (..._args: unknown[]) => `reply-${Math.random().toString(36).slice(2, 8)}`);
+const dmMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMock(...args),
   replyToFacebookComment: (...args: unknown[]) => replyMock(...args),
-  sendCommenterMessage: vi.fn(async () => undefined),
+  sendCommenterMessage: (...args: unknown[]) => dmMock(...args),
   getFacebookPostContext: vi.fn(async () => null),
   senderAction: vi.fn(async () => undefined),
   verifyWebhookSignature: vi.fn(async () => true),
@@ -89,6 +91,9 @@ const messengerTool = (context: Parameters<typeof createAgentTools>[0], onSent?:
 const commentTool = (context: Parameters<typeof createCommentAgentTools>[0], onSent?: (text: string) => void) =>
   createCommentAgentTools(context, onSent).find((t) => t.name === 'reply_comment')!;
 
+const privateTool = (context: Parameters<typeof createCommentAgentTools>[0], onSent?: (text: string) => void) =>
+  createCommentAgentTools(context, onSent).find((t) => t.name === 'send_private_message')!;
+
 async function seedThread(seed: TestSeed, commenterId: string, postSuffix: string): Promise<string> {
   const { threadId } = await processInboundComment(
     { id: seed.channel.id, businessId: seed.business.id },
@@ -109,6 +114,8 @@ describe('the quota spend', () => {
     sendMock.mockClear();
     sendMock.mockResolvedValue(undefined);
     replyMock.mockClear();
+    dmMock.mockClear();
+    dmMock.mockResolvedValue(undefined);
   });
 
   it('charges send_message exactly one unit and persists the reply', async () => {
@@ -295,6 +302,32 @@ describe('the quota spend', () => {
     expect(String(second)).toContain('already posted');
     expect(replyMock).toHaveBeenCalledTimes(1);
     expect(await spent(seed.business.id)).toEqual({ messages: 0, comments: 1 });
+  });
+
+  it('charges send_private_message as a message, and gives it back when Meta refuses', async () => {
+    const { seed } = await onPlan('dm', 3, 3);
+    const threadId = await seedThread(seed, 'USER_E', 'SPEND5');
+    const context = {
+      businessId: seed.business.id,
+      commentThreadId: threadId,
+      pageToken: 'token',
+      parentCommentExternalId: 'c-USER_E-SPEND5-0',
+      channelId: seed.channel.id,
+      commenterPlatformId: 'USER_E',
+    };
+
+    await privateTool(context).invoke({ text: 'It is $59 and we ship nationwide.' });
+
+    // A comment agent that answers in Messenger spends the message allowance, not the
+    // comment one — the public line is a separate reply_comment call with its own unit.
+    expect(await spent(seed.business.id)).toEqual({ messages: 1, comments: 0 });
+
+    dmMock.mockRejectedValueOnce(new Error('Graph 550'));
+    const refused = await privateTool(context).invoke({ text: 'Would have been a second DM.' });
+
+    expect(String(refused)).toMatch(/could not be reached/i);
+    // Nobody was messaged, so the cycle pays for nobody.
+    expect(await spent(seed.business.id)).toEqual({ messages: 1, comments: 0 });
   });
 
   it('refuses a comment reply at the cap and charges nothing for the test override', async () => {

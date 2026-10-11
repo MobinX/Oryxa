@@ -8,18 +8,11 @@ import { replyToFacebookComment, sendCommenterMessage } from '@repo/integrations
 import type { SseEmitter } from '@agent/Agent';
 
 /**
- * What the public thread says once the answer itself went to the commenter's inbox. The
- * customer asked in public and is answered in private, so this only has to point at it.
- */
-const CHECK_MESSENGER_REPLY =
-  'I have sent you the details in Messenger — please check your inbox. Message the page if you need anything else.';
-
-/**
- * Tool set for the comment agent. Differs from the Messenger set in one tool:
- * `reply_comment` carries the answer into the commenter's Messenger inbox and posts
- * `CHECK_MESSENGER_REPLY` under their comment — and when the inbox cannot be reached it
- * posts the answer itself publicly, so a refused send never leaves a pointing hand
- * aimed at nothing.
+ * Tool set for the comment agent. Two delivery tools, and the agent picks which one the
+ * question deserves: `reply_comment` says the given text under the comment, and
+ * `send_private_message` puts it in the commenter's Messenger inbox instead. Nothing swaps
+ * one for the other behind the model's back — a public reply pointing at an inbox that was
+ * never written to is the failure mode that keeps the two separate.
  */
 export function createCommentAgentTools(
   context: {
@@ -42,6 +35,12 @@ export function createCommentAgentTools(
      * usage out of nothing.
      */
     replyCommentOverride?: (pageToken: string, targetId: string, text: string) => Promise<string>;
+    /**
+     * Override the inbox send — the playground's seam, mirroring the one above: it shows the
+     * agent choosing the private route without messaging a real person, and a DM that never
+     * reaches Meta must not spend a unit of the message allowance.
+     */
+    sendPrivateMessageOverride?: (pageToken: string, commentId: string, text: string) => Promise<void>;
   },
   onSent?: (text: string) => void,
 ) {
@@ -51,66 +50,6 @@ export function createCommentAgentTools(
    * Graph POST keeps a duplicated reply off the public thread.
    */
   let replyClaimed = false;
-
-  /**
-   * Writes the answer into the commenter's own Messenger thread, so a question asked in
-   * public is answered in private and the Messenger agent later knows what this customer
-   * was already told. Returns false whenever the private route is not available or not
-   * allowed — no commenter on this thread, a test run that puts nothing on the wire, an
-   * exhausted message allowance, Meta refusing the send — and the caller then answers in
-   * the comment itself rather than pointing at an empty inbox.
-   */
-  async function sendAnswerToInbox(text: string, chargeable: boolean): Promise<boolean> {
-    if (!chargeable || !context.channelId || !context.commenterPlatformId) return false;
-
-    let chargedPeriod: string | null = null;
-    try {
-      const budget = await spendQuotaUnit(context.businessId, 'message');
-      if (!budget.spent) {
-        console.log('[agent-tool] reply_comment answering in public — the message allowance is used up');
-        return false;
-      }
-      chargedPeriod = budget.period;
-    } catch (err) {
-      // Fails open like every other gate: a database that will not answer must not mute the agent.
-      console.error('[agent-tool] message quota spend failed, sending uncharged:', err);
-    }
-
-    try {
-      await sendCommenterMessage(context.pageToken, context.parentCommentExternalId, text);
-    } catch (err) {
-      console.error('[agent-tool] reply_comment could not reach the inbox, answering in public:', err);
-      if (chargedPeriod) {
-        try {
-          await refundQuotaUnit(context.businessId, 'message', chargedPeriod);
-        } catch (refundErr) {
-          console.error('[agent-tool] message quota refund failed:', refundErr);
-        }
-      }
-      return false;
-    }
-
-    try {
-      const conversation = await getOrCreateConversation(
-        context.businessId,
-        context.channelId,
-        context.commenterPlatformId,
-        context.customerName ?? undefined,
-      );
-      await createMessage({
-        conversationId: conversation.id,
-        from: 'self',
-        content: text,
-        state: 'done',
-      });
-    } catch (err) {
-      // The customer already has the answer. Bookkeeping that fails must not undo it,
-      // and must not stop the public pointer from being posted either.
-      console.error('[agent-tool] reply_comment could not record the inbox message:', err);
-    }
-
-    return true;
-  }
 
   const replyCommentTool = tool(
     async ({ text }) => {
@@ -169,14 +108,9 @@ export function createCommentAgentTools(
         }
       }
 
-      // The answer goes to the inbox first: only once we know whether it landed can we
-      // decide what the public thread should say.
-      const sentToInbox = await sendAnswerToInbox(text, chargeable);
-      const publicText = sentToInbox ? CHECK_MESSENGER_REPLY : text;
-
       let newCommentId: string;
       try {
-        newCommentId = await postFn(context.pageToken, targetId, publicText);
+        newCommentId = await postFn(context.pageToken, targetId, text);
       } catch (err) {
         if (chargedPeriod) {
           try {
@@ -190,30 +124,119 @@ export function createCommentAgentTools(
       await createComment({
         commentThreadId: context.commentThreadId,
         from: 'self',
-        content: publicText,
+        content: text,
         externalId: newCommentId,
         parentExternalId: context.parentCommentExternalId,
         state: 'done',
       });
 
-      onSent?.(publicText);
-      const result = sentToInbox
-        ? 'Answer sent to the customer in Messenger; the comment now tells them to check their inbox. Do not repeat the details. End the turn.'
-        : 'Reply posted to the comment.';
-      console.log(`[agent-tool] reply_comment done — commentId=${newCommentId} inbox=${sentToInbox}`);
-      context.emitSse?.('tool_result', { name: 'reply_comment', result });
-      return result;
+      onSent?.(text);
+      console.log(`[agent-tool] reply_comment done — commentId=${newCommentId}`);
+      context.emitSse?.('tool_result', { name: 'reply_comment', result: 'Reply posted to the comment.' });
+      return 'Reply posted to the comment.';
     },
     {
       name: 'reply_comment',
       description:
-        'Answer the commenter. The text you give is sent privately into their Messenger inbox, and a short '
-        + 'public reply telling them to check Messenger is posted under their comment for you. So write the '
-        + 'whole answer here — price, stock, sizes, the order steps — and never write "check your inbox" as '
-        + 'the answer. Only use this when the comment is directed at the page/business; do not reply to '
-        + 'user-to-user conversation.',
+        'Post this text as a public reply under the customer’s comment. Use it for what anyone may read: an '
+        + 'honest answer about the product, or — after send_private_message — one short courteous line telling '
+        + 'the customer their details are waiting in Messenger. Never post prices, stock counts, or anything '
+        + 'the customer would have to share privately to get. Only use this when the comment is directed at '
+        + 'the page/business; do not reply to user-to-user conversation.',
       schema: z.object({
-        text: z.string().describe('The answer to deliver to this customer in Messenger; the public comment reply is written for you'),
+        text: z.string().describe('The exact words to show publicly under the comment'),
+      }),
+    },
+  );
+
+  /**
+   * The commenter's own Messenger thread, opened through the comment they just wrote —
+   * Meta's only door from a public comment to a private conversation. The answer is recorded
+   * on the conversation this commenter would get, so the Messenger agent later knows what
+   * this person was already told.
+   */
+  const sendPrivateMessageTool = tool(
+    async ({ text }) => {
+      context.emitSse?.('tool_call', { name: 'send_private_message', args: { text } });
+      console.log(`[agent-tool] send_private_message called — text="${text}"`);
+
+      if (!context.channelId || !context.commenterPlatformId) {
+        // No inbox to write into on this thread, so the only honest answer is a public one.
+        const refused = 'This commenter cannot be messaged privately. Answer in the comment with reply_comment instead.';
+        context.emitSse?.('tool_result', { name: 'send_private_message', result: refused });
+        return `${refused} End the turn.`;
+      }
+
+      // Charged only now, and only for a send that will really go on the wire — the same
+      // rule the Messenger tool follows, so a dry test run cannot manufacture usage.
+      const chargeable = !context.sendPrivateMessageOverride && text.trim() !== 'SILENT';
+      let chargedPeriod: string | null = null;
+      if (chargeable) {
+        try {
+          const budget = await spendQuotaUnit(context.businessId, 'message');
+          if (!budget.spent) {
+            const exhausted = "This cycle's Messenger messages are used up and the owner has been notified.";
+            context.emitSse?.('tool_result', { name: 'send_private_message', result: exhausted });
+            return `${exhausted} Do not try again. End the turn.`;
+          }
+          chargedPeriod = budget.period;
+        } catch (err) {
+          // Fails open like every other gate: a database that will not answer must not mute the agent.
+          console.error('[agent-tool] message quota spend failed, sending uncharged:', err);
+        }
+      }
+
+      const sendFn = context.sendPrivateMessageOverride ?? sendCommenterMessage;
+      try {
+        await sendFn(context.pageToken, context.parentCommentExternalId, text);
+      } catch (err) {
+        console.error('[agent-tool] send_private_message failed:', err);
+        if (chargedPeriod) {
+          try {
+            await refundQuotaUnit(context.businessId, 'message', chargedPeriod);
+          } catch (refundErr) {
+            console.error('[agent-tool] message quota refund failed:', refundErr);
+          }
+        }
+        // Told to the model as a fact, not retried: Meta shuts this door for people who
+        // have messaging off, and a second attempt costs the cycle without reaching anyone.
+        const unreachable = 'Messenger could not be reached for this commenter.';
+        context.emitSse?.('tool_result', { name: 'send_private_message', result: unreachable });
+        return `${unreachable} Answer in the comment with reply_comment instead. End the turn.`;
+      }
+
+      try {
+        const conversation = await getOrCreateConversation(
+          context.businessId,
+          context.channelId,
+          context.commenterPlatformId,
+          context.customerName ?? undefined,
+        );
+        await createMessage({
+          conversationId: conversation.id,
+          from: 'self',
+          content: text,
+          state: 'done',
+        });
+      } catch (err) {
+        // The customer already has the message. Bookkeeping that fails must not undo it.
+        console.error('[agent-tool] send_private_message could not record the inbox message:', err);
+      }
+
+      const sent = 'Private message sent to the customer in Messenger.';
+      context.emitSse?.('tool_result', { name: 'send_private_message', result: sent });
+      console.log(`[agent-tool] send_private_message done`);
+      return 'Private message sent to this customer’s Messenger inbox. Now call reply_comment once with a single courteous line telling them the details are waiting in Messenger, without repeating those details publicly. End the turn after that.';
+    },
+    {
+      name: 'send_private_message',
+      description:
+        'Send the text into this commenter’s own Messenger inbox instead of posting it publicly. Use it when '
+        + 'the answer is a price, a stock or quantity count, a delivery area, or anything about buying — and '
+        + 'whenever the customer would have to share their own details to get it. A genuine question about '
+        + 'the product itself belongs in the comment, not here. One call per reply.',
+      schema: z.object({
+        text: z.string().describe('The private answer to deliver in Messenger — the details themselves, in full'),
       }),
     },
   );
@@ -225,5 +248,6 @@ export function createCommentAgentTools(
       emitSse: context.emitSse,
     }),
     replyCommentTool,
+    sendPrivateMessageTool,
   ];
 }

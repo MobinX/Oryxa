@@ -49,6 +49,27 @@ const MOCK_NAMES = [
  */
 const sandboxPageId = (businessId: string) => `mock-channel-${businessId}`;
 
+/**
+ * One line per earlier comment, oldest first. A line that starts with `page:` is the page's
+ * own reply — which is how the agent sees an admin's manual answer too — and anything else
+ * is another comment from this customer.
+ */
+function parseCommentHistory(text: string): { from: 'customer' | 'self'; content: string }[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 20)
+    .map((line) => {
+      const isPage = /^page:\s*/i.test(line);
+      return {
+        from: isPage ? ('self' as const) : ('customer' as const),
+        content: line.replace(/^page:\s*/i, ''),
+      };
+    })
+    .filter((row) => row.content.length > 0);
+}
+
 interface Conversation {
   id: string;
   customerName: string | null;
@@ -62,6 +83,8 @@ interface Message {
   from: string;
   content: string;
   time: string;
+  /** Only the comment playground sets this: how the line should be labelled. */
+  kind?: 'comment' | 'reply' | 'dm';
 }
 
 interface LogEvent {
@@ -96,6 +119,15 @@ export function PlaygroundClient({
   const [isThinking, setIsThinking] = useState(false);
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
+
+  // The comment playground: one made-up public comment, whatever came before it on the post,
+  // and what the agent chose to do. Nothing here reaches Meta — both delivery routes come
+  // back down the stream as events, which is the whole point of testing them.
+  const [commenterName, setCommenterName] = useState('Ariana Rahman');
+  const [historyText, setHistoryText] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [commentThread, setCommentThread] = useState<Message[]>([]);
+  const [commentMode, setCommentMode] = useState(false);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -313,7 +345,73 @@ export function PlaygroundClient({
     }
   }
 
-  async function parseSseStream(res: Response) {
+  /**
+   * Runs the comment agent over the thread on screen. The thread is redrawn from the form on
+   * every run, so the lines shown are exactly the lines the agent was given — and the reply
+   * that arrives is drawn under whichever comment it answers.
+   */
+  async function handleRunComment(e: React.FormEvent) {
+    e.preventDefault();
+    const comment = commentText.trim();
+    if (!comment || !activeChannel) return;
+
+    const history = parseCommentHistory(historyText);
+    const time = new Date().toISOString();
+    setCommentThread([
+      ...history.map((row, i) => ({
+        id: `history-${i}`,
+        from: row.from,
+        content: row.content,
+        time,
+        kind: row.from === 'self' ? ('reply' as const) : ('comment' as const),
+      })),
+      { id: `current-${Date.now()}`, from: 'customer', content: comment, time, kind: 'comment' as const },
+    ]);
+
+    setCommentText('');
+    setIsThinking(true);
+    setLogs([]);
+
+    const append = (from: string, content: string, kind: Message['kind']) =>
+      setCommentThread((prev) => [...prev, { id: `${kind}-${Date.now()}`, from, content, time: new Date().toISOString(), kind }]);
+
+    try {
+      const response = await fetch('/api/playground/comment-test-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId,
+          channelId: activeChannel.id,
+          comment,
+          history,
+          commenterName,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        append('self', err.error || 'Failed to run the comment agent', 'reply');
+        return;
+      }
+
+      await parseSseStream(response, (event, data) => {
+        // Only the two delivery choices are drawn as thread lines; everything else the agent
+        // did (searching the catalog, tool results) belongs in the trace on the right.
+        if (event === 'comment_replied' && data.text) append('self', data.text, 'reply');
+        if (event === 'private_message_sent' && data.text) append('self', data.text, 'dm');
+        if (event === 'no_reply') {
+          append('self', data.silent ? 'Stayed silent — no comment reply, no Messenger message.' : `No tool called. Final text: ${data.text || '(empty)'}`, 'reply');
+        }
+      });
+    } catch (err) {
+      console.error('Failed during comment test run:', err);
+      append('self', `Run failed: ${String(err)}`, 'reply');
+    } finally {
+      setIsThinking(false);
+    }
+  }
+
+  async function parseSseStream(res: Response, onEvent?: (event: string, data: any) => void) {
     const reader = res.body?.getReader();
     if (!reader) return;
 
@@ -340,6 +438,7 @@ export function PlaygroundClient({
           try {
             const data = JSON.parse(rawData);
             addLog(currentEvent, data);
+            onEvent?.(currentEvent, data);
             
             // Auto-select conversation if it was created
             if (currentEvent === 'conversation_ready') {
@@ -348,6 +447,7 @@ export function PlaygroundClient({
           } catch {
             // Raw text fallback
             addLog(currentEvent, { text: rawData });
+            onEvent?.(currentEvent, { text: rawData });
           }
           currentEvent = ''; // Reset
         }
@@ -374,8 +474,8 @@ export function PlaygroundClient({
               Agent Playground
             </h1>
             <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              Chat as a mock customer against your sandbox page and watch every tool call, result and
-              reply stream in.
+              Play the mock customer — in the inbox, or under a post — and watch every tool call,
+              result and reply stream in, including which door the comment agent chose.
             </p>
           </div>
 
@@ -489,13 +589,37 @@ export function PlaygroundClient({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCreateChat}
-                  className="flex items-center gap-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 px-3 py-1.5 text-xs font-semibold border border-indigo-500/20"
-                >
-                  <Plus className="h-3.5 w-3.5" /> New Chat
-                </button>
+                {!commentMode && (
+                  <button
+                    onClick={handleCreateChat}
+                    className="flex items-center gap-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 px-3 py-1.5 text-xs font-semibold border border-indigo-500/20"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> New Chat
+                  </button>
+                )}
               </div>
+            </div>
+
+            {/* Which agent is being tested. The same prompt drives both, because one agent
+                answers this store's inbox and its comment threads. */}
+            <div className="flex items-center gap-1 border-b border-slate-800 bg-slate-900/40 px-3 py-2">
+              {[
+                { key: false, label: 'Messenger chat' },
+                { key: true, label: 'Page comment' },
+              ].map((tab) => (
+                <button
+                  key={String(tab.key)}
+                  onClick={() => setCommentMode(tab.key)}
+                  className={cn(
+                    'rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                    commentMode === tab.key
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/20'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
             {/* Split Grid: Conversations Sidebar + Chat Pane */}
@@ -546,7 +670,101 @@ export function PlaygroundClient({
 
               {/* Chat Pane */}
               <div className="flex-1 flex flex-col bg-slate-950">
-                {selectedConvId ? (
+                {commentMode ? (
+                  <>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {commentThread.length === 0 ? (
+                        <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500">
+                          <MessageSquare className="h-12 w-12 text-slate-700 mb-2 stroke-[1.5]" />
+                          <p className="text-xs font-semibold">Write the thread, then run it</p>
+                          <p className="text-[10px] text-slate-600 mt-1 max-w-[220px]">
+                            Type the earlier comments and the new one, and watch whether the agent
+                            answers publicly, slips into Messenger, or stays out of it.
+                          </p>
+                        </div>
+                      ) : (
+                        commentThread.map((line) => (
+                          <div
+                            key={line.id}
+                            className={cn(
+                              'max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm',
+                              line.from === 'customer'
+                                ? 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto rounded-tl-none'
+                                : line.kind === 'dm'
+                                  ? 'bg-emerald-700/70 text-white ml-auto rounded-tr-none'
+                                  : 'bg-indigo-600 text-white ml-auto rounded-tr-none',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'block text-[8px] font-bold uppercase tracking-wider mb-1',
+                                line.from === 'customer' ? 'text-slate-400' : line.kind === 'dm' ? 'text-emerald-200' : 'text-indigo-200',
+                              )}
+                            >
+                              {line.from === 'customer' ? `${commenterName} · on the post` : line.kind === 'dm' ? 'Messenger · only they see it' : 'Page · public reply'}
+                            </span>
+                            <p className="whitespace-pre-wrap">{line.content}</p>
+                          </div>
+                        ))
+                      )}
+
+                      {isThinking && (
+                        <div className="bg-slate-900 border border-slate-800 max-w-[80%] rounded-2xl px-4 py-3 text-xs text-slate-400 mr-auto rounded-tl-none flex items-center gap-2">
+                          <span className="flex gap-1">
+                            <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" />
+                            <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                            <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+                          </span>
+                          <span>Comment agent is deciding where to answer...</span>
+                        </div>
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+
+                    <form
+                      onSubmit={handleRunComment}
+                      className="border-t border-slate-900 p-3 bg-slate-900/30 flex flex-col gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={commenterName}
+                          onChange={(e) => setCommenterName(e.target.value)}
+                          placeholder="Commenter name"
+                          className="w-40 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-[11px] text-slate-300 outline-none focus:border-indigo-500"
+                        />
+                        <p className="text-[9px] text-slate-500 leading-tight">
+                          One earlier line per row. Start a row with <code className="text-slate-400">page:</code> for
+                          the page's own reply.
+                        </p>
+                      </div>
+                      <textarea
+                        value={historyText}
+                        onChange={(e) => setHistoryText(e.target.value)}
+                        rows={3}
+                        placeholder={'do you ship outside dhaka?\npage: yes, nationwide delivery available'}
+                        className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-[11px] text-slate-300 placeholder-slate-600 outline-none resize-none focus:border-indigo-500"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          placeholder="The new public comment — e.g. price bhai?"
+                          disabled={isThinking}
+                          className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isThinking || !commentText.trim()}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50 transition-all"
+                        >
+                          <Send className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                ) : selectedConvId ? (
                   <>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {messages.map((msg) => (
@@ -656,6 +874,14 @@ export function PlaygroundClient({
                     eventLabel = `tool_result: ${log.data.name}`;
                   } else if (log.event === 'message_sent' || log.event === 'reply') {
                     badgeColor = 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
+                  } else if (log.event === 'comment_replied') {
+                    badgeColor = 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+                    eventLabel = 'comment_replied (public)';
+                  } else if (log.event === 'private_message_sent') {
+                    badgeColor = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                    eventLabel = 'private_message_sent (Messenger)';
+                  } else if (log.event === 'no_reply') {
+                    badgeColor = 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
                   } else if (log.event === 'done' || log.event === 'runner_done') {
                     badgeColor = 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
                   } else if (log.event === 'error' || log.event === 'runner_error') {
@@ -688,7 +914,7 @@ export function PlaygroundClient({
                           res: {log.data.result}
                         </p>
                       )}
-                      {log.event === 'message_sent' && (
+                      {(log.event === 'message_sent' || log.event === 'comment_replied' || log.event === 'private_message_sent') && (
                         <p className="text-cyan-300/80 truncate">
                           text: "{log.data.text}"
                         </p>

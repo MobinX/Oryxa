@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { testRunInputSchema } from '@repo/shared';
+import { testRunInputSchema, commentTestRunInputSchema } from '@repo/shared';
 import { runAgentCore } from '@api/lib/agent-runner-core';
+import { runCommentTest } from '@api/lib/comment-test-runner';
 import type { SseEmitter } from '@repo/agent';
 
 export const testRunRouter = new Hono();
@@ -134,6 +135,96 @@ testRunRouter.post('/test-run', async (c) => {
         event: 'error',
         data: JSON.stringify({ message: String(err) }),
       });
+    }
+  });
+});
+
+/**
+ * POST /internal/test-comment-run
+ *
+ * The comment agent's own playground: a made-up public comment, optional earlier lines on
+ * that thread, and the store's current system prompt — streamed back so an operator can see
+ * which of the two doors the agent chose.
+ *
+ * `reply_comment` and `send_private_message` are both overridden, so nothing is posted to a
+ * real Page and no inbox is opened. The events that replace them are the point of the run:
+ *
+ *   thread_ready      { commentThreadId, postId, commenterPlatformId }
+ *   agent_start       { commentThreadId, historyLen }
+ *   tool_call         { name, args }
+ *   tool_result       { name, result }
+ *   comment_replied   { text }           ← what would be public under the comment
+ *   private_message_sent { text }        ← what would land in the commenter's Messenger
+ *   no_reply          { text, silent }   ← the agent delivered nothing
+ *   reply             { text }           ← the model's final text, whatever it was
+ *   done            { commentThreadId }
+ */
+testRunRouter.post('/test-comment-run', async (c) => {
+  const internalKey = c.req.header('x-internal-key');
+  if (internalKey !== process.env.INTERNAL_KEY) {
+    return c.text('Unauthorized', 401);
+  }
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.text('Malformed JSON', 400);
+  }
+
+  const parsed = commentTestRunInputSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid payload', issues: parsed.error.issues }, 400);
+  }
+
+  const { channelId, businessId, comment, history, commenterName, postId } = parsed.data;
+  // Namespaced by channel, so two stores testing at once never share a thread.
+  const commenterPlatformId = parsed.data.commenterPlatformId ?? `test-commenter-${channelId}`;
+
+  console.log(`[test-comment] request — channelId=${channelId} postId=${postId} commenter=${commenterPlatformId}`);
+  console.log(`[test-comment] comment="${comment}" historyRows=${history?.length ?? 0}`);
+
+  return streamSSE(c, async (stream) => {
+    const emitSse: SseEmitter = (event, data) => {
+      console.log(`[test-comment][sse] ${event}`, data);
+      stream.writeSSE({ event, data: JSON.stringify(data) }).catch((err) =>
+        console.error('[test-comment][sse] write error:', err),
+      );
+    };
+
+    const write = (event: string, data: unknown) =>
+      stream.writeSSE({ event, data: JSON.stringify(data) });
+
+    try {
+      const { getChannelById } = await import('@repo/db/crud/channel');
+      const channel = await getChannelById(channelId);
+
+      if (!channel) {
+        await write('error', { message: `Channel ${channelId} not found` });
+        return;
+      }
+      if (channel.businessId !== businessId) {
+        await write('error', { message: 'Channel does not belong to the given businessId' });
+        return;
+      }
+
+      await runCommentTest(
+        {
+          businessId,
+          channelId,
+          comment,
+          history,
+          commenterName,
+          commenterPlatformId,
+          postId: postId ?? 'TEST_POST',
+        },
+        emitSse,
+      );
+
+      await write('done', { commenterPlatformId });
+    } catch (err) {
+      console.error('[test-comment] unexpected error:', err);
+      await write('error', { message: String(err) });
     }
   });
 });

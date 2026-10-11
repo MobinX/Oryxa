@@ -72,3 +72,23 @@ export const testRunInputSchema = z.object({
    */
   testUserId: z.string().optional(),
 });
+
+export const commentTestRunInputSchema = z.object({
+  channelId: uuidSchema,
+  businessId: uuidSchema,
+  /** The public comment the comment agent is asked to handle. */
+  comment: z.string().min(1).max(2000),
+  /**
+   * Earlier lines on this thread, oldest first, so the agent is tested against a conversation
+   * rather than a vacuum. `from: 'self'` reads as a page reply — including one an admin typed.
+   */
+  history: z
+    .array(z.object({ from: z.enum(['customer', 'self']), content: z.string().min(1).max(2000) }))
+    .max(20)
+    .optional(),
+  /** Defaults to `test-commenter-{channelId}`, so repeated runs continue one thread. */
+  commenterPlatformId: z.string().min(1).max(120).optional(),
+  commenterName: z.string().min(1).max(120).optional(),
+  /** Defaults to `TEST_POST`, keeping playground threads off any real post id. */
+  postId: z.string().min(1).max(120).optional(),
+});

@@ -61,7 +61,7 @@ describe('comment agent tools: reply_comment', () => {
     expect(self?.state).toBe('done');
   }, 30_000);
 
-  it('delivers the answer to the commenter inbox and posts only the pointer under the comment', async () => {
+  it('sends the private answer to the inbox, then posts publicly only what the agent wrote', async () => {
     const seed = await seedTestWorld();
     const thread = await getOrCreateCommentThread(
       seed.business.id,
@@ -80,10 +80,11 @@ describe('comment agent tools: reply_comment', () => {
       channelId: seed.channel.id,
       commenterPlatformId: 'COMMENTER_DM',
     });
+    const privateTool = tools.find((t) => t.name === 'send_private_message')!;
     const replyTool = tools.find((t) => t.name === 'reply_comment')!;
 
-    const answer = 'The Photo Hoodie is $59 and sizes S–XL are in stock. Tell us your size to order.';
-    const result = await replyTool.invoke({ text: answer });
+    const answer = 'The Photo Hoodie is $59 and 5 pieces are left. Tell us your size and address to order.';
+    const dmResult = await privateTool.invoke({ text: answer });
 
     // The whole answer went to the inbox, addressed to the comment that asked.
     expect(sendCommenterMessageMock).toHaveBeenCalledWith(
@@ -91,23 +92,27 @@ describe('comment agent tools: reply_comment', () => {
       'PARENT_COMMENT_ID',
       answer,
     );
+    // Choosing the private route posts nothing publicly — that is reply_comment's job, and
+    // the tool result is what tells the model to make the one public line.
+    expect(replyToFacebookCommentMock).not.toHaveBeenCalled();
+    expect(dmResult).toMatch(/reply_comment/);
 
-    // The public thread got the pointer, never the answer.
+    const courtesy = 'Shared the price and what is left in stock with you in Messenger — please check your inbox!';
+    const replyResult = await replyTool.invoke({ text: courtesy });
+
+    // No swap, no rewriting: the comment says exactly the words the agent gave it.
     expect(replyToFacebookCommentMock).toHaveBeenCalledWith(
       'page-token-test',
       'PARENT_COMMENT_ID',
-      expect.stringMatching(/Messenger/i),
+      courtesy,
     );
-    expect(result).toMatch(/Messenger/);
+    expect(replyResult).toBe('Reply posted to the comment.');
 
-    // What was saved is what was posted, so the persisted row proves the public text too.
     const all = await listComments(thread.id);
-    const selfComment = all.find((c) => c.from === 'self');
-    expect(selfComment?.content).toMatch(/Messenger/i);
-    expect(selfComment?.content).not.toContain(answer);
+    expect(all.find((c) => c.from === 'self')?.content).toBe(courtesy);
 
-    // And the private answer is on record, so the Messenger agent knows this customer
-    // was already told it.
+    // And the private answer is on record, so the Messenger agent knows this customer was
+    // already told the price and the stock count.
     const conversation = await getOrCreateConversation(
       seed.business.id,
       seed.channel.id,
@@ -118,7 +123,7 @@ describe('comment agent tools: reply_comment', () => {
     expect(messages?.some((m) => m.from === 'self' && m.content === answer)).toBe(true);
   }, 30_000);
 
-  it('answers in the comment itself when Meta will not open the inbox', async () => {
+  it('tells the agent to answer in the comment when Messenger cannot be reached', async () => {
     const seed = await seedTestWorld();
     const thread = await getOrCreateCommentThread(
       seed.business.id,
@@ -139,19 +144,39 @@ describe('comment agent tools: reply_comment', () => {
       channelId: seed.channel.id,
       commenterPlatformId: 'COMMENTER_REFUSED',
     });
-    const replyTool = tools.find((t) => t.name === 'reply_comment')!;
+    const privateTool = tools.find((t) => t.name === 'send_private_message')!;
 
-    const result = await replyTool.invoke({ text: 'Yes, it ships within 3 days.' });
+    const result = await privateTool.invoke({ text: 'It is $59, and we ship nationwide.' });
 
-    // Pointing at an empty inbox would be a lie, so the answer is posted publicly.
-    expect(replyToFacebookCommentMock).toHaveBeenCalledWith(
-      'page-token-test',
-      'PARENT_COMMENT_ID',
-      'Yes, it ships within 3 days.',
+    expect(String(result)).toMatch(/could not be reached/i);
+    expect(replyToFacebookCommentMock).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it('refuses the private route when the thread has no commenter to message', async () => {
+    const seed = await seedTestWorld();
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_NO_DM',
+      'COMMENTER_NO_DM',
+      'Commenter No DM',
     );
-    expect(result).toBe('Reply posted to the comment.');
 
-    const all = await listComments(thread.id);
-    expect(all.find((c) => c.from === 'self')?.content).toBe('Yes, it ships within 3 days.');
+    // The same tool set without the thread's channel and commenter: there is no inbox to
+    // open, so the only honest answer is a public one — and it is said to the model, not
+    // silently substituted.
+    const tools = createCommentAgentTools({
+      businessId: seed.business.id,
+      commentThreadId: thread.id,
+      pageToken: 'page-token-test',
+      parentCommentExternalId: 'PARENT_COMMENT_ID',
+      customerName: 'Commenter No DM',
+    });
+    const privateTool = tools.find((t) => t.name === 'send_private_message')!;
+
+    const result = await privateTool.invoke({ text: 'It is $59.' });
+
+    expect(sendCommenterMessageMock).not.toHaveBeenCalled();
+    expect(String(result)).toMatch(/cannot be messaged privately/i);
   }, 30_000);
 });
