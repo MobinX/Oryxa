@@ -44,14 +44,18 @@ function inboundTextFromMessagingEvent(
     return { senderId, text: ev.message.text, externalId: ev.message.mid };
   }
 
-  const payload = ev.postback?.payload;
-  if (payload) {
-    // A command payload is the tap; a title is decoration from a generic greeting button.
-    const text = COMMAND_PAYLOAD.test(payload) ? payload : (ev.postback?.title ?? payload);
+  const postback = ev.postback;
+  if (postback) {
+    // A command payload is the tap. A title is what Meta sends when the button carried no
+    // payload at all — still a customer asking for something, so it is never dropped silently.
+    const text = postback.payload && COMMAND_PAYLOAD.test(postback.payload)
+      ? postback.payload
+      : (postback.title ?? postback.payload);
+    if (!text) return null;
     return {
       senderId,
       text,
-      externalId: ev.postback?.mid,
+      externalId: postback.mid,
     };
   }
 
@@ -376,7 +380,8 @@ async function processMessagingEvents(
         index,
         isEcho: ev.message?.is_echo ?? false,
         hasText: Boolean(ev.message?.text),
-        hasPostback: Boolean(ev.postback?.payload),
+        hasPostback: Boolean(ev.postback),
+        postbackPayload: ev.postback?.payload ?? null,
         senderId: ev.sender?.id ?? null,
       });
       if (ev.message && !ev.message.is_echo && !ev.message.text) {

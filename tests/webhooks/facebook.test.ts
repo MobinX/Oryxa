@@ -191,6 +191,28 @@ describe('Facebook Webhook', () => {
     expect(msgs?.some((m) => m.content === 'Order')).toBe(false);
   });
 
+  it('saves a postback that arrives with a title but no payload', async () => {
+    // Meta delivers exactly this shape when a button was sent without a `payload` field.
+    // Dropping it left a buyer staring at a tapped button and no answer at all.
+    const seed = await seedTestWorld();
+    const res = await postWebhook({
+      object: 'page',
+      entry: [
+        pageEntry(seed.pageChannelId, [
+          { sender: { id: 'TITLE_ONLY' }, postback: { title: 'Order', mid: 'pb-3' } },
+        ]),
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(triggerAgentRunMock).toHaveBeenCalledTimes(1);
+
+    const convs = await listConversations(seed.business.id);
+    const conv = convs.find((c) => c.customerPlatformId === 'TITLE_ONLY');
+    expect(conv).toBeDefined();
+    const msgs = await listMessages(conv!.id, seed.business.id);
+    expect(msgs?.some((m) => m.content === 'Order')).toBe(true);
+  });
+
   it('does not trigger the agent when the conversation is already working', async () => {
     const seed = await seedTestWorld();
     await createMessage({

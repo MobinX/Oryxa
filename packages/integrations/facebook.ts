@@ -289,7 +289,7 @@ type MessengerAttachment =
           title: string;
           subtitle: string;
           image_url: string;
-          buttons: Array<{ type: 'postback'; title: string; data: string }>;
+          buttons: Array<{ type: 'postback'; title: string; payload: string }>;
         }>;
       };
     }
@@ -298,7 +298,7 @@ type MessengerAttachment =
       payload: {
         template_type: 'button';
         text: string;
-        buttons: Array<{ type: 'postback'; title: string; data: string }>;
+        buttons: Array<{ type: 'postback'; title: string; payload: string }>;
       };
     };
 
@@ -324,6 +324,7 @@ export type MessengerCard = {
    * fine while it is fresh, so these are built at send time rather than stored.
    */
   imageUrl: string;
+  /** Meta reads the button's `payload` only — a button sent with `data` posts fine yet every tap arrives empty. */
   button: { title: string; payload: string };
 };
 
@@ -339,7 +340,7 @@ function genericAttachment(cards: MessengerCard[]): MessengerAttachment {
         title: card.title,
         subtitle: card.subtitle,
         image_url: card.imageUrl,
-        buttons: [{ type: 'postback', title: card.button.title, data: card.button.payload }],
+        buttons: [{ type: 'postback', title: card.button.title, payload: card.button.payload }],
       })),
     },
   };
@@ -526,7 +527,7 @@ export async function sendButtons(
           buttons: buttons.slice(0, BUTTON_LIMIT).map((button) => ({
             type: 'postback',
             title: button.title,
-            data: button.payload,
+            payload: button.payload,
           })),
         },
       },
