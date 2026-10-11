@@ -113,6 +113,13 @@
       "when": 1791417600000,
       "tag": "0015_channel_gets_its_stores_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0016_order_remembers_its_customer",
+      "breakpoints": true
     }
   ]
 }

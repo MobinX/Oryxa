@@ -7,6 +7,7 @@ import {
   updateOrderStateInputSchema,
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
+import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
 
 export async function createOrder(input: unknown) {
   const parsed = createOrderInputSchema.parse(input);
@@ -39,6 +40,21 @@ export async function createOrder(input: unknown) {
 
   const totalPrice = variantPrice * parsed.count;
 
+  // Every door an order can come in through — the agent's `create_order` tool, the
+  // merchant's form, the storefront's checkout — funnels here, so this is the one place
+  // that turns a typed phone number into the company's customer. A number nobody has
+  // used yet writes a card; a number already in the book reuses it. No number, no card:
+  // the order keeps the name it arrived with.
+  const companyId = await getCompanyIdForBusiness(parsed.businessId);
+  const customerId = companyId
+    ? await findOrCreateCustomerByPhone({
+        companyId,
+        name: parsed.customerName,
+        phone: parsed.customerPhone,
+        address: parsed.customerAddress,
+      })
+    : null;
+
   const [order] = await db
     .insert(orders)
     .values({
@@ -47,8 +63,9 @@ export async function createOrder(input: unknown) {
       variantId: variant?.id ?? parsed.variantId,
       count: parsed.count,
       variantPrice: variantPrice.toFixed(2),
+      customerId,
       customerName: parsed.customerName,
-      customerPhone: parsed.customerPhone,
+      customerPhone: normalizePhone(parsed.customerPhone) ?? parsed.customerPhone ?? null,
       customerAddress: parsed.customerAddress,
       conversationId: parsed.conversationId,
       totalPrice: totalPrice.toFixed(2),
@@ -74,6 +91,7 @@ export async function createOrder(input: unknown) {
     id: order.id,
     totalPrice,
     state: order.state,
+    customerId: order.customerId,
   };
 }
 
@@ -188,13 +206,40 @@ export async function updateOrder(businessId: string, orderId: string, input: un
     }
   }
 
+  // A number retyped on the card re-matches the card: the order moves to whoever owns
+  // that number now, or opens the card it was missing. An unchanged number changes
+  // nothing, so an order whose card a merchant deleted is not resurrected by an edit
+  // that never mentioned the phone at all.
+  if (
+    parsed.customerPhone !== undefined &&
+    normalizePhone(parsed.customerPhone) !== normalizePhone(order.customerPhone)
+  ) {
+    const companyId = await getCompanyIdForBusiness(businessId);
+    fields.customerId = companyId
+      ? await findOrCreateCustomerByPhone({
+          companyId,
+          name: parsed.customerName ?? order.customerName,
+          phone: parsed.customerPhone,
+          address: parsed.customerAddress ?? order.customerAddress,
+        })
+      : null;
+    fields.customerPhone = normalizePhone(parsed.customerPhone) ?? parsed.customerPhone ?? null;
+  }
+
   const [updated] = await db
     .update(orders)
     .set(fields)
     .where(eq(orders.id, orderId))
     .returning();
 
-  return { id: updated.id, updated: true };
+  return {
+    id: updated.id,
+    updated: true,
+    customerId: updated.customerId,
+    // The card the order left, which is not the one it joined: a retyped number moves the
+    // sale between two histories, and the caller has to refresh both pages.
+    previousCustomerId: order.customerId,
+  };
 }
 
 export async function deleteOrder(businessId: string, orderId: string) {

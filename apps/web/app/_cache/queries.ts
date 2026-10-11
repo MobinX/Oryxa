@@ -17,12 +17,13 @@ import {
   listNotifications,
   listCompanies,
   listCustomers,
+  getCustomer,
   adminListPlans,
   adminListBusinessPlans,
   getAdminTokenUsage,
   getAdminTokenUsageDetail,
 } from '@/lib/api';
-import type { Customer, NotificationList, PublicPlan } from '@/lib/api';
+import type { Customer, CustomerHistory, NotificationList, PublicPlan } from '@/lib/api';
 import { cacheTags } from './tags';
 
 /** Cached user profile — stable for a session, not a live feed. */
@@ -232,5 +233,29 @@ export async function cachedCustomers(
     return { customers, hasCompany: true };
   } catch {
     return { customers: [], hasCompany: false };
+  }
+}
+
+/**
+ * One card and everything bought under it. A store with no company, a card from another
+ * tenant and a deleted card all answer the same way here — the page cannot act on which,
+ * so it says "no such customer" rather than crashing on a 400 from inside the cache.
+ *
+ * Tagged with the store's order list as well as the card: an order advancing through its
+ * states, or being deleted, changes what this page shows but cannot name the card it
+ * touched, so every order write refreshes the history it hangs on.
+ */
+export async function cachedCustomer(
+  token: string,
+  businessId: string,
+  customerId: string,
+): Promise<CustomerHistory | null> {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.customer(customerId), cacheTags.orders(businessId));
+  try {
+    return await getCustomer(token, businessId, customerId);
+  } catch {
+    return null;
   }
 }

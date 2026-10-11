@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
 import { cachedCustomers } from '@/app/_cache/queries';
@@ -146,7 +147,12 @@ async function Book({
             id: customer.id,
             cells: [
               <div key="name" className="min-w-0">
-                <p className="truncate font-medium">{customer.name}</p>
+                <Link
+                  href={`/b/${businessId}/customers/${customer.id}`}
+                  className="block truncate font-medium text-[var(--primary)] hover:underline"
+                >
+                  {customer.name}
+                </Link>
                 {customer.address && (
                   <p className="truncate text-xs text-[var(--muted-foreground)]">{customer.address}</p>
                 )}

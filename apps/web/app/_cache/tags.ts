@@ -18,6 +18,7 @@ export const cacheTags = {
   billing: (businessId: string) => `billing-${businessId}`,
   notifications: (businessId: string) => `notifications-${businessId}`,
   customers: (businessId: string) => `customers-${businessId}`,
+  customer: (customerId: string) => `customer-${customerId}`,
   companies: () => 'companies',
   adminBusinessPlans: () => 'admin-business-plans',
   // Keyed by month as well as store: an operator flipping the month selector should not
@@ -47,10 +48,17 @@ export function expireCategories(businessId: string) {
   updateTag(cacheTags.products(businessId));
 }
 
-export function expireOrders(businessId: string, orderId?: string) {
+/**
+ * An order can open a customer card or add a line under one, so the book and that card
+ * expire with the order list. Without this the merchant sees the sale in Orders and an
+ * empty history behind the name.
+ */
+export function expireOrders(businessId: string, orderId?: string, customerId?: string | null) {
   updateTag(cacheTags.orders(businessId));
   updateTag(cacheTags.analytics(businessId));
+  updateTag(cacheTags.customers(businessId));
   if (orderId) updateTag(cacheTags.order(orderId));
+  if (customerId) updateTag(cacheTags.customer(customerId));
 }
 
 export function expireChannelPage(businessId: string) {
@@ -89,6 +97,11 @@ export function expireNotifications(businessId: string) {
 
 export function expireCustomers(businessId: string) {
   updateTag(cacheTags.customers(businessId));
+}
+
+/** One card's own history, expired when an order lands on it or is retyped away from it. */
+export function expireCustomer(customerId: string) {
+  updateTag(cacheTags.customer(customerId));
 }
 
 export function expireCompanies() {

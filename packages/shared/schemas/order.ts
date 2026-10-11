@@ -18,6 +18,8 @@ export const createOrderOutputSchema = z.object({
   id: uuidSchema,
   totalPrice: z.number(),
   state: orderStateSchema,
+  /** The card this order matched by phone; null when the buyer gave no number to match. */
+  customerId: uuidSchema.nullable(),
 });
 
 export const listOrdersQuerySchema = z.object({
@@ -53,6 +55,9 @@ export const updateOrderInputSchema = z.object({
 export const updateOrderOutputSchema = z.object({
   id: uuidSchema,
   updated: z.boolean(),
+  /** The card the order now points at, which changes when the number on it is retyped. */
+  customerId: uuidSchema.nullable(),
+  previousCustomerId: uuidSchema.nullable(),
 });
 
 export const deleteOrderOutputSchema = z.object({ deleted: z.boolean() });

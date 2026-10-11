@@ -5,6 +5,7 @@ import {
   selectCustomerSchema,
   listCustomersOutputSchema,
   listCustomersQuerySchema,
+  customerHistoryOutputSchema,
   successSchema,
 } from '@repo/shared';
 import {
@@ -12,6 +13,7 @@ import {
   listCustomers,
   updateCustomer,
   deleteCustomer,
+  getCustomerHistory,
   getCompanyIdForBusiness,
 } from '@repo/db/crud/customer';
 import { authMiddleware } from '@api/middleware/auth';
@@ -85,6 +87,54 @@ customersRouter.openapi(createCustomerRoute, async (c) => {
 const customerParamsSchema = z.object({
   businessId: z.string().uuid(),
   customerId: z.string().uuid(),
+});
+
+const getCustomerRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/customers/{customerId}',
+  tags: ['Customers'],
+  security: [{ bearerAuth: [] }],
+  request: { params: customerParamsSchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: customerHistoryOutputSchema } },
+      description: 'Customer, their orders across the company, and what they keep buying',
+    },
+    400: { content: { 'application/json': { schema: errorSchema } }, description: 'Business has no company' },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not found' },
+  },
+});
+
+/**
+ * The card is the company's, so one store's merchant may read it and must not read
+ * another company's. `getCustomerHistory` walks the whole company on purpose — a person
+ * who buys from two of a company's stores is one person — and the company check below is
+ * what keeps that walk inside the reader's own tenant.
+ */
+customersRouter.openapi(getCustomerRoute, async (c) => {
+  const { businessId, customerId } = c.req.valid('param');
+  const companyId = await getCompanyIdForBusiness(businessId);
+  if (!companyId) return c.json({ error: NO_COMPANY_ERROR }, 400);
+
+  const history = await getCustomerHistory(customerId);
+  if (!history || history.customer.companyId !== companyId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({
+    customer: serializeCustomer(history.customer),
+    orders: history.orders.map((order) => ({ ...order, createdAt: order.createdAt.toISOString() })),
+    purchases: history.purchases.map((purchase) => ({
+      ...purchase,
+      firstOrderedAt: purchase.firstOrderedAt.toISOString(),
+      lastOrderedAt: purchase.lastOrderedAt.toISOString(),
+    })),
+    stats: {
+      ...history.stats,
+      firstOrderedAt: history.stats.firstOrderedAt?.toISOString() ?? null,
+      lastOrderedAt: history.stats.lastOrderedAt?.toISOString() ?? null,
+    },
+  });
 });
 
 const updateCustomerRoute = createRoute({

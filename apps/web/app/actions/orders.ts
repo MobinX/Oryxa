@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { expireOrders } from '@/app/_cache/tags';
+import { expireOrders, expireCustomer } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import {
   ApiError,
@@ -36,7 +36,7 @@ export async function createOrderAction(businessId: string, formData: FormData) 
     redirect(`/b/${businessId}/orders/new?error=required`);
   }
 
-  await createOrder(token, businessId, {
+  const order = await createOrder(token, businessId, {
     productId,
     variantId,
     count,
@@ -46,7 +46,7 @@ export async function createOrderAction(businessId: string, formData: FormData) 
   });
 
   revalidatePath(`/b/${businessId}/orders`);
-  expireOrders(businessId);
+  expireOrders(businessId, order.id, order.customerId);
   redirect(`/b/${businessId}/orders`);
 }
 
@@ -63,13 +63,21 @@ export async function updateOrderAction(
   const state = String(formData.get('state') ?? '').trim();
 
   try {
-    await updateOrder(token, businessId, orderId, {
+    const result = await updateOrder(token, businessId, orderId, {
       count: Number.isFinite(count) && count > 0 ? count : undefined,
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
       customerAddress: customerAddress || undefined,
       state: state || undefined,
     });
+
+    revalidatePath(`/b/${businessId}/orders`);
+    expireOrders(businessId, orderId, result.customerId);
+    // A retyped number moves the sale off the card it used to point at; that history has to
+    // drop as well, or the old customer keeps a purchase they no longer made.
+    if (result.previousCustomerId && result.previousCustomerId !== result.customerId) {
+      expireCustomer(result.previousCustomerId);
+    }
   } catch (err) {
     if (err instanceof ApiError) {
       redirect(
@@ -79,8 +87,6 @@ export async function updateOrderAction(
     throw err;
   }
 
-  revalidatePath(`/b/${businessId}/orders`);
-  expireOrders(businessId, orderId);
   redirect(`/b/${businessId}/orders`);
 }
 

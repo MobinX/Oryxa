@@ -86,6 +86,7 @@ export const customers = pgTable('customers', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   idx: index('customers_company_idx').on(t.companyId, t.name),
+  phoneIdx: index('customers_company_phone_idx').on(t.companyId, t.phone),
 }));
 
 export const businesses = pgTable('businesses', {
@@ -173,6 +174,10 @@ export const orders = pgTable('orders', {
   variantId: uuid('variant_id').references(() => variants.id, { onDelete: 'set null' }),
   count: integer('count').default(1).notNull(),
   variantPrice: numeric('variant_price', { precision: 10, scale: 2 }).notNull(),
+  // The company's customer this order matched by phone. Written wherever the order
+  // came from — agent tool call, dashboard form, storefront checkout — so one person
+  // stays one person across stores instead of a fresh name on every row.
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   customerName: varchar('customer_name', { length: 255 }).notNull(),
   customerAvatar: varchar('customer_avatar', { length: 500 }),
   customerAddress: text('customer_address'),
@@ -259,6 +264,7 @@ export const companyRelations = relations(companies, ({ one, many }) => ({
 export const customerRelations = relations(customers, ({ one, many }) => ({
   company: one(companies, { fields: [customers.companyId], references: [companies.id] }),
   products: many(products),
+  orders: many(orders),
 }));
 
 export const businessRelations = relations(businesses, ({ one, many }) => ({
@@ -298,6 +304,7 @@ export const orderRelations = relations(orders, ({ one }) => ({
   business: one(businesses, { fields: [orders.businessId], references: [businesses.id] }),
   product: one(products, { fields: [orders.productId], references: [products.id] }),
   variant: one(variants, { fields: [orders.variantId], references: [variants.id] }),
+  customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
 }));
 
 export const agentRelations = relations(agents, ({ one, many }) => ({

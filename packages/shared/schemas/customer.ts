@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { orderStateSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const createCustomerInputSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'John Doe' }),
@@ -32,3 +32,46 @@ export const listCustomersQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+/**
+ * One order under a customer's card, named with the store it was placed against: a
+ * company runs several, and the same person buying from two of them is the whole point
+ * of keeping a card instead of a name per order.
+ */
+export const customerOrderSchema = z.object({
+  id: uuidSchema,
+  businessId: uuidSchema,
+  storeName: z.string(),
+  productId: uuidSchema.nullable(),
+  productName: z.string().nullable(),
+  variantName: z.string().nullable(),
+  count: z.number().int(),
+  unitPrice: z.number(),
+  totalPrice: z.number(),
+  state: orderStateSchema,
+  createdAt: timestampSchema,
+}).openapi('CustomerOrder');
+
+/** The same product folded across every order it appears in — two of these is a habit. */
+export const customerPurchaseSchema = z.object({
+  productId: uuidSchema,
+  productName: z.string(),
+  orders: z.number().int(),
+  units: z.number().int(),
+  spent: z.number(),
+  firstOrderedAt: timestampSchema,
+  lastOrderedAt: timestampSchema,
+}).openapi('CustomerPurchase');
+
+export const customerHistoryOutputSchema = z.object({
+  customer: selectCustomerSchema,
+  orders: z.array(customerOrderSchema),
+  purchases: z.array(customerPurchaseSchema),
+  stats: z.object({
+    orders: z.number().int(),
+    units: z.number().int(),
+    spent: z.number(),
+    firstOrderedAt: timestampSchema.nullable(),
+    lastOrderedAt: timestampSchema.nullable(),
+  }),
+}).openapi('CustomerHistory');

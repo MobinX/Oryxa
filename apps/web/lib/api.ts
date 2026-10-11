@@ -510,7 +510,7 @@ export const createOrder = (
     customerAddress?: string;
   },
 ) =>
-  apiFetch<{ id: string; totalPrice: number; state: string }>(
+  apiFetch<{ id: string; totalPrice: number; state: string; customerId: string | null }>(
     `/api/v1/${businessId}/orders`,
     { method: 'POST', token, body: JSON.stringify(data) },
   );
@@ -527,7 +527,12 @@ export const updateOrder = (
     state?: string;
   },
 ) =>
-  apiFetch<{ id: string; updated: boolean }>(
+  apiFetch<{
+    id: string;
+    updated: boolean;
+    customerId: string | null;
+    previousCustomerId: string | null;
+  }>(
     `/api/v1/${businessId}/orders/${orderId}`,
     { method: 'PATCH', token, body: JSON.stringify(data) },
   );
@@ -1200,3 +1205,45 @@ export const deleteCustomer = (token: string, businessId: string, customerId: st
     method: 'DELETE',
     token,
   });
+
+/** One order under a card, with the store it was placed against. */
+export type CustomerOrder = {
+  id: string;
+  businessId: string;
+  storeName: string;
+  productId: string | null;
+  productName: string | null;
+  variantName: string | null;
+  count: number;
+  unitPrice: number;
+  totalPrice: number;
+  state: string;
+  createdAt: string;
+};
+
+/** The same product folded across every order it appears in — `orders > 1` is a repeat. */
+export type CustomerPurchase = {
+  productId: string;
+  productName: string;
+  orders: number;
+  units: number;
+  spent: number;
+  firstOrderedAt: string;
+  lastOrderedAt: string;
+};
+
+export type CustomerHistory = {
+  customer: Customer;
+  orders: CustomerOrder[];
+  purchases: CustomerPurchase[];
+  stats: {
+    orders: number;
+    units: number;
+    spent: number;
+    firstOrderedAt: string | null;
+    lastOrderedAt: string | null;
+  };
+};
+
+export const getCustomer = (token: string, businessId: string, customerId: string) =>
+  apiFetch<CustomerHistory>(`/api/v1/${businessId}/customers/${customerId}`, { token });
