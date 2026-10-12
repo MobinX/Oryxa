@@ -1,0 +1,16 @@
+-- Customers describe a problem in pictures. "It is broken" is a sentence a merchant has to guess
+-- at; the photo of the cracked seam is the whole order. Meta hands that photo over a URL that
+-- works for a few hours, so unless the bytes are kept the conversation loses the thing it is
+-- about — the inbox shows a hole and the agent has nothing to look at on the next turn.
+--
+-- The keys are a second column, not a re-use of `content_type`: a message keeps being one row
+-- with one text, and the pictures ride beside it in the order the customer sent them. Text plus
+-- three photos is one turn, not four, and the agent reads it that way.
+--
+-- They live under `businesses/<id>/messages/`, never beside a merchant's product photos, because
+-- a stranger's snapshot is not store inventory and one pile gets deleted without the other.
+--
+-- Idempotent: replayed from scratch by tests/helpers/pglite-db.ts, applied once by hand to
+-- production Neon. Rows that predate this hold an empty array, which reads as "no pictures"
+-- everywhere a message is listed.
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "image_keys" text[] NOT NULL DEFAULT '{}'::text[];

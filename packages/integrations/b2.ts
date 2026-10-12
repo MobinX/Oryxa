@@ -106,6 +106,15 @@ export function buildVariantImageKey(businessId: string, originalName: string): 
   return `businesses/${businessId}/images/${randomUUID()}-${sanitizeFilename(originalName)}`;
 }
 
+/**
+ * Builds the B2 object key for a picture a customer sent into the inbox. It is a different
+ * prefix from `images/` on purpose: a merchant's own product photos and a stranger's snapshots
+ * are not the same pile, and a store that deletes its pictures must not delete a conversation.
+ */
+export function buildMessageImageKey(businessId: string, originalName: string): string {
+  return `businesses/${businessId}/messages/${randomUUID()}-${sanitizeFilename(originalName)}`;
+}
+
 export async function getSignedB2Url(key: string, expiresInSeconds = getSignedUrlTtlSeconds()): Promise<string> {
   if (_signedUrlOverride) {
     return _signedUrlOverride(key);
@@ -165,25 +174,56 @@ export async function uploadImageToB2(params: {
   contentType: string;
   originalName: string;
 }): Promise<{ key: string; url: string }> {
-  validateImageUpload(params.contentType, params.buffer.byteLength);
-
   const key = buildVariantImageKey(params.businessId, params.originalName);
+  await putImageAtKey({ key, buffer: params.buffer, contentType: params.contentType });
+  const url = await getSignedB2Url(key);
+  return { key, url };
+}
+
+/** Stores bytes at a key the caller already chose — same rules, same bucket, own layout. */
+export async function putImageAtKey(params: {
+  key: string;
+  buffer: Buffer;
+  contentType: string;
+}): Promise<void> {
+  validateImageUpload(params.contentType, params.buffer.byteLength);
 
   const command = new PutObjectCommand({
     Bucket: getBucketName(),
-    Key: key,
+    Key: params.key,
     Body: params.buffer,
     ContentType: params.contentType,
   });
 
   if (_uploadOverride) {
     await _uploadOverride(command);
-  } else {
-    // The presigned URL is local crypto, so only the real network call is
-    // reported — and never the key, which carries the customer's file name.
-    await loggedCall('b2', 'PutObject', () => getB2Client().send(command));
+    return;
   }
 
-  const url = await getSignedB2Url(key);
-  return { key, url };
+  // The presigned URL is local crypto, so only the real network call is
+  // reported — and never the key, which carries the customer's file name.
+  await loggedCall('b2', 'PutObject', () => getB2Client().send(command));
+}
+
+/**
+ * Reads a stored object back as bytes. One reader cannot follow a signed URL: the model is
+ * handed the picture inline, so a key has to become bytes before the agent can look at it.
+ */
+export async function getB2ObjectBytes(key: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const command = new GetObjectCommand({
+    Bucket: getBucketName(),
+    Key: key,
+  });
+
+  const res = await loggedCall('b2', 'GetObject', () => getB2Client().send(command));
+  const body = res.Body as AsyncIterable<Uint8Array> | undefined;
+  if (!body) throw new Error('B2 returned an object with no body');
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body) chunks.push(Buffer.from(chunk));
+
+  return {
+    buffer: Buffer.concat(chunks),
+    contentType: res.ContentType ?? 'application/octet-stream',
+  };
 }

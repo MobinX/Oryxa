@@ -269,6 +269,12 @@ export const messages = pgTable('messages', {
   state: messageStateEnum('state').default('pending').notNull(),
   /** Meta platform message id (messaging.message.mid) for webhook dedup. Null for non-platform messages. */
   externalId: varchar('external_id', { length: 100 }),
+  /**
+   * B2 keys of the pictures the customer sent, in the order they arrived. A message with photos
+   * still carries its text: the array records what the picture was, so the inbox can re-show it
+   * and the agent can look at it again — Meta's own attachment URL goes stale within hours.
+   */
+  imageKeys: text('image_keys').array().notNull().default(sql`'{}'::text[]`),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('messages_conversation_time_idx').on(t.conversationId, t.time),

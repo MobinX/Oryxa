@@ -141,6 +141,13 @@
       "when": 1791763200000,
       "tag": "0019_variants_get_a_short_label",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0020_messages_carry_their_photos",
+      "breakpoints": true
     }
   ]
 }

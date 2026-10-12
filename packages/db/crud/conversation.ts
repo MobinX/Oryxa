@@ -1,6 +1,7 @@
 import { eq, and, or, lt, desc, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
+import { resolveStoredImageUrl } from '@repo/integrations/b2';
 
 export async function getOrCreateConversation(
   businessId: string,
@@ -55,6 +56,7 @@ export async function createMessage(data: {
   content: string;
   contentType?: string;
   state?: 'pending' | 'working' | 'done';
+  imageKeys?: string[];
 }) {
   const [message] = await db
     .insert(messages)
@@ -64,6 +66,7 @@ export async function createMessage(data: {
       content: data.content,
       contentType: data.contentType ?? 'text',
       state: data.state ?? (data.from === 'customer' ? 'pending' : 'done'),
+      imageKeys: data.imageKeys ?? [],
     })
     .returning();
 
@@ -248,13 +251,23 @@ export async function listMessages(conversationId: string, businessId: string, l
     limit,
   });
 
-  return msgs.reverse().map((m) => ({
-    id: m.id,
-    from: m.from,
-    content: m.content,
-    contentType: m.contentType,
-    time: m.time.toISOString(),
-  }));
+  // A picture the merchant cannot see is a picture that was never sent, so stored keys become
+  // display URLs here. Signing needs B2, and a thread must stay readable when B2 is not
+  // configured: an unsignable photo drops out of the list instead of failing the whole fetch.
+  return Promise.all(
+    msgs.reverse().map(async (m) => ({
+      id: m.id,
+      from: m.from,
+      content: m.content,
+      contentType: m.contentType,
+      time: m.time.toISOString(),
+      images: (
+        await Promise.all(
+          m.imageKeys.map((key) => resolveStoredImageUrl(key).catch(() => null)),
+        )
+      ).filter((url): url is string => Boolean(url)),
+    })),
+  );
 }
 
 export async function getConversationForBusiness(conversationId: string, businessId: string) {
@@ -296,8 +309,10 @@ export async function processInboundMessage(
   senderId: string,
   text: string,
   externalId?: string,
+  imageKeys?: string[],
 ): Promise<{
   conversationId: string;
+  messageId: string | null;
   priorStatus: string;
   inserted: boolean;
   needsProfile: boolean;
@@ -339,6 +354,11 @@ export async function processInboundMessage(
   }
 
   const priorStatus = conv.lastMessageState;
+  const photos = imageKeys ?? [];
+  // The pictures are what the customer sent, so they name the turn: a photo with a caption is
+  // an image message, and the caption rides in `content` beside it.
+  const contentType = photos.length > 0 ? 'image' : 'text';
+  let messageId: string | null = null;
 
   if (externalId) {
     const inserted = await db
@@ -347,6 +367,8 @@ export async function processInboundMessage(
         conversationId: conv.id,
         from: 'customer',
         content: text,
+        contentType,
+        imageKeys: photos,
         state: 'pending',
         externalId,
       })
@@ -356,19 +378,29 @@ export async function processInboundMessage(
     if (inserted.length === 0) {
       return {
         conversationId: conv.id,
+        messageId: null,
         priorStatus,
         inserted: false,
         needsProfile: false,
         priorStateAt: conv.lastStateAt,
       };
     }
+
+    messageId = inserted[0].id;
   } else {
-    await db.insert(messages).values({
-      conversationId: conv.id,
-      from: 'customer',
-      content: text,
-      state: 'pending',
-    });
+    const [inserted] = await db
+      .insert(messages)
+      .values({
+        conversationId: conv.id,
+        from: 'customer',
+        content: text,
+        contentType,
+        imageKeys: photos,
+        state: 'pending',
+      })
+      .returning();
+
+    messageId = inserted.id;
   }
 
   // Mark the conversation as needing attention, but only if it was idle — never
@@ -385,6 +417,7 @@ export async function processInboundMessage(
 
   return {
     conversationId: conv.id,
+    messageId,
     priorStatus,
     inserted: true,
     needsProfile,
