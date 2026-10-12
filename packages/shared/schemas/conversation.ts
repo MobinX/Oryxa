@@ -4,6 +4,11 @@ import { messageFromSchema, messageStateSchema, timestampSchema, uuidSchema } fr
 export const listConversationsQuerySchema = z.object({
   state: messageStateSchema.optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
+  // One page of a single channel's threads. Without it a caller that only wants one Page's
+  // conversations has to take the whole store's newest N and filter afterwards — which silently
+  // returns nothing once a busier store's other threads fill the page.
+  channelId: uuidSchema.optional(),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 export const conversationListItemSchema = z.object({

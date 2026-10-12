@@ -214,15 +214,17 @@ export async function resetStaleConversation(
 
 export async function listConversations(
   businessId: string,
-  options: { state?: string; limit?: number } = {},
+  options: { state?: string; limit?: number; channelId?: string; offset?: number } = {},
 ) {
-  const { state, limit = 20 } = options;
+  const { state, limit = 20, channelId, offset = 0 } = options;
   const conditions = [eq(conversations.businessId, businessId), isNull(conversations.deletedAt)];
   if (state) conditions.push(eq(conversations.lastMessageState, state as 'pending'));
+  if (channelId) conditions.push(eq(conversations.channelId, channelId));
 
   return db.query.conversations.findMany({
     where: and(...conditions),
     limit,
+    offset,
     // lastStateAt moves when a thread gets a new message or its state changes; createdAt never
     // moves, so ordering by it buries the threads an agent has just replied to under whatever
     // happened to be created most recently.

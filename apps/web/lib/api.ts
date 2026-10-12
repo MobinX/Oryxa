@@ -444,8 +444,21 @@ export type Conversation = {
   pageName?: string | null;
 };
 
-export const listConversations = (token: string, businessId: string) =>
-  apiFetch<Conversation[]>(`/api/v1/${businessId}/conversations`, { token });
+export const listConversations = (
+  token: string,
+  businessId: string,
+  options: { channelId?: string; limit?: number; offset?: number } = {},
+) => {
+  const search = new URLSearchParams();
+  if (options.channelId) search.set('channelId', options.channelId);
+  if (options.limit) search.set('limit', String(options.limit));
+  if (options.offset) search.set('offset', String(options.offset));
+  const query = search.toString();
+  return apiFetch<Conversation[]>(
+    `/api/v1/${businessId}/conversations${query ? `?${query}` : ''}`,
+    { token },
+  );
+};
 
 export const deleteConversation = (token: string, businessId: string, conversationId: string) =>
   apiFetch<{ deleted: boolean }>(

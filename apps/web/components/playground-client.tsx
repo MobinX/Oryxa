@@ -13,6 +13,11 @@ import {
   type Channel,
 } from '@/lib/api';
 import {
+  PLAYGROUND_CHAT_PAGE,
+  sandboxPageId,
+  type PlaygroundPreload,
+} from '@/lib/playground-preload';
+import {
   Terminal as TerminalIcon,
   Bot,
   MessageSquare,
@@ -40,14 +45,6 @@ const MOCK_NAMES = [
   'Selina Kyle',
   'Arthur Curry',
 ];
-
-/**
- * The page id a test chat runs on, so a test is never mistaken for a real customer thread.
- * Namespaced by store: (platform, page id) is unique across live channels, so one shared id
- * would be claimed by the first store that opened the playground and leave every other store —
- * and the operator's sandbox — unable to create its own.
- */
-const sandboxPageId = (businessId: string) => `mock-channel-${businessId}`;
 
 /**
  * One line per earlier comment, oldest first. A line that starts with `page:` is the page's
@@ -108,10 +105,13 @@ interface LogEvent {
 export function PlaygroundClient({
   token,
   businessId,
+  preload,
   canEditPrompt = false,
 }: {
   token: string;
   businessId: string;
+  /** The sandbox channel and its first page of chats, read during rendering so nothing is blank. */
+  preload?: PlaygroundPreload | null;
   /** Only the operator console passes this: the prompt and guidance editors exist for it alone. */
   canEditPrompt?: boolean;
 }) {
@@ -121,12 +121,16 @@ export function PlaygroundClient({
   const [replyGuidance, setReplyGuidance] = useState<string>('');
   const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>('');
   const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
-  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(preload?.channel ?? null);
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConvId, setSelectedConvId] = useState<string>('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>(preload?.conversations ?? []);
+  const [selectedConvId, setSelectedConvId] = useState<string>(preload?.conversations[0]?.id ?? '');
+  const [messages, setMessages] = useState<Message[]>(preload?.messages ?? []);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [hasMoreChats, setHasMoreChats] = useState(
+    (preload?.conversations.length ?? 0) >= PLAYGROUND_CHAT_PAGE,
+  );
+  const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -144,6 +148,8 @@ export function PlaygroundClient({
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatsEndRef = useRef<HTMLButtonElement>(null);
+  const loadingMoreRef = useRef(false);
 
   // Load Initial Data
   useEffect(() => {
@@ -169,6 +175,18 @@ export function PlaygroundClient({
       setMessages([]);
     }
   }, [selectedConvId]);
+
+  // The chat drawer is the only list that grows: reaching its end asks the API for the next page.
+  useEffect(() => {
+    if (!hasMoreChats) return;
+    const node = chatsEndRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMoreChats();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMoreChats, conversations.length]);
 
   // Scroll logs and chats to bottom on updates
   useEffect(() => {
@@ -205,23 +223,53 @@ export function PlaygroundClient({
         sandbox = updated.find((c) => c.id === seeded.id);
       }
 
-      if (sandbox) setActiveChannel(sandbox);
+      if (sandbox) setActiveChannel((current) => (current?.id === sandbox.id ? current : sandbox));
     } catch (err) {
       console.error('Failed to load the playground sandbox:', err);
     }
   }
 
   async function loadConversations() {
+    if (!activeChannel) return;
     try {
-      const convList = await listConversations(token, businessId);
-      // Filter conversations belonging to the active channel
+      const convList = await listConversations(token, businessId, {
+        channelId: activeChannel.id,
+        limit: PLAYGROUND_CHAT_PAGE,
+      });
+      // The API scopes these to the channel already; filtering here too means a page that arrives
+      // from an API that has not caught up still cannot show another channel's real customers.
       const filtered = convList.filter((c) => c.channelId === activeChannel?.id);
       setConversations(filtered);
+      setHasMoreChats(convList.length >= PLAYGROUND_CHAT_PAGE);
       if (filtered.length > 0 && !selectedConvId) {
         setSelectedConvId(filtered[0]!.id);
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
+    }
+  }
+
+  /** The next page of chats, appended to what is already on screen. */
+  async function loadMoreChats() {
+    if (!activeChannel || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMoreChats(true);
+    try {
+      const next = await listConversations(token, businessId, {
+        channelId: activeChannel.id,
+        limit: PLAYGROUND_CHAT_PAGE,
+        offset: conversations.length,
+      });
+      const mine = next
+        .filter((c) => c.channelId === activeChannel.id)
+        .filter((c) => !conversations.some((held) => held.id === c.id));
+      setConversations((prev) => [...prev, ...mine]);
+      setHasMoreChats(next.length >= PLAYGROUND_CHAT_PAGE);
+    } catch (err) {
+      console.error('Failed to load the next page of chats:', err);
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMoreChats(false);
     }
   }
 
@@ -287,13 +335,29 @@ export function PlaygroundClient({
         return;
       }
 
-      await parseSseStream(response);
+      let conversationId = '';
+      await parseSseStream(response, (event, data) => {
+        if (event === 'conversation_ready' && typeof data.conversationId === 'string') {
+          conversationId = data.conversationId;
+        }
+      });
       await loadConversations();
+      // Read the thread back once the run is over. `conversation_ready` selects it mid-stream, and
+      // the messages fetched at that moment cannot include a reply the agent has not written yet —
+      // without this the seeded chat would sit showing only its own hello.
+      if (conversationId) await loadMessages(conversationId);
     } catch (err) {
       console.error('Failed to seed conversation:', err);
     } finally {
       setIsThinking(false);
     }
+  }
+
+  /** Switching chats empties the pane first, so the reader sees a load instead of the last chat. */
+  function selectChat(convId: string) {
+    if (convId === selectedConvId) return;
+    setMessages([]);
+    setSelectedConvId(convId);
   }
 
   async function handleDeleteChat(convId: string) {
@@ -700,7 +764,7 @@ export function PlaygroundClient({
                   conversations.map((conv) => (
                     <div
                       key={conv.id}
-                      onClick={() => setSelectedConvId(conv.id)}
+                      onClick={() => selectChat(conv.id)}
                       className={cn(
                         'group flex items-center justify-between gap-1.5 rounded-xl p-2 cursor-pointer transition-colors',
                         selectedConvId === conv.id
@@ -728,6 +792,16 @@ export function PlaygroundClient({
                       </button>
                     </div>
                   ))
+                )}
+                {hasMoreChats && (
+                  <button
+                    ref={chatsEndRef}
+                    onClick={loadMoreChats}
+                    disabled={isLoadingMoreChats}
+                    className="mt-1 rounded-lg border border-slate-800 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-300 disabled:opacity-60"
+                  >
+                    {isLoadingMoreChats ? 'Loading…' : 'Load more chats'}
+                  </button>
                 )}
               </div>
 
@@ -830,27 +904,51 @@ export function PlaygroundClient({
                 ) : selectedConvId ? (
                   <>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={cn(
-                            'max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm relative group',
-                            msg.from === 'customer'
-                              ? 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto rounded-tl-none'
-                              : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
-                          )}
-                        >
-                          {msg.from === 'self' && (
-                            <span className="block text-[8px] font-bold uppercase tracking-wider text-indigo-200 mb-1">
-                              AI Sales Rep
-                            </span>
-                          )}
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <span className="text-[8px] text-slate-500 mt-1 block text-right font-mono">
-                            {new Date(msg.time).toLocaleTimeString()}
-                          </span>
+                      {isLoadingMessages && messages.length === 0 ? (
+                        <div className="space-y-3">
+                          {[0, 1, 2].map((i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                'h-10 w-2/3 animate-pulse rounded-2xl',
+                                i % 2 === 0
+                                  ? 'mr-auto rounded-tl-none bg-slate-900'
+                                  : 'ml-auto rounded-tr-none bg-indigo-950',
+                              )}
+                            />
+                          ))}
+                          <p className="text-center text-[10px] text-slate-600">
+                            Loading this chat’s messages…
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        messages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={cn(
+                              'max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm relative group',
+                              msg.from === 'customer'
+                                ? 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto rounded-tl-none'
+                                : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
+                            )}
+                          >
+                            {msg.from === 'self' && (
+                              <span className="block text-[8px] font-bold uppercase tracking-wider text-indigo-200 mb-1">
+                                AI Sales Rep
+                              </span>
+                            )}
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <span
+                              // These times arrive from the server now, and the browser formats them
+                              // in its own zone — the moment the chat is re-read they are corrected.
+                              suppressHydrationWarning
+                              className="text-[8px] text-slate-500 mt-1 block text-right font-mono"
+                            >
+                              {new Date(msg.time).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        ))
+                      )}
 
                       {isThinking && (
                         <div className="bg-slate-900 border border-slate-800 max-w-[80%] rounded-2xl px-4 py-3 text-xs text-slate-400 mr-auto rounded-tl-none flex items-center gap-2">

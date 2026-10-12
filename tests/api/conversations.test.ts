@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
+import { createChannel } from '@repo/db/crud/channel';
+import { getOrCreateConversation } from '@repo/db/crud/conversation';
 import { app } from '@api/app';
 
 const sendMessageMock = vi.fn(async () => undefined);
@@ -22,6 +24,41 @@ describe('Conversations API', () => {
     const res = await app.request(`/api/v1/${business.id}/conversations`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     expect((await res.json()).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The playground lists one sandbox channel's chats, and a store's real threads live on other
+   * channels of the same business — so a caller that asks for one channel must get only that one.
+   */
+  it('GET /:businessId/conversations scopes to a channel and pages it', async () => {
+    const seed = await seedTestWorld();
+    const other = await createChannel(seed.business.id, {
+      platform: 'facebook',
+      apiToken: 'page-token-test',
+      platformChannelId: `OTHER_${crypto.randomUUID()}`,
+      agentId: seed.agent.id,
+    });
+    await getOrCreateConversation(seed.business.id, other.id, 'ANOTHER_CUSTOMER');
+
+    const scoped = await app.request(
+      `/api/v1/${seed.business.id}/conversations?channelId=${seed.channel.id}`,
+      { headers: authHeaders() },
+    );
+    expect(scoped.status).toBe(200);
+    const rows = (await scoped.json()) as { channelId: string }[];
+    expect(rows.map((row) => row.channelId)).toEqual([seed.channel.id]);
+
+    const firstPage = await app.request(
+      `/api/v1/${seed.business.id}/conversations?channelId=${seed.channel.id}&limit=1`,
+      { headers: authHeaders() },
+    );
+    expect(((await firstPage.json()) as unknown[]).length).toBe(1);
+
+    const secondPage = await app.request(
+      `/api/v1/${seed.business.id}/conversations?channelId=${seed.channel.id}&limit=1&offset=1`,
+      { headers: authHeaders() },
+    );
+    expect(((await secondPage.json()) as unknown[]).length).toBe(0);
   });
 
   it('GET /:businessId/conversations/:id/messages returns messages', async () => {

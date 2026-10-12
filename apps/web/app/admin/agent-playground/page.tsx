@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireOperatorToken } from '@/lib/admin-access';
 import { cachedBusinesses } from '@/app/_cache/queries';
+import { preloadPlayground } from '@/lib/playground-preload';
 import { PlaygroundClient } from '@/components/playground-client';
 import { operatorAccountEmail } from '@/lib/logs-session';
 import { Card } from '@/components/ui/card';
@@ -74,7 +75,12 @@ export default async function AdminAgentPlaygroundPage() {
         </p>
       </Card>
 
-      <PlaygroundClient token={token} businessId={sandbox.id} canEditPrompt />
+      <PlaygroundClient
+        token={token}
+        businessId={sandbox.id}
+        preload={await preloadPlayground(token, sandbox.id)}
+        canEditPrompt
+      />
     </div>
   );
 }
