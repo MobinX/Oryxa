@@ -202,6 +202,8 @@ export type ProductDetail = {
   customer: { id: string; name: string } | null;
   variants: Array<{
     id: string;
+    /** The short label this variant is read by, unique inside the business. */
+    variantId?: string | null;
     name: string;
     imageUrl?: string | null;
     imageKey?: string | null;

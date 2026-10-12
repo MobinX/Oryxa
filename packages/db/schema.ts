@@ -154,24 +154,36 @@ export const products = pgTable('products', {
   customerIdx: index('products_customer_id_idx').on(t.customerId),
 }));
 
-export const variants = pgTable('variants', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
-  name: varchar('name', { length: 255 }).notNull(),
-  imageUrl: varchar('image_url', { length: 500 }),
-  /**
-   * Every photo the merchant hung on this variant, in the order they hung them. `imageUrl`
-   * stays the first of them: a Messenger card, a storefront thumbnail and the agent's photo
-   * picker all read one cover, and none of them should have to learn about the set.
-   */
-  imageUrls: text('image_urls').array().notNull().default(sql`'{}'::text[]`),
-  price: numeric('price', { precision: 10, scale: 2 }),
-  stock: integer('stock').default(0).notNull(),
-  isAvailable: boolean('is_available').default(true).notNull(),
-  rating: numeric('rating', { precision: 3, scale: 2 }),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
-});
+export const variants = pgTable(
+  'variants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
+    /**
+     * The short label a merchant reads aloud, writes on a shelf and types into search: three
+     * letters and two digits. It is unique inside one business and nowhere else, so two shops may
+     * hold the same label and every lookup carries its business with it.
+     */
+    variantId: varchar('variant_id', { length: 5 }),
+    name: varchar('name', { length: 255 }).notNull(),
+    imageUrl: varchar('image_url', { length: 500 }),
+    /**
+     * Every photo the merchant hung on this variant, in the order they hung them. `imageUrl`
+     * stays the first of them: a Messenger card, a storefront thumbnail and the agent's photo
+     * picker all read one cover, and none of them should have to learn about the set.
+     */
+    imageUrls: text('image_urls').array().notNull().default(sql`'{}'::text[]`),
+    price: numeric('price', { precision: 10, scale: 2 }),
+    stock: integer('stock').default(0).notNull(),
+    isAvailable: boolean('is_available').default(true).notNull(),
+    rating: numeric('rating', { precision: 3, scale: 2 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (t) => ({
+    labelIdx: index('variants_variant_id_idx').on(t.variantId),
+  }),
+);
 
 export const orders = pgTable('orders', {
   id: uuid('id').primaryKey().defaultRandom(),

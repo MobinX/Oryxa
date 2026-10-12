@@ -2,7 +2,7 @@ import { eq, and, desc, sql, or, ilike, isNull, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema } from '@repo/shared';
-import { slugify } from '@repo/utils';
+import { slugify, makeVariantId } from '@repo/utils';
 import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
 
 async function mapVariantWithSignedImage<T extends { imageUrl: string | null; imageUrls: string[] | null }>(variant: T) {
@@ -27,6 +27,56 @@ function photoSetFor(variant: { imageUrl?: string; imageUrls?: string[] }) {
       ? [variant.imageUrl]
       : [];
   return { imageUrls: urls, imageUrl: variant.imageUrl ?? urls[0] ?? null };
+}
+
+/**
+ * Which of these labels this business already hands out. A label is only unique per business, and
+ * the variant row does not know its business — the product does — so the question is asked through
+ * the product.
+ */
+async function variantIdsTakenInBusiness(businessId: string, candidates: string[]) {
+  if (candidates.length === 0) return new Set<string>();
+  const rows = await db
+    .select({ variantId: variants.variantId })
+    .from(variants)
+    .innerJoin(products, eq(variants.productId, products.id))
+    .where(
+      and(
+        eq(products.businessId, businessId),
+        isNull(variants.deletedAt),
+        inArray(variants.variantId, candidates),
+      ),
+    );
+  return new Set(rows.map((r) => r.variantId).filter((id): id is string => id !== null));
+}
+
+/**
+ * Labels for `count` new variants of one business: roll, ask the business which of them it already
+ * holds, re-roll those, keep going until every slot has a label the shop has never used. About 1.7
+ * million shapes against a few thousand live variants, so a collision is rare and the loop almost
+ * always ends after one query.
+ */
+export async function rollVariantIds(businessId: string, count: number): Promise<string[]> {
+  const chosen: string[] = [];
+
+  for (let round = 0; chosen.length < count && round < 12; round++) {
+    const candidates = [
+      ...new Set(
+        Array.from({ length: count - chosen.length + 2 }, () => makeVariantId()).filter(
+          (id) => !chosen.includes(id),
+        ),
+      ),
+    ];
+    if (candidates.length === 0) continue;
+
+    const taken = await variantIdsTakenInBusiness(businessId, candidates);
+    for (const id of candidates) {
+      if (chosen.length >= count) break;
+      if (!taken.has(id)) chosen.push(id);
+    }
+  }
+
+  return chosen;
 }
 
 export async function createProduct(input: unknown) {
@@ -67,11 +117,13 @@ export async function createProduct(input: unknown) {
     .returning();
 
   if (parsed.variants.length > 0) {
+    const labels = await rollVariantIds(parsed.businessId, parsed.variants.length);
     await db.insert(variants).values(
-      parsed.variants.map((v) => {
+      parsed.variants.map((v, i) => {
         const photos = photoSetFor(v);
         return {
           productId: product.id,
+          variantId: labels[i] ?? null,
           name: v.name,
           imageUrl: photos.imageUrl,
           imageUrls: photos.imageUrls,
@@ -129,6 +181,28 @@ export async function getProductById(businessId: string, productId: string) {
       : null,
     variants: mappedVariants,
   };
+}
+
+/**
+ * The product a short label belongs to. The label is only unique inside one business, so the
+ * business is part of the question: the same label in another shop's catalogue returns nothing.
+ */
+export async function getProductByVariantId(businessId: string, variantId: string) {
+  const [row] = await db
+    .select({ productId: variants.productId })
+    .from(variants)
+    .innerJoin(products, eq(variants.productId, products.id))
+    .where(
+      and(
+        eq(products.businessId, businessId),
+        isNull(products.deletedAt),
+        isNull(variants.deletedAt),
+        eq(variants.variantId, variantId),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  return getProductById(businessId, row.productId);
 }
 
 export async function listProducts(
@@ -288,8 +362,10 @@ export async function updateProduct(businessId: string, productId: string, input
           })
           .where(and(eq(variants.id, variant.id), eq(variants.productId, productId)));
       } else {
+        const [label] = await rollVariantIds(businessId, 1);
         await db.insert(variants).values({
           productId,
+          variantId: label ?? null,
           name: variant.name,
           imageUrl: photos[0] ?? null,
           imageUrls: photos,

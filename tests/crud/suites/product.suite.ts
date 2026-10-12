@@ -8,6 +8,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import {
   createProduct,
   getProductById,
+  getProductByVariantId,
   listProducts,
   updateProduct,
   deleteProduct,
@@ -67,6 +68,66 @@ export function registerProductCrudTests() {
     });
     const product = await getProductById(businessId, created.id);
     expect(product?.variants).toHaveLength(1);
+  });
+
+  it('every variant is born with a short label, new to its own business', async () => {
+    const businessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Labelled',
+      price: 4,
+      sku: `LBL-${Date.now()}`,
+      variants: [
+        { name: 'One', stock: 1, isAvailable: true },
+        { name: 'Two', stock: 2, isAvailable: true },
+        { name: 'Three', stock: 3, isAvailable: true },
+      ],
+    });
+    const product = await getProductById(businessId, created.id);
+    const labelByName = new Map(product!.variants.map((v) => [v.name, v.variantId!]));
+
+    for (const label of labelByName.values()) {
+      expect(label).toMatch(/^[A-Z0-9]{5}$/);
+    }
+    expect(new Set(labelByName.values()).size).toBe(3);
+
+    const added = await updateProduct(businessId, created.id, {
+      variants: [
+        ...product!.variants.map((v) => ({ id: v.id, name: v.name, stock: v.stock, isAvailable: true })),
+        { name: 'Four', stock: 4, isAvailable: true },
+      ],
+    });
+    expect(added?.updated).toBe(true);
+
+    const after = await getProductById(businessId, created.id);
+    expect(after!.variants).toHaveLength(4);
+    for (const [name, label] of labelByName) {
+      expect(after!.variants.find((v) => v.name === name)?.variantId).toBe(label);
+    }
+    expect(after!.variants.find((v) => v.name === 'Four')?.variantId).toMatch(/^[A-Z0-9]{5}$/);
+    expect(new Set(after!.variants.map((v) => v.variantId)).size).toBe(4);
+  });
+
+  it('getProductByVariantId reads a variant by its label, inside its own business only', async () => {
+    const businessId = await setup();
+    const otherBusinessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Found By Label',
+      price: 7,
+      sku: `LBL-LOOKUP-${Date.now()}`,
+      variants: [{ name: 'Only', stock: 3, isAvailable: true }],
+    });
+    const product = await getProductById(businessId, created.id);
+    const label = product!.variants[0].variantId!;
+    expect(label).toMatch(/^[A-Z0-9]{5}$/);
+
+    const found = await getProductByVariantId(businessId, label);
+    expect(found?.id).toBe(created.id);
+    expect(found?.variants[0].variantId).toBe(label);
+
+    expect(await getProductByVariantId(otherBusinessId, label)).toBeNull();
+    expect(await getProductByVariantId(businessId, 'ZZZ99')).toBeNull();
   });
 
   it('listProducts paginates', async () => {

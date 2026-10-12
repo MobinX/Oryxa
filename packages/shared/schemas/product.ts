@@ -58,6 +58,15 @@ export const createProductOutputSchema = z.object({
 
 export const variantOutputSchema = baseVariantSchema.extend({
   id: uuidSchema,
+  /**
+   * The short label this variant is read by — three letters and two digits, unique inside the
+   * business and nowhere else. Null on a row that predates labels.
+   */
+  variantId: z
+    .string()
+    .regex(/^[A-Z0-9]{5}$/)
+    .nullable()
+    .optional(),
   imageKey: z.string().nullable().optional(),
   /** The stored keys behind `imageUrls`, so a form can resubmit the pictures it did not change. */
   imageKeys: z.array(z.string()).optional(),

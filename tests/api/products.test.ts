@@ -52,6 +52,43 @@ describe('Products API', () => {
     expect(body.error).toBe('Product entity missing');
   });
 
+  it('GET /:businessId/variants/:variantId returns the product wearing that label', async () => {
+    const { business, product, productDetail } = await seedTestWorld();
+    const label = productDetail.variants[0].variantId;
+    expect(label).toMatch(/^[A-Z0-9]{5}$/);
+
+    const res = await app.request(`/api/v1/${business.id}/variants/${label}`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      id: string;
+      variants: Array<{ id: string; variantId: string | null }>;
+    };
+    expect(body.id).toBe(product.id);
+    expect(body.variants.find((v) => v.id === productDetail.variants[0].id)?.variantId).toBe(label);
+  });
+
+  it('GET /:businessId/variants/:variantId returns 404 for a label from another business', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const other = await seedTestWorld();
+    const label = productDetail.variants[0].variantId;
+
+    const res = await app.request(`/api/v1/${other.business.id}/variants/${label}`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: string }).error).toBe('Variant not found for this business');
+  });
+
+  it('GET /:businessId/variants/:variantId returns 400 for something that is not a label', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/variants/blue-xl`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('PUT /:businessId/products/:productId returns 400 for unknown category', async () => {
     const { business, product } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/products/${product.id}`, {

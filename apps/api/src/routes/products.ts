@@ -16,6 +16,7 @@ import {
 import {
   createProduct,
   getProductById,
+  getProductByVariantId,
   listProducts,
   updateProduct,
   deleteProduct,
@@ -153,6 +154,41 @@ productsRouter.openapi(getProductRoute, async (c) => {
   const productId = c.req.param('productId');
   const product = await getProductById(businessId, productId);
   if (!product) return c.json({ error: 'Product entity missing' }, 404);
+  return c.json({
+    ...product,
+    createdAt: product.createdAt.toISOString(),
+  });
+});
+
+/**
+ * The product behind a variant's short label. A label is only unique inside one business, so the
+ * business has to be in the URL: `KQP42` in another shop's catalogue is a 404 here, not a hit.
+ */
+const getProductByVariantRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/variants/{variantId}',
+  tags: ['Catalog'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({
+      businessId: z.string().uuid(),
+      variantId: z
+        .string()
+        .regex(/^[A-Z0-9]{5}$/)
+        .openapi({ example: 'KQP42' }),
+    }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: getProductByIdOutputSchema } }, description: 'Product' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+  },
+});
+
+productsRouter.openapi(getProductByVariantRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const variantId = c.req.param('variantId');
+  const product = await getProductByVariantId(businessId, variantId);
+  if (!product) return c.json({ error: 'Variant not found for this business' }, 404);
   return c.json({
     ...product,
     createdAt: product.createdAt.toISOString(),
