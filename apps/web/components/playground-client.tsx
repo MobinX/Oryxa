@@ -61,7 +61,10 @@ const STREAM_STALLED = new Error('playground stream idle');
 
 /** One chunk of the stream, or the stall sentinel when nothing arrives inside the idle window. */
 function readNextChunk(reader: ReadableStreamDefaultReader<Uint8Array>) {
-  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+  // Named from the reader itself: the chunk type carries different names across lib versions, and
+  // spelling one of them out here is a build error waiting to happen on whichever one is absent.
+  type Chunk = Awaited<ReturnType<typeof reader.read>>;
+  return new Promise<Chunk>((resolve, reject) => {
     const timer = setTimeout(() => reject(STREAM_STALLED), RUN_IDLE_MS);
     reader.read().then(
       (chunk) => {
