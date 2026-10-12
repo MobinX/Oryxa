@@ -17,6 +17,7 @@ import {
   sandboxPageId,
   type PlaygroundPreload,
 } from '@/lib/playground-preload';
+import { uploadVariantImageDirect } from '@/lib/uploads-client';
 import {
   Terminal as TerminalIcon,
   Bot,
@@ -29,6 +30,8 @@ import {
   User,
   Shield,
   Activity,
+  Paperclip,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -126,6 +129,8 @@ interface Message {
   time: string;
   /** Only the comment playground sets this: how the line should be labelled. */
   kind?: 'comment' | 'reply' | 'dm';
+  /** The pictures the turn was sent with — a test photo reads back as a signed URL. */
+  images?: string[];
 }
 
 interface LogEvent {
@@ -172,6 +177,13 @@ export function PlaygroundClient({
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
+  /**
+   * Pictures waiting in the composer. The bytes are already in storage by the time a run starts,
+   * so the body carries keys only — the same column a Messenger photo is copied into.
+   */
+  const [pendingPhotos, setPendingPhotos] = useState<{ key: string; previewUrl: string }[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   /**
    * The run in flight, and the pane it streams into: a chat run belongs to the chat it was started
    * from — the new one it seeds takes the run over as soon as the stream names it — and a comment
@@ -474,13 +486,30 @@ export function PlaygroundClient({
     setLogs((prev) => [...prev, newLog]);
   }
 
+  /** A picture goes to storage from the browser and comes back as a key, exactly like the webhook's copy. */
+  async function handleAttachPhoto(file: File) {
+    setUploadingPhoto(true);
+    try {
+      const photo = await uploadVariantImageDirect(businessId, file);
+      setPendingPhotos((prev) => (prev.length >= 4 ? prev : [...prev, photo]));
+    } catch (err) {
+      console.error('Failed to attach a picture to the test run:', err);
+      alert(err instanceof Error ? err.message : 'Could not attach that picture');
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  }
+
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!inputMessage.trim() || !activeChannel || !selectedConvId) return;
-
     const userMessage = inputMessage.trim();
+    const photos = pendingPhotos;
+    if ((!userMessage && photos.length === 0) || !activeChannel || !selectedConvId) return;
+
     const convId = selectedConvId;
     setInputMessage('');
+    setPendingPhotos([]);
     const myRun = ++runIdRef.current;
     setRun({ id: myRun, pane: 'chat', convId });
     setLogs([]); // Reset log panel for new run
@@ -491,6 +520,7 @@ export function PlaygroundClient({
       from: 'customer',
       content: userMessage,
       time: new Date().toISOString(),
+      images: photos.map((photo) => photo.previewUrl),
     };
     setMessages((prev) => [...prev, optimisticMsg]);
 
@@ -505,6 +535,7 @@ export function PlaygroundClient({
           businessId,
           channelId: activeChannel.id,
           userMessage,
+          imageKeys: photos.map((photo) => photo.key),
           testUserId,
         }),
       });
@@ -1060,7 +1091,19 @@ export function PlaygroundClient({
                                 AI Sales Rep
                               </span>
                             )}
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            {msg.images && msg.images.length > 0 && (
+                              <div className="mb-2 flex flex-wrap gap-1.5">
+                                {msg.images.map((url) => (
+                                  <img
+                                    key={url}
+                                    src={url}
+                                    alt=""
+                                    className="h-24 w-24 rounded-lg border border-slate-800 object-cover"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            {msg.content && <div className="whitespace-pre-wrap">{msg.content}</div>}
                             <span
                               // These times arrive from the server now, and the browser formats them
                               // in its own zone — the moment the chat is re-read they are corrected.
@@ -1089,23 +1132,77 @@ export function PlaygroundClient({
                     {/* Chat Input Bar */}
                     <form
                       onSubmit={handleSendMessage}
-                      className="border-t border-slate-900 p-3 bg-slate-900/30 flex gap-2"
+                      className="border-t border-slate-900 p-3 bg-slate-900/30 flex flex-col gap-2"
                     >
-                      <input
-                        type="text"
-                        value={inputMessage}
-                        onChange={(e) => setInputMessage(e.target.value)}
-                        placeholder="Ask the sales agent a question..."
-                        disabled={chatRunning}
-                        className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
-                      />
-                      <button
-                        type="submit"
-                        disabled={chatRunning || !inputMessage.trim()}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50 transition-all"
-                      >
-                        <Send className="h-4 w-4" />
-                      </button>
+                      {pendingPhotos.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {pendingPhotos.map((photo) => (
+                            <div key={photo.key} className="relative">
+                              <img
+                                src={photo.previewUrl}
+                                alt=""
+                                className="h-16 w-16 rounded-lg border border-slate-800 object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPendingPhotos((prev) => prev.filter((p) => p.key !== photo.key))
+                                }
+                                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-slate-300 transition-colors hover:bg-red-600 hover:text-white"
+                                title="Take this picture back out"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        {/* The same four types storage accepts for a real customer's photo. */}
+                        <input
+                          ref={photoInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) void handleAttachPhoto(file);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => photoInputRef.current?.click()}
+                          disabled={chatRunning || uploadingPhoto || pendingPhotos.length >= 4}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-800 bg-slate-950 text-slate-400 transition-all hover:border-indigo-500 hover:text-indigo-400 disabled:opacity-50"
+                          title={uploadingPhoto ? 'Sending the picture…' : 'Send a picture to the agent'}
+                        >
+                          {uploadingPhoto ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Paperclip className="h-4 w-4" />
+                          )}
+                        </button>
+                        <input
+                          type="text"
+                          value={inputMessage}
+                          onChange={(e) => setInputMessage(e.target.value)}
+                          placeholder="Ask the sales agent a question..."
+                          disabled={chatRunning}
+                          className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
+                        />
+                        <button
+                          type="submit"
+                          disabled={
+                            chatRunning ||
+                            uploadingPhoto ||
+                            (!inputMessage.trim() && pendingPhotos.length === 0)
+                          }
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50 transition-all"
+                        >
+                          <Send className="h-4 w-4" />
+                        </button>
+                      </div>
                     </form>
                   </>
                 ) : (
