@@ -227,6 +227,8 @@ export type CreateProductInput = {
   customerId?: string | null;
   variants?: Array<{
     name: string;
+    /** The short label the row's pictures carry. */
+    variantId?: string;
     imageUrl?: string;
     imageUrls?: string[];
     price?: number;
@@ -246,6 +248,8 @@ export type UpdateProductInput = {
   variants?: Array<{
     id?: string;
     name: string;
+    /** The short label the row's pictures carry. Ignored for a row that already has one. */
+    variantId?: string;
     imageUrl?: string;
     imageUrls?: string[];
     clearImage?: boolean;

@@ -34,7 +34,16 @@ export const baseVariantSchema = z.object({
   rating: z.coerce.number().min(0).max(5).optional(),
 }).openapi('Variant');
 
-export const variantInputSchema = baseVariantSchema.omit({ productId: true });
+export const variantInputSchema = baseVariantSchema
+  .omit({ productId: true })
+  .extend({
+    /**
+     * The short label to keep for this variant, sent by a form that already stamped it on the
+     * pictures. Only a suggestion: the catalog hands out a freshly rolled label instead when this
+     * business already uses it.
+     */
+    variantId: z.string().regex(/^[A-Z0-9]{5}$/).optional(),
+  });
 
 export const insertProductSchema = baseProductSchema.omit({ slug: true });
 

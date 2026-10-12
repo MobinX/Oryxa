@@ -82,6 +82,7 @@ async function EditProductForm({
     const shots = v.imageUrls?.length ? v.imageUrls : v.imageUrl ? [v.imageUrl] : [];
     return {
       id: v.id,
+      variantId: v.variantId ?? null,
       name: v.name,
       stock: v.stock,
       price: v.price,

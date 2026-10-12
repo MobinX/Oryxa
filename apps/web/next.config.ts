@@ -2,7 +2,7 @@
 const nextConfig = {
   cacheComponents: true,
   allowedDevOrigins: ['dev.oryxa.us', 'dev-api.oryxa.us'],
-  transpilePackages: [],
+  transpilePackages: ['@repo/utils'],
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '**' }],
   },

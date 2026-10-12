@@ -5,11 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUploadGate } from '@/components/products/upload-gate';
-import {
-  uploadVariantImageDirect,
-  ImageUploadError,
-} from '@/lib/uploads-client';
+import { makeVariantId } from '@repo/utils';
+import { VariantPhotoDialog } from '@/components/products/variant-photo-dialog';
+import type { UploadedImage } from '@/lib/uploads-client';
 
 /** A variant holds as many shots as a merchant has; past this the strip is a gallery nobody scrolls. */
 const MAX_IMAGES = 8;
@@ -24,6 +22,8 @@ type VariantInitial = {
   name: string;
   stock: number;
   price?: number;
+  /** The short label this variant is read by, and the one stamped on every picture it holds. */
+  variantId?: string | null;
   imageKey?: string | null;
   imagePreviewUrl?: string | null;
   images?: VariantImageInitial[];
@@ -31,12 +31,9 @@ type VariantInitial = {
 
 type VariantImage = {
   id: string;
-  /** Empty while the bytes are still on their way; the key comes back with the storage response. */
+  /** The B2 object key the picture was stored under. */
   key: string;
   previewUrl: string | null;
-  uploading: boolean;
-  progress: number;
-  error: string | null;
 };
 
 type VariantRow = {
@@ -45,6 +42,8 @@ type VariantRow = {
   stock: number;
   price?: number;
   _idx: number;
+  /** Null on a saved row whose shop never gave it a label: nothing is stamped on its pictures. */
+  variantId: string | null;
   /** Whether the shelf held pictures before this merchant sat down: emptying it is then a clearing. */
   hadImages: boolean;
   images: VariantImage[];
@@ -54,14 +53,7 @@ type VariantRow = {
 function initialImages(row: VariantInitial): VariantImage[] {
   const shots =
     row.images ?? (row.imageKey ? [{ key: row.imageKey, previewUrl: row.imagePreviewUrl }] : []);
-  return shots.map((shot) => ({
-    id: shot.key,
-    key: shot.key,
-    previewUrl: shot.previewUrl ?? null,
-    uploading: false,
-    progress: 100,
-    error: null,
-  }));
+  return shots.map((shot) => ({ id: shot.key, key: shot.key, previewUrl: shot.previewUrl ?? null }));
 }
 
 /**
@@ -69,12 +61,17 @@ function initialImages(row: VariantInitial): VariantImage[] {
  * Each row is a server-action-compatible set of named inputs
  * (`variant_<i>_name`, `variant_<i>_stock`, `variant_<i>_price`,
  * `variant_<i>_imageKey` once per picture in display order,
- * `variant_<i>_clearImage`, `variant_<i>_id`).
+ * `variant_<i>_clearImage`, `variant_<i>_id`, `variant_<i>_variantId`).
  *
- * Pictures upload directly from the browser to B2 via a presigned PUT URL obtained
- * from /api/uploads/sign. The resulting B2 object keys go to the server action as
- * `variant_<i>_imageKey` on form submit — no file bytes flow through the Next.js
- * server action.
+ * A picture never goes to storage straight from the file picker. Picking one opens
+ * `VariantPhotoDialog`, which reads it into the page, stamps the row's short label into a corner
+ * with the canvas API, and only then PUTs the edited JPEG to B2 through a presigned URL from
+ * /api/uploads/sign. The resulting keys go to the server action as `variant_<i>_imageKey` on
+ * submit — no file bytes ever flow through the Next.js server action.
+ *
+ * A row that has not been saved yet cannot be handed a label by the server, so the browser rolls
+ * one here and submits it as `variant_<i>_variantId`; the catalog keeps it when the shop is not
+ * already using it, which is what makes the label on the photo and the label in the row agree.
  */
 export function VariantEditor({
   initial = [],
@@ -93,105 +90,52 @@ export function VariantEditor({
         stock: v.stock,
         price: v.price,
         _idx: i,
+        variantId: v.variantId ?? (v.id ? null : makeVariantId()),
         hadImages: images.length > 0,
         images,
       };
     }),
   );
   const [counter, setCounter] = useState(base.length);
+  /** The pictures picked for one row, still waiting their turn in front of the dialog. */
+  const [dialog, setDialog] = useState<{ idx: number; files: File[] } | null>(null);
   const fileInputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
-  const gate = useUploadGate();
-
-  const patchRow = (idx: number, changes: Partial<VariantRow>) =>
-    setRows((prev) => prev.map((row) => (row._idx === idx ? { ...row, ...changes } : row)));
-
-  const patchImage = (idx: number, imageId: string, changes: Partial<VariantImage>) =>
-    setRows((prev) =>
-      prev.map((row) =>
-        row._idx === idx
-          ? {
-              ...row,
-              images: row.images.map((img) =>
-                img.id === imageId ? { ...img, ...changes } : img,
-              ),
-            }
-          : row,
-      ),
-    );
 
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { name: '', stock: 0, _idx: counter, hadImages: false, images: [] },
+      {
+        name: '',
+        stock: 0,
+        _idx: counter,
+        variantId: makeVariantId(),
+        hadImages: false,
+        images: [],
+      },
     ]);
     setCounter((c) => c + 1);
-  };
-
-  const revoke = (img: VariantImage) => {
-    if (img.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(img.previewUrl);
   };
 
   const removeRow = (idx: number) => {
     setRows((prev) => {
       const row = prev.find((r) => r._idx === idx);
-      row?.images.forEach(revoke);
+      row?.images.forEach((img) => {
+        if (img.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(img.previewUrl);
+      });
       return prev.filter((r) => r._idx !== idx);
     });
   };
 
   const removeImage = (idx: number, imageId: string) => {
-    const input = fileInputRefs.current.get(idx);
-    if (input) input.value = '';
     setRows((prev) =>
       prev.map((row) => {
         if (row._idx !== idx) return row;
         const target = row.images.find((img) => img.id === imageId);
-        if (target) revoke(target);
+        if (target?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl);
         return { ...row, images: row.images.filter((img) => img.id !== imageId) };
       }),
     );
   };
-
-  async function uploadOne(idx: number, imageId: string, file: File) {
-    gate?.begin();
-    try {
-      const result = await uploadVariantImageDirect(businessId, file, (percent) =>
-        patchImage(idx, imageId, { progress: percent }),
-      );
-      setRows((prev) =>
-        prev.map((row) =>
-          row._idx === idx
-            ? {
-                ...row,
-                images: row.images.map((img) => {
-                  if (img.id !== imageId) return img;
-                  revoke(img);
-                  return {
-                    ...img,
-                    key: result.key,
-                    previewUrl: result.previewUrl,
-                    uploading: false,
-                    progress: 100,
-                    error: null,
-                  };
-                }),
-              }
-            : row,
-        ),
-      );
-    } catch (err) {
-      const message =
-        err instanceof ImageUploadError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Upload failed';
-      // The tile stays so the merchant can see which picture did not land and pick it again.
-      patchImage(idx, imageId, { uploading: false, progress: 0, error: message });
-    } finally {
-      gate?.end();
-    }
-  }
 
   function onPickImages(idx: number, files: File[]) {
     const input = fileInputRefs.current.get(idx);
@@ -203,27 +147,21 @@ export function VariantEditor({
     const queue = files.slice(0, Math.max(0, MAX_IMAGES - row.images.length));
     if (queue.length === 0) return;
 
-    const pending = queue.map((file, n) => ({
-      id: `up-${idx}-${Date.now()}-${n}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
+    setDialog({ idx, files: queue });
+  }
 
-    patchRow(idx, {
-      images: [
-        ...row.images,
-        ...pending.map((p) => ({
-          id: p.id,
-          key: '',
-          previewUrl: p.previewUrl,
-          uploading: true,
-          progress: 0,
-          error: null,
-        })),
-      ],
-    });
-
-    void Promise.all(pending.map((p) => uploadOne(idx, p.id, p.file)));
+  /** One picture stored: hang it on the row, and let the next one in the queue step forward. */
+  function onStored(idx: number, image: UploadedImage) {
+    setRows((prev) =>
+      prev.map((row) =>
+        row._idx === idx
+          ? { ...row, images: [...row.images, { id: image.key, key: image.key, previewUrl: image.previewUrl }] }
+          : row,
+      ),
+    );
+    setDialog((current) =>
+      current && current.idx === idx ? { ...current, files: current.files.slice(1) } : current,
+    );
   }
 
   return (
@@ -239,24 +177,25 @@ export function VariantEditor({
         </button>
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Add as many variants as you need. Leave the name empty to skip a row. If all rows are empty, a default variant is created automatically. A variant holds up to {MAX_IMAGES} pictures and the first is the one shown on the shelf. Images upload directly to storage as you pick them.
+        Add as many variants as you need. Leave the name empty to skip a row. If all rows are empty, a default variant is created automatically. A variant holds up to {MAX_IMAGES} pictures and the first is the one shown on the shelf. Each picture is stamped with the variant's short id before it is stored, so a customer who sends that photo back can be read off it.
       </p>
 
       {rows.map((row) => {
         const i = row._idx;
-        const uploading = row.images.some((img) => img.uploading);
-        const settledKeys = row.images
-          .filter((img) => img.key && !img.error)
-          .map((img) => img.key);
-        const emptied = row.hadImages && settledKeys.length === 0 && !uploading;
-        const firstUploading = row.images.find((img) => img.uploading);
-        const full = settledKeys.length >= MAX_IMAGES;
+        const keys = row.images.map((img) => img.key);
+        const emptied = row.hadImages && keys.length === 0;
+        const full = keys.length >= MAX_IMAGES;
 
         return (
           <div key={i} className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">
+              <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                 Variant #{i + 1}
+                {row.variantId && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-foreground">
+                    #{row.variantId}
+                  </span>
+                )}
               </span>
               <button
                 type="button"
@@ -267,7 +206,10 @@ export function VariantEditor({
               </button>
             </div>
             {row.id && <input type="hidden" name={`variant_${i}_id`} value={row.id} />}
-            {settledKeys.map((key) => (
+            {row.variantId && (
+              <input type="hidden" name={`variant_${i}_variantId`} value={row.variantId} />
+            )}
+            {keys.map((key) => (
               <input key={key} type="hidden" name={`variant_${i}_imageKey`} value={key} />
             ))}
             {emptied && <input type="hidden" name={`variant_${i}_clearImage`} value="1" />}
@@ -295,17 +237,15 @@ export function VariantEditor({
               <label
                 className={cn(
                   'inline-flex h-10 cursor-pointer items-center justify-center rounded-element border border-dashed border-border bg-muted/50 px-3 text-sm text-muted-foreground hover:bg-muted transition-colors',
-                  (uploading || full) && 'opacity-50 cursor-not-allowed',
+                  full && 'opacity-50 cursor-not-allowed',
                 )}
               >
                 <span className="truncate">
-                  {uploading
-                    ? `Uploading… ${firstUploading?.progress ?? 0}%`
-                    : full
-                      ? `${MAX_IMAGES} of ${MAX_IMAGES} pictures`
-                      : settledKeys.length > 0
-                        ? 'Add pictures'
-                        : 'Upload pictures'}
+                  {full
+                    ? `${MAX_IMAGES} of ${MAX_IMAGES} pictures`
+                    : keys.length > 0
+                      ? 'Add pictures'
+                      : 'Upload pictures'}
                 </span>
                 <input
                   type="file"
@@ -313,7 +253,7 @@ export function VariantEditor({
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   className="hidden"
                   aria-label={`Variant ${i + 1} pictures`}
-                  disabled={uploading || full}
+                  disabled={full}
                   ref={(el) => {
                     if (el) fileInputRefs.current.set(i, el);
                     else fileInputRefs.current.delete(i);
@@ -327,12 +267,7 @@ export function VariantEditor({
               <div className="flex flex-wrap gap-3">
                 {row.images.map((img, position) => (
                   <div key={img.id} className="space-y-1">
-                    <div
-                      className={cn(
-                        'relative h-20 w-20 overflow-hidden rounded-xl border border-border bg-muted',
-                        img.error && 'border-red-400',
-                      )}
-                    >
+                    <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-border bg-muted">
                       {img.previewUrl && (
                         <img
                           src={img.previewUrl}
@@ -340,7 +275,7 @@ export function VariantEditor({
                           className="h-full w-full object-cover"
                         />
                       )}
-                      {position === 0 && img.key && !img.uploading && (
+                      {position === 0 && (
                         <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-semibold uppercase tracking-wide text-white">
                           Cover
                         </span>
@@ -353,25 +288,7 @@ export function VariantEditor({
                       >
                         <X className="h-3 w-3" />
                       </button>
-                      {img.uploading && (
-                        <div
-                          role="progressbar"
-                          aria-label="Picture upload progress"
-                          aria-valuenow={img.progress}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          className="absolute inset-x-0 bottom-0 h-1 bg-muted"
-                        >
-                          <div
-                            className="h-full bg-primary transition-[width] duration-200"
-                            style={{ width: `${img.progress}%` }}
-                          />
-                        </div>
-                      )}
                     </div>
-                    {img.error && (
-                      <p className="w-20 text-[10px] leading-tight text-red-600">{img.error}</p>
-                    )}
                   </div>
                 ))}
               </div>
@@ -388,6 +305,17 @@ export function VariantEditor({
       >
         + Add another variant
       </Button>
+
+      {dialog && dialog.files.length > 0 && (
+        <VariantPhotoDialog
+          businessId={businessId}
+          file={dialog.files[0]}
+          label={rows.find((row) => row._idx === dialog.idx)?.variantId ?? null}
+          remaining={dialog.files.length - 1}
+          onUploaded={(image) => onStored(dialog.idx, image)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }

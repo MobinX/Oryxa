@@ -79,6 +79,42 @@ export async function rollVariantIds(businessId: string, count: number): Promise
   return chosen;
 }
 
+/** The shape of a short label: three letters and two digits, in any order. */
+const LABEL = /^[A-Z0-9]{5}$/;
+
+/**
+ * Labels for a batch of new variant rows. A label the merchant's own form already stamped on the
+ * row's pictures is kept, so the photo and the row agree; anything malformed, already handed out
+ * by this business, or missing gets a freshly rolled one instead, which is what keeps the column
+ * unique per business whatever a caller sends.
+ */
+async function assignVariantLabels(
+  businessId: string,
+  wanted: Array<string | null | undefined>,
+): Promise<Array<string | null>> {
+  const asked = wanted.filter((label): label is string => typeof label === 'string' && LABEL.test(label));
+  const held = await variantIdsTakenInBusiness(businessId, asked);
+  const rolled = await rollVariantIds(businessId, wanted.length);
+
+  const used = new Set<string>();
+  const labels: Array<string | null> = [];
+  let next = 0;
+
+  for (const want of wanted) {
+    if (want && LABEL.test(want) && !held.has(want) && !used.has(want)) {
+      used.add(want);
+      labels.push(want);
+      continue;
+    }
+    while (next < rolled.length && used.has(rolled[next])) next++;
+    const label = next < rolled.length ? rolled[next++] : null;
+    if (label) used.add(label);
+    labels.push(label);
+  }
+
+  return labels;
+}
+
 export async function createProduct(input: unknown) {
   const parsed = createProductInputSchema.parse(input);
 
@@ -117,7 +153,10 @@ export async function createProduct(input: unknown) {
     .returning();
 
   if (parsed.variants.length > 0) {
-    const labels = await rollVariantIds(parsed.businessId, parsed.variants.length);
+    const labels = await assignVariantLabels(
+      parsed.businessId,
+      parsed.variants.map((v) => v.variantId),
+    );
     await db.insert(variants).values(
       parsed.variants.map((v, i) => {
         const photos = photoSetFor(v);
@@ -362,7 +401,7 @@ export async function updateProduct(businessId: string, productId: string, input
           })
           .where(and(eq(variants.id, variant.id), eq(variants.productId, productId)));
       } else {
-        const [label] = await rollVariantIds(businessId, 1);
+        const [label] = await assignVariantLabels(businessId, [variant.variantId]);
         await db.insert(variants).values({
           productId,
           variantId: label ?? null,

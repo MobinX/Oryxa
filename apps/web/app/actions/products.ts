@@ -21,6 +21,8 @@ type ParsedVariant = {
   stock: number;
   price?: number;
   isAvailable?: boolean;
+  /** The short label the row's pictures were stamped with, kept when the shop is free of it. */
+  variantId?: string;
   imageUrl?: string;
   imageUrls?: string[];
   clearImage?: boolean;
@@ -31,7 +33,7 @@ type ParsedVariant = {
  * Each variant is identified by a numeric index suffix on its field names:
  *   variant_<i>_name, variant_<i>_stock, variant_<i>_price,
  *   variant_<i>_image, variant_<i>_imageKey (repeated, in the order hung),
- *   variant_<i>_clearImage, variant_<i>_id
+ *   variant_<i>_clearImage, variant_<i>_id, variant_<i>_variantId
  * Rows with an empty name are skipped. Image upload failures are tolerated
  * (the variant is still saved without the picture) instead of failing the whole
  * product create/update.
@@ -57,6 +59,10 @@ async function parseVariants(
     const priceRaw = String(formData.get(`variant_${i}_price`) ?? '').trim();
     const price = priceRaw ? parseFloat(priceRaw) : undefined;
     const id = String(formData.get(`variant_${i}_id`) ?? '').trim() || undefined;
+    // A row's short label arrives with its pictures already stamped with it. Anything that is not
+    // a label is dropped rather than sent, so a stale field cannot take the whole save down.
+    const label = String(formData.get(`variant_${i}_variantId`) ?? '').trim();
+    const variantId = /^[A-Z0-9]{5}$/.test(label) ? label : undefined;
     const clearImage = formData.get(`variant_${i}_clearImage`) === '1';
     // Every picture the row still holds comes back as its own field, in the order the merchant
     // hung them — the row submits the whole set rather than only what changed, so a reorder in
@@ -77,6 +83,7 @@ async function parseVariants(
 
     variants.push({
       id,
+      variantId,
       name,
       stock,
       price,
