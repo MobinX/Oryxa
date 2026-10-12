@@ -40,6 +40,9 @@ export const postListItemSchema = z.object({
   scheduledAt: timestampSchema.nullable().optional(),
   publishedAt: timestampSchema.nullable().optional(),
   createdAt: timestampSchema,
+  /** From the post's latest sync — a feed shows these the way Facebook shows its reaction bar. */
+  likeCount: z.number().int().nullable().optional(),
+  commentCount: z.number().int().nullable().optional(),
 }).openapi('PostListItem');
 
 export const postDetailSchema = postListItemSchema.extend({

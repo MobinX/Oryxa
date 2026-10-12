@@ -75,18 +75,23 @@ postsRouter.openapi(listPostsRoute, async (c) => {
   const items = await listPosts(businessId, query);
   const resolvedItems = await Promise.all(items.map((item) => resolvePostMediaUrls(item)));
   return c.json(
-    resolvedItems.map((item) => ({
-      id: item.id,
-      channelId: item.channelId,
-      productId: item.productId,
-      content: item.content,
-      mediaUrls: item.mediaUrls,
-      postState: item.postState,
-      platformPostId: item.platformPostId,
-      scheduledAt: item.scheduledAt?.toISOString() || null,
-      publishedAt: item.publishedAt?.toISOString() || null,
-      createdAt: item.createdAt.toISOString(),
-    })),
+    resolvedItems.map((item) => {
+      const latestSync = item.syncs?.[0] ?? null;
+      return {
+        id: item.id,
+        channelId: item.channelId,
+        productId: item.productId,
+        content: item.content,
+        mediaUrls: item.mediaUrls,
+        postState: item.postState,
+        platformPostId: item.platformPostId,
+        scheduledAt: item.scheduledAt?.toISOString() || null,
+        publishedAt: item.publishedAt?.toISOString() || null,
+        createdAt: item.createdAt.toISOString(),
+        likeCount: latestSync?.likeCount ?? null,
+        commentCount: latestSync?.commentCount ?? null,
+      };
+    }),
   );
 });
 

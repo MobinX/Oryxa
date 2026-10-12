@@ -659,6 +659,9 @@ export type Post = {
   scheduledAt?: string | null;
   publishedAt?: string | null;
   createdAt: string;
+  /** The counts as of the post's latest sync; absent for a post that has never been synced. */
+  likeCount?: number | null;
+  commentCount?: number | null;
 };
 
 export type PostDetail = Post & {

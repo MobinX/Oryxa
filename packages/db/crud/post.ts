@@ -71,6 +71,14 @@ export async function listPosts(
     where: and(...whereConditions),
     orderBy: [desc(posts.createdAt)],
     limit,
+    // The feed draws a reaction bar per post, and the newest sync row is the one holding the
+    // counts Facebook last reported, so the list carries that row rather than the history.
+    with: {
+      syncs: {
+        orderBy: [desc(postSyncs.syncedAt)],
+        limit: 1,
+      },
+    },
   });
 }
 
