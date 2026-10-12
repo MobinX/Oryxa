@@ -649,6 +649,30 @@ export async function getFacebookPostContext(
 }
 
 /**
+ * Copies one picture the customer sent, while Meta's link to it still works.
+ *
+ * A Messenger attachment URL is a signed CDN link that stops answering within hours, so a photo
+ * that is not taken in the moment it arrives is gone: the inbox shows an empty bubble and the
+ * next turn has nothing to argue from. Never throws — an unfetchable photo is a photo the agent
+ * never saw, and the caption beside it is still worth storing.
+ */
+export async function fetchMessengerImage(
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const res = await loggedFetch(url);
+    if (!res.ok) return null;
+    const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    // Meta answers a bad signature with an HTML error page served as 200 on some paths.
+    if (!contentType.startsWith('image/')) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return buffer.byteLength > 0 ? { buffer, contentType } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verifies a Meta webhook signature (HMAC-SHA256 of the raw request body using
  * `META_APP_SECRET`) against the `X-Hub-Signature-256` header. Fails closed if
  * the secret is missing or the signature is absent/invalid.

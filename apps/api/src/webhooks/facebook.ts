@@ -6,7 +6,8 @@ import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { readQuota, type QuotaRead, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
 import { runInBackground } from '@api/lib/background';
-import { verifyWebhookSignature, getFacebookUserProfile } from '@repo/integrations/facebook';
+import { verifyWebhookSignature, getFacebookUserProfile, fetchMessengerImage } from '@repo/integrations/facebook';
+import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { tagContext } from '@api/lib/ctx';
@@ -20,11 +21,78 @@ function fbLog(message: string, data?: unknown): void {
   console.log(`[fb-webhook] ${message}`, data);
 }
 
+type MessagingAttachment = {
+  /** `image` for a photo; `sticker`, `audio`, `file`, `fallback` are not. */
+  type?: string;
+  url?: string;
+  payload?: { url?: string; type?: string };
+};
+
 type MessagingEvent = {
   sender?: { id?: string };
-  message?: { text?: string; mid?: string; is_echo?: boolean };
+  message?: {
+    text?: string;
+    mid?: string;
+    is_echo?: boolean;
+    attachments?: MessagingAttachment[];
+  };
   postback?: { title?: string; payload?: string; mid?: string };
 };
+
+/**
+ * The pictures in a message, in the order the customer sent them. Meta gives the same link twice
+ * — once on the attachment, once inside its payload — and only one of them has always been
+ * populated across API versions, so either will do.
+ */
+function imageAttachmentUrls(ev: MessagingEvent): string[] {
+  return (ev.message?.attachments ?? [])
+    .filter((attachment) => attachment.type === 'image')
+    .map((attachment) => attachment.payload?.url ?? attachment.url)
+    .filter((url): url is string => Boolean(url));
+}
+
+/**
+ * Copies the customer's pictures into the store's own bucket before Meta's link to them expires.
+ * One lost photo never costs the message: a picture that will not download, is not a picture we
+ * take, or is bigger than the bucket allows is reported and left out, and the caption still
+ * reaches the inbox and the agent.
+ */
+async function storeInboundPhotos(businessId: string, urls: string[]): Promise<string[]> {
+  const keys: string[] = [];
+
+  for (const [index, url] of urls.entries()) {
+    try {
+      const image = await fetchMessengerImage(url);
+      if (!image) {
+        fbLog('inbound photo could not be fetched', { index });
+        emitAnomaly('inbound_photo_lost', { detail: 'fetch' });
+        continue;
+      }
+
+      const name = fileNameFromUrl(url);
+      const key = buildMessageImageKey(businessId, name);
+      await putImageAtKey({ key, buffer: image.buffer, contentType: image.contentType });
+      keys.push(key);
+      fbLog('inbound photo stored', { index, stored: keys.length });
+    } catch (err) {
+      // putImageAtKey rejects on a type or size the bucket will not hold — the common case being
+      // a camera-original the customer sent untouched.
+      fbLog('inbound photo could not be stored', { index, err });
+      emitAnomaly('inbound_photo_lost', { detail: err instanceof Error ? err.message : 'store' });
+    }
+  }
+
+  return keys;
+}
+
+/** The CDN path's last segment, which is already `…_n.jpg` on a Messenger photo. */
+function fileNameFromUrl(url: string): string {
+  try {
+    return new URL(url).pathname.split('/').filter(Boolean).pop() ?? 'photo.jpg';
+  } catch {
+    return 'photo.jpg';
+  }
+}
 
 /**
  * A postback payload is kept verbatim when it reads as a sentence, because our buttons now
@@ -38,15 +106,20 @@ function postbackMessage(postback: NonNullable<MessagingEvent['postback']>): str
   return payload?.includes(' ') ? payload : (postback.title ?? payload);
 }
 
-function inboundTextFromMessagingEvent(
+function inboundFromMessagingEvent(
   ev: MessagingEvent,
-): { senderId: string; text: string; externalId?: string } | null {
+): { senderId: string; text: string; images: string[]; externalId?: string } | null {
   if (ev.message?.is_echo) return null;
   const senderId = ev.sender?.id;
   if (!senderId) return null;
 
-  if (ev.message?.text) {
-    return { senderId, text: ev.message.text, externalId: ev.message.mid };
+  if (ev.message) {
+    const images = imageAttachmentUrls(ev);
+    // A photo with no caption is still the whole question — "is this one in your size?" arrives
+    // as one image and no words, and dropping it is dropping a customer.
+    if (ev.message.text || images.length > 0) {
+      return { senderId, text: ev.message.text ?? '', images, externalId: ev.message.mid };
+    }
   }
 
   const postback = ev.postback;
@@ -54,7 +127,7 @@ function inboundTextFromMessagingEvent(
     // A tap with neither payload nor title is still a tap: it must not vanish silently.
     const text = postbackMessage(postback);
     if (!text) return null;
-    return { senderId, text, externalId: postback.mid };
+    return { senderId, text, images: [], externalId: postback.mid };
   }
 
   return null;
@@ -369,20 +442,21 @@ async function processMessagingEvents(
   for (const [index, ev] of events.entries()) {
     fbLog('processMessagingEvents event', { index, event: ev });
 
-    const inbound = inboundTextFromMessagingEvent(ev);
+    const inbound = inboundFromMessagingEvent(ev);
     if (!inbound) {
       // An echo or a read receipt is not a customer, so it stays silent. A real
-      // message with no text (attachment, sticker, audio) is a customer who will
-      // not be answered, and that is the only skipped case worth an event.
+      // message with neither text nor a picture (sticker, audio, file) is a customer who
+      // will not be answered, and that is the only skipped case worth an event.
       fbLog('processMessagingEvents skip event — not actionable text/postback', {
         index,
         isEcho: ev.message?.is_echo ?? false,
         hasText: Boolean(ev.message?.text),
         hasPostback: Boolean(ev.postback),
         postbackPayload: ev.postback?.payload ?? null,
+        attachmentCount: ev.message?.attachments?.length ?? 0,
         senderId: ev.sender?.id ?? null,
       });
-      if (ev.message && !ev.message.is_echo && !ev.message.text) {
+      if (ev.message && !ev.message.is_echo && !ev.message.text && imageAttachmentUrls(ev).length === 0) {
         emit('webhook_item', {
           kind: 'message',
           externalId: ev.message.mid,
@@ -393,15 +467,34 @@ async function processMessagingEvents(
       continue;
     }
 
-    const { senderId, text, externalId } = inbound;
-    fbLog('processMessagingEvents inbound', { index, senderId, text, externalId: externalId ?? null });
+    const { senderId, text, images, externalId } = inbound;
+    fbLog('processMessagingEvents inbound', {
+      index,
+      senderId,
+      text,
+      externalId: externalId ?? null,
+      photoCount: images.length,
+    });
+
+    // Copied before the row is written, so the message never exists without the pictures it
+    // was sent with — and never gets a second copy of them when Meta delivers it twice.
+    const imageKeys = images.length > 0 ? await storeInboundPhotos(channel.businessId, images) : [];
+
+    // A photo that arrived with no caption and did not survive the copy would otherwise be an
+    // empty row: nothing for the merchant to read and nothing for the agent to answer. Saying
+    // what happened is the one thing that is true of it.
+    const content =
+      text || (images.length > 0 && imageKeys.length === 0
+        ? '[a photo the customer sent could not be received]'
+        : '');
 
     const { conversationId, priorStatus, inserted, needsProfile, priorStateAt } =
       await processInboundMessage(
         { id: channel.id, businessId: channel.businessId },
         senderId,
-        text,
+        content,
         externalId,
+        imageKeys,
       );
 
     fbLog('processMessagingEvents persisted', {
@@ -521,6 +614,7 @@ async function processMessagingEvents(
       externalId,
       senderId,
       text,
+      photoCount: imageKeys.length,
       inserted,
       priorStatus,
       outcome,

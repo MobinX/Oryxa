@@ -723,6 +723,7 @@ export const ANOMALY_KINDS = [
   'tool_call_unresolved',
   'duplicate_reply_prevented',
   'webhook_unknown_page',
+  'inbound_photo_lost',
   'graph_send_failed',
   'quota_exhausted',
   'quota_gate_failed',
