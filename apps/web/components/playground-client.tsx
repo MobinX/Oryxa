@@ -139,7 +139,15 @@ export function PlaygroundClient({
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
+  /**
+   * The run in flight, and the pane it streams into: a chat run belongs to the chat it was sent
+   * from (`convId` is empty until the stream names a brand-new one), a comment run to the comment
+   * thread. The waiting state follows that pane instead of the whole console, so a run cannot leave
+   * the chat list, New Chat and every other thread looking frozen while it streams.
+   */
+  const [run, setRun] = useState<{ id: number; pane: 'chat' | 'comment'; convId: string } | null>(
+    null,
+  );
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
 
@@ -156,6 +164,12 @@ export function PlaygroundClient({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatsEndRef = useRef<HTMLButtonElement>(null);
   const loadingMoreRef = useRef(false);
+  /** Each run claims a number, so only the run still holding the pane is allowed to clear it. */
+  const runIdRef = useRef(0);
+  /** Chat reads are numbered the same way — a slow answer about an abandoned chat must not paint. */
+  const loadSeqRef = useRef(0);
+  /** Which chat is on screen right now, read by a run that is about to re-read its own thread. */
+  const shownConvRef = useRef<string>(preload?.conversations[0]?.id ?? '');
 
   // Load Initial Data
   useEffect(() => {
@@ -182,6 +196,17 @@ export function PlaygroundClient({
     }
   }, [selectedConvId]);
 
+  useEffect(() => {
+    shownConvRef.current = selectedConvId;
+  }, [selectedConvId]);
+
+  // A run animates and blocks only the thread it is running in. A chat that is still being made
+  // has no id yet, so until the stream names one its own pane is the one showing the wait.
+  const chatRunning = run?.pane === 'chat' && (run.convId === '' || run.convId === selectedConvId);
+  const commentRunning = run?.pane === 'comment';
+  // The mock chat header reports whichever pane is on screen.
+  const waitingHere = commentMode ? commentRunning : chatRunning;
+
   // The chat drawer is the only list that grows: reaching its end asks the API for the next page.
   useEffect(() => {
     if (!hasMoreChats) return;
@@ -201,7 +226,7 @@ export function PlaygroundClient({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isThinking]);
+  }, [messages, run]);
 
   async function loadSandbox() {
     try {
@@ -280,15 +305,33 @@ export function PlaygroundClient({
   }
 
   async function loadMessages(convId: string) {
+    const seq = ++loadSeqRef.current;
     setIsLoadingMessages(true);
     try {
       const msgList = await listMessages(token, businessId, convId);
+      // Somebody tapped another chat while this read was on its way; its answer is not this pane's.
+      if (seq !== loadSeqRef.current) return;
       setMessages(msgList || []);
     } catch (err) {
-      console.error('Failed to load messages:', err);
+      if (seq === loadSeqRef.current) console.error('Failed to load messages:', err);
     } finally {
-      setIsLoadingMessages(false);
+      if (seq === loadSeqRef.current) setIsLoadingMessages(false);
     }
+  }
+
+  /** Re-reads a chat only while it is still the one on screen — see `shownConvRef`. */
+  async function refreshChat(convId: string) {
+    if (convId && shownConvRef.current === convId) await loadMessages(convId);
+  }
+
+  /** Hands the run in flight to the chat the stream just named, unless a newer one already took it. */
+  function claimChatRun(id: number, convId: string) {
+    setRun((current) => (current?.id === id ? { ...current, convId } : current));
+  }
+
+  /** Only the run still holding the pane may release it; one that was replaced must leave it alone. */
+  function endRun(id: number) {
+    setRun((current) => (current?.id === id ? null : current));
   }
 
   async function handleSaveSystemPrompt() {
@@ -321,7 +364,8 @@ export function PlaygroundClient({
 
     // Create custom conversation by sending a seed hello message via the Hono receiver API
     // We send an SSE trigger message which creates the conversation
-    setIsThinking(true);
+    const myRun = ++runIdRef.current;
+    setRun({ id: myRun, pane: 'chat', convId: '' });
     setLogs([]);
     try {
       const response = await fetch('/api/playground/test-run', {
@@ -345,17 +389,18 @@ export function PlaygroundClient({
       await parseSseStream(response, (event, data) => {
         if (event === 'conversation_ready' && typeof data.conversationId === 'string') {
           conversationId = data.conversationId;
+          claimChatRun(myRun, conversationId);
         }
       });
       await loadConversations();
       // Read the thread back once the run is over. `conversation_ready` selects it mid-stream, and
       // the messages fetched at that moment cannot include a reply the agent has not written yet —
       // without this the seeded chat would sit showing only its own hello.
-      if (conversationId) await loadMessages(conversationId);
+      await refreshChat(conversationId);
     } catch (err) {
       console.error('Failed to seed conversation:', err);
     } finally {
-      setIsThinking(false);
+      endRun(myRun);
     }
   }
 
@@ -396,8 +441,10 @@ export function PlaygroundClient({
     if (!inputMessage.trim() || !activeChannel || !selectedConvId) return;
 
     const userMessage = inputMessage.trim();
+    const convId = selectedConvId;
     setInputMessage('');
-    setIsThinking(true);
+    const myRun = ++runIdRef.current;
+    setRun({ id: myRun, pane: 'chat', convId });
     setLogs([]); // Reset log panel for new run
 
     // Optimistically push customer message to the chat view
@@ -431,11 +478,11 @@ export function PlaygroundClient({
       }
 
       await parseSseStream(response);
-      await loadMessages(selectedConvId);
+      await refreshChat(convId);
     } catch (err) {
       console.error('Failed during agent test run stream:', err);
     } finally {
-      setIsThinking(false);
+      endRun(myRun);
     }
   }
 
@@ -463,7 +510,8 @@ export function PlaygroundClient({
     ]);
 
     setCommentText('');
-    setIsThinking(true);
+    const myRun = ++runIdRef.current;
+    setRun({ id: myRun, pane: 'comment', convId: '' });
     setLogs([]);
 
     const append = (from: string, content: string, kind: Message['kind']) =>
@@ -496,15 +544,24 @@ export function PlaygroundClient({
         if (event === 'no_reply') {
           append('self', data.silent ? 'Stayed silent — no comment reply, no Messenger message.' : `No tool called. Final text: ${data.text || '(empty)'}`, 'reply');
         }
+        // The run stopped before it chose a door. Say so in the thread rather than leaving the
+        // operator reading a comment with no answer and no trace of why.
+        if (event === 'error') append('self', data.message || 'The comment agent did not run', 'reply');
       });
     } catch (err) {
       console.error('Failed during comment test run:', err);
       append('self', `Run failed: ${String(err)}`, 'reply');
     } finally {
-      setIsThinking(false);
+      endRun(myRun);
     }
   }
 
+  /**
+   * Reads a run's SSE stream until it says it is finished. `done` and `error` are the last events
+   * both playground routes write, so the read ends there and hangs up: waiting instead for the
+   * connection to close leaves this promise pending — and with it the thread it belongs to — on a
+   * stream a proxy may keep open long after the agent stopped writing.
+   */
   async function parseSseStream(res: Response, onEvent?: (event: string, data: any) => void) {
     const reader = res.body?.getReader();
     if (!reader) return;
@@ -512,8 +569,9 @@ export function PlaygroundClient({
     const decoder = new TextDecoder();
     let buffer = '';
     let currentEvent = '';
+    let finished = false;
 
-    while (true) {
+    while (!finished) {
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -528,25 +586,29 @@ export function PlaygroundClient({
         if (trimmed.startsWith('event: ')) {
           currentEvent = trimmed.slice(7).trim();
         } else if (trimmed.startsWith('data: ')) {
+          const event = currentEvent;
           const rawData = trimmed.slice(6).trim();
           try {
             const data = JSON.parse(rawData);
-            addLog(currentEvent, data);
-            onEvent?.(currentEvent, data);
-            
+            addLog(event, data);
+            onEvent?.(event, data);
+
             // Auto-select conversation if it was created
-            if (currentEvent === 'conversation_ready') {
+            if (event === 'conversation_ready') {
               setSelectedConvId(data.conversationId);
             }
           } catch {
             // Raw text fallback
-            addLog(currentEvent, { text: rawData });
-            onEvent?.(currentEvent, { text: rawData });
+            addLog(event, { text: rawData });
+            onEvent?.(event, { text: rawData });
           }
           currentEvent = ''; // Reset
+          if (event === 'done' || event === 'error') finished = true;
         }
       }
     }
+
+    if (finished) reader.cancel().catch(() => {});
   }
 
   return (
@@ -712,10 +774,10 @@ export function PlaygroundClient({
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className={cn(
                       "flex h-1.5 w-1.5 rounded-full",
-                      isThinking ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                      waitingHere ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
                     )} />
                     <span className="text-[10px] text-slate-400">
-                      {isThinking ? 'Agent is thinking...' : 'Online (Sandbox)'}
+                      {waitingHere ? 'Agent is thinking...' : 'Online (Sandbox)'}
                     </span>
                   </div>
                 </div>
@@ -851,7 +913,7 @@ export function PlaygroundClient({
                         ))
                       )}
 
-                      {isThinking && (
+                      {commentRunning && (
                         <div className="bg-slate-900 border border-slate-800 max-w-[80%] rounded-2xl px-4 py-3 text-xs text-slate-400 mr-auto rounded-tl-none flex items-center gap-2">
                           <span className="flex gap-1">
                             <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" />
@@ -894,12 +956,12 @@ export function PlaygroundClient({
                           value={commentText}
                           onChange={(e) => setCommentText(e.target.value)}
                           placeholder="The new public comment — e.g. price bhai?"
-                          disabled={isThinking}
+                          disabled={commentRunning}
                           className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
                         />
                         <button
                           type="submit"
-                          disabled={isThinking || !commentText.trim()}
+                          disabled={commentRunning || !commentText.trim()}
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50 transition-all"
                         >
                           <Send className="h-4 w-4" />
@@ -956,7 +1018,7 @@ export function PlaygroundClient({
                         ))
                       )}
 
-                      {isThinking && (
+                      {chatRunning && (
                         <div className="bg-slate-900 border border-slate-800 max-w-[80%] rounded-2xl px-4 py-3 text-xs text-slate-400 mr-auto rounded-tl-none flex items-center gap-2">
                           <span className="flex gap-1">
                             <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" />
@@ -979,12 +1041,12 @@ export function PlaygroundClient({
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
                         placeholder="Ask the sales agent a question..."
-                        disabled={isThinking}
+                        disabled={chatRunning}
                         className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
                       />
                       <button
                         type="submit"
-                        disabled={isThinking || !inputMessage.trim()}
+                        disabled={chatRunning || !inputMessage.trim()}
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 disabled:opacity-50 transition-all"
                       >
                         <Send className="h-4 w-4" />
