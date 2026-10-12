@@ -175,6 +175,8 @@ export function PlaygroundClient({
     (preload?.conversations.length ?? 0) >= PLAYGROUND_CHAT_PAGE,
   );
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
+  /** Mobile only: the chat list is a third of the pane, which is nobody's reading width. */
+  const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
   /**
@@ -897,12 +899,37 @@ export function PlaygroundClient({
                   {tab.label}
                 </button>
               ))}
+              <button
+                onClick={() => setChatsDrawerOpen((open) => !open)}
+                className={cn(
+                  'ml-auto rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors lg:hidden',
+                  chatsDrawerOpen
+                    ? 'border-indigo-500/20 bg-indigo-600/20 text-indigo-300'
+                    : 'border-slate-800 text-slate-400 hover:text-slate-200',
+                )}
+              >
+                {chatsDrawerOpen ? 'Close chats' : 'Chats'}
+              </button>
             </div>
 
             {/* Split Grid: Conversations Sidebar + Chat Pane */}
-            <div className="flex flex-1 min-h-0">
+            <div className="relative flex flex-1 min-h-0">
+              {chatsDrawerOpen && (
+                // Tapping anywhere beside the drawer puts it away again.
+                <div
+                  onClick={() => setChatsDrawerOpen(false)}
+                  className="absolute inset-0 z-20 bg-black/50 lg:hidden"
+                />
+              )}
               {/* Internal Conv Selector Drawer */}
-              <div className="w-1/3 border-r border-slate-800 bg-slate-900/20 overflow-y-auto flex flex-col p-2 gap-1.5">
+              <div
+                className={cn(
+                  'flex-col gap-1.5 overflow-y-auto border-slate-800 bg-slate-900/20 p-2',
+                  chatsDrawerOpen
+                    ? 'absolute inset-y-0 left-0 z-30 flex w-64 max-w-[85%] border-r shadow-xl lg:relative lg:z-auto lg:w-1/3 lg:shadow-none'
+                    : 'hidden w-full lg:flex lg:w-1/3 lg:border-r',
+                )}
+              >
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1">
                   Active Chats
                 </p>
@@ -914,7 +941,11 @@ export function PlaygroundClient({
                   conversations.map((conv) => (
                     <div
                       key={conv.id}
-                      onClick={() => selectChat(conv.id)}
+                      onClick={() => {
+                        // On a phone the list lies over the chat, so choosing a thread puts it away.
+                        setChatsDrawerOpen(false);
+                        selectChat(conv.id);
+                      }}
                       className={cn(
                         'group flex items-center justify-between gap-1.5 rounded-xl p-2 cursor-pointer transition-colors',
                         selectedConvId === conv.id
