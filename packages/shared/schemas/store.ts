@@ -34,6 +34,8 @@ export const publicStoreVariantSchema = z.object({
   stock: z.number().int(),
   isAvailable: z.boolean(),
   imageUrl: z.string().nullable().optional(),
+  /** The variant's whole photo set, signed and ready to show; `imageUrl` is the first of them. */
+  imageUrls: z.array(z.string()).optional(),
 });
 
 export const publicStoreProductSchema = z.object({

@@ -19,6 +19,15 @@ export const baseVariantSchema = z.object({
     description: 'B2 object key (private bucket) or legacy public URL',
     example: 'businesses/uuid/images/photo.png',
   }),
+  /**
+   * The whole photo set, first shot first. `imageUrl` is the cover and is kept in step with
+   * the first entry, so a reader that only ever shows one image does not have to know this
+   * field exists.
+   */
+  imageUrls: z.array(z.string().min(1)).max(10).optional().openapi({
+    description: 'B2 object keys (private bucket) or legacy public URLs, in display order',
+    example: ['businesses/uuid/images/photo.png', 'businesses/uuid/images/side.png'],
+  }),
   price: z.coerce.number().positive().optional(),
   stock: z.number().int().min(0).default(0),
   isAvailable: z.boolean().default(true),
@@ -50,6 +59,8 @@ export const createProductOutputSchema = z.object({
 export const variantOutputSchema = baseVariantSchema.extend({
   id: uuidSchema,
   imageKey: z.string().nullable().optional(),
+  /** The stored keys behind `imageUrls`, so a form can resubmit the pictures it did not change. */
+  imageKeys: z.array(z.string()).optional(),
 });
 
 export const getProductByIdOutputSchema = selectProductSchema.extend({

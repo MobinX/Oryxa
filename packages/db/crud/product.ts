@@ -5,11 +5,28 @@ import { createProductInputSchema, updateProductInputSchema, updateCategoryInput
 import { slugify } from '@repo/utils';
 import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
 
-async function mapVariantWithSignedImage<T extends { imageUrl: string | null }>(variant: T) {
+async function mapVariantWithSignedImage<T extends { imageUrl: string | null; imageUrls: string[] | null }>(variant: T) {
   return {
     ...variant,
     imageUrl: await resolveStoredImageUrl(variant.imageUrl),
+    imageUrls: (
+      await Promise.all((variant.imageUrls ?? []).map((key) => resolveStoredImageUrl(key)))
+    ).filter((url): url is string => Boolean(url)),
   };
+}
+
+/**
+ * The photo set a write should leave behind: the list the merchant sent, or the single cover
+ * when they only sent one. Both fields come back because `imageUrl` stays the first shot, and
+ * every surface that shows one image still reads it.
+ */
+function photoSetFor(variant: { imageUrl?: string; imageUrls?: string[] }) {
+  const urls = variant.imageUrls?.length
+    ? variant.imageUrls
+    : variant.imageUrl
+      ? [variant.imageUrl]
+      : [];
+  return { imageUrls: urls, imageUrl: variant.imageUrl ?? urls[0] ?? null };
 }
 
 export async function createProduct(input: unknown) {
@@ -51,15 +68,19 @@ export async function createProduct(input: unknown) {
 
   if (parsed.variants.length > 0) {
     await db.insert(variants).values(
-      parsed.variants.map((v) => ({
-        productId: product.id,
-        name: v.name,
-        imageUrl: v.imageUrl,
-        price: v.price?.toFixed(2),
-        stock: v.stock,
-        isAvailable: v.isAvailable,
-        rating: v.rating?.toFixed(2),
-      })),
+      parsed.variants.map((v) => {
+        const photos = photoSetFor(v);
+        return {
+          productId: product.id,
+          name: v.name,
+          imageUrl: photos.imageUrl,
+          imageUrls: photos.imageUrls,
+          price: v.price?.toFixed(2),
+          stock: v.stock,
+          isAvailable: v.isAvailable,
+          rating: v.rating?.toFixed(2),
+        };
+      }),
     );
   }
 
@@ -89,6 +110,7 @@ export async function getProductById(businessId: string, productId: string) {
       return {
         ...withImage,
         imageKey: v.imageUrl,
+        imageKeys: v.imageUrls ?? [],
         price: v.price ? parseFloat(v.price) : undefined,
         rating: v.rating ? parseFloat(v.rating) : undefined,
       };
@@ -238,10 +260,16 @@ export async function updateProduct(businessId: string, productId: string, input
     }
 
     for (const variant of variantUpdates) {
-      const hasIncomingImage =
-        variant.imageUrl && (isB2ObjectKey(variant.imageUrl) || !variant.imageUrl.startsWith('http'));
-      const imageUrl = hasIncomingImage ? variant.imageUrl : undefined;
-      const clearImage = variant.clearImage === true && !hasIncomingImage;
+      // Only keys are writes. A signed URL arriving in a payload is the same picture already
+      // stored, and saving the signature as the key would take the object down as soon as it
+      // expired — so anything that looks like a URL is dropped, and an empty result means the
+      // merchant changed nothing rather than cleared everything.
+      const incoming = [
+        ...(variant.imageUrls ?? []),
+        ...(variant.imageUrl ? [variant.imageUrl] : []),
+      ].filter((value) => isB2ObjectKey(value));
+      const photos = [...new Set(incoming)];
+      const clearImage = variant.clearImage === true && photos.length === 0;
 
       if (variant.id) {
         const belongsToProduct = existing.some((v) => v.id === variant.id);
@@ -255,15 +283,16 @@ export async function updateProduct(businessId: string, productId: string, input
             isAvailable: variant.isAvailable,
             price: variant.price?.toFixed(2),
             rating: variant.rating?.toFixed(2),
-            ...(imageUrl !== undefined && { imageUrl }),
-            ...(clearImage && { imageUrl: null }),
+            ...(photos.length > 0 && { imageUrls: photos, imageUrl: photos[0] }),
+            ...(clearImage && { imageUrls: [], imageUrl: null }),
           })
           .where(and(eq(variants.id, variant.id), eq(variants.productId, productId)));
       } else {
         await db.insert(variants).values({
           productId,
           name: variant.name,
-          imageUrl,
+          imageUrl: photos[0] ?? null,
+          imageUrls: photos,
           price: variant.price?.toFixed(2),
           stock: variant.stock,
           isAvailable: variant.isAvailable,

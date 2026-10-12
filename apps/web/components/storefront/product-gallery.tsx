@@ -18,7 +18,10 @@ export function productGallery(product: PublicProduct): { src: string | null; la
   };
 
   push(product.thumbnailUrl, product.name);
-  product.variants.forEach((variant) => push(variant.imageUrl, variant.name));
+  product.variants.forEach((variant) => {
+    const shots = variant.imageUrls?.length ? variant.imageUrls : [variant.imageUrl];
+    shots.forEach((src) => push(src, variant.name));
+  });
 
   return shots.length > 0 ? shots : [{ src: product.thumbnailUrl ?? null, label: product.name }];
 }

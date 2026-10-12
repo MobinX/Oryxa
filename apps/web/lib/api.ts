@@ -183,6 +183,8 @@ export type ProductVariant = {
   name: string;
   imageUrl?: string | null;
   imageKey?: string | null;
+  imageUrls?: string[];
+  imageKeys?: string[];
   imagePreviewUrl?: string;
   price?: number;
   stock: number;
@@ -203,6 +205,9 @@ export type ProductDetail = {
     name: string;
     imageUrl?: string | null;
     imageKey?: string | null;
+    imageUrls?: string[];
+    /** The stored keys behind `imageUrls`, so the edit form can resubmit what it did not change. */
+    imageKeys?: string[];
     price?: number;
     stock: number;
     isAvailable: boolean;
@@ -221,6 +226,7 @@ export type CreateProductInput = {
   variants?: Array<{
     name: string;
     imageUrl?: string;
+    imageUrls?: string[];
     price?: number;
     stock: number;
     isAvailable?: boolean;
@@ -239,6 +245,8 @@ export type UpdateProductInput = {
     id?: string;
     name: string;
     imageUrl?: string;
+    imageUrls?: string[];
+    clearImage?: boolean;
     price?: number;
     stock: number;
     isAvailable?: boolean;

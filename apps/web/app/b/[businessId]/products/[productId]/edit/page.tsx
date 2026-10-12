@@ -75,14 +75,19 @@ async function EditProductForm({
   const categories = await cachedCategories(token, businessId);
   const book = await cachedCustomers(token, businessId);
 
-  const variantInitial = product.variants.map((v) => ({
-    id: v.id,
-    name: v.name,
-    stock: v.stock,
-    price: v.price,
-    imageKey: v.imageKey,
-    imagePreviewUrl: v.imageUrl,
-  }));
+  const variantInitial = product.variants.map((v) => {
+    // The keys are what the form submits back; the signed URLs are what it shows meanwhile, and
+    // the two come off the same column in the same order.
+    const keys = v.imageKeys?.length ? v.imageKeys : v.imageKey ? [v.imageKey] : [];
+    const shots = v.imageUrls?.length ? v.imageUrls : v.imageUrl ? [v.imageUrl] : [];
+    return {
+      id: v.id,
+      name: v.name,
+      stock: v.stock,
+      price: v.price,
+      images: keys.map((key, n) => ({ key, previewUrl: shots[n] ?? null })),
+    };
+  });
 
   const formKey = [
     product.name,
@@ -91,7 +96,9 @@ async function EditProductForm({
     product.description ?? '',
     product.category?.id ?? '',
     product.customer?.id ?? '',
-    ...variantInitial.map((v) => `${v.id}:${v.name}:${v.stock}:${v.price ?? ''}:${v.imageKey ?? ''}`),
+    ...variantInitial.map(
+      (v) => `${v.id}:${v.name}:${v.stock}:${v.price ?? ''}:${v.images.map((img) => img.key).join(',')}`,
+    ),
   ].join('|');
 
   return (

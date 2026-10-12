@@ -159,6 +159,12 @@ export const variants = pgTable('variants', {
   productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   imageUrl: varchar('image_url', { length: 500 }),
+  /**
+   * Every photo the merchant hung on this variant, in the order they hung them. `imageUrl`
+   * stays the first of them: a Messenger card, a storefront thumbnail and the agent's photo
+   * picker all read one cover, and none of them should have to learn about the set.
+   */
+  imageUrls: text('image_urls').array().notNull().default(sql`'{}'::text[]`),
   price: numeric('price', { precision: 10, scale: 2 }),
   stock: integer('stock').default(0).notNull(),
   isAvailable: boolean('is_available').default(true).notNull(),

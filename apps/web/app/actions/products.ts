@@ -22,6 +22,7 @@ type ParsedVariant = {
   price?: number;
   isAvailable?: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
   clearImage?: boolean;
 };
 
@@ -29,9 +30,10 @@ type ParsedVariant = {
  * Parses an arbitrary number of variant rows from FormData.
  * Each variant is identified by a numeric index suffix on its field names:
  *   variant_<i>_name, variant_<i>_stock, variant_<i>_price,
- *   variant_<i>_image, variant_<i>_imageKey, variant_<i>_id
+ *   variant_<i>_image, variant_<i>_imageKey (repeated, in the order hung),
+ *   variant_<i>_clearImage, variant_<i>_id
  * Rows with an empty name are skipped. Image upload failures are tolerated
- * (the variant is still saved without an image) instead of failing the whole
+ * (the variant is still saved without the picture) instead of failing the whole
  * product create/update.
  */
 async function parseVariants(
@@ -55,16 +57,23 @@ async function parseVariants(
     const priceRaw = String(formData.get(`variant_${i}_price`) ?? '').trim();
     const price = priceRaw ? parseFloat(priceRaw) : undefined;
     const id = String(formData.get(`variant_${i}_id`) ?? '').trim() || undefined;
-    const keepImageKey = String(formData.get(`variant_${i}_imageKey`) ?? '').trim();
     const clearImage = formData.get(`variant_${i}_clearImage`) === '1';
+    // Every picture the row still holds comes back as its own field, in the order the merchant
+    // hung them — the row submits the whole set rather than only what changed, so a reorder in
+    // the browser is a reorder on the shelf.
+    const imageKeys = formData
+      .getAll(`variant_${i}_imageKey`)
+      .map((value) => String(value).trim())
+      .filter(Boolean);
 
-    let imageUrl = keepImageKey || undefined;
     const file = formData.get(`variant_${i}_image`);
     if (file instanceof File && file.size > 0) {
       const uploaded = await uploadVariantImage(token, businessId, file);
-      if (uploaded) imageUrl = uploaded.key;
+      if (uploaded) imageKeys.push(uploaded.key);
       // If upload returns null (B2 not configured / rejected), keep going.
     }
+
+    const imageUrls = [...new Set(imageKeys)];
 
     variants.push({
       id,
@@ -72,8 +81,9 @@ async function parseVariants(
       stock,
       price,
       isAvailable: true,
-      imageUrl,
-      clearImage: clearImage && !imageUrl,
+      imageUrl: imageUrls[0],
+      imageUrls,
+      clearImage: clearImage && imageUrls.length === 0,
     });
   }
 

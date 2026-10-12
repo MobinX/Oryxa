@@ -32,6 +32,7 @@ async function mapProduct(p: {
     stock: number;
     isAvailable: boolean;
     imageUrl: string | null;
+    imageUrls: string[] | null;
   }>;
 }) {
   const mappedVariants = await Promise.all(
@@ -42,6 +43,9 @@ async function mapProduct(p: {
       stock: v.stock,
       isAvailable: v.isAvailable,
       imageUrl: await resolveStoredImageUrl(v.imageUrl),
+      imageUrls: (
+        await Promise.all((v.imageUrls ?? []).map((key) => resolveStoredImageUrl(key)))
+      ).filter((url): url is string => Boolean(url)),
     })),
   );
   const firstImage = p.variants.find((v) => v.imageUrl)?.imageUrl ?? null;

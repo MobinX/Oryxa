@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { syncUser } from '@repo/db/crud/user';
 import { createBusiness } from '@repo/db/crud/business';
+import { setB2SignedUrlOverrideForTests } from '@repo/integrations/b2';
 import { db } from '@db/client';
 import { variants } from '@db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
@@ -160,6 +161,61 @@ export function registerProductCrudTests() {
     const listed = await listProducts(businessId, { limit: 20 });
     const row = listed.products.find((p) => p.id === created.id);
     expect(row?.variantCount).toBe(2);
+  });
+
+  it('a variant keeps its whole photo set and its cover stays the first shot', async () => {
+    setB2SignedUrlOverrideForTests(async (key) => `https://signed.example.com/${key}`);
+    try {
+      const businessId = await setup();
+      const cover = `businesses/${businessId}/images/front.jpg`;
+      const side = `businesses/${businessId}/images/side.jpg`;
+      const created = await createProduct({
+        businessId,
+        name: 'Photo Album',
+        price: 30,
+        sku: `ALB-${Date.now()}`,
+        variants: [{ name: 'Default', stock: 1, isAvailable: true, imageUrls: [cover, side] }],
+      });
+
+      const before = await getProductById(businessId, created.id);
+      const variantId = before!.variants[0].id;
+      expect(before!.variants[0].imageKeys).toEqual([cover, side]);
+      expect(before!.variants[0].imageUrl).toBe(`https://signed.example.com/${cover}`);
+      expect(before!.variants[0].imageUrls).toEqual([
+        `https://signed.example.com/${cover}`,
+        `https://signed.example.com/${side}`,
+      ]);
+
+      // The form submits the whole set, so dropping a shot is a save rather than a merge.
+      await updateProduct(businessId, created.id, {
+        variants: [
+          { id: variantId, name: 'Default', stock: 1, isAvailable: true, imageUrls: [side] },
+        ],
+      });
+      const replaced = await getProductById(businessId, created.id);
+      expect(replaced!.variants[0].imageKeys).toEqual([side]);
+      expect(replaced!.variants[0].imageKey).toBe(side);
+
+      // Taking every picture away clears the set and the cover that read from it.
+      await updateProduct(businessId, created.id, {
+        variants: [
+          {
+            id: variantId,
+            name: 'Default',
+            stock: 1,
+            isAvailable: true,
+            imageUrls: [],
+            clearImage: true,
+          },
+        ],
+      });
+      const cleared = await getProductById(businessId, created.id);
+      expect(cleared!.variants[0].imageKeys).toEqual([]);
+      expect(cleared!.variants[0].imageKey).toBeNull();
+      expect(cleared!.variants[0].imageUrl).toBeUndefined();
+    } finally {
+      setB2SignedUrlOverrideForTests(null);
+    }
   });
 
   it('deleteProduct removes product', async () => {

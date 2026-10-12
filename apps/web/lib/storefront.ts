@@ -43,6 +43,8 @@ export type PublicVariant = {
   isAvailable: boolean;
   /** Omitted when the variant has no photography. */
   imageUrl?: string | null;
+  /** Every shot on this variant, in the order the merchant hung them; `imageUrl` is the first. */
+  imageUrls?: string[];
 };
 
 export type PublicProduct = {

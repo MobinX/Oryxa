@@ -1,15 +1,23 @@
 'use client';
 
-import { useState, useId, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUploadGate } from '@/components/products/upload-gate';
 import {
   uploadVariantImageDirect,
   ImageUploadError,
 } from '@/lib/uploads-client';
+
+/** A variant holds as many shots as a merchant has; past this the strip is a gallery nobody scrolls. */
+const MAX_IMAGES = 8;
+
+type VariantImageInitial = {
+  key: string;
+  previewUrl?: string | null;
+};
 
 type VariantInitial = {
   id?: string;
@@ -18,26 +26,55 @@ type VariantInitial = {
   price?: number;
   imageKey?: string | null;
   imagePreviewUrl?: string | null;
+  images?: VariantImageInitial[];
 };
 
-type VariantRow = VariantInitial & {
-  _idx: number;
-  imageRemoved?: boolean;
-  uploading?: boolean;
-  uploadProgress?: number;
-  uploadError?: string | null;
+type VariantImage = {
+  id: string;
+  /** Empty while the bytes are still on their way; the key comes back with the storage response. */
+  key: string;
+  previewUrl: string | null;
+  uploading: boolean;
+  progress: number;
+  error: string | null;
 };
+
+type VariantRow = {
+  id?: string;
+  name: string;
+  stock: number;
+  price?: number;
+  _idx: number;
+  /** Whether the shelf held pictures before this merchant sat down: emptying it is then a clearing. */
+  hadImages: boolean;
+  images: VariantImage[];
+};
+
+/** The row's saved set, or the single cover it was saved with before sets existed. */
+function initialImages(row: VariantInitial): VariantImage[] {
+  const shots =
+    row.images ?? (row.imageKey ? [{ key: row.imageKey, previewUrl: row.imagePreviewUrl }] : []);
+  return shots.map((shot) => ({
+    id: shot.key,
+    key: shot.key,
+    previewUrl: shot.previewUrl ?? null,
+    uploading: false,
+    progress: 100,
+    error: null,
+  }));
+}
 
 /**
  * Manages an unlimited number of variant rows on the product create/edit form.
  * Each row is a server-action-compatible set of named inputs
  * (`variant_<i>_name`, `variant_<i>_stock`, `variant_<i>_price`,
- * `variant_<i>_imageKey`, `variant_<i>_clearImage`, `variant_<i>_id`).
+ * `variant_<i>_imageKey` once per picture in display order,
+ * `variant_<i>_clearImage`, `variant_<i>_id`).
  *
- * Image upload happens directly from the browser to B2 via a presigned PUT
- * URL obtained from /api/uploads/sign. The resulting B2 object key is sent
- * to the server action as `variant_<i>_imageKey` on form submit — no file
- * bytes flow through the Next.js server action.
+ * Pictures upload directly from the browser to B2 via a presigned PUT URL obtained
+ * from /api/uploads/sign. The resulting B2 object keys go to the server action as
+ * `variant_<i>_imageKey` on form submit — no file bytes flow through the Next.js
+ * server action.
  */
 export function VariantEditor({
   initial = [],
@@ -48,84 +85,99 @@ export function VariantEditor({
 }) {
   const base = initial.length > 0 ? initial : [{ name: 'Default', stock: 0 }];
   const [rows, setRows] = useState<VariantRow[]>(
-    base.map((v, i) => ({ ...v, _idx: i })),
+    base.map((v, i) => {
+      const images = initialImages(v);
+      return {
+        id: v.id,
+        name: v.name,
+        stock: v.stock,
+        price: v.price,
+        _idx: i,
+        hadImages: images.length > 0,
+        images,
+      };
+    }),
   );
   const [counter, setCounter] = useState(base.length);
   const fileInputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
   const gate = useUploadGate();
 
-  const addRow = () => {
-    setRows((prev) => [...prev, { name: '', stock: 0, _idx: counter }]);
-    setCounter((c) => c + 1);
-  };
+  const patchRow = (idx: number, changes: Partial<VariantRow>) =>
+    setRows((prev) => prev.map((row) => (row._idx === idx ? { ...row, ...changes } : row)));
 
-  const removeRow = (idx: number) => {
-    setRows((prev) => {
-      const row = prev.find((r) => r._idx === idx);
-      if (row?.imagePreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(row.imagePreviewUrl);
-      return prev.filter((r) => r._idx !== idx);
-    });
-  };
-
-  const onPickImage = async (idx: number, file: File | null) => {
-    if (!file) {
-      setRows((prev) =>
-        prev.map((row) => {
-          if (row._idx !== idx) return row;
-          const input = fileInputRefs.current.get(idx);
-          if (input) input.value = '';
-          return {
-            ...row,
-            imagePreviewUrl: null,
-            imageKey: null,
-            imageRemoved: true,
-            uploadError: null,
-          };
-        }),
-      );
-      return;
-    }
-
-    // Show an immediate local preview while the upload runs.
-    const localPreview = URL.createObjectURL(file);
+  const patchImage = (idx: number, imageId: string, changes: Partial<VariantImage>) =>
     setRows((prev) =>
       prev.map((row) =>
         row._idx === idx
           ? {
               ...row,
-              imagePreviewUrl: localPreview,
-              uploading: true,
-              uploadProgress: 0,
-              uploadError: null,
-              imageRemoved: false,
+              images: row.images.map((img) =>
+                img.id === imageId ? { ...img, ...changes } : img,
+              ),
             }
           : row,
       ),
     );
+
+  const addRow = () => {
+    setRows((prev) => [
+      ...prev,
+      { name: '', stock: 0, _idx: counter, hadImages: false, images: [] },
+    ]);
+    setCounter((c) => c + 1);
+  };
+
+  const revoke = (img: VariantImage) => {
+    if (img.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(img.previewUrl);
+  };
+
+  const removeRow = (idx: number) => {
+    setRows((prev) => {
+      const row = prev.find((r) => r._idx === idx);
+      row?.images.forEach(revoke);
+      return prev.filter((r) => r._idx !== idx);
+    });
+  };
+
+  const removeImage = (idx: number, imageId: string) => {
+    const input = fileInputRefs.current.get(idx);
+    if (input) input.value = '';
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row._idx !== idx) return row;
+        const target = row.images.find((img) => img.id === imageId);
+        if (target) revoke(target);
+        return { ...row, images: row.images.filter((img) => img.id !== imageId) };
+      }),
+    );
+  };
+
+  async function uploadOne(idx: number, imageId: string, file: File) {
     gate?.begin();
-
-    const patch = (changes: Partial<VariantRow>) =>
-      setRows((prev) =>
-        prev.map((row) => (row._idx === idx ? { ...row, ...changes } : row)),
-      );
-
     try {
       const result = await uploadVariantImageDirect(businessId, file, (percent) =>
-        patch({ uploadProgress: percent }),
+        patchImage(idx, imageId, { progress: percent }),
       );
       setRows((prev) =>
-        prev.map((row) => {
-          if (row._idx !== idx) return row;
-          if (row.imagePreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(row.imagePreviewUrl);
-          return {
-            ...row,
-            imageKey: result.key,
-            imagePreviewUrl: result.previewUrl,
-            uploading: false,
-            uploadProgress: 0,
-            uploadError: null,
-          };
-        }),
+        prev.map((row) =>
+          row._idx === idx
+            ? {
+                ...row,
+                images: row.images.map((img) => {
+                  if (img.id !== imageId) return img;
+                  revoke(img);
+                  return {
+                    ...img,
+                    key: result.key,
+                    previewUrl: result.previewUrl,
+                    uploading: false,
+                    progress: 100,
+                    error: null,
+                  };
+                }),
+              }
+            : row,
+        ),
       );
     } catch (err) {
       const message =
@@ -134,24 +186,45 @@ export function VariantEditor({
           : err instanceof Error
             ? err.message
             : 'Upload failed';
-      setRows((prev) =>
-        prev.map((row) => {
-          if (row._idx !== idx) return row;
-          if (row.imagePreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(row.imagePreviewUrl);
-          return {
-            ...row,
-            imageKey: null,
-            imagePreviewUrl: null,
-            uploading: false,
-            uploadProgress: 0,
-            uploadError: message,
-          };
-        }),
-      );
+      // The tile stays so the merchant can see which picture did not land and pick it again.
+      patchImage(idx, imageId, { uploading: false, progress: 0, error: message });
     } finally {
       gate?.end();
     }
-  };
+  }
+
+  function onPickImages(idx: number, files: File[]) {
+    const input = fileInputRefs.current.get(idx);
+    if (input) input.value = '';
+    if (files.length === 0) return;
+
+    const row = rows.find((r) => r._idx === idx);
+    if (!row) return;
+    const queue = files.slice(0, Math.max(0, MAX_IMAGES - row.images.length));
+    if (queue.length === 0) return;
+
+    const pending = queue.map((file, n) => ({
+      id: `up-${idx}-${Date.now()}-${n}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    patchRow(idx, {
+      images: [
+        ...row.images,
+        ...pending.map((p) => ({
+          id: p.id,
+          key: '',
+          previewUrl: p.previewUrl,
+          uploading: true,
+          progress: 0,
+          error: null,
+        })),
+      ],
+    });
+
+    void Promise.all(pending.map((p) => uploadOne(idx, p.id, p.file)));
+  }
 
   return (
     <div className="space-y-3">
@@ -166,11 +239,19 @@ export function VariantEditor({
         </button>
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Add as many variants as you need. Leave the name empty to skip a row. If all rows are empty, a default variant is created automatically. Images upload directly to storage as you pick them.
+        Add as many variants as you need. Leave the name empty to skip a row. If all rows are empty, a default variant is created automatically. A variant holds up to {MAX_IMAGES} pictures and the first is the one shown on the shelf. Images upload directly to storage as you pick them.
       </p>
 
       {rows.map((row) => {
         const i = row._idx;
+        const uploading = row.images.some((img) => img.uploading);
+        const settledKeys = row.images
+          .filter((img) => img.key && !img.error)
+          .map((img) => img.key);
+        const emptied = row.hadImages && settledKeys.length === 0 && !uploading;
+        const firstUploading = row.images.find((img) => img.uploading);
+        const full = settledKeys.length >= MAX_IMAGES;
+
         return (
           <div key={i} className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -186,12 +267,10 @@ export function VariantEditor({
               </button>
             </div>
             {row.id && <input type="hidden" name={`variant_${i}_id`} value={row.id} />}
-            {row.imageKey && (
-              <input type="hidden" name={`variant_${i}_imageKey`} value={row.imageKey} />
-            )}
-            {row.imageRemoved && (
-              <input type="hidden" name={`variant_${i}_clearImage`} value="1" />
-            )}
+            {settledKeys.map((key) => (
+              <input key={key} type="hidden" name={`variant_${i}_imageKey`} value={key} />
+            ))}
+            {emptied && <input type="hidden" name={`variant_${i}_clearImage`} value="1" />}
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
                 name={`variant_${i}_name`}
@@ -216,63 +295,85 @@ export function VariantEditor({
               <label
                 className={cn(
                   'inline-flex h-10 cursor-pointer items-center justify-center rounded-element border border-dashed border-border bg-muted/50 px-3 text-sm text-muted-foreground hover:bg-muted transition-colors',
-                  row.uploading && 'opacity-50 cursor-not-allowed',
+                  (uploading || full) && 'opacity-50 cursor-not-allowed',
                 )}
               >
                 <span className="truncate">
-                  {row.uploading
-                    ? `Uploading… ${row.uploadProgress ?? 0}%`
-                    : row.imagePreviewUrl
-                      ? 'Replace image'
-                      : 'Upload image'}
+                  {uploading
+                    ? `Uploading… ${firstUploading?.progress ?? 0}%`
+                    : full
+                      ? `${MAX_IMAGES} of ${MAX_IMAGES} pictures`
+                      : settledKeys.length > 0
+                        ? 'Add pictures'
+                        : 'Upload pictures'}
                 </span>
                 <input
                   type="file"
+                  multiple
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   className="hidden"
-                  aria-label={`Variant ${i + 1} image`}
-                  disabled={row.uploading}
+                  aria-label={`Variant ${i + 1} pictures`}
+                  disabled={uploading || full}
                   ref={(el) => {
                     if (el) fileInputRefs.current.set(i, el);
                     else fileInputRefs.current.delete(i);
                   }}
-                  onChange={(e) => onPickImage(i, e.target.files?.[0] ?? null)}
+                  onChange={(e) => onPickImages(i, Array.from(e.target.files ?? []))}
                 />
               </label>
             </div>
-            {row.uploading && (
-              <div
-                role="progressbar"
-                aria-label="Image upload progress"
-                aria-valuenow={row.uploadProgress ?? 0}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                className="h-1 w-full overflow-hidden rounded-full bg-muted"
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-200"
-                  style={{ width: `${row.uploadProgress ?? 0}%` }}
-                />
-              </div>
-            )}
-            {row.uploadError && (
-              <p className="text-xs text-red-600">Image upload failed: {row.uploadError}</p>
-            )}
-            {row.imagePreviewUrl && (
-              <div className="flex items-center gap-3">
-                <img
-                  src={row.imagePreviewUrl}
-                  alt={row.name}
-                  className="h-16 w-16 rounded-xl object-cover border border-border"
-                />
-                <button
-                  type="button"
-                  onClick={() => onPickImage(i, null)}
-                  disabled={row.uploading}
-                  className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                >
-                  Remove image
-                </button>
+
+            {row.images.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {row.images.map((img, position) => (
+                  <div key={img.id} className="space-y-1">
+                    <div
+                      className={cn(
+                        'relative h-20 w-20 overflow-hidden rounded-xl border border-border bg-muted',
+                        img.error && 'border-red-400',
+                      )}
+                    >
+                      {img.previewUrl && (
+                        <img
+                          src={img.previewUrl}
+                          alt={`${row.name || 'variant'} — picture ${position + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      {position === 0 && img.key && !img.uploading && (
+                        <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-semibold uppercase tracking-wide text-white">
+                          Cover
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i, img.id)}
+                        aria-label={`Remove picture ${position + 1}`}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      {img.uploading && (
+                        <div
+                          role="progressbar"
+                          aria-label="Picture upload progress"
+                          aria-valuenow={img.progress}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          className="absolute inset-x-0 bottom-0 h-1 bg-muted"
+                        >
+                          <div
+                            className="h-full bg-primary transition-[width] duration-200"
+                            style={{ width: `${img.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {img.error && (
+                      <p className="w-20 text-[10px] leading-tight text-red-600">{img.error}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
