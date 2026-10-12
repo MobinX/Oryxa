@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUploadGate } from '@/components/products/upload-gate';
 import {
   uploadVariantImageDirect,
   ImageUploadError,
@@ -23,6 +24,7 @@ type VariantRow = VariantInitial & {
   _idx: number;
   imageRemoved?: boolean;
   uploading?: boolean;
+  uploadProgress?: number;
   uploadError?: string | null;
 };
 
@@ -50,6 +52,7 @@ export function VariantEditor({
   );
   const [counter, setCounter] = useState(base.length);
   const fileInputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
+  const gate = useUploadGate();
 
   const addRow = () => {
     setRows((prev) => [...prev, { name: '', stock: 0, _idx: counter }]);
@@ -92,15 +95,24 @@ export function VariantEditor({
               ...row,
               imagePreviewUrl: localPreview,
               uploading: true,
+              uploadProgress: 0,
               uploadError: null,
               imageRemoved: false,
             }
           : row,
       ),
     );
+    gate?.begin();
+
+    const patch = (changes: Partial<VariantRow>) =>
+      setRows((prev) =>
+        prev.map((row) => (row._idx === idx ? { ...row, ...changes } : row)),
+      );
 
     try {
-      const result = await uploadVariantImageDirect(businessId, file);
+      const result = await uploadVariantImageDirect(businessId, file, (percent) =>
+        patch({ uploadProgress: percent }),
+      );
       setRows((prev) =>
         prev.map((row) => {
           if (row._idx !== idx) return row;
@@ -110,6 +122,7 @@ export function VariantEditor({
             imageKey: result.key,
             imagePreviewUrl: result.previewUrl,
             uploading: false,
+            uploadProgress: 0,
             uploadError: null,
           };
         }),
@@ -130,10 +143,13 @@ export function VariantEditor({
             imageKey: null,
             imagePreviewUrl: null,
             uploading: false,
+            uploadProgress: 0,
             uploadError: message,
           };
         }),
       );
+    } finally {
+      gate?.end();
     }
   };
 
@@ -205,7 +221,7 @@ export function VariantEditor({
               >
                 <span className="truncate">
                   {row.uploading
-                    ? 'Uploading…'
+                    ? `Uploading… ${row.uploadProgress ?? 0}%`
                     : row.imagePreviewUrl
                       ? 'Replace image'
                       : 'Upload image'}
@@ -224,6 +240,21 @@ export function VariantEditor({
                 />
               </label>
             </div>
+            {row.uploading && (
+              <div
+                role="progressbar"
+                aria-label="Image upload progress"
+                aria-valuenow={row.uploadProgress ?? 0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-1 w-full overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-200"
+                  style={{ width: `${row.uploadProgress ?? 0}%` }}
+                />
+              </div>
+            )}
             {row.uploadError && (
               <p className="text-xs text-red-600">Image upload failed: {row.uploadError}</p>
             )}

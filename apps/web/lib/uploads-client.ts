@@ -29,10 +29,16 @@ export class ImageUploadError extends Error {
  * The image bytes never touch the Next.js server or the API server. The
  * returned `key` is the B2 object key that the product form submits as
  * `variant_<i>_imageKey` so the server action can persist it.
+ *
+ * Step 2 goes through `XMLHttpRequest` rather than `fetch` because the form has
+ * to show how far the upload actually got: `fetch` reports nothing while the
+ * request body is being sent, and a large photo over a slow connection would
+ * otherwise look like a hang.
  */
 export async function uploadVariantImageDirect(
   businessId: string,
   file: File,
+  onProgress?: (percent: number) => void,
 ): Promise<UploadedImage> {
   const signRes = await fetch(`/api/uploads/sign?businessId=${encodeURIComponent(businessId)}`, {
     method: 'POST',
@@ -51,18 +57,37 @@ export async function uploadVariantImageDirect(
 
   const signed = (await signRes.json()) as SignedUpload;
 
-  const putRes = await fetch(signed.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-    },
-    body: file,
-  });
-
-  if (!putRes.ok) {
-    const text = await putRes.text().catch(() => putRes.statusText);
-    throw new ImageUploadError(`Upload to B2 failed: ${text || putRes.status}`, putRes.status);
-  }
+  await putToStorage(signed.uploadUrl, file, onProgress);
 
   return { key: signed.key, previewUrl: signed.previewUrl };
+}
+
+function putToStorage(
+  uploadUrl: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+      } else {
+        reject(new ImageUploadError(`Upload to B2 failed: ${xhr.responseText || xhr.statusText || xhr.status}`, xhr.status));
+      }
+    };
+    xhr.onerror = () => reject(new ImageUploadError('Upload to B2 failed: network error', 0));
+    xhr.onabort = () => reject(new ImageUploadError('Upload cancelled', 0));
+
+    xhr.send(file);
+  });
 }

@@ -11,6 +11,7 @@ import { ImageUpload } from '@/components/image-upload';
 import {
   getPostCachedAction,
   listComposerProductsAction,
+  expirePostsCache,
 } from '@/app/actions/posts';
 import {
   createPost,
@@ -112,6 +113,14 @@ export function PostsClient({
   const [generating, setGenerating] = useState(false);
   const [tuning, setTuning] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(() => Boolean(selectedPostId && !seededPost));
+  // An attachment still travelling to storage must not be saved past: the draft would be written
+  // without the picture nobody has finished sending.
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  /** Every write here goes straight to the API, so the cached list is expired by hand. */
+  function refreshPostsCache(postId?: string) {
+    void expirePostsCache(businessId, postId).catch(() => undefined);
+  }
 
   // Content edit state
   const [content, setContent] = useState(() => seededPost?.content ?? '');
@@ -251,6 +260,7 @@ export function PostsClient({
       });
       setPosts([created, ...posts]);
       selectPost(created.id);
+      refreshPostsCache(created.id);
       setSuccessMsg('Created a new draft post.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create post');
@@ -290,6 +300,7 @@ export function PostsClient({
       }
 
       setSuccessMsg('Post draft saved.');
+      refreshPostsCache(selectedPostId);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to save post');
     } finally {
@@ -308,6 +319,7 @@ export function PostsClient({
       if (selectedPostId === postId) {
         selectPost(null);
       }
+      refreshPostsCache(postId);
       setSuccessMsg('Post deleted successfully.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to delete post');
@@ -348,6 +360,7 @@ export function PostsClient({
       // Keep state as failed
       setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, postState: 'failed' } : p)));
     } finally {
+      refreshPostsCache(selectedPostId);
       setPublishing(false);
     }
   }
@@ -367,6 +380,7 @@ export function PostsClient({
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to sync stats');
     } finally {
+      refreshPostsCache(selectedPostId);
       setSyncing(false);
     }
   }
@@ -395,6 +409,7 @@ export function PostsClient({
       setPosts([created, ...posts]);
       selectPost(created.id);
       setSourceMode('write');
+      refreshPostsCache(created.id);
       setSuccessMsg('AI-generated draft ready!');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'AI generation failed');
@@ -421,6 +436,7 @@ export function PostsClient({
       // Update list
       setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, content: updated.content } : p)));
       setAiInstruction('');
+      refreshPostsCache(selectedPostId);
       setSuccessMsg('Draft optimized by AI.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'AI tuning failed');
@@ -628,6 +644,7 @@ export function PostsClient({
                                   ...selectedPostDetail,
                                   channelId: newChannelId,
                                 });
+                                refreshPostsCache(selectedPostDetail.id);
                                 setSuccessMsg('Target channel updated.');
                               } catch (err) {
                                 setErrorMsg(err instanceof Error ? err.message : 'Failed to update channel');
@@ -820,11 +837,12 @@ export function PostsClient({
 
                     {/* Upload new image button */}
                     {selectedPostDetail.postState !== 'published' && mediaUrls.length < 5 && (
-                      <div className="h-20 w-20 rounded-xl border border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center p-2 text-center transition-all bg-muted/5 hover:bg-muted/10">
+                      <div className="min-h-20 w-20 rounded-xl border border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center p-2 text-center transition-all bg-muted/5 hover:bg-muted/10">
                         <ImageUpload
                           token={token}
                           businessId={businessId}
                           onUploaded={handleImageUploaded}
+                          onUploadingChange={setUploadingMedia}
                         />
                       </div>
                     )}
@@ -894,15 +912,21 @@ export function PostsClient({
                         <Button
                           variant="outline"
                           onClick={() => handleSavePost()}
-                          disabled={saving}
+                          disabled={saving || uploadingMedia}
                           className="rounded-lg h-10 font-bold"
                         >
-                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Draft'}
+                          {saving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : uploadingMedia ? (
+                            'Uploading image…'
+                          ) : (
+                            'Save Draft'
+                          )}
                         </Button>
                         
                         <Button
                           onClick={handlePublishPost}
-                          disabled={publishing || isOverLimit}
+                          disabled={publishing || isOverLimit || uploadingMedia}
                           className="rounded-lg h-10 font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                         >
                           {publishing ? (
@@ -910,7 +934,7 @@ export function PostsClient({
                           ) : (
                             <Send className="h-4 w-4" />
                           )}
-                          Publish Now
+                          {uploadingMedia ? 'Uploading…' : 'Publish Now'}
                         </Button>
                       </>
                     ) : (

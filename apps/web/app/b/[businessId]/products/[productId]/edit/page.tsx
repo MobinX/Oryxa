@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { VariantEditor } from '@/components/products/variant-editor';
+import { UploadGate } from '@/components/products/upload-gate';
+import { ProductFormSubmit } from '@/components/products/product-form-submit';
 import { CategorySelect } from '@/components/products/category-select';
 import { CustomerSelect } from '@/components/products/customer-select';
 import EditProductSkeleton from './skeleton';
@@ -100,58 +102,60 @@ async function EditProductForm({
           {error}
         </p>
       )}
-      <form
-        key={formKey}
-        action={updateProductAction.bind(null, businessId, productId)}
-        className="mt-6 space-y-4"
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Product name</label>
-            <Input name="name" defaultValue={product.name} required />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Price ($)</label>
-            <Input
-              name="price"
-              type="number"
-              step="0.01"
-              min="0.01"
-              defaultValue={String(product.price)}
-              required
+      <UploadGate>
+        <form
+          key={formKey}
+          action={updateProductAction.bind(null, businessId, productId)}
+          className="mt-6 space-y-4"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium">Product name</label>
+              <Input name="name" defaultValue={product.name} required />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Price ($)</label>
+              <Input
+                name="price"
+                type="number"
+                step="0.01"
+                min="0.01"
+                defaultValue={String(product.price)}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">SKU</label>
+              <Input name="sku" defaultValue={product.sku} required />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium">Description</label>
+              <Textarea name="description" rows={3} defaultValue={product.description ?? ''} />
+            </div>
+            <div className="sm:col-span-2">
+              <CategorySelect
+                categories={categories}
+                defaultCategoryId={product.category?.id}
+              />
+            </div>
+            <CustomerSelect
+              customers={book.customers}
+              defaultCustomerId={product.customer?.id ?? product.customerId}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">SKU</label>
-            <Input name="sku" defaultValue={product.sku} required />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Description</label>
-            <Textarea name="description" rows={3} defaultValue={product.description ?? ''} />
-          </div>
-          <div className="sm:col-span-2">
-            <CategorySelect
-              categories={categories}
-              defaultCategoryId={product.category?.id}
-            />
-          </div>
-          <CustomerSelect
-            customers={book.customers}
-            defaultCustomerId={product.customer?.id ?? product.customerId}
-          />
-        </div>
 
-        <VariantEditor initial={variantInitial} businessId={businessId} />
+          <VariantEditor initial={variantInitial} businessId={businessId} />
 
-        <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
-          <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">
-            <Button type="button" variant="outline" className="w-full">
-              Cancel
-            </Button>
-          </Link>
-          <Button type="submit" className="w-full sm:w-auto">Save changes</Button>
-        </div>
-      </form>
+          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+            <Link href={`/b/${businessId}/products`} className="w-full sm:w-auto">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
+            </Link>
+            <ProductFormSubmit label="Save changes" saving="Saving…" />
+          </div>
+        </form>
+      </UploadGate>
     </Card>
   );
 }

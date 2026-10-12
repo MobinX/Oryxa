@@ -78,6 +78,18 @@ export async function getPostCachedAction(businessId: string, postId: string) {
   return cachedPost(token, businessId, postId);
 }
 
+/**
+ * The composer writes through the merchant API from the browser, so nothing expires the cached
+ * list on its own — and the list is what paints both the row text and the draft a reopened post
+ * loads. Without this, a post whose text was typed after the page was rendered keeps reading
+ * "Empty post draft" until the cache ages out.
+ */
+export async function expirePostsCache(businessId: string, postId?: string) {
+  await requireAuth();
+  revalidatePath(`/b/${businessId}/posts`);
+  expirePosts(businessId, postId);
+}
+
 export async function listComposerProductsAction(businessId: string) {
   const token = await requireAuth();
   return cachedProducts(token, businessId, { limit: 50 });

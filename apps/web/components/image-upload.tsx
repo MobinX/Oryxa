@@ -8,18 +8,27 @@ type ImageUploadProps = {
   token?: string;
   businessId: string;
   onUploaded: (result: { key: string; previewUrl: string }) => void;
+  /** Lets the surrounding form block its save button until this upload has settled. */
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
-export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps) {
+export function ImageUpload({ token, businessId, onUploaded, onUploadingChange }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  function setBusy(busy: boolean) {
+    setUploading(busy);
+    onUploadingChange?.(busy);
+  }
 
   async function handleFile(file: File) {
     setError(null);
-    setUploading(true);
+    setBusy(true);
+    setProgress(0);
     try {
-      const result = await uploadVariantImageDirect(businessId, file);
+      const result = await uploadVariantImageDirect(businessId, file, setProgress);
       const { key, previewUrl } = result;
       onUploaded({ key, previewUrl });
     } catch (err: any) {
@@ -29,7 +38,8 @@ export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps)
         setError(err instanceof Error ? err.message : 'Upload failed');
       }
     } finally {
-      setUploading(false);
+      setBusy(false);
+      setProgress(0);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
@@ -53,8 +63,23 @@ export function ImageUpload({ token, businessId, onUploaded }: ImageUploadProps)
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
-        {uploading ? 'Uploading…' : 'Upload image'}
+        {uploading ? `Uploading… ${progress}%` : 'Upload image'}
       </Button>
+      {uploading && (
+        <div
+          role="progressbar"
+          aria-label="Image upload progress"
+          aria-valuenow={progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="h-1 w-full overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-200"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>
   );
