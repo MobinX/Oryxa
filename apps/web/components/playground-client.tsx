@@ -110,16 +110,22 @@ export function PlaygroundClient({
 }: {
   token: string;
   businessId: string;
-  /** The sandbox channel and its first page of chats, read during rendering so nothing is blank. */
+  /**
+   * The sandbox channel, its first page of chats and — on the console's copy of this page — the
+   * agent row, all read during rendering so neither the chat list nor the prompt editors paint
+   * blank while a browser call is still on its way.
+   */
   preload?: PlaygroundPreload | null;
   /** Only the operator console passes this: the prompt and guidance editors exist for it alone. */
   canEditPrompt?: boolean;
 }) {
   // State
-  const [agent, setAgent] = useState<Agent | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
-  const [replyGuidance, setReplyGuidance] = useState<string>('');
-  const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>('');
+  const [agent, setAgent] = useState<Agent | null>(preload?.agent ?? null);
+  const [systemPrompt, setSystemPrompt] = useState<string>(preload?.agent?.systemPrompt ?? '');
+  const [replyGuidance, setReplyGuidance] = useState<string>(preload?.agent?.replyGuidance ?? '');
+  const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>(
+    preload?.agent?.commentReplyGuidance ?? '',
+  );
   const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(preload?.channel ?? null);
 

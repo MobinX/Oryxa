@@ -78,7 +78,9 @@ export default async function AdminAgentPlaygroundPage() {
       <PlaygroundClient
         token={token}
         businessId={sandbox.id}
-        preload={await preloadPlayground(token, sandbox.id)}
+        // The console is the only reader of prompts, so it is the only page that asks the server to
+        // read them: the prompt and both wording blocks arrive painted, not one browser call later.
+        preload={await preloadPlayground(token, sandbox.id, { withAgent: true })}
         canEditPrompt
       />
     </div>
