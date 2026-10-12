@@ -330,6 +330,10 @@ export type Agent = {
   name: string;
   platformType: string;
   systemPrompt?: string;
+  /** The store's own wording blocks; null means it never wrote one and Oryxa's built-in applies. */
+  replyGuidance?: string | null;
+  commentReplyGuidance?: string | null;
+  guidanceDefaults?: { replyGuidance: string; commentReplyGuidance: string };
   createdAt?: string;
 };
 
@@ -416,7 +420,13 @@ export const updateAgent = (
   token: string,
   businessId: string,
   agentId: string,
-  data: { name?: string; systemPrompt?: string; platformType?: string },
+  data: {
+    name?: string;
+    systemPrompt?: string;
+    platformType?: string;
+    replyGuidance?: string | null;
+    commentReplyGuidance?: string | null;
+  },
 ) =>
   apiFetch<{ id: string; updated: boolean }>(
     `/api/v1/${businessId}/agents/${agentId}`,

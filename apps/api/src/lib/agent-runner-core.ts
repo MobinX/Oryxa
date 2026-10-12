@@ -137,6 +137,8 @@ export async function runAgentCore(
     catalogSummary,
     emitSse,
     sendMessageOverride,
+    // The store's own wording if it wrote one; Agent falls back to Oryxa's built-in block.
+    replyGuidance: conv.channel.agent.replyGuidance ?? undefined,
   });
 
   const started = performance.now();

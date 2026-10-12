@@ -3,6 +3,7 @@ import {
   createAgentInputSchema,
   createAgentOutputSchema,
   selectAgentSchema,
+  agentGuidanceDefaultsSchema,
   updateAgentInputSchema,
   updateAgentOutputSchema,
   deleteAgentOutputSchema,
@@ -17,6 +18,7 @@ import {
   facebookConnectPagesInputSchema,
   facebookConnectPagesOutputSchema,
 } from '@repo/shared';
+import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
 import {
   createAgent,
   getAgentById,
@@ -113,13 +115,24 @@ const getDefaultAgentRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: { params: z.object({ businessId: z.string().uuid() }) },
   responses: {
-    200: { content: { 'application/json': { schema: selectAgentSchema } }, description: 'The agent answering this store' },
+    200: {
+      content: {
+        'application/json': {
+          schema: selectAgentSchema.extend({ guidanceDefaults: agentGuidanceDefaultsSchema }),
+        },
+      },
+      description: 'The agent answering this store, with the wording it falls back to',
+    },
   },
 });
 
 /**
  * The single agent a store's channels answer with. Created on the spot if the store predates the
  * default, which is why the playground can always show a prompt instead of an empty editor.
+ *
+ * `guidanceDefaults` travels with it because the two guidance boxes are empty whenever a store has
+ * not written its own — and an editor that shows nothing would be an editor showing a lie. The
+ * built-in text is what the agent actually gets, so the playground shows it as the placeholder.
  */
 channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
   const businessId = c.req.param('businessId');
@@ -129,7 +142,13 @@ channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
     name: agent.name,
     platformType: agent.platformType,
     systemPrompt: agent.systemPrompt,
+    replyGuidance: agent.replyGuidance,
+    commentReplyGuidance: agent.commentReplyGuidance,
     createdAt: agent.createdAt.toISOString(),
+    guidanceDefaults: {
+      replyGuidance: DEFAULT_REPLY_GUIDANCE,
+      commentReplyGuidance: COMMENT_REPLY_GUIDANCE,
+    },
   });
 });
 

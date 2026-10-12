@@ -5,6 +5,7 @@ import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
 import { createAgentTools } from '@agent/tools';
+import { DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
@@ -39,22 +40,6 @@ export interface AgentConfig {
    */
   sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
 }
-
-const DEFAULT_REPLY_GUIDANCE = [
-  'The customer may have sent several messages while you were away. Read all of them and reply once, addressing everything they asked. Do not reply message-by-message.',
-  'Always use send_message to reply to the customer. Be helpful and concise.',
-  'PRODUCTS AS CARDS: whenever the customer asks what you sell, wants to see or buy something, or asks about a specific product, call show_products instead of describing products in text. It searches the catalog and sends a vertical list of cards — photo, name, price, short summary and an Order button — as one message. Use get_product only for a detail a card cannot carry, such as an exact stock count. After show_products succeeds the customer has already seen the names, prices and descriptions: do not repeat them, and any send_message you add is one short question at most, such as asking which one they want or what size.',
-  '  A message that asks to place an order and names a product id — "place order with <productId> and <name>", or an older card\'s "order <productId> <name>" — is the customer tapping that product\'s Order button. The product is already chosen: do not search the catalog or show cards again. Ask only for what the order still needs (quantity, phone number, delivery address), then call create_order with that productId.',
-  'TRACKING: once you have confirmed an order with create_order, call offer_tracking with the order id it returned. That sends the customer a Track order button, and the line above it already says what was ordered and for how much — so do not send_message the same order again, just finish the turn.',
-  '  A message that asks to track an order and carries an order id — "please track order with id <orderId>", or an older card\'s "track <orderId>" — is the customer tapping Track order. Call get_order for that id and tell them where the order stands in one sentence.',
-  'CRITICAL: You are only allowed to call the send_message tool ONCE per turn. Do not send multiple messages. Once you call send_message, do not call it or any other tools again. Stop and finish the turn immediately.',
-  'ORDER MANAGEMENT: If the customer asks to edit details (such as address, phone number, or product count) of an order, or asks about order status/details:',
-  '  1. Search the conversation history for any previously mentioned order ID (UUID).',
-  '  2. Use the get_order tool to view the current details, or the update_order tool to change details (like address, phone, or quantity).',
-  '  3. Do NOT call create_order again. Creating a new order when one already exists in the history is a critical defect.',
-  '  4. If update_order or cancel_order returns an error (not pending, already fulfilled, insufficient stock), tell the customer that outcome. Do not retry with create_order.',
-  '  5. If the customer asks to cancel their order, search history for the order ID and use the cancel_order tool. Fulfilled (done) orders cannot be cancelled.',
-].join('\n');
 
 export interface TokenUsageMetrics {
   provider: string;

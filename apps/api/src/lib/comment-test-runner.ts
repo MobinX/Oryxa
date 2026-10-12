@@ -1,7 +1,6 @@
-import type { SseEmitter } from '@repo/agent';
+import { COMMENT_REPLY_GUIDANCE, type SseEmitter } from '@repo/agent';
 import { agentInputFields, createAgentTrace } from '@api/lib/agent-trace';
 import { emit } from '@api/lib/log';
-import { COMMENT_REPLY_GUIDANCE } from '@api/lib/comment-runner';
 
 /** A comment thread the playground can drive: the new comment, who wrote it, and what came before. */
 export type CommentTestInput = {
@@ -143,7 +142,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     customerName: input.commenterName ?? null,
     catalogSummary,
     tools,
-    replyGuidance: COMMENT_REPLY_GUIDANCE,
+    replyGuidance: full.channel.agent.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
     emitSse,
   });
 

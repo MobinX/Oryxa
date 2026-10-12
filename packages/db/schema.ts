@@ -195,6 +195,13 @@ export const agents = pgTable('agents', {
   name: varchar('name', { length: 255 }).notNull(),
   systemPrompt: text('system_prompt').notNull(),
   platformType: platformEnum('platform_type').notNull(),
+  /**
+   * The wording block appended after the prompt that tells the agent how to answer — in a DM or in
+   * a public comment. Null means "use Oryxa's built-in wording", so a store that never touched it
+   * keeps shipping the reviewed text, and emptying the box in the playground puts it back.
+   */
+  replyGuidance: text('reply_guidance'),
+  commentReplyGuidance: text('comment_reply_guidance'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 });

@@ -7,14 +7,26 @@ export const createAgentInputSchema = z.object({
   platformType: platformSchema,
 });
 
-export const updateAgentInputSchema = createAgentInputSchema.partial();
+export const updateAgentInputSchema = createAgentInputSchema.partial().extend({
+  /** null clears the store's own wording and goes back to Oryxa's built-in text. */
+  replyGuidance: z.string().max(12000).nullable().optional(),
+  commentReplyGuidance: z.string().max(12000).nullable().optional(),
+});
 
 export const selectAgentSchema = z.object({
   id: uuidSchema,
   name: z.string(),
   platformType: platformSchema,
   systemPrompt: z.string().optional(),
+  replyGuidance: z.string().nullable().optional(),
+  commentReplyGuidance: z.string().nullable().optional(),
   createdAt: timestampSchema.optional(),
+});
+
+/** What the built-in wording is, so the playground can show it as the box a merchant left empty. */
+export const agentGuidanceDefaultsSchema = z.object({
+  replyGuidance: z.string(),
+  commentReplyGuidance: z.string(),
 });
 
 export const createAgentOutputSchema = z.object({

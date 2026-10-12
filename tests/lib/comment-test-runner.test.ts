@@ -4,6 +4,7 @@ import { seedTestWorld } from '../helpers/seed';
 import { agentRunResult } from '../helpers/agent-run';
 import { runCommentTest } from '@api/lib/comment-test-runner';
 import { listComments } from '@repo/db/crud/comment';
+import { updateAgent } from '@repo/db/crud/channel';
 import type { AgentConfig } from '@repo/agent';
 
 const replyToFacebookCommentMock = vi.fn(async (..._args: unknown[]) => 'REAL_REPLY_ID');
@@ -142,5 +143,43 @@ describe('comment playground runner', () => {
     const nothing = events.find((e) => e.event === 'no_reply');
     expect(nothing?.data.silent).toBe(true);
     expect(events.some((e) => e.event === 'comment_replied')).toBe(false);
+  }, 60_000);
+
+  it('runs the wording the store wrote, and Oryxa\'s while it has written none', async () => {
+    const seed = await seedTestWorld();
+    const { getChannelById } = await import('@repo/db/crud/channel');
+    // The wording rides the agent the channel answers with, which is what the runner reads.
+    const channelAgent = (await getChannelById(seed.channel.id))!.agent!;
+    const seen: (string | undefined)[] = [];
+    const { Agent, COMMENT_REPLY_GUIDANCE } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: AgentConfig }) {
+      seen.push(this.config.replyGuidance);
+      return agentRunResult('SILENT');
+    });
+
+    try {
+      await runCommentTest({
+        businessId: seed.business.id,
+        channelId: seed.channel.id,
+        comment: 'price?',
+        commenterPlatformId: 'GUIDANCE_USER',
+        postId: 'GUIDANCE_POST',
+      });
+      expect(seen[0]).toBe(COMMENT_REPLY_GUIDANCE);
+
+      await updateAgent(seed.business.id, channelAgent.id, {
+        commentReplyGuidance: 'Only ever say hi.',
+      });
+      await runCommentTest({
+        businessId: seed.business.id,
+        channelId: seed.channel.id,
+        comment: 'price again?',
+        commenterPlatformId: 'GUIDANCE_USER',
+        postId: 'GUIDANCE_POST',
+      });
+      expect(seen[1]).toBe('Only ever say hi.');
+    } finally {
+      runSpy.mockRestore();
+    }
   }, 60_000);
 });

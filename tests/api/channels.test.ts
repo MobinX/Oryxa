@@ -101,6 +101,44 @@ describe('Channels & Agents API', () => {
     expect(((await again.json()) as { id: string }).id).toBe(agent.id);
   });
 
+  it('the two guidance blocks are the store\'s own text, and null puts them back on built-in', async () => {
+    const { business } = await seedTestWorld();
+    type Row = {
+      id: string;
+      replyGuidance: string | null;
+      commentReplyGuidance: string | null;
+      guidanceDefaults: { replyGuidance: string; commentReplyGuidance: string };
+    };
+    const read = async () =>
+      (await (await app.request(`/api/v1/${business.id}/agents/default`, { headers: authHeaders() })).json()) as Row;
+    // What the playground does: edit whichever row this store actually answers with.
+    const write = async (body: Record<string, unknown>) =>
+      (
+        await app.request(`/api/v1/${business.id}/agents/${(await read()).id}`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(body),
+        })
+      ).status;
+
+    const untouched = await read();
+    expect(untouched.replyGuidance).toBeNull();
+    expect(untouched.commentReplyGuidance).toBeNull();
+    // The playground shows the built-in wording behind an empty box, so it travels with the row.
+    expect(untouched.guidanceDefaults.replyGuidance).toContain('send_message');
+    expect(untouched.guidanceDefaults.commentReplyGuidance).toContain('send_private_message');
+
+    expect(await write({ replyGuidance: 'Answer in one line.', commentReplyGuidance: 'Never DM.' })).toBe(200);
+    const stored = await read();
+    expect(stored.replyGuidance).toBe('Answer in one line.');
+    expect(stored.commentReplyGuidance).toBe('Never DM.');
+
+    expect(await write({ replyGuidance: null, commentReplyGuidance: null })).toBe(200);
+    const cleared = await read();
+    expect(cleared.replyGuidance).toBeNull();
+    expect(cleared.commentReplyGuidance).toBeNull();
+  });
+
   it('a channel connected without an agent still gets one', async () => {
     const { business } = await seedTestWorld();
     const pageId = `NO_AGENT_PAGE_${Date.now()}`;

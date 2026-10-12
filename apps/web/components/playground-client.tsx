@@ -70,6 +70,17 @@ function parseCommentHistory(text: string): { from: 'customer' | 'self'; content
     .filter((row) => row.content.length > 0);
 }
 
+/**
+ * What to store for one guidance box. The editor shows the built-in text whenever the store has
+ * written none — so a box that still matches it, or one the admin emptied, is not custom wording
+ * and goes back as null rather than freezing today's copy into the row.
+ */
+function ownWording(text: string, builtin: string | undefined): string | null {
+  const value = text.trim();
+  if (!value) return null;
+  return value === (builtin ?? '').trim() ? null : value;
+}
+
 interface Conversation {
   id: string;
   customerName: string | null;
@@ -101,12 +112,14 @@ export function PlaygroundClient({
 }: {
   token: string;
   businessId: string;
-  /** Only the operator console passes this: a store sees its prompt, it does not write it. */
+  /** Only the operator console passes this: the prompt and guidance editors exist for it alone. */
   canEditPrompt?: boolean;
 }) {
   // State
   const [agent, setAgent] = useState<Agent | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [replyGuidance, setReplyGuidance] = useState<string>('');
+  const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>('');
   const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
@@ -175,6 +188,8 @@ export function PlaygroundClient({
 
       setAgent(agentRow);
       setSystemPrompt(agentRow.systemPrompt || '');
+      setReplyGuidance(agentRow.replyGuidance ?? '');
+      setCommentReplyGuidance(agentRow.commentReplyGuidance ?? '');
 
       // Test chats run on a sandbox page of their own, never on a Page that has customers on it.
       const pageId = sandboxPageId(businessId);
@@ -226,9 +241,18 @@ export function PlaygroundClient({
     if (!agent) return;
     setIsUpdatingPrompt(true);
     try {
-      await updateAgent(token, businessId, agent.id, { systemPrompt });
-      setAgent({ ...agent, systemPrompt });
-      addLog('system_prompt_updated', { systemPrompt });
+      // A box still holding the built-in text (or emptied on purpose) writes null, so the store
+      // keeps following Oryxa's wording as it evolves instead of pinning today's copy.
+      const guidance = {
+        replyGuidance: ownWording(replyGuidance, agent.guidanceDefaults?.replyGuidance),
+        commentReplyGuidance: ownWording(commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance),
+      };
+      await updateAgent(token, businessId, agent.id, { systemPrompt, ...guidance });
+      setAgent({ ...agent, systemPrompt, ...guidance });
+      // A box that resolved to null shows the built-in text again, not what was typed in it.
+      setReplyGuidance(guidance.replyGuidance ?? '');
+      setCommentReplyGuidance(guidance.commentReplyGuidance ?? '');
+      addLog('system_prompt_updated', { systemPrompt, ...guidance });
     } catch (err) {
       console.error('Failed to update system prompt:', err);
     } finally {
@@ -494,51 +518,90 @@ export function PlaygroundClient({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Left Side: the assistant answering this store's pages (xl:col-span-4) */}
         <div className="xl:col-span-4 flex flex-col gap-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-xl">
-            <div className="flex items-center gap-2 mb-4">
-              <Bot className="h-5 w-5 text-indigo-400" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                {agent?.name ?? 'Your Assistant'}
-              </h2>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  System Prompt
-                </label>
-                <span className="text-[10px] font-medium text-slate-500">
-                  {canEditPrompt ? 'Applies to the next test message' : 'Managed by Oryxa'}
-                </span>
+          {/* The prompt and the two wording blocks. Operator console only: a store sees its
+              assistant answer with them, it does not write them. */}
+          {canEditPrompt && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <Bot className="h-5 w-5 text-indigo-400" />
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  {agent?.name ?? 'Your Assistant'}
+                </h2>
               </div>
-              <textarea
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                readOnly={!canEditPrompt}
-                rows={12}
-                className={cn(
-                  'w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none leading-relaxed resize-none',
-                  canEditPrompt ? 'focus:border-indigo-500' : 'cursor-default opacity-80',
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    System Prompt
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-500">
+                    Applies to the next test message
+                  </span>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  rows={10}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none leading-relaxed resize-none focus:border-indigo-500"
+                  placeholder="Your assistant's instructions..."
+                />
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Messenger reply guidance
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-500">
+                    {agent?.replyGuidance ? 'Store’s own wording' : 'Built-in wording'}
+                  </span>
+                </div>
+                <textarea
+                  value={replyGuidance || agent?.guidanceDefaults?.replyGuidance || ''}
+                  onChange={(e) => setReplyGuidance(e.target.value)}
+                  rows={8}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none leading-relaxed resize-y focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Comment reply guidance
+                  </label>
+                  <span className="text-[10px] font-medium text-slate-500">
+                    {agent?.commentReplyGuidance ? 'Store’s own wording' : 'Built-in wording'}
+                  </span>
+                </div>
+                <textarea
+                  value={commentReplyGuidance || agent?.guidanceDefaults?.commentReplyGuidance || ''}
+                  onChange={(e) => setCommentReplyGuidance(e.target.value)}
+                  rows={8}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-slate-300 outline-none leading-relaxed resize-y focus:border-indigo-500"
+                />
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                  These two blocks are what the agent is told about <em>how</em> to answer — the
+                  Messenger one for chats, the comment one for public threads and the comment
+                  playground. Editing either applies to the next test run. Leave a box on the
+                  built-in text, or empty it, to keep following Oryxa’s wording as it changes.
+                </p>
+              </div>
+
+              <button
+                onClick={handleSaveSystemPrompt}
+                disabled={isUpdatingPrompt}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 py-2.5 text-xs font-bold text-indigo-400 hover:bg-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {isUpdatingPrompt ? (
+                  <>Saving...</>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" /> Save prompt &amp; guidance
+                  </>
                 )}
-                placeholder="Your assistant's instructions..."
-              />
-              {canEditPrompt && (
-                <button
-                  onClick={handleSaveSystemPrompt}
-                  disabled={isUpdatingPrompt}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 py-2.5 text-xs font-bold text-indigo-400 hover:bg-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50"
-                >
-                  {isUpdatingPrompt ? (
-                    <>Saving...</>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4" /> Save System Prompt
-                    </>
-                  )}
-                </button>
-              )}
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Connected Channel Card */}
           {activeChannel && (
