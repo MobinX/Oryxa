@@ -47,6 +47,36 @@ const MOCK_NAMES = [
 ];
 
 /**
+ * How long a run may hold a pane with nothing arriving before the pane stops waiting. A server
+ * that neither writes nor hangs up would otherwise keep the waiting animation up forever, which
+ * is the one failure mode a debugging console must not have.
+ */
+const RUN_IDLE_MS = 90_000;
+
+/** How long a chat's loading skeleton may claim the pane before it admits the read is slow. */
+const CHAT_READ_MS = 20_000;
+
+/** A stall, not a fault: nothing arrived, nothing failed. Only this one is handled quietly. */
+const STREAM_STALLED = new Error('playground stream idle');
+
+/** One chunk of the stream, or the stall sentinel when nothing arrives inside the idle window. */
+function readNextChunk(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+    const timer = setTimeout(() => reject(STREAM_STALLED), RUN_IDLE_MS);
+    reader.read().then(
+      (chunk) => {
+        clearTimeout(timer);
+        resolve(chunk);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
  * One line per earlier comment, oldest first. A line that starts with `page:` is the page's
  * own reply — which is how the agent sees an admin's manual answer too — and anything else
  * is another comment from this customer.
@@ -140,10 +170,11 @@ export function PlaygroundClient({
 
   const [inputMessage, setInputMessage] = useState('');
   /**
-   * The run in flight, and the pane it streams into: a chat run belongs to the chat it was sent
-   * from (`convId` is empty until the stream names a brand-new one), a comment run to the comment
-   * thread. The waiting state follows that pane instead of the whole console, so a run cannot leave
-   * the chat list, New Chat and every other thread looking frozen while it streams.
+   * The run in flight, and the pane it streams into: a chat run belongs to the chat it was started
+   * from — the new one it seeds takes the run over as soon as the stream names it — and a comment
+   * run to the comment thread. The waiting state follows that pane instead of the whole console, so
+   * a run cannot leave the chat list, New Chat and every other thread looking frozen while it
+   * streams, and no chat can inherit another chat's wait.
    */
   const [run, setRun] = useState<{ id: number; pane: 'chat' | 'comment'; convId: string } | null>(
     null,
@@ -200,9 +231,8 @@ export function PlaygroundClient({
     shownConvRef.current = selectedConvId;
   }, [selectedConvId]);
 
-  // A run animates and blocks only the thread it is running in. A chat that is still being made
-  // has no id yet, so until the stream names one its own pane is the one showing the wait.
-  const chatRunning = run?.pane === 'chat' && (run.convId === '' || run.convId === selectedConvId);
+  // A run animates and blocks only the thread it belongs to, and never a thread tapped afterwards.
+  const chatRunning = run?.pane === 'chat' && run.convId === selectedConvId;
   const commentRunning = run?.pane === 'comment';
   // The mock chat header reports whichever pane is on screen.
   const waitingHere = commentMode ? commentRunning : chatRunning;
@@ -307,6 +337,11 @@ export function PlaygroundClient({
   async function loadMessages(convId: string) {
     const seq = ++loadSeqRef.current;
     setIsLoadingMessages(true);
+    // A read that never answers must not own the pane: past the window the skeleton stands down,
+    // and the messages still paint the moment the request lands.
+    setTimeout(() => {
+      if (seq === loadSeqRef.current) setIsLoadingMessages(false);
+    }, CHAT_READ_MS);
     try {
       const msgList = await listMessages(token, businessId, convId);
       // Somebody tapped another chat while this read was on its way; its answer is not this pane's.
@@ -365,7 +400,7 @@ export function PlaygroundClient({
     // Create custom conversation by sending a seed hello message via the Hono receiver API
     // We send an SSE trigger message which creates the conversation
     const myRun = ++runIdRef.current;
-    setRun({ id: myRun, pane: 'chat', convId: '' });
+    setRun({ id: myRun, pane: 'chat', convId: selectedConvId });
     setLogs([]);
     try {
       const response = await fetch('/api/playground/test-run', {
@@ -547,6 +582,8 @@ export function PlaygroundClient({
         // The run stopped before it chose a door. Say so in the thread rather than leaving the
         // operator reading a comment with no answer and no trace of why.
         if (event === 'error') append('self', data.message || 'The comment agent did not run', 'reply');
+        if (event === 'stream_stalled')
+          append('self', 'Stopped waiting — the stream said nothing for a minute and a half. Any reply the agent had already written is saved.', 'reply');
       });
     } catch (err) {
       console.error('Failed during comment test run:', err);
@@ -560,7 +597,8 @@ export function PlaygroundClient({
    * Reads a run's SSE stream until it says it is finished. `done` and `error` are the last events
    * both playground routes write, so the read ends there and hangs up: waiting instead for the
    * connection to close leaves this promise pending — and with it the thread it belongs to — on a
-   * stream a proxy may keep open long after the agent stopped writing.
+   * stream a proxy may keep open long after the agent stopped writing. A stream that says nothing
+   * at all is given the same treatment after the idle window, so no run can hold a pane forever.
    */
   async function parseSseStream(res: Response, onEvent?: (event: string, data: any) => void) {
     const reader = res.body?.getReader();
@@ -571,41 +609,51 @@ export function PlaygroundClient({
     let currentEvent = '';
     let finished = false;
 
-    while (!finished) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (!finished) {
+        const { done, value } = await readNextChunk(reader);
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
-        if (trimmed.startsWith('event: ')) {
-          currentEvent = trimmed.slice(7).trim();
-        } else if (trimmed.startsWith('data: ')) {
-          const event = currentEvent;
-          const rawData = trimmed.slice(6).trim();
-          try {
-            const data = JSON.parse(rawData);
-            addLog(event, data);
-            onEvent?.(event, data);
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.slice(7).trim();
+          } else if (trimmed.startsWith('data: ')) {
+            const event = currentEvent;
+            const rawData = trimmed.slice(6).trim();
+            try {
+              const data = JSON.parse(rawData);
+              addLog(event, data);
+              onEvent?.(event, data);
 
-            // Auto-select conversation if it was created
-            if (event === 'conversation_ready') {
-              setSelectedConvId(data.conversationId);
+              // Auto-select conversation if it was created
+              if (event === 'conversation_ready') {
+                setSelectedConvId(data.conversationId);
+              }
+            } catch {
+              // Raw text fallback
+              addLog(event, { text: rawData });
+              onEvent?.(event, { text: rawData });
             }
-          } catch {
-            // Raw text fallback
-            addLog(event, { text: rawData });
-            onEvent?.(event, { text: rawData });
+            currentEvent = ''; // Reset
+            if (event === 'done' || event === 'error') finished = true;
           }
-          currentEvent = ''; // Reset
-          if (event === 'done' || event === 'error') finished = true;
         }
       }
+    } catch (err) {
+      if (err !== STREAM_STALLED) throw err;
+      // The server is writing nothing and hanging up on nothing. Give the pane back and let the
+      // caller read whatever the agent had already persisted.
+      addLog('stream_stalled', { waitedMs: RUN_IDLE_MS });
+      onEvent?.('stream_stalled', { waitedMs: RUN_IDLE_MS });
+      reader.cancel().catch(() => {});
+      return;
     }
 
     if (finished) reader.cancel().catch(() => {});
@@ -989,6 +1037,10 @@ export function PlaygroundClient({
                             Loading this chat’s messages…
                           </p>
                         </div>
+                      ) : messages.length === 0 ? (
+                        <p className="text-center text-[10px] text-slate-600">
+                          Nothing came back for this chat. Pick it again, or send it a message.
+                        </p>
                       ) : (
                         messages.map((msg) => (
                           <div
