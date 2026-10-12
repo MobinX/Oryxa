@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Facebook, Instagram, MessageCircle, Plus, ThumbsUp, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Channel, Post, PostState } from '@/lib/api';
 
@@ -11,10 +11,9 @@ type FeedFilter = 'all' | 'facebook' | 'instagram';
 type PostFeedProps = {
   posts: Post[];
   channels: Channel[];
+  businessId: string;
   filterPlatform: FeedFilter;
   onFilterPlatform: (platform: FeedFilter) => void;
-  onCreate: () => void;
-  onOpen: (postId: string) => void;
   onDelete: (postId: string, e: React.MouseEvent) => void;
 };
 
@@ -84,13 +83,13 @@ function countText(value: number | null | undefined) {
 
 function FeedCard({
   post,
+  businessId,
   channel,
-  onOpen,
   onDelete,
 }: {
   post: Post;
+  businessId: string;
   channel: Channel | null | undefined;
-  onOpen: (postId: string) => void;
   onDelete: (postId: string, e: React.MouseEvent) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -99,12 +98,12 @@ function FeedCard({
   const likes = countText(post.likeCount);
   const comments = countText(post.commentCount);
   const isPublished = post.postState === 'published';
+  const href = `/b/${businessId}/posts/${post.id}`;
 
   return (
-    <article
-      onClick={() => onOpen(post.id)}
-      className="cursor-pointer rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border hover:shadow-md"
-    >
+    <article className="cursor-pointer rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border hover:shadow-md">
+      {/* A real link, so the card opens even before this page's JavaScript is on its feet. */}
+      <Link href={href} className="block">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
@@ -158,6 +157,7 @@ function FeedCard({
             {(long || expanded) && (
               <button
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   setExpanded((current) => !current);
                 }}
@@ -181,17 +181,24 @@ function FeedCard({
           {comments && <span>{comments} comments</span>}
         </div>
       )}
+      </Link>
 
       <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2">
         <div className="flex items-center gap-1">
-          <span className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground">
+          <Link
+            href={href}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
             <ThumbsUp className="h-3.5 w-3.5" />
             {likes ?? 'Like'}
-          </span>
-          <span className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground">
+          </Link>
+          <Link
+            href={href}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
             <MessageCircle className="h-3.5 w-3.5" />
             {comments ?? 'Comment'}
-          </span>
+          </Link>
         </div>
 
         {!isPublished && (
@@ -212,10 +219,9 @@ function FeedCard({
 export function PostFeed({
   posts,
   channels,
+  businessId,
   filterPlatform,
   onFilterPlatform,
-  onCreate,
-  onOpen,
   onDelete,
 }: PostFeedProps) {
   return (
@@ -225,10 +231,13 @@ export function PostFeed({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Page Feed
           </h2>
-          <Button size="sm" onClick={onCreate} className="h-8 rounded-lg gap-1 font-semibold">
+          <Link
+            href={`/b/${businessId}/posts/new`}
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:brightness-105 active:scale-[0.98]"
+          >
             <Plus className="h-3.5 w-3.5" />
             New Post
-          </Button>
+          </Link>
         </div>
 
         <div className="flex gap-1">
@@ -279,8 +288,8 @@ export function PostFeed({
               <FeedCard
                 key={post.id}
                 post={post}
+                businessId={businessId}
                 channel={channels.find((c) => c.id === post.channelId)}
-                onOpen={onOpen}
                 onDelete={onDelete}
               />
             ))

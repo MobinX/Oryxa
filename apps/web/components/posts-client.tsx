@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -91,7 +91,11 @@ export function PostsClient({
 }: PostsClientProps) {
   const router = useRouter();
   const routeParams = useParams<{ businessId: string; postId?: string }>();
-  const selectedPostId = routeParams.postId ?? null;
+  const pathname = usePathname();
+  // `/posts/new` is a static segment, so it contributes no [postId] param at all: the route has
+  // to be read from the path, or the new-post page would look like the feed and draw it again.
+  const isNewPostPath = pathname.endsWith('/posts/new');
+  const selectedPostId = isNewPostPath ? 'new' : routeParams.postId ?? null;
   // The list route draws the feed; every other route draws one post's own page.
   const onFeed = !selectedPostId;
 
@@ -276,14 +280,6 @@ export function PostsClient({
     : null;
 
   // 1. Create a blank draft post
-  function openNewPost() {
-    if (channels.length === 0) {
-      setErrorMsg('Please connect a channel in the Channels tab before creating posts.');
-      return;
-    }
-    router.push(`/b/${businessId}/posts/new`);
-  }
-
   /**
    * `/posts/new` is the composer for a draft that does not exist yet, and every other write in
    * this tab patches an existing row — so the blank post is created first and the URL is then
@@ -542,10 +538,9 @@ export function PostsClient({
         <PostFeed
           posts={filteredPosts}
           channels={channels}
+          businessId={businessId}
           filterPlatform={filterPlatform}
           onFilterPlatform={setFilterPlatform}
-          onCreate={openNewPost}
-          onOpen={selectPost}
           onDelete={handleDeletePost}
         />
       ) : (
@@ -884,22 +879,23 @@ export function PostsClient({
 
                 {/* 6. Settings & Post actions row */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-border/40 pt-4 shrink-0">
-                  {/* Scheduling block */}
-                  <div className="flex items-center gap-3">
-                    <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Schedule Publication
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={scheduledAt}
-                        onChange={(e) => setScheduledAt(e.target.value)}
-                        disabled={selectedPostDetail.postState === 'published'}
-                        className="h-8.5 text-xs w-48 bg-card"
-                      />
+                  {/* Scheduling block — a published post already went out, so its slot is history */}
+                  {selectedPostDetail.postState !== 'published' && (
+                    <div className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                          Schedule Publication
+                        </label>
+                        <Input
+                          type="datetime-local"
+                          value={scheduledAt}
+                          onChange={(e) => setScheduledAt(e.target.value)}
+                          className="h-8.5 text-xs w-48 bg-card"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Actions buttons */}
                   <div className="flex items-center gap-2 self-end md:self-auto">
