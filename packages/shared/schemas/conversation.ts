@@ -74,8 +74,16 @@ export const testRunInputSchema = z.object({
   channelId: uuidSchema,
   /** The business UUID that owns the channel. */
   businessId: uuidSchema,
-  /** The user message to inject as the customer's inbound text. */
-  userMessage: z.string().min(1).max(2000),
+  /**
+   * The user message to inject as the customer's inbound text. Empty is allowed next to
+   * `imageKeys`, because "is this one in my size?" reaches a real page as one photo no words.
+   */
+  userMessage: z.string().max(2000),
+  /**
+   * Storage keys of the pictures the tester attached, in the order they were sent — the same
+   * column a Messenger photo lands in, so the agent gets pixels here exactly as on the channel.
+   */
+  imageKeys: z.array(z.string().min(1)).max(4).optional(),
   /**
    * Optional stable test-user platform ID. Defaults to `test-user-{channelId}`.
    * Re-using the same ID across calls continues the same conversation thread —

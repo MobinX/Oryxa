@@ -57,10 +57,15 @@ testRunRouter.post('/test-run', async (c) => {
     return c.json({ error: 'Invalid payload', issues: parsed.error.issues }, 400);
   }
 
-  const { channelId, businessId, userMessage, testUserId: rawTestUserId } = parsed.data;
+  const { channelId, businessId, userMessage, imageKeys, testUserId: rawTestUserId } = parsed.data;
   const testUserId = rawTestUserId ?? `test-user-${channelId}`;
+  const photos = imageKeys ?? [];
 
-  console.log(`[test-run] request — channelId=${channelId} businessId=${businessId} testUserId=${testUserId}`);
+  if (!userMessage.trim() && photos.length === 0) {
+    return c.json({ error: 'Send some words, a picture, or both' }, 400);
+  }
+
+  console.log(`[test-run] request — channelId=${channelId} businessId=${businessId} testUserId=${testUserId} photos=${photos.length}`);
   console.log(`[test-run] userMessage="${userMessage}"`);
 
   // ── Open SSE stream ───────────────────────────────────────────────────────
@@ -95,6 +100,11 @@ testRunRouter.post('/test-run', async (c) => {
       }
 
       // ── Get or create conversation for the test user ───────────────────────
+      // The pictures went straight to storage from the browser, so prove they are this store's
+      // own keys before the agent is handed them — the same rule the signed-read route applies.
+      const { assertB2KeyForBusiness } = await import('@repo/integrations');
+      for (const key of photos) assertB2KeyForBusiness(key, businessId);
+
       const { processInboundMessage } = await import('@repo/db/crud/conversation');
       const { conversationId, inserted } = await processInboundMessage(
         { id: channelId, businessId },
@@ -102,6 +112,7 @@ testRunRouter.post('/test-run', async (c) => {
         userMessage,
         // No externalId — test messages are never deduplicated on message id
         undefined,
+        photos,
       );
 
       console.log(`[test-run] conversation ready — conversationId=${conversationId} inserted=${inserted}`);
