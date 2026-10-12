@@ -27,6 +27,12 @@ export const messageSchema = z.object({
   content: z.string(),
   contentType: z.string(),
   time: timestampSchema,
+  /**
+   * Viewable URLs for the pictures this message was sent with, oldest first. Absent when there
+   * were none, so a reader that only shows text keeps working — and a photo the bucket would not
+   * sign drops out of this list rather than emptying the thread.
+   */
+  images: z.array(z.string()).optional(),
 });
 
 export const listMessagesQuerySchema = z.object({

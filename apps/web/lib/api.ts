@@ -485,7 +485,17 @@ export const listMessages = (
   businessId: string,
   conversationId: string,
 ) =>
-  apiFetch<Array<{ id: string; from: string; content: string; contentType: string; time: string }>>(
+  apiFetch<
+    Array<{
+      id: string;
+      from: string;
+      content: string;
+      contentType: string;
+      time: string;
+      /** Signed URLs for the photos the customer sent, oldest first; absent for a plain message. */
+      images?: string[];
+    }>
+  >(
     `/api/v1/${businessId}/conversations/${conversationId}/messages`,
     { token },
   );

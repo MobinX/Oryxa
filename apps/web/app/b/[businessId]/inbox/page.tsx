@@ -83,12 +83,28 @@ async function InboxContent({
                 <div
                   key={m.id}
                   className={cn(
-                    'max-w-[85%] rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
+                    'max-w-[85%] space-y-2 rounded-2xl px-4 py-2 text-sm sm:max-w-[75%]',
                     m.from === 'customer'
                       ? 'bg-muted'
                       : 'ml-auto bg-primary text-primary-foreground dark:bg-indigo-600 dark:text-white',
                   )}
                 >
+                  {m.images && m.images.length > 0 && (
+                    // The picture is the message, so it comes before the words. Each one links to
+                    // itself full size: a merchant judging a torn seam has to see the seam, not a
+                    // thumbnail of it.
+                    <div className="flex flex-wrap gap-2">
+                      {m.images.map((url, position) => (
+                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block">
+                          <img
+                            src={url}
+                            alt={`${m.from === 'customer' ? 'Customer' : 'Store'} photo ${position + 1}`}
+                            className="h-28 w-28 rounded-lg object-cover"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   {m.content}
                 </div>
               ))}
