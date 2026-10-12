@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
-import { logsBearer } from '@/lib/logs-session';
-import { operatorToken } from '@/lib/admin-access';
+import { authorizePlaygroundRun } from '@/lib/playground-access';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,15 +18,11 @@ function text(value: unknown, max: number): string | null {
 }
 
 /**
- * Same two proofs as the messenger playground proxy — this endpoint spends real tokens on a
- * store's agent, so a console session and an operator account are both required, and store
- * ownership is settled against the merchant API before anything is forwarded.
+ * Runs a comment through the store's own comment agent and streams what it decides — which of the
+ * two delivery tools it reached for, and what each carried. Whoever owns the store can run it:
+ * `authorizePlaygroundRun` settles that against the merchant API before anything is forwarded.
  */
 export async function POST(req: NextRequest) {
-  if (!(await logsBearer())) return jsonError(401, 'Sign in to the admin console first');
-  const token = await operatorToken();
-  if (!token) return jsonError(403, 'This sign-in is not the operator account');
-
   let body: { businessId?: unknown; channelId?: unknown; comment?: unknown; history?: unknown; commenterName?: unknown; postId?: unknown };
   try {
     body = await req.json();
@@ -42,6 +37,10 @@ export async function POST(req: NextRequest) {
   if (typeof channelId !== 'string' || !UUID.test(channelId)) {
     return jsonError(400, 'channelId is required and must be a channel id');
   }
+
+  const denied = await authorizePlaygroundRun(businessId, channelId);
+  if (denied) return jsonError(denied.status, denied.error);
+
   const comment = text(body.comment, 2000);
   if (!comment) return jsonError(400, 'comment is required');
 
@@ -59,14 +58,6 @@ export async function POST(req: NextRequest) {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   const cleanBaseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
   const internalKey = process.env.INTERNAL_KEY || 'change-me-to-random-secret';
-
-  const ownership = await fetch(`${cleanBaseUrl}/api/v1/${businessId}/agents/default`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  });
-  if (!ownership.ok) {
-    return jsonError(403, 'This store is not yours');
-  }
 
   const apiRes = await fetch(`${cleanBaseUrl}/internal/test-comment-run`, {
     method: 'POST',
