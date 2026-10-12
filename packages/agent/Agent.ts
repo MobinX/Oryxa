@@ -22,6 +22,20 @@ const PHOTO_UNAVAILABLE_NOTE = '[a picture was attached to this message; it cann
 /** The same fact for a run whose model has no eyes at all — nothing about the storage failed. */
 const PHOTO_UNSEEN_NOTE = '[a picture was attached to this message; this model cannot read pictures]';
 
+/**
+ * One picture as the model's provider asks for it.
+ *
+ * Chat Completions names a picture `image_url` and answers anything else with
+ * `400 Invalid value: 'image'`; the Gemini adapter wants the standard `image` block. LangChain's
+ * shared block type admits both spellings and converts neither, so the choice is ours to make —
+ * and getting it wrong is silent until the request leaves the process.
+ */
+export function photoBlock(contentType: string, base64: string, asUrlPart: boolean): ContentBlock {
+  return asUrlPart
+    ? { type: 'image_url', image_url: { url: `data:${contentType};base64,${base64}` } }
+    : { type: 'image', data: base64, mimeType: contentType };
+}
+
 export interface AgentConfig {
   systemPrompt: string;
   business: { id: string; name: string; description?: string | null };
@@ -168,7 +182,7 @@ export class Agent {
 
     const messages: BaseMessage[] = [
       new SystemMessage(systemContent),
-      ...(await this.historyMessages(canReadPhotos)),
+      ...(await this.historyMessages(canReadPhotos, provider === 'openai')),
     ];
 
     const result = await agent.invoke({ messages });
@@ -238,7 +252,7 @@ export class Agent {
    * about any more, and still leaves the model knowing one existed — which is what a customer's
    * "so is it the blue one?" needs to be answered at all.
    */
-  private async historyMessages(canReadPhotos: boolean): Promise<BaseMessage[]> {
+  private async historyMessages(canReadPhotos: boolean, photosAsUrlPart: boolean): Promise<BaseMessage[]> {
     const turns: BaseMessage[] = [];
 
     for (const m of this.config.history) {
@@ -249,11 +263,7 @@ export class Agent {
         for (const key of m.imageKeys ?? []) {
           try {
             const object = await getB2ObjectBytes(key);
-            photos.push({
-              type: 'image',
-              data: object.buffer.toString('base64'),
-              mimeType: object.contentType,
-            });
+            photos.push(photoBlock(object.contentType, object.buffer.toString('base64'), photosAsUrlPart));
           } catch {
             // A picture the bucket will not hand back is a turn answered without it — the caption
             // the customer typed beside the photo is still worth a reply.
