@@ -39,33 +39,40 @@ export function PostsComposerSkeleton() {
 
 export function PostsPanelSkeleton() {
   return (
-    <div className="mt-4 flex min-h-[min(70vh,600px)] flex-1 flex-col overflow-hidden rounded-card border border-border/80 bg-card shadow-card lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
-      <div className="flex min-h-0 flex-col border-b border-border/40 bg-muted/10 lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r">
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 p-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
+      <div className="space-y-3 border-b border-border/40 bg-card p-4">
+        <div className="flex items-center justify-between gap-2">
           <Pulse className="h-4 w-28" />
           <Pulse className="h-8 w-24" />
         </div>
-        <div className="flex gap-1 border-b border-border/40 px-4 py-2">
+        <div className="flex gap-1">
           <Pulse className="h-7 w-10" />
           <Pulse className="h-7 w-20" />
           <Pulse className="h-7 w-24" />
         </div>
-        <div className="flex-1 space-y-2 overflow-hidden p-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="space-y-2 rounded-xl border border-border/60 p-3">
-              <div className="flex items-center justify-between">
-                <Pulse className="h-3 w-24" />
-                <Pulse className="h-4 w-14 rounded-full" />
+      </div>
+      <div className="min-h-0 flex-1 p-4">
+        <div className="mx-auto max-w-2xl space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="space-y-3 rounded-xl border border-border/60 bg-card p-4">
+              <div className="flex items-center gap-2.5">
+                <Pulse className="h-9 w-9 rounded-full" />
+                <div className="space-y-1.5">
+                  <Pulse className="h-3 w-32" />
+                  <Pulse className="h-2.5 w-16" />
+                </div>
               </div>
               <Pulse className="h-3 w-full" />
+              <Pulse className="h-3 w-11/12" />
               <Pulse className="h-3 w-2/3" />
-              <Pulse className="h-2.5 w-16" />
+              <Pulse className="h-28 w-full rounded-lg" />
+              <div className="flex gap-4 border-t border-border/40 pt-2">
+                <Pulse className="h-6 w-14" />
+                <Pulse className="h-6 w-16" />
+              </div>
             </div>
           ))}
         </div>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col bg-card">
-        <PostsComposerSkeleton />
       </div>
     </div>
   );

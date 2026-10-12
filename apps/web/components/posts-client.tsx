@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ImageUpload } from '@/components/image-upload';
 import { ProductPhotoList } from '@/components/product-photo-list';
+import { PostFeed } from '@/components/posts/post-feed';
 import {
   getPostCachedAction,
   listComposerProductsAction,
@@ -31,7 +32,6 @@ import {
 import {
   Facebook,
   Instagram,
-  Plus,
   Trash2,
   Sparkles,
   Clock,
@@ -42,11 +42,12 @@ import {
   FileText,
   AlertCircle,
   HelpCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Pulse } from '@/components/skeletons';
 import { PostsComposerSkeleton } from '@/components/posts-panel-skeleton';
-import { ReaderDate, ReaderTime } from '@/components/reader-clock';
+import { ReaderTime } from '@/components/reader-clock';
 
 const CommentSection = dynamic(
   () => import('@/components/comments/comment-section').then((mod) => mod.CommentSection),
@@ -91,6 +92,8 @@ export function PostsClient({
   const router = useRouter();
   const routeParams = useParams<{ businessId: string; postId?: string }>();
   const selectedPostId = routeParams.postId ?? null;
+  // The list route draws the feed; every other route draws one post's own page.
+  const onFeed = !selectedPostId;
 
   function selectPost(postId: string | null) {
     if (postId) {
@@ -104,13 +107,15 @@ export function PostsClient({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const postsRef = useRef(posts);
   postsRef.current = posts;
+  // Strict mode runs an effect twice, and a blank draft is a write: the second pass must not
+  // open a second empty post on the merchant's page.
+  const blankDraftRequested = useRef(false);
   const [selectedPostDetail, setSelectedPostDetail] = useState<PostDetail | null>(seededPost);
   const [filterPlatform, setFilterPlatform] = useState<'all' | 'facebook' | 'instagram'>('all');
   const [updatingChannel, setUpdatingChannel] = useState(false);
   const [liveCommentCount, setLiveCommentCount] = useState<number | null>(null);
 
   // Loading states
-  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -170,6 +175,16 @@ export function PostsClient({
   // Paint the selected draft from the list immediately; only fetch extra
   // fields (aiPrompt / latestSync) when the list item is missing or published.
   useEffect(() => {
+    if (selectedPostId === 'new') {
+      if (blankDraftRequested.current) return;
+      blankDraftRequested.current = true;
+      setSelectedPostDetail(null);
+      setLoadingDetail(true);
+      void startBlankDraft();
+      return;
+    }
+    blankDraftRequested.current = false;
+
     if (!selectedPostId) {
       setSelectedPostDetail(null);
       setContent('');
@@ -261,27 +276,41 @@ export function PostsClient({
     : null;
 
   // 1. Create a blank draft post
-  async function handleCreatePost() {
+  function openNewPost() {
     if (channels.length === 0) {
       setErrorMsg('Please connect a channel in the Channels tab before creating posts.');
       return;
     }
-    setCreating(true);
+    router.push(`/b/${businessId}/posts/new`);
+  }
+
+  /**
+   * `/posts/new` is the composer for a draft that does not exist yet, and every other write in
+   * this tab patches an existing row — so the blank post is created first and the URL is then
+   * swapped to point at it, leaving Back on the feed rather than on an empty draft.
+   */
+  async function startBlankDraft() {
     setErrorMsg(null);
+    const channel = channels[0];
+    if (!channel) {
+      setErrorMsg('Please connect a channel in the Channels tab before creating posts.');
+      setLoadingDetail(false);
+      router.replace(`/b/${businessId}/posts`);
+      return;
+    }
     try {
-      const defaultChannel = channels[0];
       const created = await createPost(token, businessId, {
-        channelId: defaultChannel.id,
+        channelId: channel.id,
         content: '',
       });
-      setPosts([created, ...posts]);
-      selectPost(created.id);
+      setPosts([created, ...postsRef.current]);
       refreshPostsCache(created.id);
       setSuccessMsg('Created a new draft post.');
+      router.replace(`/b/${businessId}/posts/${created.id}`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create post');
-    } finally {
-      setCreating(false);
+      setLoadingDetail(false);
+      router.replace(`/b/${businessId}/posts`);
     }
   }
 
@@ -509,135 +538,31 @@ export function PostsClient({
         </div>
       )}
 
-      {/* Left panel: Post List */}
-      <div className="border-b border-border/40 lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-r flex flex-col bg-muted/10 min-h-0">
-        
-        {/* Header Actions */}
-        <div className="p-4 border-b border-border/40 flex items-center justify-between gap-2 shrink-0">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Drafts & Posts</h2>
-          <Button
-            size="sm"
-            onClick={handleCreatePost}
-            disabled={creating || channels.length === 0}
-            className="rounded-lg h-8 gap-1 font-semibold"
-          >
-            {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-            New Post
-          </Button>
-        </div>
-
-        {/* Filter Platform tabs */}
-        <div className="px-4 py-2 border-b border-border/40 bg-card flex gap-1 shrink-0">
-          <button
-            onClick={() => setFilterPlatform('all')}
-            className={cn(
-              'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
-              filterPlatform === 'all'
-                ? 'bg-primary/10 text-primary font-bold'
-                : 'text-muted-foreground hover:bg-muted',
-            )}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilterPlatform('facebook')}
-            className={cn(
-              'px-2.5 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors',
-              filterPlatform === 'facebook'
-                ? 'bg-primary/10 text-primary font-bold'
-                : 'text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <Facebook className="h-3 w-3" /> Facebook
-          </button>
-          <button
-            disabled
-            className="px-2.5 py-1 text-xs font-medium text-muted-foreground/50 flex items-center gap-1 cursor-not-allowed"
-            title="Instagram posting is coming soon!"
-          >
-            <Instagram className="h-3 w-3" /> Instagram
-            <span className="text-[9px] px-1 py-0.5 rounded bg-muted/80 text-muted-foreground scale-90 origin-left">soon</span>
-          </button>
-        </div>
-
-        {/* Posts List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
-          {filteredPosts.length === 0 ? (
-            <div className="text-center text-xs text-muted-foreground py-8">
-              No posts found. Click "+ New Post" to start a draft.
-            </div>
-          ) : (
-            filteredPosts.map((post) => {
-              const channel = channels.find((c) => c.id === post.channelId);
-              const isSelected = selectedPostId === post.id;
-              
-              return (
-                <div
-                  key={post.id}
-                  onClick={() => selectPost(post.id)}
-                  className={cn(
-                    'group relative rounded-xl border p-3 cursor-pointer transition-all duration-200 hover:shadow-sm',
-                    isSelected
-                      ? 'bg-card border-primary ring-1 ring-primary/20 shadow-sm'
-                      : 'bg-card/50 border-border hover:bg-card hover:border-border/80',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {channel?.platform === 'facebook' ? (
-                        <Facebook className="h-3 w-3 text-blue-600" />
-                      ) : (
-                        <Instagram className="h-3 w-3 text-pink-600" />
-                      )}
-                      <span className="truncate max-w-[120px] font-medium">
-                        {channelPageName(channel)}
-                      </span>
-                    </div>
-
-                    <span
-                      className={cn(
-                        'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full',
-                        post.postState === 'published' && 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
-                        post.postState === 'scheduled' && 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300',
-                        post.postState === 'draft' && 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
-                        post.postState === 'failed' && 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300',
-                      )}
-                    >
-                      {post.postState}
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-xs text-foreground/80 line-clamp-2 min-h-[2rem]">
-                    {post.content || <em className="text-muted-foreground">Empty post draft</em>}
-                  </p>
-
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>
-                      <ReaderDate at={post.createdAt} />
-                    </span>
-                    
-                    {/* Hard Delete Button */}
-                    <button
-                      onClick={(e) => handleDeletePost(post.id, e)}
-                      className="opacity-0 group-hover:opacity-100 hover:text-destructive p-1 rounded transition-opacity"
-                      title="Delete draft"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Right panel: Composer / Detail */}
-      <div className="flex-1 flex flex-col min-h-0 bg-card">
-        {loadingDetail ? (
-          <PostsComposerSkeleton />
-        ) : selectedPostId && selectedPostDetail ? (
-          <div className="flex-1 flex flex-col min-h-0">
+      {onFeed ? (
+        <PostFeed
+          posts={filteredPosts}
+          channels={channels}
+          filterPlatform={filterPlatform}
+          onFilterPlatform={setFilterPlatform}
+          onCreate={openNewPost}
+          onOpen={selectPost}
+          onDelete={handleDeletePost}
+        />
+      ) : (
+        <div className="flex-1 flex flex-col min-h-0 bg-card">
+          <div className="flex shrink-0 items-center border-b border-border/40 bg-muted/10 px-3 py-2">
+            <button
+              onClick={() => selectPost(null)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              All posts
+            </button>
+          </div>
+          {loadingDetail || selectedPostId === 'new' ? (
+            <PostsComposerSkeleton />
+          ) : selectedPostDetail ? (
+            <div className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 space-y-6">
                 
                 {/* 1. Header with Milestones */}
@@ -1087,13 +1012,14 @@ export function PostsClient({
             <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground mb-4">
               <FileText className="h-6 w-6" />
             </div>
-            <h3 className="font-bold text-sm text-foreground">No post selected</h3>
+            <h3 className="font-bold text-sm text-foreground">This post could not be opened</h3>
             <p className="text-xs mt-1">
-              Select a post draft from the list on the left to edit, schedule or publish it. Or click "+ New Post" to start a new draft.
+              Go back to the feed and pick the post again.
             </p>
           </div>
         )}
       </div>
+      )}
 
     </div>
   );
