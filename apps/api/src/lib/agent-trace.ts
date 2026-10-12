@@ -107,13 +107,20 @@ export function tokenFields(metrics: TokenUsageMetrics | undefined): Record<stri
 
 /** Compact, chronological view of what the model was actually shown. */
 export function agentInputFields(input: {
-  history: Array<{ from: string; content: string }>;
+  history: Array<{ from: string; content: string; imageKeys?: string[]; hadImages?: boolean }>;
   catalogCount: number;
   systemPrompt: string;
 }): Record<string, unknown> {
   return {
     historyLength: input.history.length,
-    turns: input.history,
+    // A turn's photo keys stay out of the log: they name a file from somebody's phone, and the
+    // logs page is readable by anyone with a link to it. How many pictures a turn carried is what
+    // an operator needs; which picture it was is not.
+    turns: input.history.map((m) =>
+      (m.imageKeys?.length ?? 0) === 0 && !m.hadImages
+        ? { from: m.from, content: m.content }
+        : { from: m.from, content: m.content, photos: m.imageKeys?.length ?? 0, hadPhotos: m.hadImages === true },
+    ),
     catalogCount: input.catalogCount,
     systemPromptLength: input.systemPrompt.length,
   };

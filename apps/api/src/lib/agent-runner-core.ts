@@ -106,9 +106,17 @@ export async function runAgentCore(
   // sorted oldest→newest.
   const historyById = new Map(conv.messages.map((m) => [m.id, m]));
   for (const m of pendingMsgs) historyById.set(m.id, m);
+  const pendingIds = new Set(repliedMessageIds);
   const history = [...historyById.values()]
     .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-    .map((m) => ({ from: m.from, content: m.content }));
+    .map((m) => ({
+      from: m.from,
+      content: m.content,
+      // Only the backlog's pictures are handed over as pixels; a photo two turns ago has already
+      // been answered, and paying to look at it again on every reply is not what it is for.
+      imageKeys: pendingIds.has(m.id) ? m.imageKeys : [],
+      hadImages: !pendingIds.has(m.id) && m.imageKeys.length > 0,
+    }));
 
   const catalog = await listProducts(conv.businessId, { limit: 10 });
   console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);

@@ -2,18 +2,40 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
+import type { BaseMessage, ContentBlock } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
+import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
 import { DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
 
+/**
+ * What a picture the model is not shown becomes in its history: the fact, without the pixels.
+ * Phrased as a note about the message rather than an instruction, because it sits in the
+ * customer's turn and the model has to be able to tell whose words those are.
+ */
+const PHOTO_UNAVAILABLE_NOTE = '[a picture was attached to this message; it cannot be seen now]';
+
+/** The same fact for a run whose model has no eyes at all — nothing about the storage failed. */
+const PHOTO_UNSEEN_NOTE = '[a picture was attached to this message; this model cannot read pictures]';
+
 export interface AgentConfig {
   systemPrompt: string;
   business: { id: string; name: string; description?: string | null };
-  history: Array<{ from: string; content: string }>;
+  /**
+   * The thread the model is about to read. `imageKeys` are the bucket keys of the pictures on a
+   * turn that is being answered now, so the model can look at them; `hadImages` says a turn the
+   * model has already answered carried one, which it is told about in words instead of pixels.
+   */
+  history: Array<{
+    from: string;
+    content: string;
+    imageKeys?: string[];
+    hadImages?: boolean;
+  }>;
   conversationId: string;
   pageToken: string;
   customerPlatformId: string;
@@ -100,6 +122,12 @@ export class Agent {
             temperature: 0.3,
           }));
 
+    // `gemini-flash-lite-latest` — the only model this path uses on Gemini — has no eyes: its
+    // adapter throws on an image part instead of ignoring it. A picture goes to a model that can
+    // look at one, and to every other model as a note saying a picture was sent.
+    const canReadPhotos =
+      provider === 'openai' || /vision|gemini-(1\.5|2|3)/.test(modelName);
+
     const sentTexts = this.sentTexts;
     const { emitSse, sendMessageOverride } = this.config;
 
@@ -138,15 +166,9 @@ export class Agent {
       historyLen: this.config.history.length,
     });
 
-    const messages = [
+    const messages: BaseMessage[] = [
       new SystemMessage(systemContent),
-      ...this.config.history
-        .slice()
-        .map((m) =>
-          m.from === 'customer'
-            ? new HumanMessage(m.content)
-            : new AIMessage(m.content),
-        ),
+      ...(await this.historyMessages(canReadPhotos)),
     ];
 
     const result = await agent.invoke({ messages });
@@ -206,6 +228,59 @@ export class Agent {
       sentTexts: this.sentTexts,
       metrics,
     };
+  }
+
+  /**
+   * The history rows as model messages.
+   *
+   * A picture is pixels for the turn being answered now and a sentence for every turn before it.
+   * Re-reading a thread's photos on each reply charges the merchant for images nobody is asking
+   * about any more, and still leaves the model knowing one existed — which is what a customer's
+   * "so is it the blue one?" needs to be answered at all.
+   */
+  private async historyMessages(canReadPhotos: boolean): Promise<BaseMessage[]> {
+    const turns: BaseMessage[] = [];
+
+    for (const m of this.config.history) {
+      const wanted = (m.imageKeys?.length ?? 0) > 0 || Boolean(m.hadImages);
+      const photos: ContentBlock[] = [];
+
+      if (canReadPhotos && !m.hadImages) {
+        for (const key of m.imageKeys ?? []) {
+          try {
+            const object = await getB2ObjectBytes(key);
+            photos.push({
+              type: 'image',
+              data: object.buffer.toString('base64'),
+              mimeType: object.contentType,
+            });
+          } catch {
+            // A picture the bucket will not hand back is a turn answered without it — the caption
+            // the customer typed beside the photo is still worth a reply.
+          }
+        }
+      }
+
+      const note = wanted && photos.length === 0 ? (canReadPhotos ? PHOTO_UNAVAILABLE_NOTE : PHOTO_UNSEEN_NOTE) : '';
+      const text = [m.content, note].filter(Boolean).join('\n\n');
+
+      const blocks: ContentBlock[] = [];
+      if (text) blocks.push({ type: 'text', text });
+      blocks.push(...photos);
+
+      // A plain string stays a plain string: only a turn that actually carries a picture becomes
+      // a content array, so every text-only thread reaches the model exactly as it always did.
+      const content =
+        blocks.length === 0
+          ? ''
+          : blocks.length === 1 && blocks[0].type === 'text'
+            ? text
+            : blocks;
+
+      turns.push(m.from === 'customer' ? new HumanMessage(content) : new AIMessage(content));
+    }
+
+    return turns;
   }
 }
 

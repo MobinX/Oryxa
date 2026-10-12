@@ -1,6 +1,6 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { searchProducts } from '@repo/db/crud/product';
+import { searchProducts, getProductByVariantId } from '@repo/db/crud/product';
 import { createOrder, getOrderById, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
@@ -119,6 +119,83 @@ export function createCatalogTools(context: {
       description: 'Search the product catalog by name or SKU. Returns matching products with variants.',
       schema: z.object({
         query: z.string().describe('Product name or SKU to search for'),
+      }),
+    },
+  );
+
+  /**
+   * The short label a merchant stamps on a variant's photo, read off the picture the customer
+   * sent. A label is the one thing in this store that names one size of one product exactly, so
+   * a lookup either answers the question outright or says so — and then the model is left with
+   * what it can see, which is the second path this tool exists to hand over.
+   */
+  const getProductByVariantIdTool = tool(
+    async ({ variantId }) => {
+      // A model quotes the stamp as it reads it: "#AFG23", "afg23", sometimes with the label of
+      // the picture beside it. Only the five characters matter.
+      const label = variantId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+      context.emitSse?.('tool_call', { name: 'get_product_by_variant_id', args: { variantId: label } });
+      console.log(`[agent-tool] get_product_by_variant_id called with label="${label}"`);
+
+      if (!/^[A-Z0-9]{5}$/.test(label)) {
+        const result = JSON.stringify({
+          found: false,
+          read: variantId,
+          instruction:
+            'That is not a variant label — a label is exactly three letters and two digits. '
+            + 'Read the picture again and look for the stamped code, or search the catalog by what you see.',
+        });
+        context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
+        return result;
+      }
+
+      const product = await getProductByVariantId(context.businessId, label);
+      const variant = product?.variants.find((v) => v.variantId === label) ?? null;
+
+      if (!product || !variant) {
+        const result = JSON.stringify({
+          found: false,
+          variantId: label,
+          instruction:
+            'Nothing in this store wears that label. Reason from the picture itself and search the '
+            + 'catalog with the words that best describe what you see, or say the item is not one of ours.',
+        });
+        context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
+        return result;
+      }
+
+      const result = JSON.stringify({
+        found: true,
+        variantId: label,
+        product: {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          price: product.price,
+          description: product.description,
+        },
+        variant: {
+          id: variant.id,
+          name: variant.name,
+          price: variant.price,
+          stock: variant.stock,
+          isAvailable: variant.isAvailable,
+        },
+        instruction: context.conversationId
+          ? `This is the exact item the stamped label belongs to: ${product.name}, variant ${variant.name}. `
+            + 'Show it with show_products (query the product name) so the customer gets the card, and name that variant in one line.'
+          : `This is the exact item the stamped label belongs to: ${product.name}, variant ${variant.name}. Answer with it.`,
+      });
+      console.log(`[agent-tool] get_product_by_variant_id result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
+      context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
+      return result;
+    },
+    {
+      name: 'get_product_by_variant_id',
+      description: 'Find the exact product and variant a customer means from the short label stamped on a photo they sent — five characters, three letters and two digits, often written with a # in front ("#AFG23"). USE THIS FIRST whenever a message contains such a code, whether the customer typed it or it is printed on a picture. Only when this finds nothing should you describe the photo and search by words instead.',
+      schema: z.object({
+        variantId: z.string().min(1).max(40).describe('The stamped label, with or without its #'),
       }),
     },
   );
@@ -262,7 +339,14 @@ export function createCatalogTools(context: {
     },
   );
 
-  return [getProductTool, createOrderTool, getOrderTool, updateOrderTool, cancelOrderTool];
+  return [
+    getProductTool,
+    getProductByVariantIdTool,
+    createOrderTool,
+    getOrderTool,
+    updateOrderTool,
+    cancelOrderTool,
+  ];
 }
 
 export function createAgentTools(

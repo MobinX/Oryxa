@@ -148,6 +148,13 @@
       "when": 1791849600000,
       "tag": "0020_messages_carry_their_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0021_agents_learn_to_read_a_picture",
+      "breakpoints": true
     }
   ]
 }
