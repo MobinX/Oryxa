@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ImageUpload } from '@/components/image-upload';
+import { ProductPhotoList } from '@/components/product-photo-list';
 import {
   getPostCachedAction,
   listComposerProductsAction,
@@ -78,6 +79,9 @@ function channelPageName(channel: Channel | null | undefined): string {
   return channel?.pageName || 'Connected Page';
 }
 
+/** Both platforms stop taking pictures past this many, so the composer stops offering them too. */
+const MAX_POST_MEDIA = 5;
+
 export function PostsClient({
   token,
   businessId,
@@ -138,6 +142,11 @@ export function PostsClient({
   const [productOptions, setProductOptions] = useState<ProductListItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
+  // The manual composer has no product of its own, so the merchant picks one only to borrow the
+  // pictures it already has. The AI tab needs no second picker: its product choice is this one.
+  const [suggestProductId, setSuggestProductId] = useState('');
+  const photosProductId = sourceMode === 'ai' ? selectedProductId : suggestProductId;
+  const photosProductName = productOptions.find((p) => p.id === photosProductId)?.name;
   const [selectedTone, setSelectedTone] = useState('friendly');
 
   // AI Tune instruction state
@@ -166,6 +175,7 @@ export function PostsClient({
       setContent('');
       setMediaUrls([]);
       setScheduledAt('');
+      setSuggestProductId('');
       setLiveCommentCount(null);
       setLoadingDetail(false);
       return;
@@ -179,6 +189,10 @@ export function PostsClient({
       setContent(fromList.content);
       setMediaUrls(fromList.mediaUrls || []);
       setScheduledAt(scheduleInputValue(fromList.scheduledAt));
+      // A draft written from a product keeps offering that product's pictures, so the merchant
+      // editing it tomorrow sees the same shelf they chose today.
+      setSuggestProductId(fromList.productId ?? '');
+      if (fromList.productId) setSelectedProductId(fromList.productId);
       setLoadingDetail(false);
     } else {
       setLoadingDetail(true);
@@ -196,6 +210,8 @@ export function PostsClient({
         setContent(detail.content);
         setMediaUrls(detail.mediaUrls || []);
         setScheduledAt(scheduleInputValue(detail.scheduledAt));
+        setSuggestProductId(detail.productId ?? '');
+        if (detail.productId) setSelectedProductId(detail.productId);
       })
       .catch((err) => {
         if (cancelled || fromList) return;
@@ -211,7 +227,7 @@ export function PostsClient({
   }, [selectedPostId, businessId]);
 
   useEffect(() => {
-    if (sourceMode !== 'ai' || productOptions.length > 0) return;
+    if (productOptions.length > 0) return;
     let cancelled = false;
     setLoadingProducts(true);
     void listComposerProductsAction(businessId)
@@ -231,7 +247,7 @@ export function PostsClient({
     return () => {
       cancelled = true;
     };
-  }, [sourceMode, businessId, productOptions.length]);
+  }, [businessId, productOptions.length]);
 
   // Filter posts
   const filteredPosts = posts.filter((post) => {
@@ -409,6 +425,9 @@ export function PostsClient({
       setPosts([created, ...posts]);
       selectPost(created.id);
       setSourceMode('write');
+      // The tab flips to Write Manually after generating, and the product the copy was written
+      // from is the one whose pictures belong beside it.
+      setSuggestProductId(selectedProductId);
       refreshPostsCache(created.id);
       setSuccessMsg('AI-generated draft ready!');
     } catch (err) {
@@ -452,6 +471,17 @@ export function PostsClient({
 
   function handleRemoveImage(indexToRemove: number) {
     setMediaUrls(mediaUrls.filter((_, idx) => idx !== indexToRemove));
+  }
+
+  /** A tapped product photo joins the composer's attachments, and a tapped again one leaves them. */
+  function handleTogglePhoto(url: string) {
+    setMediaUrls((current) =>
+      current.includes(url)
+        ? current.filter((u) => u !== url)
+        : current.length >= MAX_POST_MEDIA
+          ? current
+          : [...current, url],
+    );
   }
 
   // Character counter limits
@@ -784,6 +814,33 @@ export function PostsClient({
                         </Button>
                       </div>
                     )}
+
+                    {sourceMode === 'write' && (
+                      <div className="flex flex-col md:flex-row items-end gap-3 animate-in fade-in duration-200">
+                        <div className="flex-1 w-full space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Select Product to suggest photos
+                          </label>
+                          <Select
+                            value={suggestProductId}
+                            onChange={(e) => setSuggestProductId(e.target.value)}
+                            className="bg-card"
+                            disabled={loadingProducts}
+                          >
+                            {loadingProducts && productOptions.length === 0 ? (
+                              <option value="">Loading products…</option>
+                            ) : (
+                              <option value="">No product — upload your own photos</option>
+                            )}
+                            {productOptions.map((prod) => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.name} (${prod.price})
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -836,7 +893,7 @@ export function PostsClient({
                     ))}
 
                     {/* Upload new image button */}
-                    {selectedPostDetail.postState !== 'published' && mediaUrls.length < 5 && (
+                    {selectedPostDetail.postState !== 'published' && mediaUrls.length < MAX_POST_MEDIA && (
                       <div className="min-h-20 w-20 rounded-xl border border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center p-2 text-center transition-all bg-muted/5 hover:bg-muted/10">
                         <ImageUpload
                           token={token}
@@ -848,9 +905,23 @@ export function PostsClient({
                     )}
 
                     {mediaUrls.length === 0 && (
-                      <span className="text-xs text-muted-foreground italic">No image attached. Supports up to 5 attachments.</span>
+                      <span className="text-xs text-muted-foreground italic">No image attached. Supports up to {MAX_POST_MEDIA} attachments.</span>
                     )}
                   </div>
+
+                  {/* The product's own shelf, beside the merchant's uploads — a picked picture is an
+                      attachment exactly like an uploaded one. */}
+                  {selectedPostDetail.postState !== 'published' && photosProductId && (
+                    <ProductPhotoList
+                      token={token}
+                      businessId={businessId}
+                      productId={photosProductId}
+                      productName={photosProductName}
+                      selected={mediaUrls}
+                      max={MAX_POST_MEDIA}
+                      onToggle={handleTogglePhoto}
+                    />
+                  )}
                 </div>
 
                 {/* 5. AI Tune Instruction Bar */}
