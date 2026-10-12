@@ -193,6 +193,50 @@ describe('Agent Runner', () => {
     runSpy.mockRestore();
   }, 30_000);
 
+  it('shows the model pixels for the last three pictures and words for the ones before', async () => {
+    // A photo and the question about it routinely arrive as two deliveries: the second run must
+    // still be looking at the picture, not telling the customer it cannot see it. Older pictures
+    // stay a note, so a long thread does not pay for its whole album on every reply.
+    const seed = await seedTestWorld();
+    const { createMessage } = await import('@repo/db/crud/conversation');
+    for (let i = 0; i < 4; i++) {
+      await createMessage({
+        conversationId: seed.conversation.id,
+        from: 'customer',
+        content: `answered photo ${i}`,
+        state: 'done',
+        imageKeys: [`photo-${i}`],
+      });
+    }
+    await createMessage({
+      conversationId: seed.conversation.id,
+      from: 'customer',
+      content: 'the one asking now',
+      imageKeys: ['photo-4'],
+    });
+
+    const { Agent } = await import('@repo/agent');
+    let capturedHistory: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> = [];
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: {
+      sentTexts: string[];
+      config: { history: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> };
+    }) {
+      capturedHistory = [...this.config.history];
+      this.sentTexts = ['reply'];
+      return agentRunResult('done', ['reply']);
+    });
+
+    await runAgentForConversation(seed.conversation.id);
+
+    const photoTurns = capturedHistory.filter((m) => m.imageKeys.length > 0 || m.hadImages);
+    expect(photoTurns.length).toBe(5);
+    expect(photoTurns.slice(-3).every((m) => m.imageKeys.length === 1)).toBe(true);
+    expect(photoTurns.slice(0, -3).every((m) => m.hadImages && m.imageKeys.length === 0)).toBe(true);
+    expect(photoTurns.at(-1)?.content).toBe('the one asking now');
+
+    runSpy.mockRestore();
+  }, 30_000);
+
   it('triggerAgentRun fires fetch to internal endpoint', async () => {
     const fetchMock = vi.fn(async () => new Response('accepted', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);

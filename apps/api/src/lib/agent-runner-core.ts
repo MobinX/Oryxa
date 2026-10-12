@@ -5,6 +5,15 @@ import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 
+/**
+ * How many of a thread's pictures are still handed to the model as pixels.
+ *
+ * Each one costs roughly a thousand tokens and is re-sent on every reply, so the window is a
+ * trade: wide enough that a photo and the question about it survive arriving as two deliveries,
+ * narrow enough that a long thread does not pay for its whole photo album.
+ */
+const PHOTO_MEMORY = 3;
+
 export interface AgentRunOptions {
   /**
    * If provided, structured debug events are streamed to the caller (the test
@@ -107,16 +116,29 @@ export async function runAgentCore(
   const historyById = new Map(conv.messages.map((m) => [m.id, m]));
   for (const m of pendingMsgs) historyById.set(m.id, m);
   const pendingIds = new Set(repliedMessageIds);
-  const history = [...historyById.values()]
-    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-    .map((m) => ({
+  const orderedHistory = [...historyById.values()]
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+  // A picture stays pixels for the last few the customer sent, not only for the ones being
+  // answered this second. "Do you have this?" and the photo it belongs to routinely land as two
+  // deliveries a second apart: the first run looks at the picture, the second one is left holding
+  // the sentence and replies that it cannot see anything. Anything older than that window is the
+  // note in `Agent.ts` — the model still knows a picture was sent, and stops asking for it.
+  const seenRecently = new Set(
+    orderedHistory
+      .filter((m) => m.imageKeys.length > 0)
+      .slice(-PHOTO_MEMORY)
+      .map((m) => m.id),
+  );
+  const history = orderedHistory.map((m) => {
+    const asPixels = pendingIds.has(m.id) || seenRecently.has(m.id);
+    return {
       from: m.from,
       content: m.content,
-      // Only the backlog's pictures are handed over as pixels; a photo two turns ago has already
-      // been answered, and paying to look at it again on every reply is not what it is for.
-      imageKeys: pendingIds.has(m.id) ? m.imageKeys : [],
-      hadImages: !pendingIds.has(m.id) && m.imageKeys.length > 0,
-    }));
+      imageKeys: asPixels ? m.imageKeys : [],
+      hadImages: !asPixels && m.imageKeys.length > 0,
+    };
+  });
 
   const catalog = await listProducts(conv.businessId, { limit: 10 });
   console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);
