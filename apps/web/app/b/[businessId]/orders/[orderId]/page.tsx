@@ -28,17 +28,20 @@ const nextState: Record<string, string> = {
   onDelivery: 'done',
 };
 
-export default function OrderDetailPage({
+export default async function OrderDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string; orderId: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  const { businessId } = await params;
   return (
     <div className="mx-auto max-w-2xl">
+      {/* An absolute href: a relative ".." from /orders/<id> lands on /b/<businessId>, which is a
+          layout with no page of its own. */}
       <Link
-        href=".."
+        href={`/b/${businessId}/orders`}
         className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
       >
         ← Back to orders

@@ -62,15 +62,18 @@ function day(iso: string): string {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-export default function CustomerDetailPage({
+export default async function CustomerDetailPage({
   params,
 }: {
   params: Promise<{ businessId: string; customerId: string }>;
 }) {
+  const { businessId } = await params;
   return (
     <div className="space-y-6">
+      {/* An absolute href: a relative ".." from /customers/<id> lands on /b/<businessId>, which
+          is a layout with no page of its own. */}
       <Link
-        href=".."
+        href={`/b/${businessId}/customers`}
         className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
       >
         ← Back to customers

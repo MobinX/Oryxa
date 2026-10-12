@@ -10,17 +10,20 @@ import { Card } from '@/components/ui/card';
 import { createOrderAction } from '@/app/actions/orders';
 import NewOrderSkeleton from './skeleton';
 
-export default function NewOrderPage({
+export default async function NewOrderPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ productId?: string }>;
 }) {
+  const { businessId } = await params;
   return (
     <div className="mx-auto max-w-2xl">
+      {/* An absolute href: a relative ".." from /orders/new lands on /b/<businessId>, which is a
+          layout with no page of its own. */}
       <Link
-        href=".."
+        href={`/b/${businessId}/orders`}
         className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
       >
         ← Back to orders
