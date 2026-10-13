@@ -978,7 +978,7 @@ export function PlaygroundClient({
                           e.stopPropagation();
                           handleDeleteChat(conv.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 rounded transition-all"
+                        className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1.5 rounded transition-all"
                         title="Hard Delete Chat History"
                       >
                         <Trash2 className="h-3 w-3" />
