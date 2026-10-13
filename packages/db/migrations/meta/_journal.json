@@ -169,6 +169,13 @@
       "when": 1792108800000,
       "tag": "0023_orders_remember_the_messenger_id",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0024_default_agent_learns_the_variant_tools",
+      "breakpoints": true
     }
   ]
 }

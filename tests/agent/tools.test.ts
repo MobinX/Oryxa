@@ -361,7 +361,168 @@ describe('Agent Tools', () => {
     expect(page.hasMore).toBe(true);
     expect(page.instruction).toContain('startingLimit=1');
   });
+  it('show_product_info cards every size that is actually on offer', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Sizing Shirt',
+      price: 40,
+      sku: `SIZE-${Date.now()}`,
+      description: 'Three sizes',
+      variants: [
+        { name: 'S', stock: 3, isAvailable: true, price: 38, imageUrl: 'https://cdn.test/s.jpg' },
+        { name: 'M', stock: 5, isAvailable: true, price: 42, imageUrl: 'https://cdn.test/m.jpg' },
+        { name: 'XL', stock: 0, isAvailable: true, price: 46, imageUrl: 'https://cdn.test/xl.jpg' },
+      ],
+    });
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const productId = (await searchProductsForTest(seed.business.id, 'Sizing Shirt'))[0]!.id;
+
+    const result = JSON.parse(await tools.find((t) => t.name === 'show_product_info')!.invoke({ productId }));
+    expect(result.sent).toBe(true);
+
+    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    // A sold-out size gets no button: the customer would tap Order and be refused.
+    expect(cards.map((c) => c.title)).toEqual(['Sizing Shirt — S', 'Sizing Shirt — M']);
+    expect(cards.map((c) => c.subtitle)).toEqual(['$38.00 · 3 in stock', '$42.00 · 5 in stock']);
+    expect(cards[1]!.imageUrl).toBe('https://cdn.test/m.jpg');
+    expect(result.hiddenOutOfStock).toEqual(['XL']);
+
+    // Each tap names the size it came from, in the sentence the order path already reads.
+    const variantIds = (await getProductByIdForTest(seed.business.id, productId)).variants.map((v) => v.id);
+    expect(cards[0]!.button.payload).toBe(`place order with ${productId} and Sizing Shirt — S variant ${variantIds[0]}`);
+    expect(cards[1]!.button.payload).toBe(`place order with ${productId} and Sizing Shirt — M variant ${variantIds[1]}`);
+  });
+
+  it('show_variant_photos sends every picture of one size, each orderable', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Gallery Jacket',
+      price: 80,
+      sku: `GAL-${Date.now()}`,
+      description: 'Shot three times',
+      variants: [{
+        name: 'M',
+        stock: 4,
+        isAvailable: true,
+        price: 80,
+        imageUrl: 'https://cdn.test/g1.jpg',
+        imageUrls: ['https://cdn.test/g1.jpg', 'https://cdn.test/g2.jpg', 'https://cdn.test/g3.jpg'],
+      }],
+    });
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const productId = (await searchProductsForTest(seed.business.id, 'Gallery Jacket'))[0]!.id;
+    const variantId = (await getProductByIdForTest(seed.business.id, productId)).variants[0]!.id;
+
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!.invoke({ productId, variantId }),
+    );
+    expect(result.sent).toBe(true);
+
+    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(cards.map((c) => c.imageUrl)).toEqual([
+      'https://cdn.test/g1.jpg',
+      'https://cdn.test/g2.jpg',
+      'https://cdn.test/g3.jpg',
+    ]);
+    // One item seen from three sides: the price and the count are common to every card, and only the
+    // photo position differs — otherwise the list reads as three identical messages.
+    expect([...new Set(cards.map((c) => c.title))]).toEqual(['Gallery Jacket — M']);
+    expect(cards.map((c) => c.subtitle)).toEqual([
+      '$80.00 · 4 in stock · photo 1 of 3',
+      '$80.00 · 4 in stock · photo 2 of 3',
+      '$80.00 · 4 in stock · photo 3 of 3',
+    ]);
+    expect(new Set(cards.map((c) => c.button.payload))).toEqual(
+      new Set([`place order with ${productId} and Gallery Jacket — M variant ${variantId}`]),
+    );
+  });
+
+  it('show_variant_photos refuses a variant that is not one of the product\'s sizes', async () => {
+    const seed = await seedTestWorld();
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!
+        .invoke({ productId: seed.productDetail.id, variantId: '00000000-0000-0000-0000-000000000000' }),
+    );
+    expect(result.sent).toBe(false);
+    expect(result.instruction).toContain('show_product_info');
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('create_order refuses to guess a size when the product has several', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Choice Shirt',
+      price: 40,
+      sku: `CHOICE-${Date.now()}`,
+      description: 'Two sizes',
+      variants: [
+        { name: 'S', stock: 3, isAvailable: true, price: 38 },
+        { name: 'M', stock: 3, isAvailable: true, price: 42 },
+      ],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'Choice Shirt'))[0]!.id;
+
+    const tools = createAgentTools(agentContext(seed));
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'create_order')!.invoke({ productId, count: 1, customerPhone: '555-0099' }),
+    );
+
+    expect(result.error).toMatch(/variants/);
+    expect(result.instruction).toContain('show_product_info');
+    expect(result.variants.map((v: { name: string }) => v.name)).toEqual(['S', 'M']);
+
+    // Nothing was written, so the customer keeps one question instead of a wrong parcel.
+    const history = JSON.parse(await tools.find((t) => t.name === 'show_orders')!.invoke({}));
+    expect(history.orders).toEqual([]);
+  });
+
+  it('create_order stamps the variant, whether the tap gave it or the product had only one', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools(agentContext(seed));
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+
+    const chosen = seed.productDetail.variants[0]!;
+    const byTap = JSON.parse(
+      await createOrderTool.invoke({
+        productId: seed.productDetail.id,
+        variantId: chosen.id,
+        count: 1,
+        customerPhone: '555-0100',
+      }),
+    );
+    // The single size answers the question the customer never had to ask.
+    const byDefault = JSON.parse(
+      await createOrderTool.invoke({
+        productId: seed.productDetail.id,
+        count: 1,
+        customerPhone: '555-0101',
+      }),
+    );
+
+    const { getOrderById } = await import('@repo/db/crud/order');
+    for (const order of [byTap, byDefault]) {
+      const row = await getOrderById(seed.business.id, order.id);
+      expect(row?.variantId).toBe(chosen.id);
+      expect(row?.variantName).toBe(chosen.name);
+    }
+  });
 });
+
+/** The catalog row with its variants, read the way the card tools read it. */
+async function getProductByIdForTest(businessId: string, productId: string) {
+  const { getProductById } = await import('@repo/db/crud/product');
+  return (await getProductById(businessId, productId))!;
+}
 
 /** The catalog row the order tests need, looked up the way the agent tools look it up. */
 async function searchProductsForTest(businessId: string, query: string) {

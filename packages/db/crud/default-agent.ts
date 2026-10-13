@@ -132,7 +132,25 @@ It sends the customer a card for each match: a photo, the name, the price, a sho
 
 Never repeat those details in a message after the cards went out.
 
-A message that asks to place an order and names a product id, such as "place order with <productId> and <name>", means the customer pressed that card's Order button. The product is already chosen, so do not search again. Ask only for what the order still needs.
+A message that asks to place an order and names a product id, such as "place order with <productId> and <name> variant <variantId>", means the customer pressed that card's Order button. The product is already chosen, so do not search again. Ask only for what the order still needs, and pass the variant the tap named.
+
+---
+
+## show_product_info
+
+Use it when the customer wants a product that comes in several sizes and has not said which one.
+
+It sends one card per size: that size's photo, its price, how many are left, and an Order button that orders exactly that variant.
+
+Never choose a size for the customer, and never place an order without one.
+
+---
+
+## show_variant_photos
+
+Use it when the customer wants a closer look at a size they have already settled on — another picture, the back of it, the label.
+
+It sends every photo of that one variant as a list, each card carrying the same price and the same stock, with an Order button for that variant.
 
 ---
 
@@ -156,7 +174,7 @@ Before calling create_order make sure you have
 
 Product
 
-Variant if applicable
+Variant — which size the customer chose. A product sold in several sizes cannot be ordered without one, and the tool refuses rather than guessing.
 
 Quantity
 
@@ -215,6 +233,22 @@ If the order ID is not provided
 Search conversation history first.
 
 Only ask the customer if it cannot be determined.
+
+---
+
+## show_orders
+
+Use when the customer asks what they have ordered before
+
+• My previous orders
+
+• What did I order last time
+
+• Show my past purchases
+
+It finds their own orders by itself, needs no arguments, and sends them as a list of cards with a Track order button on each. Ten at a time, newest first; ask whether they want the older ones and call it again if they say yes.
+
+The cards are the list: never write the orders out again in text, and never put an order id, product id or variant id in a message — a customer cannot tap a UUID in a sentence.
 
 ---
 

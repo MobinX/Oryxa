@@ -188,7 +188,13 @@ export async function getOrdersByPlatformId(
       eq(orders.customerPlatformId, customerPlatformId),
       isNull(orders.deletedAt),
     ),
-    with: { product: true, variant: true },
+    // The variants come along with the product because a card needs a photo and only a variant has
+    // one: an order placed before the size was chosen, or from a storefront that never picked one,
+    // still showed the customer *their* purchase rather than nothing.
+    with: {
+      product: { with: { variants: { where: isNull(variants.deletedAt) } } },
+      variant: true,
+    },
     orderBy: [desc(orders.createdAt)],
     offset,
     limit: limit + 1,
@@ -202,11 +208,19 @@ export async function getOrdersByPlatformId(
     rows.slice(0, limit).map(async (o) => {
       const productActive = o.product && !o.product.deletedAt ? o.product : null;
       const variantActive = o.variant && !o.variant.deletedAt ? o.variant : null;
-      const storedImage = variantActive?.imageUrl ?? productActive?.imageUrl ?? null;
+      // A photo belongs to a variant, never to the product row. An order that never chose a size —
+      // anything placed before the agent was made to ask — still shows the customer what they bought,
+      // so the picture falls back to the first size of that product which has one.
+      const storedImage =
+        variantActive?.imageUrl
+        ?? productActive?.variants.find((v) => v.imageUrl)?.imageUrl
+        ?? null;
       const imageUrl = storedImage ? await resolveStoredImageUrl(storedImage).catch(() => null) : null;
 
       return {
         id: o.id,
+        productId: o.productId,
+        variantId: o.variantId,
         productName: productActive?.name ?? null,
         variantName: variantActive?.name ?? null,
         imageUrl,

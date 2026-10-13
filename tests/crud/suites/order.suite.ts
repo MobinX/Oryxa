@@ -9,7 +9,7 @@ import {
   updateOrderState,
   deleteOrder,
 } from '@repo/db/crud/order';
-import { getProductById } from '@repo/db/crud/product';
+import { createProduct, getProductById } from '@repo/db/crud/product';
 
 export function registerOrderCrudTests() {
   it('createOrder computes total price', async () => {
@@ -307,5 +307,60 @@ export function registerOrderCrudTests() {
       state: 'pending',
     });
     expect(page.orders[0]!.createdAt).toBeInstanceOf(Date);
+  });
+
+  it('an order that never chose a size still shows the product\'s photo', async () => {
+    const { business } = await seedTestWorld();
+    const product = await createProduct({
+      businessId: business.id,
+      name: 'Fallback Shirt',
+      price: 30,
+      sku: `FBK-${Date.now()}`,
+      description: 'Ordered while no size was recorded',
+      variants: [
+        { name: 'S', stock: 4, isAvailable: true, price: 30, imageUrl: 'https://cdn.test/fbk-s.jpg' },
+        { name: 'M', stock: 4, isAvailable: true, price: 30 },
+      ],
+    });
+
+    // Two sizes and no choice made, so the row is written with variant_id NULL. That is the shape a
+    // customer's own history has to survive: only a variant carries a photo, and a history read that
+    // could not see past the order row dropped these orders off the list of things they bought.
+    const order = await createOrder({
+      businessId: business.id,
+      productId: product.id,
+      count: 1,
+      customerName: 'Buyer',
+      customerPlatformId: 'psid-fallback',
+    });
+
+    const page = await getOrdersByPlatformId(business.id, 'psid-fallback');
+    expect(page.orders.map((o) => o.id)).toEqual([order.id]);
+    expect(page.orders[0]!.variantName).toBeNull();
+    expect(page.orders[0]!.productName).toBe('Fallback Shirt');
+    expect(page.orders[0]!.imageUrl).toBe('https://cdn.test/fbk-s.jpg');
+  });
+
+  it('an order whose product has no photo anywhere reports none rather than a wrong one', async () => {
+    const { business } = await seedTestWorld();
+    const product = await createProduct({
+      businessId: business.id,
+      name: 'Bare Towel',
+      price: 12,
+      sku: `BARE-${Date.now()}`,
+      description: 'The store never photographed it',
+      variants: [{ name: 'One', stock: 2, isAvailable: true, price: 12 }],
+    });
+    await createOrder({
+      businessId: business.id,
+      productId: product.id,
+      count: 1,
+      customerName: 'Buyer',
+      customerPlatformId: 'psid-bare',
+    });
+
+    const page = await getOrdersByPlatformId(business.id, 'psid-bare');
+    expect(page.orders).toHaveLength(1);
+    expect(page.orders[0]!.imageUrl).toBeNull();
   });
 }
