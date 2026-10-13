@@ -171,6 +171,8 @@ export function PlaygroundClient({
   const [selectedConvId, setSelectedConvId] = useState<string>(preload?.conversations[0]?.id ?? '');
   const [messages, setMessages] = useState<Message[]>(preload?.messages ?? []);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  /** A chat that never arrived is not an empty chat: the pane says which, and offers the retry. */
+  const [chatLoadError, setChatLoadError] = useState<string | null>(null);
   const [hasMoreChats, setHasMoreChats] = useState(
     (preload?.conversations.length ?? 0) >= PLAYGROUND_CHAT_PAGE,
   );
@@ -353,6 +355,7 @@ export function PlaygroundClient({
 
   async function loadMessages(convId: string) {
     const seq = ++loadSeqRef.current;
+    setChatLoadError(null);
     setIsLoadingMessages(true);
     // A read that never answers must not own the pane: past the window the skeleton stands down,
     // and the messages still paint the moment the request lands.
@@ -365,7 +368,10 @@ export function PlaygroundClient({
       if (seq !== loadSeqRef.current) return;
       setMessages(msgList || []);
     } catch (err) {
-      if (seq === loadSeqRef.current) console.error('Failed to load messages:', err);
+      if (seq === loadSeqRef.current) {
+        console.error('Failed to load messages:', err);
+        setChatLoadError(err instanceof Error && err.message ? err.message : 'The chat did not load.');
+      }
     } finally {
       if (seq === loadSeqRef.current) setIsLoadingMessages(false);
     }
@@ -458,7 +464,12 @@ export function PlaygroundClient({
 
   /** Switching chats empties the pane first, so the reader sees a load instead of the last chat. */
   function selectChat(convId: string) {
-    if (convId === selectedConvId) return;
+    if (convId === selectedConvId) {
+      // Already on screen, so a second tap only means something after a failed read — and re-setting
+      // the same id would not re-run the effect, so this one has to re-read by hand.
+      if (chatLoadError) void loadMessages(convId);
+      return;
+    }
     setMessages([]);
     setSelectedConvId(convId);
   }
@@ -1103,9 +1114,22 @@ export function PlaygroundClient({
                             Loading this chat’s messages…
                           </p>
                         </div>
+                      ) : chatLoadError ? (
+                        <div className="space-y-2 py-4 text-center">
+                          <p className="text-[10px] text-red-400">
+                            Could not load this chat: {chatLoadError}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => loadMessages(selectedConvId)}
+                            className="rounded-lg border border-slate-800 px-3 py-1.5 text-[11px] font-semibold text-slate-300 transition-colors hover:text-slate-100"
+                          >
+                            Try again
+                          </button>
+                        </div>
                       ) : messages.length === 0 ? (
                         <p className="text-center text-[10px] text-slate-600">
-                          Nothing came back for this chat. Pick it again, or send it a message.
+                          No messages in this chat yet — send one and the agent answers it.
                         </p>
                       ) : (
                         messages.map((msg) => (
