@@ -925,8 +925,9 @@ export function PlaygroundClient({
               <div
                 className={cn(
                   'flex-col gap-1.5 overflow-y-auto border-slate-800 bg-slate-900/20 p-2',
+                  // A phone lays this over the chat, so it has to read as a surface; max-lg keeps the desktop pane's wash as it was.
                   chatsDrawerOpen
-                    ? 'absolute inset-y-0 left-0 z-30 flex w-64 max-w-[85%] border-r shadow-xl lg:relative lg:z-auto lg:w-1/3 lg:shadow-none'
+                    ? 'absolute inset-y-0 left-0 z-30 flex w-64 max-w-[85%] border-r shadow-xl max-lg:bg-slate-900/90 max-lg:backdrop-blur-xl max-lg:backdrop-saturate-150 lg:relative lg:z-auto lg:w-1/3 lg:shadow-none'
                     : 'hidden w-full lg:flex lg:w-1/3 lg:border-r',
                 )}
               >
