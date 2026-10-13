@@ -195,13 +195,44 @@ describe('agent run outcome logging', () => {
     expect(of(events, 'agent_input')).toHaveLength(0);
   });
 
-  it('flags a channel that can never reply as the reason for the silence', async () => {
+  it('answers a store that follows the default with the default, not its own dormant copy', async () => {
     const seed = await seedTestWorld();
-    const { updateChannelAgent } = await import('@repo/db/crud/channel');
-    await updateChannelAgent(seed.channel.id, seed.business.id, null);
+    const { db } = await import('@repo/db/client');
+    const { agents } = await import('@repo/db/schema');
+    const { eq } = await import('drizzle-orm');
+    // The store's row keeps the text it was copied with; the flag is what decides whose words answer.
+    await db
+      .update(agents)
+      .set({ systemPrompt: 'DORMANT COPY — must not answer', followsDefault: true })
+      .where(eq(agents.id, seed.agent.id));
 
     const { events } = await runAndCapture(seed.conversation.id);
+    const { DEFAULT_AGENT_PROMPT } = await import('@repo/db/crud/default-agent');
 
+    expect(kinds(events)).toEqual([]);
+    expect(of(events, 'agent_input')[0]).toMatchObject({
+      systemPromptLength: DEFAULT_AGENT_PROMPT.length,
+    });
+    expect(of(events, 'agent_run')).toHaveLength(1);
+  });
+
+  it('flags a conversation whose channel is gone as the reason for the silence', async () => {
+    const seed = await seedTestWorld();
+    const conversationCrud = await import('@repo/db/crud/conversation');
+    const read = conversationCrud.getConversationWithHistory;
+    const spy = vi
+      .spyOn(conversationCrud, 'getConversationWithHistory')
+      .mockImplementation(async (id) => {
+        const conv = await read(id);
+        // The channel row is what the reply is sent through; without it the run cannot answer at all.
+        return conv ? ({ ...conv, channel: null } as unknown as typeof conv) : conv;
+      });
+
+    const { events } = await runAndCapture(seed.conversation.id);
+    spy.mockRestore();
+
+    // The channel carries the Page token a reply is sent with, so this is the silence that is still
+    // real. A channel merely missing its own agent row is no longer part of it.
     expect(kinds(events)).toEqual(['channel_without_agent']);
     expect(of(events, 'anomaly')[0]).toMatchObject({ detail: seed.conversation.id });
     expect(of(events, 'agent_run')).toHaveLength(0);

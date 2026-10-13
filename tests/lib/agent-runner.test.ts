@@ -57,7 +57,7 @@ describe('Agent Runner', () => {
     runSpy.mockRestore();
   }, 30_000);
 
-  it('runAgentForConversation returns early when conversation has no agent', async () => {
+  it('runAgentForConversation answers a channel with no agent of its own', async () => {
     const seed = await seedTestWorld();
     const { updateChannelAgent } = await import('@repo/db/crud/channel');
     await updateChannelAgent(seed.channel.id, seed.business.id, null);
@@ -65,8 +65,10 @@ describe('Agent Runner', () => {
     const messagesBefore = await listMessages(seed.conversation.id, seed.business.id);
     await runAgentForConversation(seed.conversation.id);
     const messagesAfter = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messagesAfter?.length).toBe(messagesBefore?.length);
-  });
+    // This used to be a silence no error ever named: no agent row, no reply, nothing in the log but an
+    // anomaly. The channel still holds the Page token, so the platform default answers the customer.
+    expect(messagesAfter?.length).toBeGreaterThan(messagesBefore?.length ?? 0);
+  }, 30_000);
 
   it('runAgentForConversation re-triggers for a message it never claimed', async () => {
     const seed = await seedTestWorld();
