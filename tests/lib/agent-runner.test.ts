@@ -222,21 +222,38 @@ describe('Agent Runner', () => {
     // stay a note, so a long thread does not pay for its whole album on every reply.
     const seed = await seedTestWorld();
     const { createMessage } = await import('@repo/db/crud/conversation');
+    const photoTurnsSeeded: Array<{ id: string }> = [];
     for (let i = 0; i < 4; i++) {
-      await createMessage({
-        conversationId: seed.conversation.id,
-        from: 'customer',
-        content: `answered photo ${i}`,
-        state: 'done',
-        imageKeys: [`photo-${i}`],
-      });
+      photoTurnsSeeded.push(
+        await createMessage({
+          conversationId: seed.conversation.id,
+          from: 'customer',
+          content: `answered photo ${i}`,
+          state: 'done',
+          imageKeys: [`photo-${i}`],
+        }),
+      );
     }
-    await createMessage({
+    const askingNow = await createMessage({
       conversationId: seed.conversation.id,
       from: 'customer',
       content: 'the one asking now',
       imageKeys: ['photo-4'],
     });
+
+    // History is ordered by `time`, and five inserts finish inside one clock tick: on a tie the
+    // database returns them in whatever order it likes, which is how this test passed locally and
+    // failed on a runner. Spacing the timestamps is the only way the newest message is newest.
+    const { db } = await import('@db/client');
+    const { messages } = await import('@repo/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const spaced = [...photoTurnsSeeded, askingNow];
+    for (const [i, message] of spaced.entries()) {
+      await db
+        .update(messages)
+        .set({ time: new Date(Date.now() - (spaced.length - i) * 60_000) })
+        .where(eq(messages.id, message.id));
+    }
 
     const { Agent } = await import('@repo/agent');
     let capturedHistory: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> = [];
