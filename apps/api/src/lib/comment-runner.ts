@@ -97,6 +97,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   const { createCommentAgentTools } = await import('@agent/tools/comment');
   const { listProducts } = await import('@repo/db/crud/product');
   const { getFacebookPostContext, replyToFacebookComment } = await import('@repo/integrations/facebook');
+  const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
   const trace = createAgentTrace();
   const started = performance.now();
@@ -186,9 +187,10 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
       .join('\n');
 
+    const answering = await resolveAnsweringAgent(thread.channel.agent);
     const systemPrompt = postContext
-      ? `Post being commented on:\n${postContext}\n\n${thread.channel.agent.systemPrompt}`
-      : thread.channel.agent.systemPrompt;
+      ? `Post being commented on:\n${postContext}\n\n${answering.systemPrompt}`
+      : answering.systemPrompt;
 
     emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt }));
 
@@ -218,7 +220,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       customerName: thread.commenterName,
       catalogSummary,
       tools,
-      replyGuidance: thread.channel.agent.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
+      replyGuidance: answering.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
     });
 
     try {

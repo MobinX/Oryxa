@@ -220,8 +220,31 @@ export const agents = pgTable('agents', {
    */
   replyGuidance: text('reply_guidance'),
   commentReplyGuidance: text('comment_reply_guidance'),
+  /**
+   * False means this row is the store's own writing and answers its customers; true means the row
+   * keeps its text only as a record, and the store answers with the platform default instead. The
+   * copy is never deleted, so one UPDATE turns a store back into an override.
+   */
+  followsDefault: boolean('follows_default').notNull().default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
+});
+
+/**
+ * The one agent every store answers with until it writes its own — the row an operator edits for all
+ * merchants at once, where the code constant could only ever reach stores created after the edit.
+ * Read as a singleton (`order by created_at limit 1`) and created on first read, the same way the
+ * per-business rows were: nothing in Postgres needs a constraint to keep one writer honest.
+ */
+export const defaultAgents = pgTable('default_agent', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull().default('Oryxa Sales Agent'),
+  platformType: platformEnum('platform_type').notNull().default('facebook'),
+  systemPrompt: text('system_prompt').notNull(),
+  replyGuidance: text('reply_guidance'),
+  commentReplyGuidance: text('comment_reply_guidance'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const channels = pgTable('channels', {

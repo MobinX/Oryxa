@@ -48,7 +48,10 @@ export async function createAgent(businessId: string, input: unknown) {
   const parsed = createAgentInputSchema.parse(input);
   const [agent] = await db
     .insert(agents)
-    .values({ ...parsed, businessId })
+    // The prompt in this call is somebody's own writing — the input schema requires one — so the row
+    // arrives as an override. The column's default is true for the copies `ensureDefaultAgent` mints,
+    // which nobody authored; inheriting it here would dorm the text its author just supplied.
+    .values({ ...parsed, businessId, followsDefault: false })
     .returning();
   return agent;
 }
@@ -87,9 +90,16 @@ export async function updateAgent(businessId: string, agentId: string, input: un
   const parsed = updateAgentInputSchema.parse(input);
   const agent = await getAgentById(businessId, agentId);
   if (!agent) return null;
+  // Writing prompt or wording text here means the store is answering with its own words, so the row stops
+  // following the platform default. Only the flag changes meaning: whatever the row held before is still
+  // there, and clearing the flag brings it back.
+  const ownsItsWords =
+    parsed.systemPrompt !== undefined ||
+    parsed.replyGuidance !== undefined ||
+    parsed.commentReplyGuidance !== undefined;
   const [updated] = await db
     .update(agents)
-    .set(parsed)
+    .set({ ...parsed, ...(ownsItsWords ? { followsDefault: false } : {}) })
     .where(eq(agents.id, agentId))
     .returning();
   return { id: updated.id, updated: true };

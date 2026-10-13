@@ -403,7 +403,7 @@ export function PlaygroundClient({
         commentReplyGuidance: ownWording(commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance),
       };
       await updateAgent(token, businessId, agent.id, { systemPrompt, ...guidance });
-      setAgent({ ...agent, systemPrompt, ...guidance });
+      setAgent({ ...agent, systemPrompt, ...guidance, followsDefault: false });
       // A box that resolved to null shows the built-in text again, not what was typed in it.
       setReplyGuidance(guidance.replyGuidance ?? '');
       setCommentReplyGuidance(guidance.commentReplyGuidance ?? '');
@@ -756,6 +756,16 @@ export function PlaygroundClient({
                 </h2>
               </div>
 
+              {/* What the boxes below hold is the platform default until this store saves, and a save
+                  makes the copy its own — so the editor says which of the two it is looking at. */}
+              {agent?.followsDefault !== false && (
+                <p className="mb-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[10px] leading-relaxed text-indigo-200">
+                  Answering with the default agent — edit that once at{' '}
+                  <span className="font-mono">/admin/default-agent</span> and every store follows it.
+                  Saving here writes this store&apos;s own copy, and this store stops following.
+                </p>
+              )}
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -780,7 +790,11 @@ export function PlaygroundClient({
                     Messenger reply guidance
                   </label>
                   <span className="text-[10px] font-medium text-slate-500">
-                    {agent?.replyGuidance ? 'Store’s own wording' : 'Built-in wording'}
+                    {agent?.replyGuidance
+                      ? agent.followsDefault === false
+                        ? 'Store’s own wording'
+                        : 'Default wording'
+                      : 'Built-in wording'}
                   </span>
                 </div>
                 <textarea
@@ -797,7 +811,11 @@ export function PlaygroundClient({
                     Comment reply guidance
                   </label>
                   <span className="text-[10px] font-medium text-slate-500">
-                    {agent?.commentReplyGuidance ? 'Store’s own wording' : 'Built-in wording'}
+                    {agent?.commentReplyGuidance
+                      ? agent.followsDefault === false
+                        ? 'Store’s own wording'
+                        : 'Default wording'
+                      : 'Built-in wording'}
                   </span>
                 </div>
                 <textarea

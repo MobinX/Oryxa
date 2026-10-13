@@ -36,7 +36,7 @@ import {
   ChannelTakenError,
   ChannelAgentError,
 } from '@repo/db/crud/channel';
-import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
+import { ensureDefaultAgent, getPlatformAgent, resolveAnsweringAgent } from '@repo/db/crud/default-agent';
 import {
   getFacebookOAuthUrl,
   exchangeCodeForToken,
@@ -137,17 +137,22 @@ const getDefaultAgentRoute = createRoute({
 channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const agent = await ensureDefaultAgent(businessId);
+  // The editor shows what this store ACTUALLY answers with — its own row when it wrote one, the platform
+  // default otherwise — while the id stays the store's row, because that is where saving must land.
+  const answering = await resolveAnsweringAgent(agent);
+  const platform = await getPlatformAgent();
   return c.json({
     id: agent.id,
     name: agent.name,
     platformType: agent.platformType,
-    systemPrompt: agent.systemPrompt,
-    replyGuidance: agent.replyGuidance,
-    commentReplyGuidance: agent.commentReplyGuidance,
+    systemPrompt: answering.systemPrompt,
+    replyGuidance: answering.replyGuidance,
+    commentReplyGuidance: answering.commentReplyGuidance,
+    followsDefault: agent.followsDefault !== false,
     createdAt: agent.createdAt.toISOString(),
     guidanceDefaults: {
-      replyGuidance: DEFAULT_REPLY_GUIDANCE,
-      commentReplyGuidance: COMMENT_REPLY_GUIDANCE,
+      replyGuidance: platform.replyGuidance ?? DEFAULT_REPLY_GUIDANCE,
+      commentReplyGuidance: platform.commentReplyGuidance ?? COMMENT_REPLY_GUIDANCE,
     },
   });
 });

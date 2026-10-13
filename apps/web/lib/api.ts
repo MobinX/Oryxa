@@ -355,6 +355,8 @@ export type Agent = {
   /** The store's own wording blocks; null means it never wrote one and Oryxa's built-in applies. */
   replyGuidance?: string | null;
   commentReplyGuidance?: string | null;
+  /** False when this store answers with its own row. True means the text above is the platform default's. */
+  followsDefault?: boolean;
   guidanceDefaults?: { replyGuidance: string; commentReplyGuidance: string };
   createdAt?: string;
 };
@@ -1151,6 +1153,32 @@ export const adminListAssignments = (token: string, businessId: string) =>
   apiFetch<PlanAssignment[]>(`/api2/admin/businesses/${businessId}/assignments`, {
     token,
     signInPath: null,
+  });
+
+/**
+ * The agent every store answers with until it writes its own. Console bearer only: one write here
+ * speaks for every business on the platform, so a merchant's token is refused at the route.
+ */
+export type PlatformAgent = {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  replyGuidance: string | null;
+  commentReplyGuidance: string | null;
+};
+
+export const adminGetPlatformAgent = (bearer: string) =>
+  apiFetch<PlatformAgent>('/api2/admin/default-agent', { token: bearer, signInPath: null });
+
+export const adminUpdatePlatformAgent = (
+  bearer: string,
+  data: { systemPrompt?: string; replyGuidance?: string | null; commentReplyGuidance?: string | null },
+) =>
+  apiFetch<PlatformAgent>('/api2/admin/default-agent', {
+    method: 'PUT',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(data),
   });
 
 // Customers (scoped through the business's company)

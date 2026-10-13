@@ -68,10 +68,12 @@ export default async function AdminAgentPlaygroundPage() {
           Testing against <span className="font-mono text-primary">{SANDBOX_SLUG}</span>
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Saving a prompt here changes this sandbox store's agent only. The text every{' '}
-          <em>new</em> store ships with lives in{' '}
-          <code>packages/db/crud/default-agent.ts</code>, and editing it is a code change, not a
-          keystroke — that is deliberate, because it cannot be undone for the stores already on it.
+          Saving a prompt here changes this sandbox store's agent only — its own copy, and it stops
+          following the default. The text every other store answers with is edited on{' '}
+          <Link href="/admin/default-agent" className="font-medium text-primary underline-offset-4 hover:underline">
+            Default agent
+          </Link>
+          , and it reaches them on the customer's next message.
         </p>
       </Card>
 

@@ -20,6 +20,8 @@ export const selectAgentSchema = z.object({
   systemPrompt: z.string().optional(),
   replyGuidance: z.string().nullable().optional(),
   commentReplyGuidance: z.string().nullable().optional(),
+  /** False when this store answers with its own row instead of the platform default. */
+  followsDefault: z.boolean().optional(),
   createdAt: timestampSchema.optional(),
 });
 
@@ -27,6 +29,27 @@ export const selectAgentSchema = z.object({
 export const agentGuidanceDefaultsSchema = z.object({
   replyGuidance: z.string(),
   commentReplyGuidance: z.string(),
+});
+
+/**
+ * The one agent every store answers with until it writes its own — what the operator console edits for
+ * all merchants at once. Its id is exposed so the console can say which row it is editing; nothing else
+ * joins to it.
+ */
+export const platformAgentSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  systemPrompt: z.string(),
+  replyGuidance: z.string().nullable(),
+  commentReplyGuidance: z.string().nullable(),
+});
+
+export const updatePlatformAgentInputSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  systemPrompt: z.string().min(1).max(40000).optional(),
+  /** null puts that block back on the reviewed wording in code, same as a merchant emptying their box. */
+  replyGuidance: z.string().max(12000).nullable().optional(),
+  commentReplyGuidance: z.string().max(12000).nullable().optional(),
 });
 
 export const createAgentOutputSchema = z.object({

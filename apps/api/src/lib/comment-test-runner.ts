@@ -39,6 +39,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
   const { listProducts } = await import('@repo/db/crud/product');
   const { Agent } = await import('@repo/agent');
   const { createCommentAgentTools } = await import('@agent/tools/comment');
+  const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
   const trace = createAgentTrace(forward);
   const emitSse = trace.emitSse;
@@ -98,9 +99,10 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
     .join('\n');
 
+  const answering = await resolveAnsweringAgent(full.channel.agent);
   const systemPrompt = full.postContext
-    ? `Post being commented on:\n${full.postContext}\n\n${full.channel.agent.systemPrompt}`
-    : full.channel.agent.systemPrompt;
+    ? `Post being commented on:\n${full.postContext}\n\n${answering.systemPrompt}`
+    : answering.systemPrompt;
 
   emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt }));
 
@@ -142,7 +144,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     customerName: input.commenterName ?? null,
     catalogSummary,
     tools,
-    replyGuidance: full.channel.agent.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
+    replyGuidance: answering.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
     emitSse,
   });
 

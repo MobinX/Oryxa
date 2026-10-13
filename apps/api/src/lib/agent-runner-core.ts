@@ -61,15 +61,19 @@ export async function runAgentCore(
   const { Agent } = await import('@repo/agent');
   const { listProducts } = await import('@repo/db/crud/product');
   const { sendMessage, senderAction } = await import('@repo/integrations/facebook');
+  const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
   const conv = await getConversationWithHistory(conversationId);
-  if (!conv?.channel?.agent) {
-    console.log(`[agent-runner-core] no agent on conversation ${conversationId} — skipping`);
-    // Nothing can reply to this customer until an agent is attached to the
-    // channel — a silence with no error anywhere in the system.
+  if (!conv?.channel) {
+    console.log(`[agent-runner-core] no channel on conversation ${conversationId} — skipping`);
+    // The channel carries the Page token a reply is sent with, so without one nothing can answer —
+    // a silence with no error anywhere in the system. A channel holding no agent of its own is no
+    // longer part of that silence: it answers with the platform default.
     emitAnomaly('channel_without_agent', { detail: conversationId });
     return;
   }
+
+  const answering = await resolveAnsweringAgent(conv.channel.agent);
 
   // Atomic claim: only one concurrent caller transitions idle→working and gets
   // to run the agent. This is the single race-free gate that prevents duplicate
@@ -148,7 +152,7 @@ export async function runAgentCore(
     .join('\n');
 
   // Everything the model is about to see, before it decides anything.
-  emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt: conv.channel.agent.systemPrompt }));
+  emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt: answering.systemPrompt }));
 
   // Resolve the real sendMessage function here; the override (if any) is injected into
   // the Agent so the same path is exercised whether or not we are in test mode. The raw
@@ -157,7 +161,7 @@ export async function runAgentCore(
   const resolvedSendMessage = sendMessageOverride ?? sendMessage;
 
   const agent = new Agent({
-    systemPrompt: conv.channel.agent.systemPrompt,
+    systemPrompt: answering.systemPrompt,
     business: conv.business ?? { id: conv.businessId, name: 'Store' },
     history,
     conversationId: conv.id,
@@ -167,8 +171,9 @@ export async function runAgentCore(
     catalogSummary,
     emitSse,
     sendMessageOverride,
-    // The store's own wording if it wrote one; Agent falls back to Oryxa's built-in block.
-    replyGuidance: conv.channel.agent.replyGuidance ?? undefined,
+    // Already resolved: the store's own block, else the platform default's, else undefined and Agent
+    // falls back to the reviewed text in @agent/guidance.
+    replyGuidance: answering.replyGuidance ?? undefined,
   });
 
   const started = performance.now();

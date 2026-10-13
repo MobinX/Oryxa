@@ -2,12 +2,15 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   adminStatsResponseSchema,
   errorSchema,
+  platformAgentSchema,
   resolveTimeZone,
+  updatePlatformAgentInputSchema,
   type AdminStatsResponse,
 } from '@repo/shared';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
 import { queryLogs } from '@api/lib/log-query';
 import { emit, errorFields } from '@api/lib/log';
+import { getPlatformAgent, updatePlatformAgent } from '@repo/db/crud/default-agent';
 import {
   getAdminDailySeries,
   getAdminSnapshot,
@@ -351,4 +354,66 @@ adminRouter.openapi(tokenUsageDetailRoute, async (c) => {
   if (!detail) return c.json({ error: 'Business not found' }, 404);
 
   return c.json({ month, startTime: start.toISOString(), endTime: end.toISOString(), ...detail }, 200);
+});
+
+/**
+ * The agent every store answers with until it writes one of its own.
+ *
+ * This is the prompt edit that reaches the merchants who are replying to customers today: a store's row
+ * copied the built-in text when the store was created and has heard nothing from it since, which is how
+ * an operator's wording change silently landed on nobody. A store that wrote its own prompt is an override
+ * and stays one — this route does not reach it.
+ *
+ * Reads and writes take the same gate as every other `/api2` route: the console bearer, never a merchant's
+ * Firebase token, because one write here speaks for every business on the platform.
+ */
+const getPlatformAgentRoute = createRoute({
+  method: 'get',
+  path: '/admin/default-agent',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { 'application/json': { schema: platformAgentSchema } },
+      description: 'The default agent, created from the reviewed text if this is the first read of it',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+  },
+});
+
+adminRouter.openapi(getPlatformAgentRoute, async (c) => c.json(await getPlatformAgent(), 200));
+
+const updatePlatformAgentRoute = createRoute({
+  method: 'put',
+  path: '/admin/default-agent',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: { body: { content: { 'application/json': { schema: updatePlatformAgentInputSchema } } } },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: platformAgentSchema } },
+      description: 'The saved default. Stores following it answer with this on the customer’s next message.',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+  },
+});
+
+adminRouter.openapi(updatePlatformAgentRoute, async (c) => {
+  // No log event here: the event vocabulary is closed on purpose (Axiom caps a dataset at 256 permanent
+  // fields) and no other console write emits one. The row's own updated_at is the audit trail.
+  return c.json(await updatePlatformAgent(c.req.valid('json')), 200);
 });
