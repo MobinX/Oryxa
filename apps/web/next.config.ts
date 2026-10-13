@@ -33,6 +33,20 @@ const nextConfig = {
       { source: '/logs/login', destination: '/admin/login', permanent: false },
     ];
   },
+  /**
+   * The console's data calls go to this app's own origin and are forwarded here, because
+   * `NEXT_PUBLIC_API_URL` is a machine-local address in the browser bundle: on a phone or through
+   * a tunnel, `http://localhost:3500` is the device itself, so every direct browser-to-API call
+   * dies at the network and the page paints an empty pane. The server resolves that host fine, so
+   * proxying it restores what a reload — which is server-rendered — was already doing.
+   * `afterFiles` rather than the default: the real route handlers under `/api/v1` (the Facebook
+   * callback) have to be matched before the proxy swallows the prefix.
+   */
+  async rewrites() {
+    const raw = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001';
+    const api = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+    return { afterFiles: [{ source: '/api/v1/:path*', destination: `${api}/api/v1/:path*` }] };
+  },
 };
 
 export default nextConfig;

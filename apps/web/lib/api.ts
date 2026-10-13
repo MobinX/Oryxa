@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+/**
+ * Server-side, a call leaves for the API host, which resolves where the server runs. In a browser it
+ * must not: `NEXT_PUBLIC_API_URL` is a machine-local address in the bundle, so from a phone
+ * `http://localhost:3500` is the handset's own loopback and every direct call dies at the network.
+ * An empty base keeps those calls on this app's origin, where the `/api/v1` proxy in next.config.ts
+ * hands them to the API — the same route a server render already takes.
+ */
+const API_URL =
+  typeof window === 'undefined' ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001' : '';
 
 export class ApiError extends Error {
   constructor(
