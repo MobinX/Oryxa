@@ -2,7 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireConsoleBearer } from '@/lib/admin-access';
-import { ApiError, adminUpdatePlatformAgent } from '@/lib/api';
+import {
+  ApiError,
+  adminMakeAgentFollowDefault,
+  adminUpdatePlatformAgent,
+} from '@/lib/api';
 
 export type DefaultAgentSaveResult = { ok: true } | { ok: false; error: string };
 
@@ -34,6 +38,30 @@ export async function updateDefaultAgentAction(formData: FormData): Promise<Defa
     return {
       ok: false,
       error: err instanceof ApiError ? err.message : 'Could not save the default agent.',
+    };
+  }
+
+  revalidatePath('/admin/default-agent');
+  return { ok: true };
+}
+
+/**
+ * Bring one store back onto the fleet default.
+ *
+ * Console bearer for the same reason the prompt edit is: this speaks for a business the clicker does
+ * not own. It is a flag write, so the store's own text survives it — clicking this by mistake costs
+ * nothing that cannot be undone by clicking the store back into an override with its next save.
+ */
+export async function followDefaultAgentAction(formData: FormData): Promise<DefaultAgentSaveResult> {
+  const agentId = String(formData.get('agentId') ?? '');
+  if (!agentId) return { ok: false, error: 'No store was named.' };
+
+  try {
+    await adminMakeAgentFollowDefault(await requireConsoleBearer(), agentId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof ApiError ? err.message : 'Could not change who that store answers with.',
     };
   }
 

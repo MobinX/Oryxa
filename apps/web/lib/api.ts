@@ -1183,6 +1183,30 @@ export const adminUpdatePlatformAgent = (
     body: JSON.stringify(data),
   });
 
+/** A store answering with its own words instead of the platform default. */
+export type AgentOverride = {
+  id: string;
+  businessId: string;
+  businessName: string;
+  agentName: string;
+  systemPromptChars: number;
+  pages: number;
+};
+
+export type AgentOverrideReport = { following: number; overrides: AgentOverride[] };
+
+export const adminGetOverrideReport = (bearer: string) =>
+  apiFetch<AgentOverrideReport>('/api2/admin/default-agent/overrides', { token: bearer, signInPath: null });
+
+/** One store back onto the fleet default. Its own text stays in its row, unused rather than erased. */
+export const adminMakeAgentFollowDefault = (bearer: string, agentId: string) =>
+  apiFetch<{ id: string; followsDefault: true }>('/api2/admin/default-agent/overrides/follow', {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify({ agentId }),
+  });
+
 // Customers (scoped through the business's company)
 export type Customer = {
   id: string;

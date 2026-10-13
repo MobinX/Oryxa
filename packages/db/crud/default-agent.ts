@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
-import { agents, defaultAgents } from '@db/schema';
+import { agents, businesses, defaultAgents } from '@db/schema';
 
 export const DEFAULT_AGENT_NAME = 'Oryxa Sales Agent';
 
@@ -636,4 +636,57 @@ export async function resolveAnsweringAgent(override?: AgentOverride | null): Pr
     replyGuidance: written(override.replyGuidance) ?? platform.replyGuidance,
     commentReplyGuidance: written(override.commentReplyGuidance) ?? platform.commentReplyGuidance,
   };
+}
+
+/**
+ * Who is NOT answering with the default, and how many Pages sit behind each one.
+ *
+ * Opting out takes a keystroke in the playground; reading the fleet back took a SQL query, which is the
+ * only way the first override was found. Length is reported rather than the text because this is a list
+ * to act on, not a second prompt editor.
+ */
+export async function getOverrideReport() {
+  const rows = await db
+    .select({
+      id: agents.id,
+      businessId: agents.businessId,
+      businessName: businesses.name,
+      agentName: agents.name,
+      systemPromptChars: sql<number>`length(${agents.systemPrompt})::int`,
+      pages: sql<number>`(select count(*) from channels ch
+                           where ch.agent_id = ${agents.id} and ch.deleted_at is null)::int`,
+      followsDefault: agents.followsDefault,
+    })
+    .from(agents)
+    .innerJoin(businesses, eq(businesses.id, agents.businessId))
+    .where(and(isNull(agents.deletedAt), isNull(businesses.deletedAt)))
+    .orderBy(desc(businesses.createdAt));
+
+  return {
+    following: rows.filter((row) => row.followsDefault).length,
+    overrides: rows.filter((row) => !row.followsDefault).map((row) => ({
+      id: row.id,
+      businessId: row.businessId,
+      businessName: row.businessName,
+      agentName: row.agentName,
+      systemPromptChars: Number(row.systemPromptChars),
+      pages: Number(row.pages),
+    })),
+  };
+}
+
+/**
+ * Bring one store back onto the fleet default.
+ *
+ * Deliberately a flag and nothing else: the store's own text stays in its row, so the operator who
+ * clicks this for somebody who wrote their own rules can be un-clicked the same way. Deleting the text
+ * would make a second thoughtless click cost a merchant their work.
+ */
+export async function makeAgentFollowDefault(agentId: string) {
+  const [updated] = await db
+    .update(agents)
+    .set({ followsDefault: true })
+    .where(and(eq(agents.id, agentId), isNull(agents.deletedAt)))
+    .returning({ id: agents.id });
+  return updated ?? null;
 }

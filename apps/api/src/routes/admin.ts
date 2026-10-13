@@ -1,8 +1,10 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   adminStatsResponseSchema,
+  agentOverrideReportSchema,
   agentGuidanceDefaultsSchema,
   errorSchema,
+  followDefaultAgentInputSchema,
   platformAgentSchema,
   resolveTimeZone,
   updatePlatformAgentInputSchema,
@@ -12,7 +14,12 @@ import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
 import { queryLogs } from '@api/lib/log-query';
 import { emit, errorFields } from '@api/lib/log';
-import { getPlatformAgent, updatePlatformAgent } from '@repo/db/crud/default-agent';
+import {
+  getOverrideReport,
+  getPlatformAgent,
+  makeAgentFollowDefault,
+  updatePlatformAgent,
+} from '@repo/db/crud/default-agent';
 import {
   getAdminDailySeries,
   getAdminSnapshot,
@@ -436,4 +443,66 @@ adminRouter.openapi(updatePlatformAgentRoute, async (c) => {
   // No log event here: the event vocabulary is closed on purpose (Axiom caps a dataset at 256 permanent
   // fields) and no other console write emits one. The row's own updated_at is the audit trail.
   return c.json(await updatePlatformAgent(c.req.valid('json')), 200);
+});
+
+/**
+ * Which stores are NOT answering with the default, and the one click that brings a store back.
+ *
+ * The fleet's state was only readable with SQL, while the way out of it — a save in the playground —
+ * takes one keystroke. That asymmetry is what this pair of routes closes.
+ */
+const getOverridesRoute = createRoute({
+  method: 'get',
+  path: '/admin/default-agent/overrides',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { 'application/json': { schema: agentOverrideReportSchema } },
+      description: 'Every live agent, split into those following the default and those answering their own',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+  },
+});
+
+adminRouter.openapi(getOverridesRoute, async (c) => c.json(await getOverrideReport(), 200));
+
+const followDefaultAgentRoute = createRoute({
+  method: 'post',
+  path: '/admin/default-agent/overrides/follow',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: { body: { content: { 'application/json': { schema: followDefaultAgentInputSchema } } } },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.object({ id: z.string().uuid(), followsDefault: z.literal(true) }) } },
+      description: 'The store now answers with the default; its own text stays in its row, unused',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No live agent with that id',
+    },
+  },
+});
+
+adminRouter.openapi(followDefaultAgentRoute, async (c) => {
+  const { agentId } = c.req.valid('json');
+  const updated = await makeAgentFollowDefault(agentId);
+  if (!updated) return c.json({ error: 'Agent not found' }, 404);
+  return c.json({ id: updated.id, followsDefault: true as const }, 200);
 });

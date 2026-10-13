@@ -124,6 +124,54 @@ describe('the gate in front of the fleet-wide write', () => {
 });
 
 /**
+ * Who is NOT answering with the default, and the click that puts a store back.
+ */
+describe('the override list', () => {
+  withPglite();
+
+  type Report = { following: number; overrides: Array<{ id: string; businessName: string; pages: number }> };
+
+  const report = async () => {
+    const res = await app.request('http://localhost/api2/admin/default-agent/overrides', {
+      headers: { Authorization: bearer(OPERATOR) },
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Report;
+  };
+
+  const followAgain = (agentId: string, auth = bearer(OPERATOR)) =>
+    app.request('http://localhost/api2/admin/default-agent/overrides/follow', {
+      method: 'POST',
+      headers: { Authorization: auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId }),
+    });
+
+  it('names the stores that opted out, with the text kept behind them', async () => {
+    const { business, agent } = await seedTestWorld();
+
+    const listed = await report();
+    const row = listed.overrides.find((o) => o.id === agent.id);
+    expect(row).toMatchObject({ businessName: business.name, pages: 1 });
+
+    // Following the default must not erase what the store wrote.
+    expect((await followAgain(agent.id)).status).toBe(200);
+    const after = await getAgentById(business.id, agent.id);
+    expect(after?.followsDefault).toBe(true);
+    expect(after?.systemPrompt).toBe(agent.systemPrompt);
+
+    expect((await report()).overrides.some((o) => o.id === agent.id)).toBe(false);
+  });
+
+  it('refuses a nameless id and a caller who is not the console', async () => {
+    expect((await followAgain('00000000-0000-4000-8000-000000000000')).status).toBe(404);
+    expect((await app.request('http://localhost/api2/admin/default-agent/overrides')).status).toBe(401);
+    // A header that is not a bearer at all: refused before any provider is consulted, so this asserts
+    // the same way whether or not Firebase credentials happen to be configured in the environment.
+    expect((await followAgain('00000000-0000-4000-8000-000000000000', 'Basic nobody')).status).toBe(401);
+  });
+});
+
+/**
  * The flag is the mechanism, and nothing wrote to it in a test: a save carrying only nulls used to
  * flip a follower into an override, which is the opposite of what "clear my wording" asks for.
  */

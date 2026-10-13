@@ -52,6 +52,27 @@ export const updatePlatformAgentInputSchema = z.object({
   commentReplyGuidance: z.string().max(12000).nullable().optional(),
 });
 
+/**
+ * A store answering with its own words rather than the platform default. The console needs to name these:
+ * opting out is a keystroke, while reading the fleet's state back was a SQL query.
+ */
+export const agentOverrideSchema = z.object({
+  id: uuidSchema,
+  businessId: uuidSchema,
+  businessName: z.string(),
+  agentName: z.string(),
+  /** Length, not text: the list says who opted out, it is not a second prompt editor. */
+  systemPromptChars: z.number(),
+  pages: z.number(),
+});
+
+export const agentOverrideReportSchema = z.object({
+  following: z.number(),
+  overrides: z.array(agentOverrideSchema),
+});
+
+export const followDefaultAgentInputSchema = z.object({ agentId: uuidSchema });
+
 export const createAgentOutputSchema = z.object({
   id: uuidSchema,
   createdAt: timestampSchema,
