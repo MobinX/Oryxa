@@ -60,30 +60,30 @@ export function FormPageSkeleton() {
 
 export function DashboardPageSkeleton() {
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-5">
-        <Pulse className="h-11 w-full max-w-md" />
-        <div className="flex gap-2">
-          <Pulse className="h-10 w-10 rounded-xl" />
-          <Pulse className="h-10 w-10 rounded-full" />
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-4 sm:gap-4 sm:pb-5">
+        <Pulse className="h-11 w-full max-w-md min-w-0" />
+        <div className="flex shrink-0 gap-2">
+          <Pulse className="h-10 w-10 shrink-0 rounded-xl" />
+          <Pulse className="h-10 w-10 shrink-0 rounded-full" />
         </div>
       </div>
       <div className="space-y-2">
-        <Pulse className="h-9 w-72" />
-        <Pulse className="h-4 w-56" />
+        <Pulse className="h-8 w-full max-w-72 sm:h-9" />
+        <Pulse className="h-4 w-full max-w-56" />
       </div>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Pulse key={i} className="h-36 rounded-[22px]" />
+          <Pulse key={i} className="h-28 rounded-[22px] sm:h-36" />
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-12">
-        <Pulse className="h-72 lg:col-span-5 rounded-[22px]" />
-        <Pulse className="h-72 lg:col-span-7 rounded-[22px]" />
+      <div className="grid grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-12">
+        <Pulse className="h-64 rounded-[22px] sm:h-72 lg:col-span-5" />
+        <Pulse className="h-64 rounded-[22px] sm:h-72 lg:col-span-7" />
       </div>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Pulse key={i} className="h-28 rounded-[22px]" />
+          <Pulse key={i} className="h-24 rounded-[22px] sm:h-28" />
         ))}
       </div>
     </div>

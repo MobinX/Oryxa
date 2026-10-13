@@ -22,7 +22,7 @@ export function SearchBar({ businessId, placeholder = 'Search anything...', init
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative flex-1 max-w-md">
+    <form onSubmit={handleSubmit} className="relative min-w-0 flex-1 max-w-md">
       <input
         type="text"
         placeholder={placeholder}

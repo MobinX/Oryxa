@@ -18,7 +18,6 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  FolderTree,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
@@ -157,9 +156,9 @@ async function DashboardContent({
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Top Navigation / Search Header */}
-      <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-5">
+      <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-4 sm:gap-4 sm:pb-5">
         <SearchBar businessId={businessId} />
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -183,12 +182,12 @@ async function DashboardContent({
       </div>
 
       {/* Greeting Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-geist text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h2 className="font-geist text-xl font-bold tracking-tight text-foreground sm:text-3xl">
             Good morning, {me.name}! 👋
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-1 text-sm text-muted-foreground">
             Here&apos;s a live overview of your business today.
           </p>
         </div>
@@ -211,31 +210,31 @@ async function DashboardContent({
       <RecentNotices businessId={businessId} notices={notices.notifications} />
 
       {/* Row 1: Four Statistics Cards */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         {topStats.map((item) => (
-          <Link key={item.label} href={`/b/${businessId}/${item.href}`} className="block group">
-            <Card className="hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.99] border-border/60 transition-all duration-200">
-              <div className="flex items-center justify-between gap-3">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${item.color}`}>
+          <Link key={item.label} href={`/b/${businessId}/${item.href}`} className="block min-w-0 group">
+            <Card className="hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.99] border-border/60 p-4 transition-all duration-200 sm:p-6">
+              <div className="flex items-center justify-between gap-2 sm:gap-3">
+                <div className="min-w-0 space-y-2 sm:space-y-3">
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10 ${item.color}`}>
                       <item.icon className="h-5 w-5 stroke-[1.75]" />
                     </div>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="truncate text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       {item.label}
                     </span>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="font-geist text-3xl font-extrabold tracking-tight text-foreground">
+                    <p className="font-geist text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
                       {item.count}
                     </p>
-                    <p className="text-[11px] font-medium text-muted-foreground">
+                    <p className="hidden text-[11px] font-medium text-muted-foreground sm:block">
                       {item.desc}
                     </p>
                   </div>
                 </div>
 
-                <div className="w-20 h-10 shrink-0 self-end opacity-90 group-hover:opacity-100 transition-opacity">
+                <div className="hidden h-10 w-20 shrink-0 self-end opacity-90 group-hover:opacity-100 transition-opacity sm:block">
                   <svg className="w-full h-full" viewBox="0 0 120 30" fill="none">
                     <path
                       d={item.sparkline}
@@ -253,36 +252,37 @@ async function DashboardContent({
       </div>
 
       {/* Row 2: Recent Activity & Meta Banner */}
-      <div className="grid gap-6 lg:grid-cols-12">
+      {/* grid-cols-1 + min-w-0: an implicit track is as wide as its min-content, and one unwrappable line then outgrows the phone. */}
+      <div className="grid grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-12">
         {/* Recent Activity */}
-        <div className="lg:col-span-5 flex">
-          <Card className="w-full flex flex-col justify-between border-border/60">
-            <div className="space-y-6">
+        <div className="flex min-w-0 lg:col-span-5">
+          <Card className="w-full flex flex-col justify-between border-border/60 p-5 sm:p-6">
+            <div className="space-y-4 sm:space-y-6">
               <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" />
+                <Activity className="h-5 w-5 text-primary shrink-0" />
                 <h3 className="font-geist text-lg font-bold text-foreground">
                   Recent activity
                 </h3>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-4 sm:space-y-5">
                 {recentActivity.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
                     No recent activity found.
                   </p>
                 ) : (
                   recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3.5">
+                    <div key={index} className="flex items-start gap-3 sm:gap-3.5">
                       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${activity.color}`}>
                         <activity.icon className="h-4.5 w-4.5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground">{activity.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
                           {activity.desc}
                         </p>
                       </div>
-                      <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
+                      <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5 shrink-0">
                         {activity.timeLabel}
                       </span>
                     </div>
@@ -293,7 +293,7 @@ async function DashboardContent({
 
             <Link
               href={`/b/${businessId}/inbox`}
-              className="mt-6 flex items-center justify-center gap-1.5 rounded-xl bg-muted/50 py-3 text-xs font-semibold text-primary hover:bg-muted transition-colors w-full"
+              className="mt-5 flex items-center justify-center gap-1.5 rounded-xl bg-muted/50 py-2.5 text-xs font-semibold text-primary hover:bg-muted transition-colors w-full sm:mt-6 sm:py-3"
             >
               View inbox
               <ArrowRight className="h-4 w-4" />
@@ -302,17 +302,17 @@ async function DashboardContent({
         </div>
 
         {/* Connect with Meta Promotion Card */}
-        <div className="lg:col-span-7 flex">
-          <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-800 p-8 text-white shadow-xl shadow-indigo-500/10 flex flex-col justify-between w-full min-h-[300px]">
-            <div className="absolute right-0 top-0 -mr-16 -mt-16 h-72 w-72 rounded-full bg-white/5 blur-2xl" />
-            <div className="absolute -left-20 -bottom-20 h-72 w-72 rounded-full bg-indigo-400/10 blur-2xl" />
+        <div className="flex min-w-0 lg:col-span-7">
+          <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-800 p-6 text-white shadow-xl shadow-indigo-500/10 flex flex-col justify-between w-full min-w-0 sm:min-h-[300px] sm:p-8">
+            <div className="absolute right-0 top-0 -mr-16 -mt-16 h-56 w-56 rounded-full bg-white/5 blur-2xl sm:h-72 sm:w-72" />
+            <div className="absolute -left-20 -bottom-20 h-56 w-56 rounded-full bg-indigo-400/10 blur-2xl sm:h-72 sm:w-72" />
 
             <div className="relative z-10 max-w-md">
               <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-wider border border-white/10 backdrop-blur-sm">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-200 animate-pulse" />
+                <Sparkles className="h-3.5 w-3.5 text-indigo-200 animate-pulse shrink-0" />
                 Meta integration
               </div>
-              <h3 className="font-geist text-2xl font-bold tracking-tight mt-4 sm:text-3xl leading-tight">
+              <h3 className="font-geist text-2xl font-bold tracking-tight mt-4 leading-tight sm:text-3xl">
                 Connect with <span className="text-indigo-200">Meta</span>
               </h3>
               <p className="text-sm text-indigo-100/90 leading-relaxed mt-3">
@@ -320,15 +320,15 @@ async function DashboardContent({
               </p>
             </div>
 
-            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-8 pt-4 border-t border-white/10">
+            <div className="relative z-10 flex flex-col gap-4 mt-6 pt-4 border-t border-white/10 sm:flex-row sm:items-center sm:justify-between sm:mt-8">
               <Link
                 href={`/b/${businessId}/channels`}
-                className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-indigo-700 shadow-sm transition-all duration-200 hover:bg-indigo-50 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-indigo-700 shadow-sm transition-all duration-200 hover:bg-indigo-50 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
               >
                 Connect Now
               </Link>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto opacity-95">
+              <div className="flex items-center gap-2 self-start opacity-95 sm:self-auto">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 border border-white/15 backdrop-blur-sm font-bold text-sm">
                   f
                 </div>
@@ -360,11 +360,11 @@ async function DashboardContent({
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
           {/* Card 1: Total Views */}
-          <Card className="border-border/60">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+          <Card className="border-border/60 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Total views
                 </span>
@@ -374,7 +374,7 @@ async function DashboardContent({
                   <span>{viewChange.label}</span>
                 </div>
               </div>
-              <div className="w-16 h-8 opacity-80">
+              <div className="w-16 h-8 shrink-0 opacity-80">
                 <svg className="w-full h-full" viewBox="0 0 100 30" fill="none">
                   <path
                     d="M5 22C20 22 25 12 40 12C55 12 60 25 75 25C90 25 95 8 110 8"
@@ -388,9 +388,9 @@ async function DashboardContent({
           </Card>
 
           {/* Card 2: Messages Received */}
-          <Card className="border-border/60">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+          <Card className="border-border/60 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Messages
                 </span>
@@ -400,7 +400,7 @@ async function DashboardContent({
                   <span>{messageChange.label}</span>
                 </div>
               </div>
-              <div className="w-16 h-8 opacity-80">
+              <div className="w-16 h-8 shrink-0 opacity-80">
                 <svg className="w-full h-full" viewBox="0 0 100 30" fill="none">
                   <path
                     d="M5 10C20 10 25 22 40 22C55 22 60 8 75 8C90 8 95 18 110 18"
@@ -414,9 +414,9 @@ async function DashboardContent({
           </Card>
 
           {/* Card 3: Orders Placed */}
-          <Card className="border-border/60">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+          <Card className="border-border/60 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Orders
                 </span>
@@ -426,7 +426,7 @@ async function DashboardContent({
                   <span>{orderChange.label}</span>
                 </div>
               </div>
-              <div className="w-16 h-8 opacity-80">
+              <div className="w-16 h-8 shrink-0 opacity-80">
                 <svg className="w-full h-full" viewBox="0 0 100 30" fill="none">
                   <path
                     d="M5 18C20 18 25 25 40 25C55 25 60 10 75 10C90 10 95 20 110 20"
@@ -440,9 +440,9 @@ async function DashboardContent({
           </Card>
 
           {/* Card 4: Revenue */}
-          <Card className="border-border/60">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+          <Card className="border-border/60 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Revenue
                 </span>
@@ -458,7 +458,7 @@ async function DashboardContent({
                   <span>{revenueChange.label}</span>
                 </div>
               </div>
-              <div className="w-16 h-8 opacity-80">
+              <div className="w-16 h-8 shrink-0 opacity-80">
                 <svg className="w-full h-full" viewBox="0 0 100 30" fill="none">
                   <path
                     d="M5 12C20 12 25 5 40 5C55 5 60 22 75 22C90 22 95 15 110 15"
@@ -519,23 +519,23 @@ function QuotaStrip({ quota, businessId }: { quota: QuotaStatus | null; business
   return (
     <Link
       href={`/b/${businessId}/billing`}
-      className={`flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-element border px-4 py-3 text-sm transition-colors hover:bg-muted/40 ${tone}`}
+      className={`flex flex-col gap-2 rounded-element border px-4 py-3 text-sm transition-colors hover:bg-muted/40 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-6 sm:gap-y-2 ${tone}`}
     >
-      <span className="flex flex-wrap items-center gap-x-5 gap-y-1">
+      <span className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-1">
         <strong className="font-geist font-bold">
           {quota.assigned ? quota.planName : 'No plan — unlimited replies'}
         </strong>
-        <span>
+        <span className="min-w-0">
           <span className="text-muted-foreground">Messenger</span>{' '}
           <span className="font-medium tabular-nums">{messenger.text}</span>
         </span>
-        <span>
+        <span className="min-w-0">
           <span className="text-muted-foreground">Comments</span>{' '}
           <span className="font-medium tabular-nums">{comments.text}</span>
         </span>
       </span>
 
-      <span className="text-xs text-muted-foreground">
+      <span className="text-xs text-muted-foreground shrink-0">
         {stopped
           ? 'The agent is stopped until the cycle resets'
           : `resets in ${quota.cycle.daysLeft} ${quota.cycle.daysLeft === 1 ? 'day' : 'days'}`}
@@ -560,15 +560,15 @@ function RecentNotices({
   if (notices.length === 0) return null;
 
   return (
-    <Card className="border-border/60 p-5">
+    <Card className="border-border/60 p-5 sm:p-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Bell className="h-4.5 w-4.5 text-primary" />
+        <div className="flex min-w-0 items-center gap-2">
+          <Bell className="h-4.5 w-4.5 shrink-0 text-primary" />
           <h3 className="font-geist text-sm font-bold text-foreground">Notifications</h3>
         </div>
         <Link
           href={`/b/${businessId}/notifications`}
-          className="text-xs font-semibold text-primary hover:underline"
+          className="text-xs font-semibold text-primary hover:underline shrink-0"
         >
           View all
         </Link>
@@ -579,7 +579,7 @@ function RecentNotices({
           <Link
             key={notice.id}
             href={notice.link ?? `/b/${businessId}/notifications`}
-            className="flex items-start gap-3.5"
+            className="flex items-start gap-3 sm:gap-3.5"
           >
             <span
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notice.readAt ? 'bg-border' : 'bg-primary'}`}
@@ -587,11 +587,11 @@ function RecentNotices({
             />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-foreground">{notice.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-2">
                 {notice.body}
               </p>
             </div>
-            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5">
+            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap pt-0.5 shrink-0">
               {formatTimeAgo(new Date(notice.createdAt))}
             </span>
           </Link>
