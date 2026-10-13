@@ -31,7 +31,6 @@ const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: 'products', label: 'Products', icon: Package },
   { href: 'customers', label: 'Customers', icon: Users },
-  { href: 'companies', label: 'Companies', icon: Building2 },
   { href: 'orders', label: 'Orders', icon: ShoppingCart },
   { href: 'categories', label: 'Categories', icon: FolderTree },
   { href: 'storefront', label: 'Storefront', icon: Store },

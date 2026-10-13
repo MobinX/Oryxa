@@ -72,13 +72,6 @@ async function Book({
         <p className="text-[var(--muted-foreground)]">
           This store is not linked to a company yet, so it has no customer book.
         </p>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Create a company and assign this store to it on the{' '}
-          <a href={`/b/${businessId}/companies`} className="text-[var(--primary)] hover:underline">
-            Companies
-          </a>{' '}
-          page.
-        </p>
       </Card>
     );
   }

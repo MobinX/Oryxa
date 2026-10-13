@@ -19,7 +19,6 @@ export const cacheTags = {
   notifications: (businessId: string) => `notifications-${businessId}`,
   customers: (businessId: string) => `customers-${businessId}`,
   customer: (customerId: string) => `customer-${customerId}`,
-  companies: () => 'companies',
   adminBusinessPlans: () => 'admin-business-plans',
   // Keyed by month as well as store: an operator flipping the month selector should not
   // have a finished month re-requested, and nothing writes these tags to expire them.
@@ -102,8 +101,4 @@ export function expireCustomers(businessId: string) {
 /** One card's own history, expired when an order lands on it or is retyped away from it. */
 export function expireCustomer(customerId: string) {
   updateTag(cacheTags.customer(customerId));
-}
-
-export function expireCompanies() {
-  updateTag(cacheTags.companies());
 }

@@ -15,7 +15,6 @@ import {
   listPublicPlans,
   getBilling,
   listNotifications,
-  listCompanies,
   listCustomers,
   getCustomer,
   adminListPlans,
@@ -206,13 +205,6 @@ export async function cachedNotifications(
     // whose only job is this list reads `unavailable` and says so instead of "all quiet".
     return { notifications: [], unreadCount: 0, unavailable: true };
   }
-}
-
-export async function cachedCompanies(token: string) {
-  'use cache';
-  cacheLife('minutes');
-  cacheTag(cacheTags.companies());
-  return listCompanies(token);
 }
 
 /**

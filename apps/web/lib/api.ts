@@ -1145,61 +1145,6 @@ export const adminListAssignments = (token: string, businessId: string) =>
     signInPath: null,
   });
 
-// Companies
-export type Company = {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string | null;
-  phone?: string | null;
-  createdAt: string;
-};
-
-export type CreateCompanyInput = {
-  name: string;
-  description?: string;
-  phone?: string;
-};
-
-export const listCompanies = (token: string) =>
-  apiFetch<{ companies: Company[]; totalCount: number }>('/api/v1/companies', { token });
-
-export const createCompany = (token: string, data: CreateCompanyInput) =>
-  apiFetch<Company>('/api/v1/companies', { method: 'POST', token, body: JSON.stringify(data) });
-
-export const updateCompany = (token: string, companyId: string, data: Partial<CreateCompanyInput>) =>
-  apiFetch<{ success: boolean }>(`/api/v1/companies/${companyId}`, {
-    method: 'PUT',
-    token,
-    body: JSON.stringify(data),
-  });
-
-export const deleteCompany = (token: string, companyId: string) =>
-  apiFetch<{ deleted: boolean }>(`/api/v1/companies/${companyId}`, { method: 'DELETE', token });
-
-export const getCompanyBusinesses = (token: string, companyId: string) =>
-  apiFetch<{ businesses: Array<{ id: string; name: string }> }>(
-    `/api/v1/companies/${companyId}/businesses`,
-    { token },
-  );
-
-export const assignBusinessToCompany = (token: string, companyId: string, businessId: string) =>
-  apiFetch<{ success: boolean }>(`/api/v1/companies/${companyId}/businesses`, {
-    method: 'POST',
-    token,
-    body: JSON.stringify({ businessId }),
-  });
-
-export const unassignBusinessFromCompany = (
-  token: string,
-  companyId: string,
-  businessId: string,
-) =>
-  apiFetch<{ success: boolean }>(`/api/v1/companies/${companyId}/businesses/${businessId}`, {
-    method: 'DELETE',
-    token,
-  });
-
 // Customers (scoped through the business's company)
 export type Customer = {
   id: string;
