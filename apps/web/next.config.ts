@@ -38,14 +38,22 @@ const nextConfig = {
    * `NEXT_PUBLIC_API_URL` is a machine-local address in the browser bundle: on a phone or through
    * a tunnel, `http://localhost:3500` is the device itself, so every direct browser-to-API call
    * dies at the network and the page paints an empty pane. The server resolves that host fine, so
-   * proxying it restores what a reload — which is server-rendered — was already doing.
+   * proxying it restores what a reload — which is server-rendered — was already doing. The API host
+   * does not have to be public or same-origin: only this server ever contacts it.
    * `afterFiles` rather than the default: the real route handlers under `/api/v1` (the Facebook
-   * callback) have to be matched before the proxy swallows the prefix.
+   * callback) have to be matched before the proxy swallows the prefix. Both prefixes the console
+   * calls — `/api/v1` for a store, `/api2` for the operator pages — go through, or one of them
+   * would be left asking the browser to reach the API after all.
    */
   async rewrites() {
     const raw = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001';
     const api = raw.endsWith('/') ? raw.slice(0, -1) : raw;
-    return { afterFiles: [{ source: '/api/v1/:path*', destination: `${api}/api/v1/:path*` }] };
+    return {
+      afterFiles: [
+        { source: '/api/v1/:path*', destination: `${api}/api/v1/:path*` },
+        { source: '/api2/:path*', destination: `${api}/api2/:path*` },
+      ],
+    };
   },
 };
 
