@@ -31,6 +31,7 @@ vi.mock('@repo/agent', async () => {
 
 type RunInstance = {
   sentTexts: string[];
+  sentByReplyTool: boolean;
   config: { emitSse?: (event: string, data: unknown) => void };
 };
 
@@ -92,6 +93,7 @@ describe('agent run outcome logging', () => {
       this.config.emitSse?.('tool_call', { name: 'send_message', args: { text: 'Yes, 10 left.' } });
       this.config.emitSse?.('tool_result', { name: 'send_message', result: 'Message successfully sent' });
       this.sentTexts = ['Yes, 10 left.'];
+      this.sentByReplyTool = true;
       return agentRunResult('Yes, 10 left.', ['Yes, 10 left.']);
     });
 
@@ -295,6 +297,7 @@ describe('agent run chain', () => {
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: RunInstance) {
       this.sentTexts = ['ok'];
+      this.sentByReplyTool = true;
       return agentRunResult('ok', ['ok']);
     });
 
@@ -324,6 +327,7 @@ describe('agent run chain', () => {
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: RunInstance) {
       this.sentTexts = ['ok'];
+      this.sentByReplyTool = true;
       return agentRunResult('ok', ['ok']);
     });
     const conversationCrud = await import('@repo/db/crud/conversation');

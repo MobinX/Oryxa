@@ -217,11 +217,13 @@ export async function runAgentCore(
       emit('error', errorFields(metricErr), { dedupe: null });
     }
 
-    // #8: the send_message tool is the source of truth — it sends AND persists
-    // the exact text. Only fall back to sending+saving the final LLM message if
-    // the agent never called send_message (so the customer still gets a reply).
-    if (agent.sentTexts.length === 0 && replyText) {
-      console.log(`[agent-runner-core] fallback: agent did not call send_message, sending final reply directly`);
+    // The closing line is sent whenever the reply tool did not speak, and only then. Nothing sent:
+    // the customer would otherwise get no answer at all. A card sent (product list, Track-order row):
+    // the card is a picture with buttons, not a reply, so the model's line after it is what asks the
+    // customer what they want. The reply tool sent: those words are already in the thread, and
+    // sending them again is the double reply the old rule was written to stop.
+    if (!agent.sentByReplyTool && replyText) {
+      console.log(`[agent-runner-core] sending the model's closing line — the reply tool did not speak (${agent.sentTexts.length} send(s) of another kind before it)`);
 
       // The same charge as the tool path, because this is a reply the customer receives:
       // the tool simply never ran. A test override puts nothing on the wire and pays
@@ -302,7 +304,10 @@ export async function runAgentCore(
     // and LangGraph feeds the error back to the model as a tool message.
     emitAnomaly('tool_call_unresolved', { detail: unresolved });
   }
-  if (sentViaTool > 0 && sentViaFallback > 0) {
+  if (agent.sentByReplyTool && sentViaFallback > 0) {
+    // The one way a customer gets the same words twice: the reply tool sent them, and the closing line
+    // went out as well. The gate above makes this unreachable, so a hit here means that gate moved.
+    // A card plus a closing line is not a double send — the card is buttons, not an answer.
     emitAnomaly('double_send');
   }
   if (ok && clearedCount > 0 && sentViaTool + sentViaFallback === 0) {

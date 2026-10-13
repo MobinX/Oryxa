@@ -21,12 +21,22 @@ export function agentRunResult(replyText: string, sentTexts: string[] = []): Age
 
 /**
  * Mock implementation for Agent.prototype.run. The runners gate their fallback on the
- * instance's `sentTexts` (not the result's), so this writes both from one argument the
- * way the real Agent shares a single array between the two.
+ * instance's `sentByReplyTool` (and count `sentTexts`), so this writes both from one
+ * argument the way the real Agent shares a single array between the two.
+ *
+ * Handing over texts means stubbing the reply tool, which is what those tests are about, so the flag
+ * follows the array by default. A card-only turn — a send that is not an answer — passes `replyTool:
+ * false`, because the runner is then expected to send the model's closing line as well.
  */
-export function stubAgentRun(replyText: string, sentTexts: string[] = []) {
-  return async function (this: { sentTexts: string[] }): Promise<AgentRunResult> {
+export function stubAgentRun(
+  replyText: string,
+  sentTexts: string[] = [],
+  opts: { replyTool?: boolean } = {},
+) {
+  const replyTool = opts.replyTool ?? sentTexts.length > 0;
+  return async function (this: { sentTexts: string[]; sentByReplyTool: boolean }): Promise<AgentRunResult> {
     this.sentTexts = sentTexts;
+    this.sentByReplyTool = replyTool;
     return agentRunResult(replyText, sentTexts);
   };
 }

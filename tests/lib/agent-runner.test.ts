@@ -138,6 +138,26 @@ describe('Agent Runner', () => {
     runSpy.mockRestore();
   }, 30_000);
 
+  it('sends the model’s closing line after a card, because a card is not an answer', async () => {
+    // show_products put a card row on the wire and the model then wrote the question it never sent as
+    // a message. Dropping that line left the customer a shelf of pictures and nobody asking what they
+    // wanted; only the reply tool already speaking is a reason to drop it.
+    const seed = await seedTestWorld();
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(
+      stubAgentRun('Which size would you like?', ['Kurti — 1200 (Order)'], { replyTool: false }),
+    );
+
+    sendMessageMock.mockClear();
+    await runAgentForConversation(seed.conversation.id);
+    runSpy.mockRestore();
+
+    expect(sendMessageMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'Which size would you like?');
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
+    expect(selfContents).toContain('Which size would you like?');
+  }, 30_000);
+
   it('runAgentForConversation falls back to send+save when the agent did not use send_message', async () => {
     // #8 fallback path: agent produced a reply but never called send_message,
     // so the runner sends and persists that reply itself.
@@ -173,9 +193,10 @@ describe('Agent Runner', () => {
     const { Agent } = await import('@repo/agent');
     const sentViaTool = ['reply'];
     let capturedHistory: Array<{ from: string; content: string }> = [];
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { sentTexts: string[]; config: { history: Array<{ from: string; content: string }> } }) {
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { sentTexts: string[]; sentByReplyTool: boolean; config: { history: Array<{ from: string; content: string }> } }) {
       capturedHistory = [...this.config.history];
       this.sentTexts = sentViaTool;
+      this.sentByReplyTool = sentViaTool.length > 0;
       return agentRunResult('done', sentViaTool);
     });
 
@@ -221,10 +242,12 @@ describe('Agent Runner', () => {
     let capturedHistory: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> = [];
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: {
       sentTexts: string[];
+      sentByReplyTool: boolean;
       config: { history: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> };
     }) {
       capturedHistory = [...this.config.history];
       this.sentTexts = ['reply'];
+      this.sentByReplyTool = true;
       return agentRunResult('done', ['reply']);
     });
 

@@ -105,8 +105,14 @@ export interface AgentRunResult {
 }
 
 export class Agent {
-  /** Texts the agent actually sent via the reply tool during `run()`. */
+  /** Every text that reached Messenger during `run()` — a reply, a card row, a button row. */
   sentTexts: string[] = [];
+  /**
+   * Whether the reply tool (`send_message`) was the thing that spoke. A closing line from the model is
+   * worth sending after a card the customer cannot talk back to, and worth dropping after a reply that
+   * already carried those exact words.
+   */
+  sentByReplyTool = false;
 
   constructor(private config: AgentConfig) {}
 
@@ -165,7 +171,10 @@ export class Agent {
           emitSse,
           sendMessageOverride,
         },
-        (text) => sentTexts.push(text),
+        (text, kind) => {
+          sentTexts.push(text);
+          if (kind === 'reply') this.sentByReplyTool = true;
+        },
       );
 
     const agent = createReactAgent({ llm, tools });

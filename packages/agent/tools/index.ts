@@ -360,8 +360,13 @@ export function createAgentTools(
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
   },
-  /** Called when the agent actually sends a reply via send_message. */
-  onSent?: (text: string) => void,
+  /**
+   * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
+   * reply tool wrote, `card` is a product list or a button row. The runner needs the difference — a
+   * closing line after a card is a second message the customer should get, while a closing line after
+   * the reply tool would be the same words twice.
+   */
+  onSent?: (text: string, kind: 'reply' | 'card') => void,
 ) {
   const sendFn = context.sendMessageOverride ?? fbSendMessage;
   let sentCount = 0;
@@ -475,7 +480,7 @@ export function createAgentTools(
         content: text,
         state: 'done',
       });
-      onSent?.(text);
+      onSent?.(text, 'reply');
 
       console.log(`[agent-tool] send_message done — message persisted`);
       const result = 'Message successfully sent to the customer. You have completed your turn. Do not call send_message again or call any other tools. Stop and finish now.';
@@ -569,7 +574,7 @@ export function createAgentTools(
         content,
         state: 'done',
       });
-      onSent?.(content);
+      onSent?.(content, 'card');
 
       return logResult(JSON.stringify({
         sent: true,
@@ -628,7 +633,7 @@ export function createAgentTools(
         content,
         state: 'done',
       });
-      onSent?.(content);
+      onSent?.(content, 'card');
 
       const result = JSON.stringify({
         sent: true,
