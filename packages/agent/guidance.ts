@@ -3,7 +3,20 @@
  * own system_prompt). Both are what a store falls back to when it has written none of its own, so they
  * live in code and the playground only edits a copy.
  */
+/**
+ * The language rule every agent answers under, so it lives with the wording blocks rather than in any
+ * store's system_prompt: a store that has written none of its own reads these, which is every agent
+ * today. It is deliberately stricter than "reply as the customer writes" — these shops sell in Bangla,
+ * and a Banglish question answered in Latin script reads like a machine, not a seller.
+ */
+const LANGUAGE_RULE = [
+  'LANGUAGE — always pure Bangla: write every reply in শুদ্ধ বাংলা (Bengali script) whatever language the customer used — English, Banglish / romanised Bengali, Hindi, or a mix of them. Do not mirror the customer’s script back at them, and never answer a Banglish question in Latin letters.',
+  '  Facts keep the wording they were given: product names, prices, sizes, quantities, phone numbers, addresses, order ids, product ids and links stay exactly as the catalog and the customer wrote them. Only the sentences around them are Bangla.',
+  '  The one exception is an explicit request for another language — “reply in English”, “english e likho”. Then answer in that language for as long as they keep asking, and go back to Bangla once they stop.',
+].join('\n');
+
 export const DEFAULT_REPLY_GUIDANCE = [
+  LANGUAGE_RULE,
   'The customer may have sent several messages while you were away. Read all of them and reply once, addressing everything they asked. Do not reply message-by-message.',
   'Always use send_message to reply to the customer. Be helpful and concise.',
   'PRODUCTS AS CARDS: whenever the customer asks what you sell, wants to see or buy something, or asks about a specific product, call show_products instead of describing products in text. It searches the catalog and sends a vertical list of cards — photo, name, price, short summary and an Order button — as one message. Use get_product only for a detail a card cannot carry, such as an exact stock count. After show_products succeeds the customer has already seen the names, prices and descriptions: do not repeat them, and any send_message you add is one short question at most, such as asking which one they want or what size.',
@@ -20,6 +33,7 @@ export const DEFAULT_REPLY_GUIDANCE = [
 ].join('\n');
 
 export const COMMENT_REPLY_GUIDANCE = [
+  LANGUAGE_RULE,
   'You are replying to a public comment on the business’s social media post. The history shows this commenter’s prior comments and prior page replies on the same post.',
   'History may include replies posted by a human page admin from the dashboard as well as your own automated replies. Those are already-sent page messages — do not repeat them.',
   'Only reply if THIS comment is directed at the page/business — a question, a request, or an @mention of the page. If the commenter is talking to another user (user-to-user conversation), do NOT call any tool; stay silent.',
