@@ -1,12 +1,14 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   adminStatsResponseSchema,
+  agentGuidanceDefaultsSchema,
   errorSchema,
   platformAgentSchema,
   resolveTimeZone,
   updatePlatformAgentInputSchema,
   type AdminStatsResponse,
 } from '@repo/shared';
+import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
 import { queryLogs } from '@api/lib/log-query';
 import { emit, errorFields } from '@api/lib/log';
@@ -374,7 +376,13 @@ const getPlatformAgentRoute = createRoute({
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
-      content: { 'application/json': { schema: platformAgentSchema } },
+      content: {
+        'application/json': { schema: platformAgentSchema.extend({ guidanceDefaults: agentGuidanceDefaultsSchema }) },
+      },
+      // The row's own text, plus the reviewed blocks an empty wording box falls back to. The console shows
+      // the latter as the box's placeholder: writing there REPLACES that whole block for every following
+      // store — including the pure-Bangla rule — so an editor that could not show what it was replacing
+      // would be inviting the operator to delete it blind.
       description: 'The default agent, created from the reviewed text if this is the first read of it',
     },
     401: {
@@ -388,7 +396,19 @@ const getPlatformAgentRoute = createRoute({
   },
 });
 
-adminRouter.openapi(getPlatformAgentRoute, async (c) => c.json(await getPlatformAgent(), 200));
+adminRouter.openapi(getPlatformAgentRoute, async (c) => {
+  const platform = await getPlatformAgent();
+  return c.json(
+    {
+      ...platform,
+      guidanceDefaults: {
+        replyGuidance: platform.replyGuidance ?? DEFAULT_REPLY_GUIDANCE,
+        commentReplyGuidance: platform.commentReplyGuidance ?? COMMENT_REPLY_GUIDANCE,
+      },
+    },
+    200,
+  );
+});
 
 const updatePlatformAgentRoute = createRoute({
   method: 'put',

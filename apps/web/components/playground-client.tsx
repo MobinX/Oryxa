@@ -402,12 +402,16 @@ export function PlaygroundClient({
         replyGuidance: ownWording(replyGuidance, agent.guidanceDefaults?.replyGuidance),
         commentReplyGuidance: ownWording(commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance),
       };
-      await updateAgent(token, businessId, agent.id, { systemPrompt, ...guidance });
-      setAgent({ ...agent, systemPrompt, ...guidance, followsDefault: false });
+      // The prompt box opens holding the DEFAULT's text for a store that follows it, so sending it
+      // unchanged would let a plain Save claim ownership of words nobody typed. Only a real edit writes.
+      const tookOwnPrompt = Boolean(systemPrompt.trim()) && systemPrompt !== (agent.systemPrompt ?? '');
+      const payload = tookOwnPrompt ? { systemPrompt, ...guidance } : guidance;
+      await updateAgent(token, businessId, agent.id, payload);
+      setAgent({ ...agent, ...payload, ...(tookOwnPrompt ? { followsDefault: false } : {}) });
       // A box that resolved to null shows the built-in text again, not what was typed in it.
       setReplyGuidance(guidance.replyGuidance ?? '');
       setCommentReplyGuidance(guidance.commentReplyGuidance ?? '');
-      addLog('system_prompt_updated', { systemPrompt, ...guidance });
+      addLog('system_prompt_updated', payload);
     } catch (err) {
       console.error('Failed to update system prompt:', err);
     } finally {
@@ -757,8 +761,9 @@ export function PlaygroundClient({
               </div>
 
               {/* What the boxes below hold is the platform default until this store saves, and a save
-                  makes the copy its own — so the editor says which of the two it is looking at. */}
-              {agent?.followsDefault !== false && (
+                  makes the copy its own — so the editor says which of the two it is looking at. Only once
+                  the row has actually loaded: an unread editor is not evidence that anything is following. */}
+              {agent && agent.followsDefault !== false && (
                 <p className="mb-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[10px] leading-relaxed text-indigo-200">
                   Answering with the default agent — edit that once at{' '}
                   <span className="font-mono">/admin/default-agent</span> and every store follows it.

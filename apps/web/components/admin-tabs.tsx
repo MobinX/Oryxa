@@ -8,7 +8,7 @@ const TABS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/plans', label: 'Plans', icon: CreditCard, exact: true },
   { href: '/admin/token-analytics', label: 'Tokens', icon: Cpu, exact: false },
-  { href: '/admin/default-agent', label: 'Default agent', icon: FileText, exact: true },
+  { href: '/admin/default-agent', label: 'Default', icon: FileText, exact: true },
   { href: '/admin/agent-playground', label: 'Playground', icon: Bot, exact: false },
   { href: '/admin/logs', label: 'Event log', icon: ScrollText, exact: false },
 ];
@@ -17,7 +17,9 @@ export function AdminTabs() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 p-1">
+    // Scrolls rather than widening the page: six labelled tabs run past a narrow tablet, and the console
+    // header overflowing sideways is the bug this app has already been asked to fix once.
+    <nav className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border/40 bg-muted/40 p-1">
       {TABS.map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         const Icon = tab.icon;
@@ -26,7 +28,7 @@ export function AdminTabs() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? 'page' : undefined}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'

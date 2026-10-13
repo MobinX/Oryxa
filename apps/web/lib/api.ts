@@ -1165,6 +1165,8 @@ export type PlatformAgent = {
   systemPrompt: string;
   replyGuidance: string | null;
   commentReplyGuidance: string | null;
+  /** The reviewed blocks an empty wording box falls back to — what a write here would replace. */
+  guidanceDefaults?: { replyGuidance: string; commentReplyGuidance: string };
 };
 
 export const adminGetPlatformAgent = (bearer: string) =>

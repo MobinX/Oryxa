@@ -7,10 +7,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { updateDefaultAgentAction } from '@/app/actions/default-agent';
 import type { PlatformAgent } from '@/lib/api';
 
+/** The limits `updatePlatformAgentInputSchema` enforces, spelled here so a long paste fails in the browser, not as a 400. */
+const PROMPT_LIMIT = 40_000;
+const WORDING_LIMIT = 12_000;
+
+/**
+ * What a wording box is answering with, read off the row instead of assumed by the caption. The caption that
+ * shipped first said "empty right now" unconditionally, which told an operator who had already written here
+ * that nothing was written.
+ */
+function wordingState(written: string | null, reviewed: string | undefined) {
+  const reviewedChars = reviewed?.trim().length ?? 0;
+  if (written?.trim()) {
+    return `Answering with this text (${written.trim().length} chars) for every store still following the default. Emptying the box hands the wording back to Oryxa's reviewed block.`;
+  }
+  return `Empty, so every following store answers with Oryxa's reviewed block (${reviewedChars} chars, shown greyed below) — it carries the rule that keeps replies in শুদ্ধ বাংলা and the send-message-once rule. Anything typed here replaces that whole block for every one of them.`;
+}
+
 /**
  * Every field the default agent answers with, in three boxes that mean different things: the prompt is who
  * the agent is and is required, and the two wording blocks are how it answers — left empty each falls back
- * to Oryxa's reviewed text in code, which is why they start empty here rather than holding a copy of it.
+ * to Oryxa's reviewed text in code, which is why each box shows that text as its placeholder.
  */
 export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
   const [isPending, startTransition] = useTransition();
@@ -41,25 +58,28 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
           id="systemPrompt"
           name="systemPrompt"
           rows={22}
+          maxLength={PROMPT_LIMIT}
           defaultValue={agent.systemPrompt}
           className="font-mono text-xs leading-relaxed"
         />
+        <p className="text-[11px] text-[var(--muted-foreground)]">
+          {agent.systemPrompt.length.toLocaleString()} characters, limit {PROMPT_LIMIT.toLocaleString()}.
+        </p>
       </Card>
 
       <Card className="space-y-2">
         <label className="block text-sm font-medium" htmlFor="replyGuidance">
           Messenger wording
         </label>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Appended after the prompt for a DM. Empty right now, so Oryxa's reviewed block is what every store
-          is answering with — writing here replaces it for every store still following the default.
-        </p>
+        <p className="text-xs text-[var(--muted-foreground)]">{wordingState(agent.replyGuidance, agent.guidanceDefaults?.replyGuidance)}</p>
         <Textarea
           id="replyGuidance"
           name="replyGuidance"
           rows={8}
+          maxLength={WORDING_LIMIT}
           defaultValue={agent.replyGuidance ?? ''}
-          className="font-mono text-xs leading-relaxed"
+          placeholder={agent.guidanceDefaults?.replyGuidance ?? ''}
+          className="font-mono text-xs leading-relaxed placeholder:text-slate-500/60"
         />
       </Card>
 
@@ -69,14 +89,16 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
         </label>
         <p className="text-xs text-[var(--muted-foreground)]">
           The block a comment reply answers with, including which things go to Messenger instead of the
-          thread. Empty means Oryxa's reviewed block.
+          thread. {wordingState(agent.commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance)}
         </p>
         <Textarea
           id="commentReplyGuidance"
           name="commentReplyGuidance"
           rows={8}
+          maxLength={WORDING_LIMIT}
           defaultValue={agent.commentReplyGuidance ?? ''}
-          className="font-mono text-xs leading-relaxed"
+          placeholder={agent.guidanceDefaults?.commentReplyGuidance ?? ''}
+          className="font-mono text-xs leading-relaxed placeholder:text-slate-500/60"
         />
       </Card>
 

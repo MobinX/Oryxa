@@ -93,10 +93,14 @@ export async function updateAgent(businessId: string, agentId: string, input: un
   // Writing prompt or wording text here means the store is answering with its own words, so the row stops
   // following the platform default. Only the flag changes meaning: whatever the row held before is still
   // there, and clearing the flag brings it back.
+  //
+  // Only NON-EMPTY text claims ownership. A box emptied on purpose, or a save that sent nothing but nulls,
+  // is the store handing its wording back to the default — flipping the flag there would turn "clear my
+  // wording" into "stop following the wording", which is the opposite of what the caller asked for.
   const ownsItsWords =
-    parsed.systemPrompt !== undefined ||
-    parsed.replyGuidance !== undefined ||
-    parsed.commentReplyGuidance !== undefined;
+    Boolean(parsed.systemPrompt?.trim()) ||
+    Boolean(parsed.replyGuidance?.trim()) ||
+    Boolean(parsed.commentReplyGuidance?.trim());
   const [updated] = await db
     .update(agents)
     .set({ ...parsed, ...(ownsItsWords ? { followsDefault: false } : {}) })
