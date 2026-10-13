@@ -10,6 +10,11 @@ export const createOrderInputSchema = z.object({
   customerPhone: z.string().max(20).optional(),
   customerAddress: z.string().optional(),
   conversationId: uuidSchema.optional(),
+  /**
+   * The Messenger id of the buyer, so their own order history is findable later. Optional because an
+   * order can arrive from the dashboard or a comment, where nobody has a page-scoped id at hand.
+   */
+  customerPlatformId: z.string().max(120).optional(),
 });
 
 export const createOrderBodySchema = createOrderInputSchema.omit({ businessId: true });

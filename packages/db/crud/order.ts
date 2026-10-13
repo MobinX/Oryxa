@@ -9,6 +9,9 @@ import {
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
 
+/** A page of order history: ten, because that is what one Messenger card list can carry. */
+const ORDER_HISTORY_PAGE = 10;
+
 export async function createOrder(input: unknown) {
   const parsed = createOrderInputSchema.parse(input);
 
@@ -68,6 +71,9 @@ export async function createOrder(input: unknown) {
       customerPhone: normalizePhone(parsed.customerPhone) ?? parsed.customerPhone ?? null,
       customerAddress: parsed.customerAddress,
       conversationId: parsed.conversationId,
+      // Blank rather than absent: a dashboard order has no Messenger behind it, and writing an empty
+      // string here would make it look like a customer with an unknown id rather than no id.
+      customerPlatformId: parsed.customerPlatformId?.trim() ? parsed.customerPlatformId.trim() : null,
       totalPrice: totalPrice.toFixed(2),
       state: 'pending',
     })
@@ -152,6 +158,67 @@ export async function listOrders(
     state: o.state,
     createdAt: o.createdAt.toISOString(),
   }));
+}
+
+/**
+ * Every order this Messenger customer placed with this store, newest first, one page at a time.
+ *
+ * Two filters, not one: the business, because another store's orders are nobody's history here, and the
+ * platform id, because that is the only identity a Messenger conversation always has — a phone number is
+ * given sometimes and mis-typed often.
+ *
+ * One query, not two: it reads `limit + 1` rows and reports whether the extra one was there, so a caller
+ * learns "there are older ones" without a second round trip to count them on the reply path.
+ */
+export async function getOrdersByPlatformId(
+  businessId: string,
+  customerPlatformId: string,
+  options: { offset?: number; limit?: number } = {},
+) {
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
+  const limit = Math.min(ORDER_HISTORY_PAGE, Math.max(1, Math.trunc(options.limit ?? ORDER_HISTORY_PAGE)));
+
+  // An empty id asks for nothing. Guarded rather than queried, because `= NULL` would match no rows
+  // while a careless `''` on a legacy row could, and neither is a history anybody asked for.
+  if (!customerPlatformId?.trim()) return { orders: [], hasMore: false, offset, limit };
+
+  const rows = await db.query.orders.findMany({
+    where: and(
+      eq(orders.businessId, businessId),
+      eq(orders.customerPlatformId, customerPlatformId),
+      isNull(orders.deletedAt),
+    ),
+    with: { product: true, variant: true },
+    orderBy: [desc(orders.createdAt)],
+    offset,
+    limit: limit + 1,
+  });
+
+  const hasMore = rows.length > limit;
+
+  // Signed links are minted at send time, so the page resolves them together rather than one after
+  // another — a history read sits between the customer's question and their answer.
+  const items = await Promise.all(
+    rows.slice(0, limit).map(async (o) => {
+      const productActive = o.product && !o.product.deletedAt ? o.product : null;
+      const variantActive = o.variant && !o.variant.deletedAt ? o.variant : null;
+      const storedImage = variantActive?.imageUrl ?? productActive?.imageUrl ?? null;
+      const imageUrl = storedImage ? await resolveStoredImageUrl(storedImage).catch(() => null) : null;
+
+      return {
+        id: o.id,
+        productName: productActive?.name ?? null,
+        variantName: variantActive?.name ?? null,
+        imageUrl,
+        count: o.count,
+        totalPrice: parseFloat(o.totalPrice),
+        state: o.state,
+        createdAt: o.createdAt,
+      };
+    }),
+  );
+
+  return { orders: items, hasMore, offset, limit };
 }
 
 export async function updateOrderState(businessId: string, orderId: string, input: unknown) {

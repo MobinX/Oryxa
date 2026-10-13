@@ -276,4 +276,95 @@ describe('Agent Tools', () => {
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     expect(messages?.at(-1)?.content).toContain(`Just placed — 2 × Test T-Shirt, $59.98`);
   });
+
+  it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'History Hoodie',
+      price: 50,
+      sku: `HIST-${Date.now()}`,
+      description: 'For the order history test',
+      variants: [{ name: 'M', stock: 5, isAvailable: true, price: 50, imageUrl: 'https://cdn.test/hist.jpg' }],
+    });
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
+
+    const order = JSON.parse(
+      await createOrderTool.invoke({
+        productId: (await searchProductsForTest(seed.business.id, 'History Hoodie'))[0]!.id,
+        count: 1,
+        customerPhone: '555-0077',
+      }),
+    );
+
+    const result = JSON.parse(await showOrdersTool.invoke({}));
+    expect(result.sent).toBe(true);
+    expect(result.orders.map((o: { id: string }) => o.id)).toEqual([order.id]);
+
+    // The card carries the payload the webhook already knows how to read, so a tap on it is a
+    // tracking question and needs no new plumbing anywhere in the app.
+    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(cards[0]!.button.payload).toBe(`please track order with id ${order.id}`);
+    expect(cards[0]!.title).toContain('History Hoodie');
+
+    const messages = await listMessages(seed.conversation.id, seed.business.id);
+    expect(messages?.at(-1)).toMatchObject({ from: 'self' });
+    expect(messages?.at(-1)?.content).toContain('History Hoodie');
+  });
+
+  it('show_orders refuses another customer\'s id and sends nothing while refusing', async () => {
+    const seed = await seedTestWorld();
+    sendMessageMock.mockClear();
+
+    const tools = createAgentTools(agentContext(seed));
+    const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
+
+    const result = JSON.parse(await showOrdersTool.invoke({ messengerId: 'psid-of-somebody-else' }));
+    expect(result.sent).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('psid-of-somebody-else');
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('show_orders says so when there is no history, and hands the model the next page', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools(agentContext(seed));
+    const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
+
+    const empty = JSON.parse(await showOrdersTool.invoke({}));
+    expect(empty.sent).toBe(false);
+    expect(empty.orders).toEqual([]);
+    expect(empty.instruction).toContain('Do not invent an order');
+
+    // Two orders, asked for one page of one: the answer must say older ones exist and give the
+    // arguments that fetch them, or the paging hint is decoration rather than instruction.
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Paging Jacket',
+      price: 70,
+      sku: `PAGE-${Date.now()}`,
+      description: 'Two of these exist',
+      variants: [{ name: 'M', stock: 5, isAvailable: true, price: 70, imageUrl: 'https://cdn.test/p.jpg' }],
+    });
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const productId = (await searchProductsForTest(seed.business.id, 'Paging Jacket'))[0]!.id;
+    for (let i = 0; i < 2; i++) {
+      await createOrderTool.invoke({ productId, count: 1, customerPhone: '555-0088' });
+    }
+
+    const page = JSON.parse(await showOrdersTool.invoke({ startingLimit: 0, endLimit: 1 }));
+    expect(page.sent).toBe(true);
+    expect(page.showing).toBe('1-1');
+    expect(page.hasMore).toBe(true);
+    expect(page.instruction).toContain('startingLimit=1');
+  });
 });
+
+/** The catalog row the order tests need, looked up the way the agent tools look it up. */
+async function searchProductsForTest(businessId: string, query: string) {
+  const { searchProducts } = await import('@repo/db/crud/product');
+  return searchProducts(businessId, query, 5);
+}

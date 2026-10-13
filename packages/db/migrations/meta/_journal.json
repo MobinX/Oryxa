@@ -162,6 +162,13 @@
       "when": 1792022400000,
       "tag": "0022_every_store_follows_one_default",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0023_orders_remember_the_messenger_id",
+      "breakpoints": true
     }
   ]
 }

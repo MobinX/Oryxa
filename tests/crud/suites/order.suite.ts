@@ -3,6 +3,7 @@ import { seedTestWorld } from '../../helpers/seed';
 import {
   createOrder,
   getOrderById,
+  getOrdersByPlatformId,
   listOrders,
   updateOrder,
   updateOrderState,
@@ -190,5 +191,121 @@ export function registerOrderCrudTests() {
 
     const after = await getProductById(business.id, productDetail.id);
     expect(after?.variants.find((v) => v.id === variantId)?.stock).toBe(7);
+  });
+
+  it('getOrdersByPlatformId reads one customer\'s orders and nobody else\'s', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const place = (psid: string | undefined, count: number) =>
+      createOrder({
+        businessId: business.id,
+        productId: productDetail.id,
+        variantId,
+        count,
+        customerName: 'Buyer',
+        ...(psid ? { customerPlatformId: psid } : {}),
+      });
+
+    const mine = await place('psid-mine', 1);
+    const alsoMine = await place('psid-mine', 2);
+    const theirs = await place('psid-theirs', 3);
+    const noMessenger = await place(undefined, 4); // a dashboard order: nobody's history
+
+    const forMe = await getOrdersByPlatformId(business.id, 'psid-mine');
+    expect(forMe.orders.map((o) => o.id).sort()).toEqual([mine.id, alsoMine.id].sort());
+    expect(forMe.hasMore).toBe(false);
+
+    const forThem = await getOrdersByPlatformId(business.id, 'psid-theirs');
+    expect(forThem.orders.map((o) => o.id)).toEqual([theirs.id]);
+
+    // An id that matches nothing returns nothing — including the orders that carry no id at all.
+    expect((await getOrdersByPlatformId(business.id, 'psid-nobody')).orders).toEqual([]);
+    expect((await getOrdersByPlatformId(business.id, '')).orders).toEqual([]);
+    expect((await getOrdersByPlatformId(business.id, '   ')).orders).toEqual([]);
+    void noMessenger;
+  });
+
+  it('getOrdersByPlatformId pages without repeating or dropping an order', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const ids: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const order = await createOrder({
+        businessId: business.id,
+        productId: productDetail.id,
+        variantId,
+        count: 1,
+        customerName: 'Buyer',
+        customerPlatformId: 'psid-paged',
+      });
+      ids.push(order.id);
+    }
+
+    // Two pages of two. Which order is "newest" is not asserted: all four land in the same clock tick,
+    // and a tie is broken by the database, not by the code under test.
+    const first = await getOrdersByPlatformId(business.id, 'psid-paged', { offset: 0, limit: 2 });
+    const second = await getOrdersByPlatformId(business.id, 'psid-paged', { offset: 2, limit: 2 });
+    const third = await getOrdersByPlatformId(business.id, 'psid-paged', { offset: 4, limit: 2 });
+
+    expect(first.orders).toHaveLength(2);
+    expect(first.hasMore).toBe(true);
+    expect(second.orders).toHaveLength(2);
+    expect(second.hasMore).toBe(false);
+    expect(third.orders).toHaveLength(0);
+    expect(third.hasMore).toBe(false);
+
+    const seen = [...first.orders, ...second.orders].map((o) => o.id).sort();
+    expect(seen).toEqual([...ids].sort());
+
+    // A page wider than one Messenger card list can hold is cut, not sent and truncated by luck.
+    const capped = await getOrdersByPlatformId(business.id, 'psid-paged', { offset: 0, limit: 50 });
+    expect(capped.orders).toHaveLength(4);
+  });
+
+  it('a deleted order leaves the customer\'s history', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    const kept = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 1,
+      customerName: 'Buyer',
+      customerPlatformId: 'psid-cancelled',
+    });
+    const removed = await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 1,
+      customerName: 'Buyer',
+      customerPlatformId: 'psid-cancelled',
+    });
+    await deleteOrder(business.id, removed.id);
+
+    const page = await getOrdersByPlatformId(business.id, 'psid-cancelled');
+    expect(page.orders.map((o) => o.id)).toEqual([kept.id]);
+  });
+
+  it('an order carries the product and price the history card needs', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const variantId = productDetail.variants[0]!.id;
+    await createOrder({
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId,
+      count: 2,
+      customerName: 'Buyer',
+      customerPlatformId: 'psid-shape',
+    });
+
+    const page = await getOrdersByPlatformId(business.id, 'psid-shape');
+    expect(page.orders[0]).toMatchObject({
+      productName: productDetail.name,
+      count: 2,
+      totalPrice: expect.any(Number),
+      state: 'pending',
+    });
+    expect(page.orders[0]!.createdAt).toBeInstanceOf(Date);
   });
 }

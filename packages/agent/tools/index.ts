@@ -1,7 +1,7 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { searchProducts, getProductByVariantId } from '@repo/db/crud/product';
-import { createOrder, getOrderById, updateOrder, deleteOrder } from '@repo/db/crud/order';
+import { createOrder, getOrderById, getOrdersByPlatformId, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
@@ -84,6 +84,11 @@ export function createCatalogTools(context: {
   businessId: string;
   /** Optional: links an order to the originating Messenger conversation. */
   conversationId?: string;
+  /**
+   * Optional: the buyer's page-scoped Messenger id, written on the order so they can ask for their own
+   * history later. Absent for a comment thread or a dashboard form, where no such id is in hand.
+   */
+  customerPlatformId?: string | null;
   customerName?: string | null;
   emitSse?: SseEmitter;
 }) {
@@ -216,6 +221,7 @@ export function createCatalogTools(context: {
           customerPhone,
           customerAddress,
           conversationId: context.conversationId,
+          customerPlatformId: context.customerPlatformId ?? undefined,
         });
         result = JSON.stringify(order);
       } catch (err) {
@@ -653,5 +659,137 @@ export function createAgentTools(
     },
   );
 
-  return [...createCatalogTools(context), sendMessageTool, showProductsTool, offerTrackingTool];
+  const showOrdersTool = tool(
+    async ({ startingLimit, endLimit, messengerId }) => {
+      const from = Math.max(0, Math.trunc(startingLimit ?? 0));
+      const to = Math.max(from + 1, Math.trunc(endLimit ?? from + CARD_LIST_LIMIT));
+      // One Messenger card list holds ten; wider asks are cut rather than silently truncated later.
+      const size = Math.min(CARD_LIST_LIMIT, to - from);
+
+      context.emitSse?.('tool_call', { name: 'show_orders', args: { startingLimit: from, endLimit: from + size } });
+      console.log(`[agent-tool] show_orders called — page ${from}..${from + size}`);
+
+      const logResult = (result: string) => {
+        console.log(`[agent-tool] show_orders result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
+        context.emitSse?.('tool_result', { name: 'show_orders', result });
+        return result;
+      };
+
+      // The customer id comes from the conversation the run belongs to. An argument may name one, but it
+      // is checked against that id and refused, because a model told "look up 1234567" must not be able to
+      // read somebody else's order history out of another person's chat.
+      const askedFor = messengerId?.trim();
+      if (askedFor && askedFor !== context.customerPlatformId) {
+        return logResult(JSON.stringify({
+          sent: false,
+          reason: 'that Messenger id belongs to a different customer than the one in this conversation',
+          instruction: 'Do not send any id back to the customer. Say you can only see the orders in this chat, and offer to look those up.',
+        }));
+      }
+
+      const { orders: page, hasMore } = await getOrdersByPlatformId(
+        context.businessId,
+        context.customerPlatformId,
+        { offset: from, limit: size },
+      );
+
+      if (page.length === 0) {
+        return logResult(JSON.stringify({
+          sent: false,
+          orders: [],
+          reason: from > 0 ? 'no older orders than the ones already shown' : 'this customer has no orders at this store',
+          instruction: 'Say so in one short send_message and offer to help them order something. Do not invent an order.',
+        }));
+      }
+
+      const cards: MessengerCard[] = [];
+      const photoless: string[] = [];
+      for (const o of page) {
+        if (!o.imageUrl) {
+          photoless.push(o.productName ?? 'an order');
+        } else {
+          const state = STATE_FOR_BUYER[o.state] ?? o.state;
+          const what = oneLine(`${o.count} × ${o.productName ?? 'your order'}`, 60);
+          cards.push({
+            title: what,
+            subtitle: oneLine(`${state} · ${money(o.totalPrice)} · ${o.createdAt.toISOString().slice(0, 10)}`, 95),
+            imageUrl: o.imageUrl,
+            // The tap is the sentence the existing tracking path already understands.
+            button: { title: 'Track order', payload: `please track order with id ${o.id}` },
+          });
+        }
+      }
+
+      const summary = page.map((o) => ({
+        id: o.id,
+        product: o.productName,
+        variant: o.variantName,
+        count: o.count,
+        total: money(o.totalPrice),
+        state: STATE_FOR_BUYER[o.state] ?? o.state,
+        date: o.createdAt.toISOString().slice(0, 10),
+      }));
+
+      if (cards.length === 0) {
+        return logResult(JSON.stringify({
+          sent: false,
+          orders: summary,
+          hasMore,
+          reason: 'none of these orders has a product photo, and a card needs one',
+          instruction: 'List them in one short send_message instead — date, item, and status.',
+        }));
+      }
+
+      // A list the customer sees is one reply, so it costs the cycle what a paragraph would have cost.
+      const budget = await takeMessageUnit(!context.sendMessageOverride);
+      if (!budget.allowed) {
+        console.log('[agent-tool] show_orders refused — the message allowance is used up');
+        return logResult(BUDGET_REFUSED);
+      }
+
+      const content = cardsAsText(cards);
+      try {
+        await sendCards(cards);
+      } catch (err) {
+        await returnMessageUnit(budget.period);
+        throw err;
+      }
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content,
+        state: 'done',
+      });
+      onSent?.(content, 'card');
+
+      return logResult(JSON.stringify({
+        sent: true,
+        showing: `${from + 1}-${from + cards.length}`,
+        orders: summary,
+        ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
+        hasMore,
+        instruction: hasMore
+          ? `These are the ${cards.length} most recent of at least ${from + cards.length + 1} orders. Ask in your closing line whether they want the older ones; if they say yes, call show_orders again with startingLimit=${from + size} and endLimit=${from + size * 2}.`
+          : 'That is every order they have. Your closing line can ask which one they want to track.',
+      }));
+    },
+    {
+      name: 'show_orders',
+      description:
+        'Show the customer their OWN previous orders with this store, as a vertical list of Messenger cards (item, status, price, date, and a Track order button each). USE THIS whenever they ask about their order history — "what did I order", "my previous orders", "can you show my past purchases" — instead of guessing an order id. It needs no arguments: the customer is whoever this conversation belongs to. Do not use it to look up one known order (get_order does that) and never call it to create or change anything.',
+      schema: z.object({
+        startingLimit: z.number().int().min(0).optional().describe(
+          'Index of the first order to show, newest first. 0 (the default) is the most recent order.',
+        ),
+        endLimit: z.number().int().min(1).optional().describe(
+          'Index to stop at, exclusive. Defaults to startingLimit + 10; a page shows at most 10 cards, so ask for 0..10, then 10..20 for older ones.',
+        ),
+        messengerId: z.string().max(120).optional().describe(
+          'Leave empty. Only ever the id of the customer in THIS conversation; any other id is refused.',
+        ),
+      }),
+    },
+  );
+
+  return [...createCatalogTools(context), sendMessageTool, showProductsTool, offerTrackingTool, showOrdersTool];
 }

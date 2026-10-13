@@ -200,12 +200,22 @@ export const orders = pgTable('orders', {
   customerAvatar: varchar('customer_avatar', { length: 500 }),
   customerAddress: text('customer_address'),
   customerPhone: varchar('customer_phone', { length: 20 }),
+  /**
+   * The Messenger id of the customer who placed it, so "what did I order last time?" is answerable
+   * without a phone number and without an order id. Written wherever one exists — an agent tool call
+   * or a storefront checkout that came in through a Page — and null for an order a merchant typed
+   * into the dashboard, which has no platform identity behind it.
+   */
+  customerPlatformId: varchar('customer_platform_id', { length: 120 }),
   state: orderStateEnum('state').default('pending').notNull(),
   totalPrice: numeric('total_price', { precision: 10, scale: 2 }).notNull(),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
-});
+}, (t) => ({
+  // The order-history lookup: this store, this customer, newest first.
+  platformLookupIdx: index('orders_business_platform_idx').on(t.businessId, t.customerPlatformId),
+}));
 
 export const agents = pgTable('agents', {
   id: uuid('id').primaryKey().defaultRandom(),
