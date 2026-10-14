@@ -183,6 +183,13 @@
       "when": 1792281600000,
       "tag": "0025_default_agent_names_a_size_as_a_word",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792368000000,
+      "tag": "0026_default_agent_pages_a_big_catalog",
+      "breakpoints": true
     }
   ]
 }

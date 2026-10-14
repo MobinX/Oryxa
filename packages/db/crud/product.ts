@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, or, ilike, isNull, inArray } from 'drizzle-orm';
+import { eq, and, asc, desc, sql, or, ilike, isNull, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { products, variants, categories } from '@db/schema';
 import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema } from '@repo/shared';
@@ -244,8 +244,12 @@ export async function getProductByVariantId(businessId: string, variantId: strin
   return getProductById(businessId, row.productId);
 }
 
-/** A customer's word for a size, folded to something a name can be compared against. */
-export function foldVariantName(value: string): string {
+/**
+ * A name folded to what another name can be compared against: trimmed, lower-cased, inner runs of
+ * whitespace collapsed, and the punctuation a customer types around a word removed ("#DAA03", "Fg.",
+ * "the  wool  one"). Used for a size and for a category alike, because a word is a word.
+ */
+export function foldName(value: string): string {
   return value
     .trim()
     .toLowerCase()
@@ -272,17 +276,17 @@ export function matchVariant<T extends { id: string; name: string; variantId?: s
   const byId = rows.filter((row) => row.id === wanted);
   if (byId.length) return { matches: byId, via: 'id' };
 
-  const folded = foldVariantName(wanted);
+  const folded = foldName(wanted);
   if (!folded) return { matches: [], via: 'none' };
 
-  const byName = rows.filter((row) => foldVariantName(row.name) === folded);
+  const byName = rows.filter((row) => foldName(row.name) === folded);
   if (byName.length) return { matches: byName, via: 'name' };
 
   // A word inside a name, or a name inside a word: "Fg" answers "fg variant ta dekhao", and "black"
   // answers "the black one". Both sides need two characters or any single letter matches everything.
   const byWord = folded.length >= 2
     ? rows.filter((row) => {
-        const name = foldVariantName(row.name);
+        const name = foldName(row.name);
         return name.length >= 2 && (name.includes(folded) || folded.includes(name));
       })
     : [];
@@ -594,39 +598,78 @@ export async function listCategories(businessId: string) {
   }));
 }
 
-export async function searchProducts(businessId: string, query: string, limit = 5) {
-  const rows = await db
-    .select({
-      id: products.id,
-      name: products.name,
-      price: products.price,
-      sku: products.sku,
-      description: products.description,
-      categoryId: products.categoryId,
-    })
+/**
+ * A window over the catalog, in a stable order.
+ *
+ * Two things this had to fix. Without an ORDER BY, an empty query — which is what "what do you have?"
+ * becomes — returned ten rows in whatever order Postgres felt like, so a customer asking for the next
+ * page could be shown the same shirt twice and never the one they wanted; and variants were fetched with
+ * one query per product, eleven HTTPS round trips on a serverless driver for a single card list, which is
+ * latency the customer pays before the cards exist.
+ *
+ * A product under a deleted category is not for sale, so it is filtered out here rather than at each
+ * caller that remembered to check.
+ */
+export async function searchProducts(
+  businessId: string,
+  query: string,
+  limit = 5,
+  options: { categoryId?: string | null; offset?: number } = {},
+) {
+  const trimmed = query.trim();
+  const rows = await db.query.products.findMany({
+    where: and(
+      eq(products.businessId, businessId),
+      isNull(products.deletedAt),
+      options.categoryId ? eq(products.categoryId, options.categoryId) : undefined,
+      trimmed
+        ? or(ilike(products.name, `%${trimmed}%`), ilike(products.sku, `%${trimmed}%`))
+        : undefined,
+    ),
+    with: {
+      category: true,
+      variants: { where: isNull(variants.deletedAt) },
+    },
+    orderBy: [asc(products.name), asc(products.id)],
+    limit,
+    offset: Math.max(0, Math.trunc(options.offset ?? 0)),
+  });
+
+  return rows
+    .filter((row) => !row.categoryId || (row.category && !row.category.deletedAt))
+    .map(({ category, ...row }) => row);
+}
+
+/**
+ * How many live products the same search would match, counting past the page.
+ *
+ * A card list can only carry ten, so the number a customer is told cannot come from the list itself —
+ * that is how "here is everything" ends up said about ten of a hundred and thirty-seven. Kept separate
+ * from searchProducts because only the customer-facing tool needs it; a lookup that just wants a match
+ * should not pay for a second round trip.
+ */
+export async function countSearchResults(
+  businessId: string,
+  query: string,
+  options: { categoryId?: string | null } = {},
+): Promise<number> {
+  const trimmed = query.trim();
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
     .from(products)
     .leftJoin(categories, eq(products.categoryId, categories.id))
     .where(
       and(
         eq(products.businessId, businessId),
         isNull(products.deletedAt),
+        options.categoryId ? eq(products.categoryId, options.categoryId) : undefined,
         or(isNull(products.categoryId), isNull(categories.deletedAt)),
-        or(
-          ilike(products.name, `%${query}%`),
-          ilike(products.sku, `%${query}%`),
-        ),
+        trimmed
+          ? or(ilike(products.name, `%${trimmed}%`), ilike(products.sku, `%${trimmed}%`))
+          : undefined,
       ),
-    )
-    .limit(limit);
+    );
 
-  const results = await Promise.all(
-    rows.map(async (p) => {
-      const productVariants = await db.query.variants.findMany({
-        where: and(eq(variants.productId, p.id), isNull(variants.deletedAt)),
-      });
-      return { ...p, variants: productVariants };
-    }),
-  );
-
-  return results;
+  return row?.count ?? 0;
 }
+

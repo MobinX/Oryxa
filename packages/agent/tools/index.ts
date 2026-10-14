@@ -1,6 +1,14 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { searchProducts, getProductByVariantId, getProductById, matchVariant } from '@repo/db/crud/product';
+import {
+  searchProducts,
+  countSearchResults,
+  getProductByVariantId,
+  getProductById,
+  listCategories,
+  matchVariant,
+  foldName,
+} from '@repo/db/crud/product';
 import { createOrder, getOrderById, getOrdersByPlatformId, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
@@ -113,6 +121,16 @@ const STATE_FOR_BUYER: Record<string, string> = {
   onDelivery: 'On delivery',
   done: 'Done',
 };
+
+/**
+ * The state word a customer is allowed to hear. Every tool result the model reads is relayed to them in
+ * prose, so a raw enum value in one of those results reaches a Bangla reply as English jargon — "pending
+ * অবস্থায় আছে" is a stored example, and "onDelivery" is not a word anyone reads. Nothing that hands an
+ * order to the model may pass the column through untouched.
+ */
+function stateWord(state: string): string {
+  return STATE_FOR_BUYER[state] ?? state;
+}
 
 /** Catalog tools shared by every transport (Messenger, comments, future ones). */
 export function createCatalogTools(context: {
@@ -293,7 +311,7 @@ export function createCatalogTools(context: {
           conversationId: context.conversationId,
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
-        result = JSON.stringify(order);
+        result = JSON.stringify({ ...order, state: stateWord(order.state) });
       } catch (err) {
         result = err instanceof Error ? err.message : 'Failed to create order.';
       }
@@ -323,7 +341,9 @@ export function createCatalogTools(context: {
       console.log(`[agent-tool] get_order called — orderId=${orderId}`);
 
       const order = await getOrderById(context.businessId, orderId);
-      const result = order ? JSON.stringify(order) : 'Order not found.';
+      const result = order
+        ? JSON.stringify({ ...order, state: order.state ? stateWord(order.state) : order.state })
+        : 'Order not found.';
 
       console.log(`[agent-tool] get_order result: ${result}`);
       context.emitSse?.('tool_result', { name: 'get_order', result });
@@ -351,7 +371,7 @@ export function createCatalogTools(context: {
       }
 
       if (order.state !== 'pending') {
-        const result = `Cannot update order. Order is currently in '${order.state}' status. Updates are only allowed for pending orders.`;
+        const result = `Cannot update order. It is ${stateWord(order.state)}, and changes are only allowed while it is Pending. Say that to the customer in their own language — do not repeat the state word as-is if they wrote in another.`;
         context.emitSse?.('tool_result', { name: 'update_order', result });
         return result;
       }
@@ -397,7 +417,7 @@ export function createCatalogTools(context: {
       }
 
       if (order.state === 'done') {
-        const result = `Cannot cancel order. Order is already fulfilled ('done'). Tell the customer it can no longer be cancelled.`;
+        const result = `Cannot cancel order. It is already ${stateWord(order.state)}, so it can no longer be cancelled. Tell the customer that in their own language.`;
         context.emitSse?.('tool_result', { name: 'cancel_order', result });
         return result;
       }
@@ -602,11 +622,62 @@ export function createAgentTools(
   );
 
   const showProductsTool = tool(
-    async ({ query }) => {
-      context.emitSse?.('tool_call', { name: 'show_products', args: { query } });
-      console.log(`[agent-tool] show_products called — query="${query}"`);
+    async ({ query, category, startingLimit, endLimit }) => {
+      const logResult = (result: string) => {
+        console.log(`[agent-tool] show_products result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
+        context.emitSse?.('tool_result', { name: 'show_products', result });
+        return result;
+      };
 
-      const matches = await searchProducts(context.businessId, query, CARD_LIST_LIMIT);
+      const word = (query ?? '').trim();
+      context.emitSse?.('tool_call', { name: 'show_products', args: { query: word, category, startingLimit, endLimit } });
+      console.log(`[agent-tool] show_products called — query="${word}" category="${category ?? ''}"`);
+
+      const from = Math.max(0, Math.trunc(startingLimit ?? 0));
+      const to = Math.max(from + 1, Math.trunc(endLimit ?? from + CARD_LIST_LIMIT));
+      const size = Math.min(CARD_LIST_LIMIT, to - from);
+
+      // A category is something a merchant types in words and a customer repeats in words, so the word is
+      // what gets matched. An id is accepted too, because a card tap or an earlier result may carry one —
+      // but it is never something the customer could be asked for.
+      let categoryId: string | null = null;
+      let categoryHit: { id: string; name: string } | null = null;
+      const wantedCategory = (category ?? '').trim();
+      if (wantedCategory) {
+        const all = await listCategories(context.businessId);
+        const folded = foldName(wantedCategory);
+        categoryHit = all.find((c) => c.id === wantedCategory)
+          ?? all.find((c) => foldName(c.name) === folded)
+          ?? all.find((c) => {
+            const name = foldName(c.name);
+            return name.length >= 2 && (name.includes(folded) || folded.includes(name));
+          })
+          ?? null;
+        if (!categoryHit) {
+          return logResult(JSON.stringify({
+            sent: false,
+            reason: all.length === 0
+              ? 'this store does not group its products into categories'
+              : `no category in this store answers to "${wantedCategory}"`,
+            ...(all.length ? { categories: all.map((c) => ({ name: c.name, products: c.productCount })) } : {}),
+            instruction: all.length
+              ? `Nothing was sent. The store's categories are: ${all.map((c) => c.name).join(', ')}. Show the one the customer meant, or drop the category and search by product name. Do not ask the customer for a category id.`
+              : 'Nothing was sent. Search by product name instead (show_products with the name, or no query at all for the store\'s first page), and say what the store has rather than what it lacks.',
+          }));
+        }
+        categoryId = categoryHit.id;
+      }
+
+      // What this page is a page OF, said the way the customer said it. "Matching this search" would be a
+      // lie when the customer named a category and no product word at all.
+      const scope = categoryHit ? `in ${categoryHit.name}` : word ? `matching "${word}"` : 'on sale';
+
+      // The count is asked for alongside the page because a card list can carry ten and a catalog can hold
+      // a hundred and thirty-seven: without the second number, ten shown looks exactly like ten existing.
+      const [matches, total] = await Promise.all([
+        searchProducts(context.businessId, word, size, { categoryId, offset: from }),
+        countSearchResults(context.businessId, word, { categoryId }),
+      ]);
       const products = matches.filter(isSellable);
       const cards: MessengerCard[] = [];
       const photoless: string[] = [];
@@ -639,17 +710,26 @@ export function createAgentTools(
         });
       }
 
-      const logResult = (result: string) => {
-        console.log(`[agent-tool] show_products result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
-        context.emitSse?.('tool_result', { name: 'show_products', result });
-        return result;
-      };
+      const shownThrough = from + matches.length;
+      const hasMore = shownThrough < total;
+      const nextPageArgs = [
+        ...(word ? [`query "${word}"`] : []),
+        ...(categoryHit ? [`category "${categoryHit.name}"`] : []),
+        `startingLimit=${shownThrough}`,
+        `endLimit=${shownThrough + size}`,
+      ].join(', ');
 
       if (cards.length === 0) {
         return logResult(JSON.stringify({
           sent: false,
+          showing: `${from + 1}-${shownThrough}`,
+          matchingProducts: total,
           reason: products.length === 0
-            ? (matches.length === 0 ? 'no product matches that search' : 'every match is out of stock')
+            ? (matches.length === 0
+              ? (total === 0
+                ? (word ? `no product matches "${word}"` : categoryHit ? `nothing is on sale in ${categoryHit.name}` : 'this store has no products yet')
+                : 'the rest of the matches are out of stock')
+              : 'every product on this page is out of stock')
             : 'none of the matches has a photo',
           products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, description: p.description })),
           instruction: products.length === 0
@@ -667,18 +747,42 @@ export function createAgentTools(
 
       return logResult(JSON.stringify({
         sent: true,
+        showing: `${from + 1}-${shownThrough}`,
+        // The number that makes "these are all we have" a claim the model can only make when it is true.
+        matchingProducts: total,
+        ...(categoryHit ? { category: categoryHit.name } : {}),
         products: cards.map((card) => card.title),
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
-        instruction: 'The customer can now see these products with a photo, price and an Order button each. '
-          + 'Do NOT repeat their names, prices or descriptions. Any send_message from here is one short '
-          + 'question at most, such as asking which one they want.',
+        hasMore,
+        instruction: [
+          'The customer can now see these products with a photo, price and an Order button each. Do NOT repeat their names, prices or descriptions in text.',
+          photoless.length
+            ? `No photo exists for ${photoless.join(', ')}, so those are not on cards — say they can be described on request rather than leaving them out silently.`
+            : '',
+          hasMore
+            ? `The store has ${total} products ${scope}; ${total - shownThrough} are NOT shown, so never say this is everything, all the products, or the full range. Offer to show more, and if the customer says yes call show_products again with ${nextPageArgs}.`
+            : `These are all ${total} products ${scope} — only now may you say the customer has seen everything that matches.`,
+          'Any send_message from here is one short question at most, such as asking which one they want or whether they want the next page.',
+        ].filter(Boolean).join(' '),
       }));
     },
     {
       name: 'show_products',
-      description: 'Show products to the customer as Messenger cards — photo, name, price, short summary and an Order button each, stacked as a vertical list in one message. USE THIS INSTEAD OF describing products in text whenever the customer asks what is available, wants to see or buy something, or asks about a product.',
+      description:
+        'Show products to the customer as Messenger cards — photo, name, price, short summary and an Order button each, stacked as a vertical list in one message. USE THIS INSTEAD OF describing products in text whenever the customer asks what is available, wants to see or buy something, or asks about a product. A card list carries ten products at a time, so for a big catalog this shows one page: narrow it with category (named in words) or query, page it with startingLimit/endLimit, and the result tells you how many products the store actually has — never imply the page shown is the whole catalog. "What do you have?" is answered with no query at all; "what sarees do you have?" is answered with category only.',
       schema: z.object({
-        query: z.string().describe('Product name or SKU to search for; an empty string lists the whole catalog'),
+        query: z.string().optional().describe(
+          'Product name or SKU to search for. Leave it out when the customer asks what the store has, or asks for a whole category — then filter with category alone.',
+        ),
+        category: z.string().max(120).optional().describe(
+          'Optional: only products in this category, named as the merchant wrote it ("Saree", "electronics"). Never ask the customer for a category id.',
+        ),
+        startingLimit: z.number().int().min(0).optional().describe(
+          'Index of the first product to show, in stable name order. 0 (the default) is the first page.',
+        ),
+        endLimit: z.number().int().min(1).optional().describe(
+          'Index to stop at, exclusive. Defaults to startingLimit + 10; ten is all one card list can carry, so ask 0..10, then 10..20 for the next page.',
+        ),
       }),
     },
   );
@@ -695,7 +799,7 @@ export function createAgentTools(
         return missing;
       }
 
-      const state = STATE_FOR_BUYER[order.state] ?? order.state;
+      const state = stateWord(order.state);
       const text = oneLine(
         `${state} — ${order.count} × ${order.productName ?? 'your order'}, ${money(order.totalPrice)}`,
         160,
@@ -791,7 +895,7 @@ export function createAgentTools(
         if (!o.imageUrl) {
           photoless.push(o.productName ?? 'an order');
         } else {
-          const state = STATE_FOR_BUYER[o.state] ?? o.state;
+          const state = stateWord(o.state);
           const what = oneLine(`${o.count} × ${o.productName ?? 'your order'}`, 60);
           cards.push({
             title: what,
@@ -809,7 +913,7 @@ export function createAgentTools(
         variant: o.variantName,
         count: o.count,
         total: money(o.totalPrice),
-        state: STATE_FOR_BUYER[o.state] ?? o.state,
+        state: stateWord(o.state),
         date: o.createdAt.toISOString().slice(0, 10),
       }));
 

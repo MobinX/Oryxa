@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchVariant, foldVariantName } from '@repo/db/crud/product';
+import { matchVariant, foldName } from '@repo/db/crud/product';
 
 /**
  * These are pure functions over rows the caller already holds, so no database is involved — which is
@@ -13,14 +13,14 @@ const rows = [
   { id: '44444444-4444-4444-4444-444444444444', name: 'Rose Gold', variantId: 'JAA09' },
 ];
 
-describe('foldVariantName', () => {
+describe('foldName', () => {
   it('folds the ways a customer types a size, and nothing else', () => {
-    expect(foldVariantName(' Fg ')).toBe('fg');
-    expect(foldVariantName('"FG"')).toBe('fg');
-    expect(foldVariantName('#rose   gold')).toBe('rose gold');
-    expect(foldVariantName('Fg.')).toBe('fg');
+    expect(foldName(' Fg ')).toBe('fg');
+    expect(foldName('"FG"')).toBe('fg');
+    expect(foldName('#rose   gold')).toBe('rose gold');
+    expect(foldName('Fg.')).toBe('fg');
     // The words around the size stay: a caller that needs them matches against them.
-    expect(foldVariantName('Fg variant ta dekhao')).toBe('fg variant ta dekhao');
+    expect(foldName('Fg variant ta dekhao')).toBe('fg variant ta dekhao');
   });
 });
 

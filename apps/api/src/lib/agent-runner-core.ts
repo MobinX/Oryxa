@@ -59,7 +59,7 @@ export async function runAgentCore(
     listPendingCustomerMessages,
   } = await import('@repo/db/crud/conversation');
   const { Agent } = await import('@repo/agent');
-  const { listProducts } = await import('@repo/db/crud/product');
+  const { buildCatalogSummary } = await import('./catalog-summary');
   const { sendMessage, senderAction } = await import('@repo/integrations/facebook');
   const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
@@ -144,15 +144,13 @@ export async function runAgentCore(
     };
   });
 
-  const catalog = await listProducts(conv.businessId, { limit: 10 });
+  const catalog = await buildCatalogSummary(conv.businessId);
   console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);
-  console.log(`[agent-runner-core] catalog loaded — ${catalog.products.length} products`);
-  const catalogSummary = catalog.products
-    .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
-    .join('\n');
+  console.log(`[agent-runner-core] catalog loaded — ${catalog.total} products`);
+  const catalogSummary = catalog.summary;
 
   // Everything the model is about to see, before it decides anything.
-  emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt: answering.systemPrompt }));
+  emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
   // Resolve the real sendMessage function here; the override (if any) is injected into
   // the Agent so the same path is exercised whether or not we are in test mode. The raw

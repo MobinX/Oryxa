@@ -95,7 +95,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   } = await import('@repo/db/crud/comment');
   const { Agent } = await import('@repo/agent');
   const { createCommentAgentTools } = await import('@agent/tools/comment');
-  const { listProducts } = await import('@repo/db/crud/product');
+  const { buildCatalogSummary } = await import('./catalog-summary');
   const { getFacebookPostContext, replyToFacebookComment } = await import('@repo/integrations/facebook');
   const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
@@ -182,17 +182,15 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       { from: 'customer' as const, content: current.content },
     ];
 
-    const catalog = await listProducts(thread.businessId, { limit: 10 });
-    const catalogSummary = catalog.products
-      .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
-      .join('\n');
+    const catalog = await buildCatalogSummary(thread.businessId);
+    const catalogSummary = catalog.summary;
 
     const answering = await resolveAnsweringAgent(thread.channel.agent);
     const systemPrompt = postContext
       ? `Post being commented on:\n${postContext}\n\n${answering.systemPrompt}`
       : answering.systemPrompt;
 
-    emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt }));
+    emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt }));
 
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
     const tools = createCommentAgentTools(

@@ -94,8 +94,11 @@ describe('Agent Tools', () => {
     await updateOrderState(seed.business.id, created.id, { state: 'done' });
 
     const result = await updateOrderTool.invoke({ orderId: created.id, count: 3 });
-    expect(result).toContain("Updates are only allowed for pending orders");
-    expect(result).toContain('done');
+    expect(result).toContain('only allowed while it is Pending');
+    // The customer-facing word, never the column value: 'done' is a database token, 'Done' is what the
+    // map says and the only form that should reach a reply.
+    expect(result).toContain('Done');
+    expect(result).not.toMatch(/'done'/);
   });
 
   it('update_order tool tells the agent when stock is insufficient', async () => {
@@ -144,7 +147,9 @@ describe('Agent Tools', () => {
     await updateOrderState(seed.business.id, created.id, { state: 'done' });
 
     const result = await cancelOrderTool.invoke({ orderId: created.id });
-    expect(result).toContain('already fulfilled');
+    expect(result).toContain('can no longer be cancelled');
+    expect(result).toContain('Done');
+    expect(result).not.toMatch(/'done'/);
   });
 
   it('send_message tool calls Facebook API', async () => {
@@ -559,6 +564,111 @@ describe('Agent Tools', () => {
       expect(row?.variantId).toBe(chosen.id);
       expect(row?.variantName).toBe(chosen.name);
     }
+  });
+
+  it('get_order and create_order hand the model the customer word, never the column value', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools(agentContext(seed));
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const getOrderTool = tools.find((t) => t.name === 'get_order')!;
+
+    // Guidance tells the model to relay these results, so an enum token here becomes English jargon
+    // inside a শুদ্ধ বাংলা reply — the exact thing that happened on the virsys page.
+    const order = JSON.parse(await createOrderTool.invoke({
+      productId: seed.productDetail.id,
+      count: 1,
+      customerPhone: '555-0130',
+    }));
+    expect(order.state).toBe('Pending');
+
+    const looked = JSON.parse(await getOrderTool.invoke({ orderId: order.id }));
+    expect(looked.state).toBe('Pending');
+
+    await updateOrderState(seed.business.id, order.id, { state: 'onDelivery' });
+    const moved = JSON.parse(await getOrderTool.invoke({ orderId: order.id }));
+    expect(moved.state).toBe('On delivery');
+    expect(JSON.stringify(moved)).not.toContain('onDelivery');
+  });
+
+  it('show_products pages a catalog one message cannot hold, and says how big it is', async () => {
+    const seed = await seedTestWorld();
+    for (const name of ['Aaa Hat', 'Bbb Hat', 'Ccc Hat']) {
+      await createProduct({
+        businessId: seed.business.id,
+        name,
+        price: 20,
+        sku: `PAGE-${name}-${Date.now()}`,
+        description: 'Paged across two messages',
+        variants: [{ name: 'One', stock: 3, isAvailable: true, price: 20, imageUrl: `https://cdn.test/${name}.jpg` }],
+      });
+    }
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const showProductsTool = tools.find((t) => t.name === 'show_products')!;
+
+    const first = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 0, endLimit: 2 }));
+    expect(first.sent).toBe(true);
+    // A card list of two out of three has to say it is two out of three, or the model tells the customer
+    // they have seen the shop.
+    expect({ showing: first.showing, matchingProducts: first.matchingProducts, hasMore: first.hasMore })
+      .toEqual({ showing: '1-2', matchingProducts: 3, hasMore: true });
+    expect((lastSend(sendMessageMock)[2] as MessengerCard[]).map((c) => c.title)).toEqual(['Aaa Hat', 'Bbb Hat']);
+    expect(first.instruction).toMatch(/are NOT shown/);
+    expect(first.instruction).toContain('startingLimit=2');
+    expect(first.instruction).not.toContain('These are all');
+
+    const second = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 2, endLimit: 4 }));
+    expect({ showing: second.showing, matchingProducts: second.matchingProducts, hasMore: second.hasMore })
+      .toEqual({ showing: '3-3', matchingProducts: 3, hasMore: false });
+    expect((lastSend(sendMessageMock)[2] as MessengerCard[]).map((c) => c.title)).toEqual(['Ccc Hat']);
+    expect(second.instruction).toContain('These are all 3 products');
+
+    // Stable order is what makes the two pages a page and not a reshuffle.
+    const titles = [
+      ...(first.products as string[]),
+      ...(second.products as string[]),
+    ];
+    expect(new Set(titles).size).toBe(3);
+  });
+
+  it('show_products filters by the category a customer names, never by an id', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Red Saree',
+      price: 100,
+      sku: `CAT1-${Date.now()}`,
+      description: 'One kind',
+      categoryName: 'Saree',
+      variants: [{ name: 'One', stock: 2, isAvailable: true, price: 100, imageUrl: 'https://cdn.test/saree.jpg' }],
+    });
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Blue Cap',
+      price: 50,
+      sku: `CAT2-${Date.now()}`,
+      description: 'Another kind',
+      categoryName: 'Caps',
+      variants: [{ name: 'One', stock: 2, isAvailable: true, price: 50, imageUrl: 'https://cdn.test/cap.jpg' }],
+    });
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const showProductsTool = tools.find((t) => t.name === 'show_products')!;
+
+    const byWord = JSON.parse(await showProductsTool.invoke({ category: ' saree ' }));
+    expect(byWord.sent).toBe(true);
+    expect(byWord.category).toBe('Saree');
+    expect(byWord.matchingProducts).toBe(1);
+    expect((lastSend(sendMessageMock)[2] as MessengerCard[]).map((c) => c.title)).toEqual(['Red Saree']);
+
+    const miss = JSON.parse(await showProductsTool.invoke({ category: 'Watches' }));
+    expect(miss.sent).toBe(false);
+    const names = miss.categories.map((c: { name: string }) => c.name);
+    expect(names).toContain('Saree');
+    expect(names).toContain('Caps');
+    expect(miss.instruction).toMatch(/do not ask the customer for a category id/i);
   });
 
   it('show_variant_photos answers to the size word, not only to an id', async () => {

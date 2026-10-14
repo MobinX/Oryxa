@@ -36,7 +36,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     markCommentDone,
     updateCommentThreadState,
   } = await import('@repo/db/crud/comment');
-  const { listProducts } = await import('@repo/db/crud/product');
+  const { buildCatalogSummary } = await import('./catalog-summary');
   const { Agent } = await import('@repo/agent');
   const { createCommentAgentTools } = await import('@agent/tools/comment');
   const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
@@ -94,17 +94,15 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     { from: 'customer' as const, content: input.comment },
   ];
 
-  const catalog = await listProducts(input.businessId, { limit: 10 });
-  const catalogSummary = catalog.products
-    .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
-    .join('\n');
+  const catalog = await buildCatalogSummary(input.businessId);
+  const catalogSummary = catalog.summary;
 
   const answering = await resolveAnsweringAgent(full.channel.agent);
   const systemPrompt = full.postContext
     ? `Post being commented on:\n${full.postContext}\n\n${answering.systemPrompt}`
     : answering.systemPrompt;
 
-  emit('agent_input', agentInputFields({ history, catalogCount: catalog.products.length, systemPrompt }));
+  emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt }));
 
   let delivered = false;
   const tools = createCommentAgentTools(
