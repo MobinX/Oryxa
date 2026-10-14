@@ -3,7 +3,7 @@ import { syncUser } from '@repo/db/crud/user';
 import { createBusiness } from '@repo/db/crud/business';
 import { setB2SignedUrlOverrideForTests } from '@repo/integrations/b2';
 import { db } from '@db/client';
-import { variants } from '@db/schema';
+import { categories, variants } from '@db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import {
   createProduct,
@@ -16,6 +16,7 @@ import {
   deleteCategory,
   listCategories,
   searchProducts,
+  countSearchResults,
 } from '@repo/db/crud/product';
 
 export function registerProductCrudTests() {
@@ -397,5 +398,39 @@ export function registerProductCrudTests() {
 
     const results = await searchProducts(businessId, catName);
     expect(results.some((p) => p.id === created.id)).toBe(false);
+  });
+
+  it('the page and the total count the same products when a shelf went away under one of them', async () => {
+    const businessId = await setup();
+    const catName = `DriftCat-${Date.now()}`;
+    // Named so the doomed row sorts FIRST: a window that filters after LIMIT/OFFSET then hands back an
+    // empty page while the total, filtered in SQL, still says one product exists.
+    await createProduct({
+      businessId,
+      name: `Aaa ${catName}`,
+      price: 9,
+      sku: `DRIFT-A-${Date.now()}`,
+      categoryName: catName,
+      variants: [],
+    });
+    const kept = await createProduct({
+      businessId,
+      name: `Zzz ${catName}`,
+      price: 9,
+      sku: `DRIFT-Z-${Date.now()}`,
+      variants: [],
+    });
+
+    const cat = (await listCategories(businessId)).find((c) => c.name === catName)!;
+    // The state deleteCategory no longer produces — shelf deleted, the product on it left live. Legacy
+    // rows are in it, and it is the only way to prove the two reads share one filter.
+    await db.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, cat.id));
+
+    const page = await searchProducts(businessId, catName, 1, { offset: 0 });
+    const total = await countSearchResults(businessId, catName);
+
+    expect(page.map((p) => p.id)).toEqual([kept.id]);
+    expect(total).toBe(1);
+    expect(page.length).toBe(total);
   });
 }

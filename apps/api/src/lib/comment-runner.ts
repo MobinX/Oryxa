@@ -182,7 +182,8 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       { from: 'customer' as const, content: current.content },
     ];
 
-    const catalog = await buildCatalogSummary(thread.businessId);
+    // A comment thread has no card tools, so the catalog block must not send it to show_products.
+    const catalog = await buildCatalogSummary(thread.businessId, { canShowCards: false });
     const catalogSummary = catalog.summary;
 
     const answering = await resolveAnsweringAgent(thread.channel.agent);

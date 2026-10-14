@@ -575,6 +575,7 @@ export async function deleteCategory(businessId: string, categoryId: string) {
 export async function listCategories(businessId: string) {
   const cats = await db.query.categories.findMany({
     where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt)),
+    orderBy: [asc(categories.name), asc(categories.id)],
   });
 
   const countRows = await db
@@ -599,6 +600,21 @@ export async function listCategories(businessId: string) {
 }
 
 /**
+ * The shelves this store groups by, in name order, for matching a customer's word against them.
+ *
+ * Kept apart from listCategories because that one also counts the products on each shelf, and the only
+ * reader that wants those counts is the reply that says "this store has no shelf called that". A catalog
+ * tool that resolves a word should pay one round trip, not two, on every turn it filters.
+ */
+export async function findCategories(businessId: string) {
+  return db.query.categories.findMany({
+    where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt)),
+    orderBy: [asc(categories.name), asc(categories.id)],
+    columns: { id: true, name: true },
+  });
+}
+
+/**
  * A window over the catalog, in a stable order.
  *
  * Two things this had to fix. Without an ORDER BY, an empty query — which is what "what do you have?"
@@ -606,9 +622,6 @@ export async function listCategories(businessId: string) {
  * page could be shown the same shirt twice and never the one they wanted; and variants were fetched with
  * one query per product, eleven HTTPS round trips on a serverless driver for a single card list, which is
  * latency the customer pays before the cards exist.
- *
- * A product under a deleted category is not for sale, so it is filtered out here rather than at each
- * caller that remembered to check.
  */
 export async function searchProducts(
   businessId: string,
@@ -616,18 +629,9 @@ export async function searchProducts(
   limit = 5,
   options: { categoryId?: string | null; offset?: number } = {},
 ) {
-  const trimmed = query.trim();
   const rows = await db.query.products.findMany({
-    where: and(
-      eq(products.businessId, businessId),
-      isNull(products.deletedAt),
-      options.categoryId ? eq(products.categoryId, options.categoryId) : undefined,
-      trimmed
-        ? or(ilike(products.name, `%${trimmed}%`), ilike(products.sku, `%${trimmed}%`))
-        : undefined,
-    ),
+    where: catalogMatch(businessId, query, options.categoryId),
     with: {
-      category: true,
       variants: { where: isNull(variants.deletedAt) },
     },
     orderBy: [asc(products.name), asc(products.id)],
@@ -635,9 +639,40 @@ export async function searchProducts(
     offset: Math.max(0, Math.trunc(options.offset ?? 0)),
   });
 
-  return rows
-    .filter((row) => !row.categoryId || (row.category && !row.category.deletedAt))
-    .map(({ category, ...row }) => row);
+  return rows;
+}
+
+/**
+ * The one predicate that decides what a catalog search matches.
+ *
+ * Page and total read through it together, because two hand-written copies of the same rule drift: a
+ * window filtered one way and a count filtered another is how "these are all 12 products" ends up said
+ * about a page of ten that quietly dropped two, and the numbers the model is told to trust stop being
+ * the same population.
+ *
+ * A product under a deleted category is not for sale, so it is excluded here rather than at each caller
+ * that remembered to check. Said as a subquery rather than a join because the relational read above owns
+ * its own joins and the count above owns none.
+ */
+function catalogMatch(businessId: string, query: string, categoryId?: string | null) {
+  const trimmed = query.trim();
+  // Written with the query builder rather than one sql fragment because AND binds tighter than OR: an
+  // unparenthesised "category is null or category is live" swallowed every condition in front of it and
+  // matched the whole store. The tests caught it as a page that ignored its own filter.
+  const liveShelves = db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.businessId, businessId), isNull(categories.deletedAt)));
+
+  return and(
+    eq(products.businessId, businessId),
+    isNull(products.deletedAt),
+    categoryId ? eq(products.categoryId, categoryId) : undefined,
+    or(isNull(products.categoryId), inArray(products.categoryId, liveShelves)),
+    trimmed
+      ? or(ilike(products.name, `%${trimmed}%`), ilike(products.sku, `%${trimmed}%`))
+      : undefined,
+  );
 }
 
 /**
@@ -653,22 +688,10 @@ export async function countSearchResults(
   query: string,
   options: { categoryId?: string | null } = {},
 ): Promise<number> {
-  const trimmed = query.trim();
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(products)
-    .leftJoin(categories, eq(products.categoryId, categories.id))
-    .where(
-      and(
-        eq(products.businessId, businessId),
-        isNull(products.deletedAt),
-        options.categoryId ? eq(products.categoryId, options.categoryId) : undefined,
-        or(isNull(products.categoryId), isNull(categories.deletedAt)),
-        trimmed
-          ? or(ilike(products.name, `%${trimmed}%`), ilike(products.sku, `%${trimmed}%`))
-          : undefined,
-      ),
-    );
+    .where(catalogMatch(businessId, query, options.categoryId));
 
   return row?.count ?? 0;
 }

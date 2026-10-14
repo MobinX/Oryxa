@@ -206,7 +206,11 @@ describe('Agent Tools', () => {
     // turn of history are not left reading an empty bubble.
     expect(sent).toEqual(['Photo Hoodie — $59.00 — Warm fleece lining, with a roomy pocket']);
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)).toMatchObject({ from: 'self', content: sent[0] });
+    // The stored line also keeps the window that went out, because a tool result does not survive the
+    // turn: without it, "and the rest?" in a later message has nothing to page from and sends page one.
+    expect(messages?.at(-1)).toMatchObject({ from: 'self' });
+    expect(messages?.at(-1)?.content).toContain(sent[0]!);
+    expect(messages?.at(-1)?.content).toMatch(/showing 1-1 of 1 matching "Hoodie"/);
   });
 
   it('show_products keeps a photoless product out of the cards and says so', async () => {
@@ -630,6 +634,50 @@ describe('Agent Tools', () => {
       ...(second.products as string[]),
     ];
     expect(new Set(titles).size).toBe(3);
+  });
+
+  it('show_products keeps its honesty when a page runs out or has no pictures', async () => {
+    const seed = await seedTestWorld();
+    // Two products the customer cannot be shown, then one they can, so a page of the first two is a page
+    // with nothing to send — and the rest of the store is still behind it.
+    for (const [name, photo] of [['Aaa Hat', null], ['Bbb Hat', null], ['Ccc Hat', 'https://cdn.test/ccc.jpg']]) {
+      await createProduct({
+        businessId: seed.business.id,
+        name,
+        price: 20,
+        sku: `EDGE-${name}-${Date.now()}`,
+        description: 'Paging edge cases',
+        variants: [{ name: 'One', stock: 3, isAvailable: true, price: 20, ...(photo ? { imageUrl: photo } : {}) }],
+      });
+    }
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const showProductsTool = tools.find((t) => t.name === 'show_products')!;
+
+    // A page whose every product lacks a photo is not an empty store: the browse has to stay open.
+    const stalled = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 0, endLimit: 2 }));
+    expect(stalled.sent).toBe(false);
+    expect({ showing: stalled.showing, matchingProducts: stalled.matchingProducts, hasMore: stalled.hasMore })
+      .toEqual({ showing: '1-2', matchingProducts: 3, hasMore: true });
+    expect(stalled.reason).toMatch(/photo/i);
+    expect(stalled.instruction).toMatch(/keep paging/i);
+    expect(stalled.instruction).toContain('startingLimit=2');
+
+    // Asking past the end is the customer saying "more" once too often. It used to answer "the rest of the
+    // matches are out of stock" — a claim about inventory the store never made.
+    const pastEnd = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 5, endLimit: 7 }));
+    expect(pastEnd.sent).toBe(false);
+    expect(pastEnd.hasMore).toBe(false);
+    expect(pastEnd.reason).toMatch(/already been shown/);
+    expect(pastEnd.reason).not.toMatch(/stock/);
+    expect(pastEnd.instruction).toMatch(/do not send the first page again/i);
+
+    // The page that does carry a picture still says it is the last of them.
+    const last = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 2, endLimit: 4 }));
+    expect(last.sent).toBe(true);
+    expect({ showing: last.showing, matchingProducts: last.matchingProducts, hasMore: last.hasMore })
+      .toEqual({ showing: '3-3', matchingProducts: 3, hasMore: false });
   });
 
   it('show_products filters by the category a customer names, never by an id', async () => {

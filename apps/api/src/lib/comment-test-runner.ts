@@ -94,7 +94,8 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     { from: 'customer' as const, content: input.comment },
   ];
 
-  const catalog = await buildCatalogSummary(input.businessId);
+  // A comment thread has no card tools, so the catalog block must not send it to show_products.
+  const catalog = await buildCatalogSummary(input.businessId, { canShowCards: false });
   const catalogSummary = catalog.summary;
 
   const answering = await resolveAnsweringAgent(full.channel.agent);

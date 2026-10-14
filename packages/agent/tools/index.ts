@@ -5,6 +5,7 @@ import {
   countSearchResults,
   getProductByVariantId,
   getProductById,
+  findCategories,
   listCategories,
   matchVariant,
   foldName,
@@ -541,12 +542,17 @@ export function createAgentTools(
    * keep the sentence a human would have read as the record, and hand the unit back if the wire
    * refuses. Says whether it went, because a refused budget is a different answer to the model than
    * a send that threw.
+   *
+   * `recordNote` is written into the stored line and never onto the wire. It exists because a tool
+   * result is not kept between turns while the messages are: without the window the customer actually
+   * saw, "and more?" on the NEXT turn has nothing to page from and sends the first ten again.
    */
-  async function deliverCards(cards: MessengerCard[]): Promise<boolean> {
+  async function deliverCards(cards: MessengerCard[], recordNote?: string): Promise<boolean> {
     const budget = await takeMessageUnit(!context.sendMessageOverride);
     if (!budget.allowed) return false;
 
-    const content = cardsAsText(cards);
+    const said = cardsAsText(cards);
+    const content = recordNote ? `${said}\n${recordNote}` : said;
     try {
       await sendCards(cards);
     } catch (err) {
@@ -559,7 +565,7 @@ export function createAgentTools(
       content,
       state: 'done',
     });
-    onSent?.(content, 'card');
+    onSent?.(said, 'card');
     return true;
   }
 
@@ -639,30 +645,33 @@ export function createAgentTools(
 
       // A category is something a merchant types in words and a customer repeats in words, so the word is
       // what gets matched. An id is accepted too, because a card tap or an earlier result may carry one —
-      // but it is never something the customer could be asked for.
+      // but it is never something the customer could be asked for. The shelves are read without their
+      // product counts, because only the reply that has to list them wants counts, and a filtered turn
+      // should pay one round trip for this rather than two.
       let categoryId: string | null = null;
       let categoryHit: { id: string; name: string } | null = null;
       const wantedCategory = (category ?? '').trim();
       if (wantedCategory) {
-        const all = await listCategories(context.businessId);
+        const shelves = await findCategories(context.businessId);
         const folded = foldName(wantedCategory);
-        categoryHit = all.find((c) => c.id === wantedCategory)
-          ?? all.find((c) => foldName(c.name) === folded)
-          ?? all.find((c) => {
+        categoryHit = shelves.find((c) => c.id === wantedCategory)
+          ?? shelves.find((c) => foldName(c.name) === folded)
+          ?? shelves.find((c) => {
             const name = foldName(c.name);
             return name.length >= 2 && (name.includes(folded) || folded.includes(name));
           })
           ?? null;
         if (!categoryHit) {
+          const withCounts = shelves.length ? await listCategories(context.businessId) : [];
           return logResult(JSON.stringify({
             sent: false,
-            reason: all.length === 0
+            reason: shelves.length === 0
               ? 'this store does not group its products into categories'
               : `no category in this store answers to "${wantedCategory}"`,
-            ...(all.length ? { categories: all.map((c) => ({ name: c.name, products: c.productCount })) } : {}),
-            instruction: all.length
-              ? `Nothing was sent. The store's categories are: ${all.map((c) => c.name).join(', ')}. Show the one the customer meant, or drop the category and search by product name. Do not ask the customer for a category id.`
-              : 'Nothing was sent. Search by product name instead (show_products with the name, or no query at all for the store\'s first page), and say what the store has rather than what it lacks.',
+            ...(withCounts.length ? { categories: withCounts.map((c) => ({ name: c.name, products: c.productCount })) } : {}),
+            instruction: withCounts.length
+              ? `Nothing was sent. The store's categories are: ${withCounts.map((c) => c.name).join(', ')}. Show the one the customer meant, or drop the category and search by product name. Do not ask the customer for a category id.`
+              : 'Nothing was sent. This store does not group products into categories at all, so search by product name (show_products with the name, or no query for the store\'s first page) and answer from what comes back.',
           }));
         }
         categoryId = categoryHit.id;
@@ -674,11 +683,43 @@ export function createAgentTools(
 
       // The count is asked for alongside the page because a card list can carry ten and a catalog can hold
       // a hundred and thirty-seven: without the second number, ten shown looks exactly like ten existing.
+      // Both go through one predicate, so the window and the total count the same population.
       const [matches, total] = await Promise.all([
         searchProducts(context.businessId, word, size, { categoryId, offset: from }),
         countSearchResults(context.businessId, word, { categoryId }),
       ]);
+      const shownThrough = from + matches.length;
+      const hasMore = shownThrough < total;
+      const nextPageArgs = [
+        ...(word ? [`query "${word}"`] : []),
+        ...(categoryHit ? [`category "${categoryHit.name}"`] : []),
+        `startingLimit=${shownThrough || from}`,
+        `endLimit=${(shownThrough || from) + size}`,
+      ].join(', ');
+
+      // An empty window now means exactly one thing, because page and total share a filter: with a row
+      // still unshown behind the offset, the window would have found it. Every earlier version of this
+      // branch guessed "the rest are out of stock" from the same shape, which is a story about inventory
+      // the store never said — it is what asking for page fifteen of six products looks like.
+      if (matches.length === 0) {
+        return logResult(JSON.stringify({
+          sent: false,
+          matchingProducts: total,
+          ...(total === 0 ? {} : { askedFor: `${from + 1}-${from + size}` }),
+          hasMore: false,
+          reason: total === 0
+            ? (word
+              ? `no product matches "${word}"${categoryHit ? ` in ${categoryHit.name}` : ''}`
+              : categoryHit ? `nothing is on sale in ${categoryHit.name}` : 'this store has no products yet')
+            : `every product ${scope} has already been shown — there is nothing at position ${from + 1} to show`,
+          instruction: total === 0
+            ? 'Do not invent a product and do not blame stock. Say the store has nothing of that kind, and ask what else the customer wants.'
+            : 'Do not send the first page again, and never tell the customer the rest is out of stock — there is no rest. Ask which of what they have already seen they want.',
+        }));
+      }
+
       const products = matches.filter(isSellable);
+      const unavailable = matches.filter((p) => !isSellable(p)).map((p) => p.name);
       const cards: MessengerCard[] = [];
       const photoless: string[] = [];
 
@@ -710,37 +751,34 @@ export function createAgentTools(
         });
       }
 
-      const shownThrough = from + matches.length;
-      const hasMore = shownThrough < total;
-      const nextPageArgs = [
-        ...(word ? [`query "${word}"`] : []),
-        ...(categoryHit ? [`category "${categoryHit.name}"`] : []),
-        `startingLimit=${shownThrough}`,
-        `endLimit=${shownThrough + size}`,
-      ].join(', ');
-
       if (cards.length === 0) {
+        // Nothing on this page can be carded is not nothing left to look at: a catalog whose next ten rows
+        // are photoless would otherwise stop the browse here, with the rest of the store unexamined and
+        // the model told nothing of it.
         return logResult(JSON.stringify({
           sent: false,
           showing: `${from + 1}-${shownThrough}`,
           matchingProducts: total,
-          reason: products.length === 0
-            ? (matches.length === 0
-              ? (total === 0
-                ? (word ? `no product matches "${word}"` : categoryHit ? `nothing is on sale in ${categoryHit.name}` : 'this store has no products yet')
-                : 'the rest of the matches are out of stock')
-              : 'every product on this page is out of stock')
-            : 'none of the matches has a photo',
+          hasMore,
           products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, description: p.description })),
-          instruction: products.length === 0
-            ? 'Do not invent a product. Say it is unavailable and ask what else the customer wants.'
-            : 'A card needs a photo and none of these has one, so nothing was sent. Describe them in one send_message instead.',
+          ...(unavailable.length ? { notBuyable: unavailable } : {}),
+          reason: products.length === 0
+            ? `all ${matches.length} products on this page are not available to order`
+            : `none of the ${products.length} products on this page has a photo, and a card needs one`,
+          instruction: hasMore
+            ? `Nothing here could be sent, but ${total - shownThrough} more products ${scope} have not been looked at yet — keep paging with ${nextPageArgs} before you say the store has nothing to show. Do not tell the customer about these ones unless they ask.`
+            : products.length === 0
+              ? 'Nothing here is buyable and there is no further page. Say the store cannot take an order for that right now, and never that it has no such product.'
+              : 'A card needs a photo and none of these has one, so nothing was sent. Describe them in one send_message instead.',
         }));
       }
 
       // A row of cards the customer sees is one reply, so it costs the cycle what a
       // paragraph would have cost.
-      if (!(await deliverCards(cards))) {
+      if (!(await deliverCards(
+        cards,
+        `showing ${from + 1}-${shownThrough} of ${total} ${scope}${hasMore ? ', more not shown' : ', that is all'}`,
+      ))) {
         console.log(`[agent-tool] show_products refused — the message allowance is used up`);
         return logResult(BUDGET_REFUSED);
       }
@@ -753,14 +791,18 @@ export function createAgentTools(
         ...(categoryHit ? { category: categoryHit.name } : {}),
         products: cards.map((card) => card.title),
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
+        ...(unavailable.length ? { notBuyable: unavailable } : {}),
         hasMore,
         instruction: [
           'The customer can now see these products with a photo, price and an Order button each. Do NOT repeat their names, prices or descriptions in text.',
           photoless.length
             ? `No photo exists for ${photoless.join(', ')}, so those are not on cards — say they can be described on request rather than leaving them out silently.`
             : '',
+          unavailable.length
+            ? `${unavailable.join(', ')} are on this page but not available to order — mention that only if the customer asks about one.`
+            : '',
           hasMore
-            ? `The store has ${total} products ${scope}; ${total - shownThrough} are NOT shown, so never say this is everything, all the products, or the full range. Offer to show more, and if the customer says yes call show_products again with ${nextPageArgs}.`
+            ? `The store has ${total} products ${scope}; ${total - shownThrough} are NOT shown, so never say this is everything, all the products, or the full range. Offer to show more, and if the customer says yes call show_products again with ${nextPageArgs} — the window you sent is kept in the message record, so a "more" in a later turn pages from it rather than starting over.`
             : `These are all ${total} products ${scope} — only now may you say the customer has seen everything that matches.`,
           'Any send_message from here is one short question at most, such as asking which one they want or whether they want the next page.',
         ].filter(Boolean).join(' '),
@@ -774,7 +816,7 @@ export function createAgentTools(
         query: z.string().optional().describe(
           'Product name or SKU to search for. Leave it out when the customer asks what the store has, or asks for a whole category — then filter with category alone.',
         ),
-        category: z.string().max(120).optional().describe(
+        category: z.string().max(255).optional().describe(
           'Optional: only products in this category, named as the merchant wrote it ("Saree", "electronics"). Never ask the customer for a category id.',
         ),
         startingLimit: z.number().int().min(0).optional().describe(
@@ -928,7 +970,10 @@ export function createAgentTools(
       }
 
       // A list the customer sees is one reply, so it costs the cycle what a paragraph would have cost.
-      if (!(await deliverCards(cards))) {
+      if (!(await deliverCards(
+        cards,
+        `showing ${from + 1}-${from + page.length} orders${hasMore ? ', older ones not shown' : ', that is all of them'}`,
+      ))) {
         console.log('[agent-tool] show_orders refused — the message allowance is used up');
         return logResult(BUDGET_REFUSED);
       }

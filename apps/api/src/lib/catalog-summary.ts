@@ -24,7 +24,15 @@ const NAMED_PRODUCT_LIMIT = 10;
  */
 export type CatalogSummary = { summary: string; total: number };
 
-export async function buildCatalogSummary(businessId: string): Promise<CatalogSummary> {
+/**
+ * Whether the agent reading this block can put cards in front of the customer. A comment thread cannot —
+ * its toolset has no show_products — so the block must not send it to a tool it does not own.
+ */
+export async function buildCatalogSummary(
+  businessId: string,
+  options: { canShowCards?: boolean } = {},
+): Promise<CatalogSummary> {
+  const canShowCards = options.canShowCards !== false;
   const [total, firstPage] = await Promise.all([
     countSearchResults(businessId, ''),
     searchProducts(businessId, '', NAMED_PRODUCT_LIMIT),
@@ -35,12 +43,16 @@ export async function buildCatalogSummary(businessId: string): Promise<CatalogSu
   }
 
   if (total <= NAMED_PRODUCT_LIMIT) {
+    // Every one of them is named, so the block may say it is the whole catalog — but "whole catalog" is
+    // not "all buyable", and an agent that confuses the two tells a customer a sold-out shirt is on sale.
+    const buyable = firstPage.filter((p) => (p.variants ?? []).some((v) => v.isAvailable && v.stock > 0)).length;
     const lines = firstPage
       .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
       .join('\n');
     return {
       total,
-      summary: `Catalog (${total} product${total === 1 ? '' : 's'} — this is the store's whole catalog):\n${lines}`,
+      summary: `Catalog (${total} product${total === 1 ? '' : 's'} — this is the store's whole catalog`
+        + `${total > buyable ? `, ${buyable} of them available to order now` : ''}):\n${lines}`,
     };
   }
 
@@ -53,14 +65,19 @@ export async function buildCatalogSummary(businessId: string): Promise<CatalogSu
       + (unclassified > 0 ? `; plus ${unclassified} with no category` : '')
     : 'None of them are grouped into categories, so there is no category to offer.';
 
+  const howToAnswer = canShowCards
+    ? 'To answer what the shop has: name the categories above, or call show_products with no query'
+      + ' for the first page and offer the next one. Never say a customer has seen everything.'
+    : 'To answer what the shop has: name the categories above and describe a few in your own words.'
+      + ' You cannot show a product list here, so never imply the customer has seen everything the store holds.';
+
   return {
     total,
     summary: [
       `Catalog: this store has ${total} products on sale — far more than one message can show,`
-        + ' so the list below is a sample, NOT the range.',
+        + ` so the list below is a sample (the ${firstPage.length} that come first by name), NOT the range.`,
       shape,
-      'To answer what the shop has: name the categories above, or call show_products with no query'
-        + ' for the first page and offer the next one. Never say a customer has seen everything.',
+      howToAnswer,
       ...firstPage.map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`),
     ].join('\n'),
   };
