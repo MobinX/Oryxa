@@ -176,6 +176,13 @@
       "when": 1792195200000,
       "tag": "0024_default_agent_learns_the_variant_tools",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792281600000,
+      "tag": "0025_default_agent_names_a_size_as_a_word",
+      "breakpoints": true
     }
   ]
 }

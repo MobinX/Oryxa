@@ -1,6 +1,6 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { searchProducts, getProductByVariantId, getProductById } from '@repo/db/crud/product';
+import { searchProducts, getProductByVariantId, getProductById, matchVariant } from '@repo/db/crud/product';
 import { createOrder, getOrderById, getOrdersByPlatformId, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
@@ -90,8 +90,15 @@ function variantLine(productName: string, variantName: string): string {
 
 function variantPriceLine(price: string, stock: number, photo?: { index: number; of: number }): string {
   const parts = [price, `${stock} in stock`];
-  if (photo && photo.of > 1) parts.push(`photo ${photo.index} of ${photo.of}`);
+  // A single-photo size must not read as the plain variant card it also is: saying "the only photo"
+  // is what tells the customer nothing further exists to ask for.
+  if (photo) parts.push(photo.of === 1 ? 'the only photo' : `photo ${photo.index} of ${photo.of}`);
   return oneLine(parts.join(' · '), 95);
+}
+
+/** How many pictures a size actually has, from whatever the caller already holds. */
+function photoCount(variant: { imageUrls?: string[] | null; imageUrl?: string | null }): number {
+  return variant.imageUrls?.length ?? (variant.imageUrl ? 1 : 0);
 }
 
 const STATE_FOR_BUYER: Record<string, string> = {
@@ -130,9 +137,13 @@ export function createCatalogTools(context: {
           variants: p.variants.map((v) => ({
             id: v.id,
             name: v.name,
+            label: v.variantId ?? null,
             price: v.price,
             stock: v.stock,
             isAvailable: v.isAvailable,
+            // The count is the fact that was missing: a model that knows a size has one picture does
+            // not promise the customer the rest of a set that does not exist.
+            photos: photoCount(v),
           })),
         })),
       );
@@ -170,8 +181,10 @@ export function createCatalogTools(context: {
           found: false,
           read: variantId,
           instruction:
-            'That is not a variant label — a label is exactly three letters and two digits. '
-            + 'Read the picture again and look for the stamped code, or search the catalog by what you see.',
+            'That is not a variant label — a label is five characters of letters and digits, like AFG23. '
+            + 'If the customer named the size in words ("Fg", "Black", "Small") instead, that is not a label: '
+            + 'call show_variant_photos or show_product_info with the product and that word. '
+            + 'Otherwise read the picture again and look for the stamped code, or search the catalog by what you see.',
         });
         context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
         return result;
@@ -900,11 +913,22 @@ export function createAgentTools(
         }));
       }
 
+      // What the model needs to answer the NEXT question about this product without asking the
+      // customer anything: each size's id, its stamped label, and how many pictures it has.
+      const listed = onOffer.map((v) => ({
+        id: v.id,
+        name: v.name,
+        label: v.variantId ?? null,
+        price: money(v.price ?? product.price),
+        stock: v.stock,
+        photos: photoCount(v),
+      }));
+
       const cards: MessengerCard[] = [];
       const photoless: string[] = [];
       for (const variant of onOffer) {
-        // A card needs a picture and a variant can be photoless while its siblings are not, so the
-        // name is the label rather than the photo — the customer still sees the price and the size.
+        // A card needs a picture. A size with none is left off the cards and named in the result, so
+        // the model can tell the customer it exists rather than silently shrinking the list.
         if (!variant.imageUrl) {
           photoless.push(variant.name);
           continue;
@@ -922,9 +946,9 @@ export function createAgentTools(
         return logResult(JSON.stringify({
           sent: false,
           product: line,
-          variants: onOffer.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })),
-          reason: 'none of these variants has a photo, and a card needs one',
-          instruction: 'List the sizes with their prices in one short send_message and ask which one they want.',
+          variants: listed,
+          reason: 'none of these sizes has a photo, and a card needs one',
+          instruction: 'Name the sizes with their prices in one short send_message and ask which one they want — by name, never by an id, which the customer cannot read.',
         }));
       }
 
@@ -936,10 +960,12 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         product: line,
-        variants: cards.map((card) => ({ name: card.title, price: card.subtitle })),
+        variants: listed,
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(soldOut.length ? { hiddenOutOfStock: soldOut } : {}),
-        instruction: 'The customer can now see every size of this product with its own Order button. Do not repeat the prices or the stock in text; one short line asking which size they want is enough. Tapping a card orders THAT variant.',
+        instruction: photoless.length
+          ? `The customer can see ${cards.length} of the ${onOffer.length} sizes of ${product.name}; no picture exists for ${photoless.join(', ')}, so those are not on cards. Say so in one short line. Do not repeat the prices or the stock, and never ask the customer for an id — the sizes are listed above with what they answer to.`
+          : `The customer can now see all ${cards.length} sizes of ${product.name}, each with its own Order button, and this result gives you each size's id, label and picture count. Do not repeat the prices or the stock; one short line asking which size they want is enough. Tapping a card orders THAT size.`,
       }));
     },
     {
@@ -953,15 +979,17 @@ export function createAgentTools(
   );
 
   /**
-   * Every photo of ONE variant. A merchant hangs several pictures on a size — front, back, the label
-   * — and a customer who wants to see the thing itself is asking about that size, not about the other
-   * four. The price, the stock and the Order button are the same on every card, because it is one
-   * product being looked at from several sides.
+   * Every photo of ONE size. A merchant hangs several pictures on a size — front, back, the label — and
+   * a customer who wants to see the thing itself is asking about that size, not about the other four.
+   * The price, the stock and the Order button are the same on every card, because it is one product
+   * being looked at from several sides. The size is named the way a customer names it, because a UUID
+   * is the one thing in this conversation nobody present can supply: it lives in a card's button, which
+   * is never written into the history the next turn reads.
    */
   const showVariantPhotosTool = tool(
     async ({ productId, variantId }) => {
       context.emitSse?.('tool_call', { name: 'show_variant_photos', args: { productId, variantId } });
-      console.log(`[agent-tool] show_variant_photos called — productId=${productId} variantId=${variantId}`);
+      console.log(`[agent-tool] show_variant_photos called — productId=${productId} variant="${variantId}"`);
 
       const logResult = (result: string) => {
         console.log(`[agent-tool] show_variant_photos result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
@@ -973,42 +1001,90 @@ export function createAgentTools(
         console.error('[agent-tool] show_variant_photos could not load the product:', err);
         return null;
       });
-      const variant = product?.variants.find((v) => v.id === variantId) ?? null;
-
-      if (!product || !variant) {
+      if (!product) {
         return logResult(JSON.stringify({
           sent: false,
-          reason: !product
-            ? 'no product with that id in this store'
-            : 'that variant is not one of this product\'s sizes',
-          variantId,
-          ...(product ? { variants: product.variants.map((v) => ({ id: v.id, name: v.name })) } : {}),
-          instruction: product
-            ? 'Call show_product_info to list the sizes this product really has. Do not invent a variant.'
-            : 'Search the catalog with show_products first. Do not invent a product.',
+          reason: 'no product with that id in this store',
+          instruction: 'Search the catalog with show_products first. Do not invent a product.',
         }));
       }
 
+      /** What a size answers to, in the order the customer can offer them: its word, then its label. */
+      const sizes = product.variants.map((v) => ({
+        id: v.id,
+        name: v.name,
+        label: v.variantId ?? null,
+        photos: photoCount(v),
+      }));
+
+      const { matches, via } = matchVariant(product.variants, variantId);
+
+      if (matches.length === 0) {
+        return logResult(JSON.stringify({
+          sent: false,
+          product: { id: product.id, name: product.name },
+          sizes,
+          reason: `no size of ${product.name} answers to "${variantId}"`,
+          instruction:
+            `This product has ${sizes.length} sizes: ${sizes.map((s) => s.label ? `${s.name} (label ${s.label})` : s.name).join(', ')}. `
+            + 'Tell the customer which sizes there are and ask which one they mean, by name, or call show_product_info to put them on cards. '
+            + 'Never ask the customer for an id — nobody can read or type one, and the sizes above are already everything they could mean.',
+        }));
+      }
+
+      if (matches.length > 1) {
+        const candidates = matches.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, photos: photoCount(v) }));
+        return logResult(JSON.stringify({
+          sent: false,
+          product: { id: product.id, name: product.name },
+          candidates,
+          reason: `"${variantId}" matches ${matches.length} sizes of ${product.name}`,
+          instruction:
+            `Two or more sizes answer to that word: ${candidates.map((c) => c.name).join(', ')}. Nothing was sent. `
+            + 'Ask the customer which of those they mean, or call show_product_info to put them on cards. Do not pick one, '
+            + 'and do not ask for an id.',
+        }));
+      }
+
+      const variant = matches[0];
+      // The pictures the customer can actually be shown (signed links) against the pictures the store
+      // holds on record. A gap between them is a storage fault, and it must never be reported as
+      // "this size has no picture" — nor quietly papered over with a promise of more.
+      const stored = variant.imageKeys?.length ?? (variant.imageUrl || variant.imageKey ? 1 : 0);
       const photos = (variant.imageUrls?.length ? variant.imageUrls : variant.imageUrl ? [variant.imageUrl] : [])
         .filter((url): url is string => Boolean(url));
 
       if (photos.length === 0) {
         return logResult(JSON.stringify({
           sent: false,
-          variant: { id: variant.id, name: variant.name, price: variant.price, stock: variant.stock },
-          reason: 'this variant has no pictures at all',
-          instruction: 'Say so in one short send_message and describe it, or show another size with show_product_info.',
+          variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price), stock: variant.stock },
+          photosOnRecord: stored,
+          ...(via !== 'id' && via !== 'none' ? { matchedBy: via } : {}),
+          ...(stored > 0
+            ? {
+                reason: `this size has ${stored} pictures on record but none could be shown right now`,
+                instruction:
+                  `Say that the picture of ${variant.name} cannot be shown at the moment. Do NOT say the store has no picture of it, `
+                  + 'do not send, promise or describe a photo you do not have, and offer the written details or another size from show_product_info.',
+              }
+            : {
+                reason: `this size has no picture on record at all`,
+                instruction:
+                  `Say in one short send_message that we have no picture of ${variant.name}. Do not send, promise, describe or apologise for `
+                  + 'a photo the store does not have. Give the written details instead, or offer another size with show_product_info.',
+              }),
         }));
       }
 
       const shown = photos.slice(0, CARD_LIST_LIMIT);
+      const last = shown.length;
       const label = variantLine(product.name, variant.name);
       const cards: MessengerCard[] = shown.map((imageUrl, index) => ({
         title: label,
         subtitle: variantPriceLine(
           money(variant.price ?? product.price),
           variant.stock,
-          { index: index + 1, of: shown.length },
+          { index: index + 1, of: photos.length },
         ),
         imageUrl,
         button: { title: 'Order', payload: orderPayload(product.id, label, variant.id) },
@@ -1019,21 +1095,36 @@ export function createAgentTools(
         return logResult(BUDGET_REFUSED);
       }
 
+      // Only the branch where the whole set went out may use the word "all". A one-picture size gets
+      // told it is the only one, which is what stops the next turn being spent on a set that does not exist.
+      const counted = photos.length === 1
+        ? `One picture of ${variant.name} went out, and it is the ONLY picture this store has of that size — there is nothing further to send. Say that it is the only picture we have; never say more pictures, all pictures or every picture.`
+        : last < photos.length
+          ? `This message carried ${last} pictures of ${variant.name}, numbered 1-${last} of the ${photos.length} this size has. The other ${photos.length - last} are NOT sent and the customer has not seen them, so never say all or every picture.`
+          : `The customer can now see all ${photos.length} pictures of ${variant.name} — that is the whole set this store holds for this size, and nothing is left to send.`;
+
       return logResult(JSON.stringify({
         sent: true,
-        variant: { id: variant.id, name: variant.name, price: money(variant.price ?? product.price), stock: variant.stock },
-        photosSent: cards.length,
-        ...(photos.length > shown.length ? { photosNotSent: photos.length - shown.length } : {}),
-        instruction: `The customer can now see all ${cards.length} pictures of ${variant.name} — same item, same price, an Order button on each that orders this exact variant. Do not repeat the price or the stock, and do not list the other sizes unless they ask.`,
+        variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price), stock: variant.stock },
+        ...(via !== 'id' && via !== 'none' ? { matchedBy: via } : {}),
+        photosSent: last,
+        photosTotal: photos.length,
+        ...(last < photos.length ? { photosNotSent: photos.length - last } : {}),
+        ...(stored > photos.length
+          ? { photosUndeliverable: stored - photos.length }
+          : {}),
+        instruction: `${counted} Same item, same price, an Order button on each card that orders this exact size. Do not repeat the price or the stock, do not list the other sizes unless asked, and never promise a picture you have not sent.`,
       }));
     },
     {
       name: 'show_variant_photos',
       description:
-        'Show every photo of ONE specific variant of a product, as a vertical list of Messenger cards that all carry the same price, the same number in stock and an Order button that orders that variant. Use it when the customer asks to see a thing more closely — other pictures, the back, the label, a better look at the size they named — once the product and variant are known.',
+        'Show every photo of ONE size of a product, as a vertical list of Messenger cards that all carry the same price, the same stock and an Order button that orders that exact size. Use it when the customer wants a closer look — another picture, the back of it, the label. Name the size the way the customer named it ("Fg", "black xl", "#DAA03", or the id a card tap carried); you never need an id from the customer, and the result tells you honestly how many pictures this store actually has.',
       schema: z.object({
         productId: z.string().uuid().describe('The UUID of the product'),
-        variantId: z.string().uuid().describe('The UUID of the variant whose photos should be shown'),
+        variantId: z.string().min(1).max(120).describe(
+          'Which size to show, as the customer said it: the size word ("Fg", "Black XL"), the five-character label printed on its photo ("DAA03"), or a variant UUID from a search you already did.',
+        ),
       }),
     },
   );

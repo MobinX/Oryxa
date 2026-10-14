@@ -516,6 +516,197 @@ describe('Agent Tools', () => {
       expect(row?.variantName).toBe(chosen.name);
     }
   });
+
+  it('show_variant_photos answers to the size word, not only to an id', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Word Jacket',
+      price: 90,
+      sku: `WORD-${Date.now()}`,
+      description: 'Two sizes, one word each',
+      variants: [
+        { name: 'Fg', stock: 4, isAvailable: true, price: 90, imageUrl: 'https://cdn.test/w-fg.jpg' },
+        { name: 'Black', stock: 2, isAvailable: true, price: 95, imageUrl: 'https://cdn.test/w-black.jpg' },
+      ],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'Word Jacket'))[0]!.id;
+    const variants = (await getProductByIdForTest(seed.business.id, productId)).variants;
+
+    const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'show_variant_photos')!;
+
+    // The customer's own words, in the shapes they arrive in, reach the same size the id reaches.
+    sendMessageMock.mockClear();
+    const byId = JSON.parse(await tool.invoke({ productId, variantId: variants[0]!.id }));
+    const byIdCards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(byId.matchedBy).toBeUndefined();
+
+    sendMessageMock.mockClear();
+    const byWord = JSON.parse(await tool.invoke({ productId, variantId: ' fg ' }));
+    const byWordCards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(byWord.sent).toBe(true);
+    expect(byWord.matchedBy).toBe('name');
+    expect(byWordCards).toEqual(byIdCards);
+
+    // A five-letter word is a name, not a label: 'Black' must not be read as a code the merchant never issued.
+    sendMessageMock.mockClear();
+    const black = JSON.parse(await tool.invoke({ productId, variantId: 'Black' }));
+    expect(black.matchedBy).toBe('name');
+    expect((lastSend(sendMessageMock)[2] as MessengerCard[])[0]!.title).toBe('Word Jacket — Black');
+
+    // The stamped label still works, because that is how a picture is identified.
+    sendMessageMock.mockClear();
+    const byLabel = JSON.parse(await tool.invoke({ productId, variantId: variants[1]!.variantId ?? '' }));
+    expect(byLabel.matchedBy).toBe('label');
+    expect(byLabel.variant.name).toBe('Black');
+  });
+
+  it('show_variant_photos calls a single picture the only one there is', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'One Shot Shirt',
+      price: 25,
+      sku: `ONE-${Date.now()}`,
+      description: 'Photographed once',
+      variants: [{ name: 'M', stock: 7, isAvailable: true, price: 25, imageUrl: 'https://cdn.test/one.jpg' }],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'One Shot Shirt'))[0]!.id;
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!.invoke({ productId, variantId: 'M' }),
+    );
+
+    expect({ sent: result.sent, photosSent: result.photosSent, photosTotal: result.photosTotal })
+      .toEqual({ sent: true, photosSent: 1, photosTotal: 1 });
+
+    // This is the sentence that must differ from a plain size card, and the rule that must differ from
+    // "all the pictures": the customer asked twice for more and was promised a set that does not exist.
+    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.subtitle).toBe('$25.00 · 7 in stock · the only photo');
+    expect(result.instruction).toContain('ONLY picture');
+    expect(result.instruction).toMatch(/never say more pictures, all pictures or every picture/i);
+    expect(result.instruction).not.toMatch(/can now see all 1 pictures/i);
+  });
+
+  it('show_variant_photos tells the truth when the store holds no picture', async () => {
+    const seed = await seedTestWorld();
+    // The seeded product's one size has never been photographed.
+    const tools = createAgentTools(agentContext(seed));
+    sendMessageMock.mockClear();
+
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!.invoke({
+        productId: seed.productDetail.id,
+        variantId: 'Red M',
+      }),
+    );
+    expect(result.sent).toBe(false);
+    expect(result.photosOnRecord).toBe(0);
+    expect(result.reason).toMatch(/no picture on record/);
+    expect(result.instruction).toMatch(/do not send, promise/i);
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('show_variant_photos asks which size when a word answers to two, and sends nothing', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Twin Hoodie',
+      price: 60,
+      sku: `TWIN-${Date.now()}`,
+      description: 'Two sizes a customer cannot tell apart by word',
+      variants: [
+        { name: 'Fg', stock: 3, isAvailable: true, price: 60, imageUrl: 'https://cdn.test/t1.jpg' },
+        { name: 'fg', stock: 2, isAvailable: true, price: 65, imageUrl: 'https://cdn.test/t2.jpg' },
+      ],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'Twin Hoodie'))[0]!.id;
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!.invoke({ productId, variantId: 'Fg' }),
+    );
+
+    expect(result.sent).toBe(false);
+    expect(result.candidates.map((c: { name: string }) => c.name)).toEqual(['Fg', 'fg']);
+    expect(result.instruction).toMatch(/which of those/i);
+    expect(result.instruction).toMatch(/do not ask for an id/i);
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('show_variant_photos lists the sizes rather than demanding a code when the word matches none', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Narrow Cap',
+      price: 20,
+      sku: `NAR-${Date.now()}`,
+      description: 'One size only',
+      variants: [{ name: 'Small', stock: 6, isAvailable: true, price: 20, imageUrl: 'https://cdn.test/cap.jpg' }],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'Narrow Cap'))[0]!.id;
+
+    sendMessageMock.mockClear();
+    const tools = createAgentTools(agentContext(seed));
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_variant_photos')!.invoke({ productId, variantId: 'purple' }),
+    );
+
+    expect(result.sent).toBe(false);
+    expect(result.sizes.map((s: { name: string }) => s.name)).toEqual(['Small']);
+    expect(result.instruction).toMatch(/never ask the customer for an id/i);
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('show_product_info hands back the ids and picture counts that make asking unnecessary', async () => {
+    const seed = await seedTestWorld();
+    const tools = createAgentTools(agentContext(seed));
+    const productId = seed.productDetail.id;
+
+    const result = JSON.parse(
+      await tools.find((t) => t.name === 'show_product_info')!.invoke({ productId }),
+    );
+    // It cannot card a size with no picture, but it still tells the model what that size is called and
+    // that there is nothing to show — which is what the next turn needs to answer instead of asking.
+    expect(result.sent).toBe(false);
+    expect(result.variants).toEqual([
+      { id: seed.productDetail.variants[0]!.id, name: 'Red M', label: seed.productDetail.variants[0]!.variantId ?? null, price: '$29.99', stock: 10, photos: 0 },
+    ]);
+  });
+
+  it('get_product tells the model how many pictures each size actually has', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'Counted Scarf',
+      price: 18,
+      sku: `COUNT-${Date.now()}`,
+      description: 'Three pictures on one size, none on the other',
+      variants: [
+        {
+          name: 'Wool', stock: 3, isAvailable: true, price: 18, imageUrl: 'https://cdn.test/s1.jpg',
+          imageUrls: ['https://cdn.test/s1.jpg', 'https://cdn.test/s2.jpg', 'https://cdn.test/s3.jpg'],
+        },
+        { name: 'Silk', stock: 1, isAvailable: true, price: 22 },
+      ],
+    });
+
+    const tools = createAgentTools(agentContext(seed));
+    const found = JSON.parse(
+      await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'Counted Scarf' }),
+    );
+    const scarf = found[0];
+    expect(scarf.variants.map((v: { name: string; photos: number }) => [v.name, v.photos]))
+      .toEqual([['Wool', 3], ['Silk', 0]]);
+    expect(scarf.variants[0].label).toMatch(/^[A-Z0-9]{5}$/);
+    // The counts and the label are the point; the picture bytes are not something a model needs.
+    expect(JSON.stringify(scarf)).not.toContain('cdn.test');
+  });
 });
 
 /** The catalog row with its variants, read the way the card tools read it. */

@@ -244,6 +244,57 @@ export async function getProductByVariantId(businessId: string, variantId: strin
   return getProductById(businessId, row.productId);
 }
 
+/** A customer's word for a size, folded to something a name can be compared against. */
+export function foldVariantName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
+}
+
+export type VariantMatchVia = 'id' | 'name' | 'word' | 'label' | 'none';
+
+/**
+ * Which of these sizes a customer's word means.
+ *
+ * The word arrives exactly as it was said: "Fg", "fg variant ta", "#DAA03", or the UUID a card tap
+ * carried. Of those, only the words survive between turns — the history the model reads next time is
+ * the text on the cards, and a card never shows an id — so a lookup by what the customer called the
+ * size is the one route that works twice. Names are tried before the label shape on purpose: a size
+ * called Black is five letters long and would otherwise be read as a code the merchant never stamped.
+ */
+export function matchVariant<T extends { id: string; name: string; variantId?: string | null }>(
+  rows: T[],
+  raw: string,
+): { matches: T[]; via: VariantMatchVia } {
+  const wanted = raw.trim();
+  const byId = rows.filter((row) => row.id === wanted);
+  if (byId.length) return { matches: byId, via: 'id' };
+
+  const folded = foldVariantName(wanted);
+  if (!folded) return { matches: [], via: 'none' };
+
+  const byName = rows.filter((row) => foldVariantName(row.name) === folded);
+  if (byName.length) return { matches: byName, via: 'name' };
+
+  // A word inside a name, or a name inside a word: "Fg" answers "fg variant ta dekhao", and "black"
+  // answers "the black one". Both sides need two characters or any single letter matches everything.
+  const byWord = folded.length >= 2
+    ? rows.filter((row) => {
+        const name = foldVariantName(row.name);
+        return name.length >= 2 && (name.includes(folded) || folded.includes(name));
+      })
+    : [];
+  if (byWord.length) return { matches: byWord, via: 'word' };
+
+  const label = wanted.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const byLabel = label.length === 5 ? rows.filter((row) => row.variantId === label) : [];
+  if (byLabel.length) return { matches: byLabel, via: 'label' };
+
+  return { matches: [], via: 'none' };
+}
+
 export async function listProducts(
   businessId: string,
   options: { categoryId?: string; limit?: number; offset?: number } = {},
