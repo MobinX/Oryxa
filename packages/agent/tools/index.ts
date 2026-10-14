@@ -101,11 +101,17 @@ function photoCount(variant: { imageUrls?: string[] | null; imageUrl?: string | 
   return variant.imageUrls?.length ?? (variant.imageUrl ? 1 : 0);
 }
 
+/**
+ * The order's state, said plainly. Every earlier version of this map claimed a time as well as a status
+ * — "Just placed" for pending — and a state column that only the merchant can move does not age with the
+ * order, so a June sale still read "Just placed" beside its own June date. The word is now the state and
+ * nothing else; when is what the date on the card is for.
+ */
 const STATE_FOR_BUYER: Record<string, string> = {
-  pending: 'Just placed',
-  acknowledged: 'Confirmed with the store',
-  onDelivery: 'On its way',
-  done: 'Delivered',
+  pending: 'Pending',
+  acknowledged: 'Acknowledged',
+  onDelivery: 'On delivery',
+  done: 'Done',
 };
 
 /** Catalog tools shared by every transport (Messenger, comments, future ones). */

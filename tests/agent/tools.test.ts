@@ -270,11 +270,11 @@ describe('Agent Tools', () => {
     expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.stringMatching(/^Just placed — 2 × Test T-Shirt, \$59\.98$/),
+      expect.stringMatching(/^Pending — 2 × Test T-Shirt, \$59\.98$/),
       [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toContain(`Just placed — 2 × Test T-Shirt, $59.98`);
+    expect(messages?.at(-1)?.content).toContain(`Pending — 2 × Test T-Shirt, $59.98`);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
@@ -314,6 +314,50 @@ describe('Agent Tools', () => {
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     expect(messages?.at(-1)).toMatchObject({ from: 'self' });
     expect(messages?.at(-1)?.content).toContain('History Hoodie');
+  });
+
+  it('a past order is named by its state, and never by how long ago it was placed', async () => {
+    const seed = await seedTestWorld();
+    await createProduct({
+      businessId: seed.business.id,
+      name: 'State Coat',
+      price: 50,
+      sku: `STATE-${Date.now()}`,
+      description: 'One order in each state',
+      variants: [{ name: 'M', stock: 8, isAvailable: true, price: 50, imageUrl: 'https://cdn.test/state.jpg' }],
+    });
+    const productId = (await searchProductsForTest(seed.business.id, 'State Coat'))[0]!.id;
+
+    const tools = createAgentTools(agentContext(seed));
+    const createOrderTool = tools.find((t) => t.name === 'create_order')!;
+    const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
+
+    const wanted = ['pending', 'acknowledged', 'onDelivery', 'done'];
+    for (const state of wanted) {
+      const order = JSON.parse(
+        await createOrderTool.invoke({ productId, count: 1, customerPhone: '555-0120' }),
+      );
+      await updateOrderState(seed.business.id, order.id, { state });
+    }
+
+    sendMessageMock.mockClear();
+    const result = JSON.parse(await showOrdersTool.invoke({}));
+    expect(result.sent).toBe(true);
+
+    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    expect(cards).toHaveLength(4);
+    // Each card is the state word and the date, and nothing in it claims a time the state cannot know.
+    expect(cards.map((c) => c.subtitle.split(' · ')[0]).sort()).toEqual(
+      ['Acknowledged', 'Done', 'On delivery', 'Pending'],
+    );
+    for (const card of cards) {
+      expect(card.subtitle).toMatch(/^(Pending|Acknowledged|On delivery|Done) · \$50\.00 · \d{4}-\d{2}-\d{2}$/);
+    }
+    expect(JSON.stringify(cards).toLowerCase()).not.toMatch(/just placed|recently|today|hours ago/);
+    // The prose the model writes comes from this same field, so a card cannot be honest beside a lie.
+    expect(result.orders.map((o: { state: string }) => o.state).sort()).toEqual(
+      ['Acknowledged', 'Done', 'On delivery', 'Pending'],
+    );
   });
 
   it('show_orders refuses another customer\'s id and sends nothing while refusing', async () => {
