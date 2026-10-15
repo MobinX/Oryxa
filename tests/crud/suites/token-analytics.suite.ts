@@ -12,7 +12,7 @@ export function registerTokenAnalyticsCrudTests() {
       conversationId: seed.conversation.id,
       integrationType: 'facebook_messenger',
       provider: 'openai',
-      model: 'gpt-5-mini',
+      model: 'gpt-6-luna',
       inputTokens: 150,
       outputTokens: 50,
       totalTokens: 200,

@@ -27,7 +27,7 @@ describe('photoBlock', () => {
   it('reaches the wire as image_url, never as a bare image part', async () => {
     let sent: unknown = null;
     const model = new ChatOpenAI({
-      model: 'gpt-5-mini',
+      model: 'gpt-6-luna',
       apiKey: 'not-a-real-key',
       configuration: {
         baseURL: 'http://127.0.0.1:9/v1',

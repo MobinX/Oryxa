@@ -124,7 +124,7 @@ export class Agent {
 
     const modelName =
       provider === 'openai'
-        ? (process.env.OPENAI_MODEL || 'gpt-5-mini')
+        ? (process.env.OPENAI_MODEL || 'gpt-6-luna')
         : 'gemini-flash-lite-latest';
 
     const llm =
@@ -233,7 +233,7 @@ export class Agent {
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     
-    // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out; OpenAI gpt-5-mini: $0.15/1M in, $0.60/1M out)
+    // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out; OpenAI gpt-6-luna: $0.15/1M in, $0.60/1M out)
     const rateIn = provider === 'openai' ? 0.15 : 0.075;
     const rateOut = provider === 'openai' ? 0.60 : 0.30;
     const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));

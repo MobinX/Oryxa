@@ -465,7 +465,7 @@ postsRouter.openapi(syncPostRoute, async (c) => {
 function getLlm() {
   const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
   if (provider === 'openai') {
-    const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
+    const model = process.env.OPENAI_MODEL || 'gpt-6-luna';
     // Reasoning-class answers 400 for any temperature other than the default 1.
     const isReasoning = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('gpt-5');
     return new ChatOpenAI({
@@ -568,7 +568,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
       postId: created.id,
       integrationType: 'ai_post_generation',
       provider,
-      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-5-mini') : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,
@@ -686,7 +686,7 @@ Output only the revised post content. Do not add any conversational text or wrap
       postId: post.id,
       integrationType: 'ai_post_tuning',
       provider,
-      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-5-mini') : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,

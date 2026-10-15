@@ -171,7 +171,7 @@ describe('outcome field helpers', () => {
   it('adds nothing to the outcome event when the run produced no metrics', () => {
     expect(tokenFields(undefined)).toEqual({});
     expect(tokenFields({
-      provider: 'openai', model: 'gpt-5-mini', inputTokens: 10, outputTokens: 4, totalTokens: 14,
+      provider: 'openai', model: 'gpt-6-luna', inputTokens: 10, outputTokens: 4, totalTokens: 14,
       cacheHitTokens: 6, cacheMissTokens: 4, cacheHitPercent: 60, latencyMs: 900, estimatedCostUsd: 0.0001,
     })).toMatchObject({ provider: 'openai', totalTokens: 14, estimatedCostUsd: 0.0001 });
   });

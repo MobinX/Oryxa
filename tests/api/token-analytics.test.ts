@@ -15,7 +15,7 @@ describe('Token Analytics API', () => {
       channelId: seed.channel.id,
       integrationType: 'facebook_messenger',
       provider: 'openai',
-      model: 'gpt-5-mini',
+      model: 'gpt-6-luna',
       inputTokens: 500,
       outputTokens: 100,
       totalTokens: 600,
