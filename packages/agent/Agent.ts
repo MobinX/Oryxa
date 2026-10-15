@@ -130,20 +130,18 @@ export class Agent {
     const llm =
       this.config.llm ??
       (provider === 'openai'
-        ? (() => {
-            const model = modelName;
-            const isReasoning = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('gpt-5');
-            return new ChatOpenAI({
-              model,
-              apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
-              configuration: {
-                baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
-              },
-              temperature: isReasoning ? undefined : 0.3,
-              maxTokens: 16384,
-              modelKwargs: isReasoning ? { reasoning_effort: 'low' } : undefined,
-            });
-          })()
+        ? new ChatOpenAI({
+            model: modelName,
+            apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
+            configuration: {
+              baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+            },
+            // gpt-6-luna is reasoning-class: any temperature other than the server default is a 400,
+            // so the field is absent rather than set to 0 — and effort replaces the old
+            // reasoning_effort kwarg, which this model shape ignores.
+            reasoning: { effort: 'medium' },
+            maxTokens: 16384,
+          })
         : new ChatGoogleGenerativeAI({
             model: modelName,
             apiKey: process.env.GEMINI_API_KEY,
@@ -233,7 +231,8 @@ export class Agent {
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     
-    // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out; OpenAI gpt-6-luna: $0.15/1M in, $0.60/1M out)
+    // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out). The OpenAI rates are the ones gpt-5-mini was
+    // priced at and have NOT been re-checked for gpt-6-luna, so estimated_cost_usd is a scale, not a bill.
     const rateIn = provider === 'openai' ? 0.15 : 0.075;
     const rateOut = provider === 'openai' ? 0.60 : 0.30;
     const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));

@@ -466,15 +466,14 @@ function getLlm() {
   const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
   if (provider === 'openai') {
     const model = process.env.OPENAI_MODEL || 'gpt-6-luna';
-    // Reasoning-class answers 400 for any temperature other than the default 1.
-    const isReasoning = model.startsWith('o1') || model.startsWith('o3') || model.startsWith('gpt-5');
     return new ChatOpenAI({
       model,
       apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
       configuration: {
         baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
       },
-      temperature: isReasoning ? undefined : 0.7,
+      // Reasoning-class: a temperature other than the server default is a 400, so none is sent.
+      reasoning: { effort: 'medium' },
     });
   }
   return new ChatGoogleGenerativeAI({
