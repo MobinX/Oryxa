@@ -136,11 +136,12 @@ export class Agent {
             configuration: {
               baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
             },
-            // gpt-6-luna is reasoning-class: any temperature other than the server default is a 400,
-            // so the field is absent rather than set to 0 — and effort replaces the old
-            // reasoning_effort kwarg, which this model shape ignores.
+            // gpt-6-luna is a reasoning deployment, and Azure says so with a 400 rather than a warning:
+            // no temperature at all (anything but the server default is rejected) and
+            // max_completion_tokens in place of max_tokens. Both messages came back from a real
+            // customer turn, so this shape is proven rather than assumed.
             reasoning: { effort: 'medium' },
-            maxTokens: 16384,
+            maxCompletionTokens: 16384,
           })
         : new ChatGoogleGenerativeAI({
             model: modelName,
