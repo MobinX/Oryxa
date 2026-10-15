@@ -7,11 +7,33 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
-import { openAIChatOptions, openAIModel } from '@agent/model';
 import { DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
+
+/**
+ * The text a model actually answered with.
+ *
+ * The chat-completions path hands back a string; the Responses path hands back a list of content blocks
+ * with the prose in one `{type:'text'}` part among them. `String(blocks)` is "[object Object]" and
+ * `JSON.stringify(blocks)` is a bracketed blob, so every place that shows a customer or stores a model's
+ * answer reads it through here rather than learning that the hard way.
+ */
+export function contentText(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        const text = (part as { text?: unknown } | null)?.text;
+        return typeof text === 'string' ? text : '';
+      })
+      .join('')
+      .trim();
+  }
+  return content == null ? '' : JSON.stringify(content);
+}
 
 /**
  * What a picture the model is not shown becomes in its history: the fact, without the pixels.
@@ -124,12 +146,26 @@ export class Agent {
       (process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini');
 
     const modelName =
-      provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest';
+      provider === 'openai'
+        ? (process.env.OPENAI_MODEL || 'gpt-6-luna')
+        : 'gemini-flash-lite-latest';
 
     const llm =
       this.config.llm ??
       (provider === 'openai'
-        ? new ChatOpenAI(openAIChatOptions(modelName, { maxCompletionTokens: 16384 }))
+        ? new ChatOpenAI({
+            model: modelName,
+            apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
+            configuration: {
+              baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+            },
+            // The Responses API is the path that forwards `reasoning` to a reasoning deployment. On chat
+            // completions LangChain names the reply cap from its own model test — o\d and gpt-5* — so a
+            // deployment called gpt-6-luna gets `max_tokens`, which Azure rejects with a 400. No cap and
+            // no temperature are set, which is what this model expects.
+            reasoning: { effort: 'medium' },
+            useResponsesApi: true,
+          })
         : new ChatGoogleGenerativeAI({
             model: modelName,
             apiKey: process.env.GEMINI_API_KEY,
@@ -191,10 +227,7 @@ export class Agent {
     const result = await agent.invoke({ messages });
     const latencyMs = Date.now() - startTime;
     const lastMessage = result.messages[result.messages.length - 1];
-    const replyText =
-      typeof lastMessage.content === 'string'
-        ? lastMessage.content
-        : JSON.stringify(lastMessage.content);
+    const replyText = contentText(lastMessage.content);
 
     // Aggregate usage metadata across all AI messages in the React loop
     let inputTokens = 0;

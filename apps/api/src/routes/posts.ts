@@ -23,7 +23,7 @@ import { getChannelById } from '@repo/db/crud/channel';
 import { getPublisher, extractB2Key, resolveStoredImageUrl } from '@repo/integrations';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
-import { openAIChatOptions, openAIModel } from '@repo/agent/model';
+import { contentText } from '@repo/agent/Agent';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -466,7 +466,18 @@ postsRouter.openapi(syncPostRoute, async (c) => {
 function getLlm() {
   const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
   if (provider === 'openai') {
-    return new ChatOpenAI(openAIChatOptions(openAIModel()));
+    const model = process.env.OPENAI_MODEL || 'gpt-6-luna';
+    return new ChatOpenAI({
+      model,
+      apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
+      configuration: {
+        baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+      },
+      // The Responses API is the path that forwards `reasoning`; no temperature and no reply cap, which
+      // is what a reasoning deployment accepts. Same shape as the agent turn in packages/agent/Agent.ts.
+      reasoning: { effort: 'medium' },
+      useResponsesApi: true,
+    });
   }
   return new ChatGoogleGenerativeAI({
     model: 'gemini-flash-lite-latest',
@@ -530,7 +541,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
   ]);
   const latencyMs = Date.now() - startTime;
 
-  const content = String(res.content).trim();
+  const content = contentText(res.content);
 
   // Create the draft post in the database
   const created = await createPost(businessId, channelId, {
@@ -559,7 +570,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
       postId: created.id,
       integrationType: 'ai_post_generation',
       provider,
-      model: provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,
@@ -644,7 +655,7 @@ Output only the revised post content. Do not add any conversational text or wrap
   ]);
   const latencyMs = Date.now() - startTime;
 
-  const content = String(res.content).trim();
+  const content = contentText(res.content);
 
   // Save tuned draft
   const updated = await updatePost(businessId, postId, {
@@ -677,7 +688,7 @@ Output only the revised post content. Do not add any conversational text or wrap
       postId: post.id,
       integrationType: 'ai_post_tuning',
       provider,
-      model: provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,
