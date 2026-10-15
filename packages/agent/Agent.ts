@@ -7,6 +7,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
+import { openAIChatOptions, openAIModel } from '@agent/model';
 import { DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 
 /** Callback type for emitting structured debug/observability events. */
@@ -123,26 +124,12 @@ export class Agent {
       (process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini');
 
     const modelName =
-      provider === 'openai'
-        ? (process.env.OPENAI_MODEL || 'gpt-6-luna')
-        : 'gemini-flash-lite-latest';
+      provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest';
 
     const llm =
       this.config.llm ??
       (provider === 'openai'
-        ? new ChatOpenAI({
-            model: modelName,
-            apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
-            configuration: {
-              baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
-            },
-            // gpt-6-luna is a reasoning deployment, and Azure says so with a 400 rather than a warning:
-            // no temperature at all (anything but the server default is rejected) and
-            // max_completion_tokens in place of max_tokens. Both messages came back from a real
-            // customer turn, so this shape is proven rather than assumed.
-            reasoning: { effort: 'medium' },
-            maxCompletionTokens: 16384,
-          })
+        ? new ChatOpenAI(openAIChatOptions(modelName, { maxCompletionTokens: 16384 }))
         : new ChatGoogleGenerativeAI({
             model: modelName,
             apiKey: process.env.GEMINI_API_KEY,

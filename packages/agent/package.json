@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./Agent": "./Agent.ts"
+    "./Agent": "./Agent.ts",
+    "./model": "./model.ts"
   },
   "scripts": {
     "build": "echo 'agent package - no build step'"

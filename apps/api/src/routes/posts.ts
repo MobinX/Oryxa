@@ -23,6 +23,7 @@ import { getChannelById } from '@repo/db/crud/channel';
 import { getPublisher, extractB2Key, resolveStoredImageUrl } from '@repo/integrations';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
+import { openAIChatOptions, openAIModel } from '@repo/agent/model';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
@@ -465,16 +466,7 @@ postsRouter.openapi(syncPostRoute, async (c) => {
 function getLlm() {
   const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
   if (provider === 'openai') {
-    const model = process.env.OPENAI_MODEL || 'gpt-6-luna';
-    return new ChatOpenAI({
-      model,
-      apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
-      configuration: {
-        baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
-      },
-      // Reasoning-class: a temperature other than the server default is a 400, so none is sent.
-      reasoning: { effort: 'medium' },
-    });
+    return new ChatOpenAI(openAIChatOptions(openAIModel()));
   }
   return new ChatGoogleGenerativeAI({
     model: 'gemini-flash-lite-latest',
@@ -567,7 +559,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
       postId: created.id,
       integrationType: 'ai_post_generation',
       provider,
-      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,
@@ -685,7 +677,7 @@ Output only the revised post content. Do not add any conversational text or wrap
       postId: post.id,
       integrationType: 'ai_post_tuning',
       provider,
-      model: provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-6-luna') : 'gemini-flash-lite-latest',
+      model: provider === 'openai' ? openAIModel() : 'gemini-flash-lite-latest',
       inputTokens,
       outputTokens,
       totalTokens,
