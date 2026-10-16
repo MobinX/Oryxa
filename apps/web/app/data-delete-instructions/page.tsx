@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Trash2, ShieldAlert, Mail, Settings, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
 
 export default function DataDeleteInstructionsPage() {
   return (
@@ -29,7 +29,7 @@ export default function DataDeleteInstructionsPage() {
                 {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by RR Computer
+                by {PARENT_COMPANY_NAME}
               </span>
             </div>
           </Link>
@@ -70,7 +70,7 @@ export default function DataDeleteInstructionsPage() {
            {/* Instructions Content */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              {COMPANY_NAME}, a product of <strong>RR Computer</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to delete your data or disconnect your channels.
+              {COMPANY_NAME}, a product of <strong>{PARENT_COMPANY_NAME}</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to delete your data or disconnect your channels.
             </p>
 
             {/* Primary Method: Highlighted */}
@@ -187,7 +187,7 @@ export default function DataDeleteInstructionsPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
       </footer>
     </div>
   );

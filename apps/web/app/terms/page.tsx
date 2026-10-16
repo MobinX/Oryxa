@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Scale, Shield, AlertTriangle, FileCheck, HelpCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
 
 export default function TermsPage() {
   return (
@@ -29,7 +29,7 @@ export default function TermsPage() {
                 {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by RR Computer
+                by {PARENT_COMPANY_NAME}
               </span>
             </div>
           </Link>
@@ -62,7 +62,7 @@ export default function TermsPage() {
                 Terms &amp; Conditions
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of RR Computer
+                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
               </p>
             </div>
           </div>
@@ -70,7 +70,7 @@ export default function TermsPage() {
           {/* Terms Text */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              Welcome to {COMPANY_NAME}! These Terms &amp; Conditions ("Terms") govern your access to and use of {COMPANY_NAME} ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>RR Computer</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
+              Welcome to {COMPANY_NAME}! These Terms &amp; Conditions ("Terms") govern your access to and use of {COMPANY_NAME} ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>{PARENT_COMPANY_NAME}</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
             </p>
 
             <section className="space-y-3">
@@ -84,7 +84,7 @@ export default function TermsPage() {
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Authentication is managed securely through Firebase Auth. You are solely responsible for keeping your login credentials confidential.</li>
                 <li>You agree to notify support immediately of any unauthorized access to your account.</li>
-                <li>RR Computer is not liable for losses caused by unauthorized use of your credentials.</li>
+                <li>{PARENT_COMPANY_NAME} is not liable for losses caused by unauthorized use of your credentials.</li>
               </ul>
             </section>
 
@@ -112,7 +112,7 @@ export default function TermsPage() {
                 Our AI agents run on LangGraph and Gemini LLM tools to talk to customers and manage carts/orders:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
-                <li>AI responses are generated programmatically and dynamically. While we strive to optimize prompts, RR Computer does not guarantee 100% accuracy of AI auto-replies.</li>
+                <li>AI responses are generated programmatically and dynamically. While we strive to optimize prompts, {PARENT_COMPANY_NAME} does not guarantee 100% accuracy of AI auto-replies.</li>
                 <li>You are responsible for regularly reviewing your agents' conversations and correcting product lists, stocks, or pricing data to prevent incorrect orders.</li>
                 <li>Service is provided "as is" and "as available". We are not responsible for Gemini or Meta API service outages, rate-limiting, or token exhaustion.</li>
               </ul>
@@ -124,7 +124,7 @@ export default function TermsPage() {
                 <h2>4. Intellectual Property</h2>
               </div>
               <p>
-                All rights, titles, and interests in the {COMPANY_NAME} platform, its database schemas, backend code (Hono framework), agent configurations, web app layouts, designs, and brand logos are and remain the exclusive intellectual property of <strong>RR Computer</strong> and its licensors. You may not copy, modify, distribute, or reverse-engineer the source code.
+                All rights, titles, and interests in the {COMPANY_NAME} platform, its database schemas, backend code (Hono framework), agent configurations, web app layouts, designs, and brand logos are and remain the exclusive intellectual property of <strong>{PARENT_COMPANY_NAME}</strong> and its licensors. You may not copy, modify, distribute, or reverse-engineer the source code.
               </p>
             </section>
 
@@ -134,10 +134,10 @@ export default function TermsPage() {
                 These Terms shall be governed by and construed in accordance with the laws of Bangladesh. Any dispute arising from these terms shall be settled exclusively in the competent courts of Dhaka, Bangladesh.
               </p>
               <p className="mt-2">
-                For questions regarding billing, enterprise terms, or service complaints, contact the RR Computer team at:
+                For questions regarding billing, enterprise terms, or service complaints, contact the {PARENT_COMPANY_NAME} team at:
               </p>
               <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
-                <p><strong className="text-foreground">RR Computer - Software Division</strong></p>
+                <p><strong className="text-foreground">{PARENT_COMPANY_NAME} - Software Division</strong></p>
                 <p>Email: alamsarwar@hotmail.com</p>
                 <p>
                   Address:<br />
@@ -172,7 +172,7 @@ export default function TermsPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
       </footer>
     </div>
   );

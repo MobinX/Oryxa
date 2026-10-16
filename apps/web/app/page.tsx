@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
 import { 
   Bot, 
   Inbox, 
@@ -268,7 +268,7 @@ export default function Home() {
                 {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by RR Computer
+                by {PARENT_COMPANY_NAME}
               </span>
             </div>
           </Link>
@@ -1171,12 +1171,12 @@ export default function Home() {
                   {COMPANY_NAME}
                 </span>
                 <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                  by RR Computer
+                  by {PARENT_COMPANY_NAME}
                 </span>
               </div>
             </Link>
             <p className="font-inter text-muted-foreground leading-relaxed text-xs">
-              A specialized AI-powered product developed by <strong>RR Computer</strong>. {COMPANY_NAME} automates customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
+              A specialized AI-powered product developed by <strong>{PARENT_COMPANY_NAME}</strong>. {COMPANY_NAME} automates customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
             </p>
           </div>
 
@@ -1218,7 +1218,7 @@ export default function Home() {
 
         {/* Bottom Bar */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-border/10 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-inter text-[11px]">
-          <div>© 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.</div>
+          <div>© 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.</div>
           <div className="flex items-center gap-6">
             <span className="hover:text-foreground transition-colors cursor-pointer">Twitter</span>
             <span className="hover:text-foreground transition-colors cursor-pointer">GitHub</span>

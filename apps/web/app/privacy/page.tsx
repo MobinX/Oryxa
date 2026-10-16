@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ShieldCheck, Mail, Lock, Eye, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
 
 export default function PrivacyPage() {
   return (
@@ -29,7 +29,7 @@ export default function PrivacyPage() {
                 {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by RR Computer
+                by {PARENT_COMPANY_NAME}
               </span>
             </div>
           </Link>
@@ -62,7 +62,7 @@ export default function PrivacyPage() {
                 Privacy Policy
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of RR Computer
+                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
               </p>
             </div>
           </div>
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
           {/* Privacy Text */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              At {COMPANY_NAME}, we are committed to protecting your privacy. This Privacy Policy explains how {COMPANY_NAME} (referred to as "we," "us," or "our"), a specialized product of <strong>RR Computer</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
+              At {COMPANY_NAME}, we are committed to protecting your privacy. This Privacy Policy explains how {COMPANY_NAME} (referred to as "we," "us," or "our"), a specialized product of <strong>{PARENT_COMPANY_NAME}</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
             </p>
 
             <section className="space-y-3">
@@ -141,7 +141,7 @@ export default function PrivacyPage() {
                 If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, you can follow our <Link href="/data-delete-instructions" className="text-primary hover:underline font-semibold">Data Deletion Instructions</Link> or contact us at:
               </p>
               <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
-                <p><strong className="text-foreground">RR Computer - Software Division</strong></p>
+                <p><strong className="text-foreground">{PARENT_COMPANY_NAME} - Software Division</strong></p>
                 <p>Email: alamsarwar@hotmail.com</p>
                 <p>
                   Address:<br />
@@ -176,7 +176,7 @@ export default function PrivacyPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
       </footer>
     </div>
   );
