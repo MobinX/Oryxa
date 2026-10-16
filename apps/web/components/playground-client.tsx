@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import type { Tiktoken } from 'js-tiktoken';
 import {
   getDefaultAgent,
   updateAgent,
@@ -160,6 +161,38 @@ export function PlaygroundClient({
   // State
   const [agent, setAgent] = useState<Agent | null>(preload?.agent ?? null);
   const [systemPrompt, setSystemPrompt] = useState<string>(preload?.agent?.systemPrompt ?? '');
+  // The prompt's size in the model's own tokens, not characters. Counted 500ms after typing stops, with
+  // the tokenizer built once and kept for the life of the page: building it is the expensive part, and
+  // the ranks are only worth loading if somebody actually edits the prompt.
+  const [promptTokens, setPromptTokens] = useState<number | null>(null);
+  const [promptCounting, setPromptCounting] = useState(false);
+  const tokenizerRef = useRef<Tiktoken | null>(null);
+
+  useEffect(() => {
+    setPromptCounting(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const tokenizer = tokenizerRef.current ?? await import('js-tiktoken').then(({ getEncoding }) => {
+            const built = getEncoding('cl100k_base');
+            tokenizerRef.current = built;
+            return built;
+          });
+          setPromptTokens(tokenizer.encode(systemPrompt).length);
+        } catch {
+          setPromptTokens(null);
+        } finally {
+          setPromptCounting(false);
+        }
+      })();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [systemPrompt]);
+
+  useEffect(() => () => {
+    tokenizerRef.current?.free();
+    tokenizerRef.current = null;
+  }, []);
   const [replyGuidance, setReplyGuidance] = useState<string>(preload?.agent?.replyGuidance ?? '');
   const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>(
     preload?.agent?.commentReplyGuidance ?? '',
@@ -776,9 +809,21 @@ export function PlaygroundClient({
                   <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                     System Prompt
                   </label>
-                  <span className="text-[10px] font-medium text-slate-500">
-                    Applies to the next test message
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="rounded-lg border border-slate-800 bg-slate-900 px-2 py-0.5 text-[10px] font-mono text-slate-400"
+                      title="Tokens the prompt costs, counted with the cl100k_base byte-pair encoding"
+                    >
+                      {promptCounting
+                        ? 'counting…'
+                        : promptTokens === null
+                          ? 'tokens unavailable'
+                          : `${promptTokens.toLocaleString()} tokens`}
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-500">
+                      Applies to the next test message
+                    </span>
+                  </div>
                 </div>
                 <textarea
                   value={systemPrompt}
