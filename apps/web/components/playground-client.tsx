@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Tiktoken } from 'js-tiktoken';
+import type { Tiktoken } from 'js-tiktoken/lite';
 import {
   getDefaultAgent,
   updateAgent,
@@ -174,11 +174,17 @@ export function PlaygroundClient({
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const tokenizer = tokenizerRef.current ?? await import('js-tiktoken').then(({ getEncoding }) => {
-            const built = getEncoding('cl100k_base');
-            tokenizerRef.current = built;
-            return built;
-          });
+          let tokenizer = tokenizerRef.current;
+          if (!tokenizer) {
+            // js-tiktoken's main entry inlines all six rank tables — 10.7 MB of literal — so ask for the
+            // lite class and the one table this count actually needs.
+            const [{ Tiktoken }, { default: cl100k_base }] = await Promise.all([
+              import('js-tiktoken/lite'),
+              import('js-tiktoken/ranks/cl100k_base'),
+            ]);
+            tokenizer = new Tiktoken(cl100k_base);
+            tokenizerRef.current = tokenizer;
+          }
           setPromptTokens(tokenizer.encode(systemPrompt).length);
         } catch {
           setPromptTokens(null);
