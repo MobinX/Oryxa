@@ -163,7 +163,8 @@ export function PlaygroundClient({
   const [systemPrompt, setSystemPrompt] = useState<string>(preload?.agent?.systemPrompt ?? '');
   // The prompt's size in the model's own tokens, not characters. Counted 500ms after typing stops, with
   // the tokenizer built once and kept for the life of the page: building it is the expensive part, and
-  // the ranks are only worth loading if somebody actually edits the prompt.
+  // the ranks are only worth loading if somebody actually edits the prompt. js-tiktoken holds plain JS
+  // data rather than wasm memory, so there is no free() to call and its type does not offer one.
   const [promptTokens, setPromptTokens] = useState<number | null>(null);
   const [promptCounting, setPromptCounting] = useState(false);
   const tokenizerRef = useRef<Tiktoken | null>(null);
@@ -188,11 +189,6 @@ export function PlaygroundClient({
     }, 500);
     return () => clearTimeout(timer);
   }, [systemPrompt]);
-
-  useEffect(() => () => {
-    tokenizerRef.current?.free();
-    tokenizerRef.current = null;
-  }, []);
   const [replyGuidance, setReplyGuidance] = useState<string>(preload?.agent?.replyGuidance ?? '');
   const [commentReplyGuidance, setCommentReplyGuidance] = useState<string>(
     preload?.agent?.commentReplyGuidance ?? '',
