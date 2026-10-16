@@ -24,6 +24,30 @@ const NAMED_PRODUCT_LIMIT = 10;
  */
 export type CatalogSummary = { summary: string; total: number };
 
+export type CatalogSummary = { summary: string; total: number };
+
+/** The shelves this store groups by, in the one sentence form both branches use. */
+function shelfShape(named: Array<{ name: string; count: number }>, unclassified: number): string {
+  return named.length
+    ? `Categories: ${named.map((c) => `${c.name} (${c.count})`).join(', ')}`
+      + (unclassified > 0 ? `; plus ${unclassified} with no category` : '')
+    : 'This store does not group its products into categories, so there is no category to offer.';
+}
+
+/**
+ * How a broad "what do you have" is answered. Said here because the block is the only place that knows
+ * whether the store has shelves worth naming: a customer asking which kinds the shop carries wants the
+ * list of kinds, in words — not a card list of the products they can already see.
+ */
+function answerWithCategories(cards: boolean): string {
+  const lead = 'When the customer asks what kinds or categories the shop has, answer from the Categories'
+    + ' line above in your own words — that question is about the shelves, so the product count is not'
+    + ' the answer to it and a product card list is not the reply.';
+  return cards
+    ? lead + ' Then offer one shelf: show_products with that category and no query shows its products.'
+    : lead + ' Describe a few of the items you have and invite them to name what they are after.';
+}
+
 /**
  * Whether the agent reading this block can put cards in front of the customer. A comment thread cannot —
  * its toolset has no show_products — so the block must not send it to a tool it does not own.
@@ -46,28 +70,44 @@ export async function buildCatalogSummary(
     // Every one of them is named, so the block may say it is the whole catalog — but "whole catalog" is
     // not "all buyable", and an agent that confuses the two tells a customer a sold-out shirt is on sale.
     const buyable = firstPage.filter((p) => (p.variants ?? []).some((v) => v.isAvailable && v.stock > 0)).length;
+
+    // The page IS the catalog at this size, so the shelf counts come out of the rows already in hand —
+    // this is the branch every store in the fleet sits in today, and the one that used to return before
+    // the categories were read, which is why "which categories do you have" was unanswerable.
+    const counts = new Map<string, number>();
+    for (const row of firstPage) {
+      const name = row.category?.name;
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const named = [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const unclassified = firstPage.length - named.reduce((sum, c) => sum + c.count, 0);
+
     const lines = firstPage
-      .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`)
+      .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
       .join('\n');
     return {
       total,
-      summary: `Catalog (${total} product${total === 1 ? '' : 's'} — this is the store's whole catalog`
-        + `${total > buyable ? `, ${buyable} of them available to order now` : ''}):\n${lines}`,
+      summary: [
+        `Catalog (${total} product${total === 1 ? '' : 's'} — this is the store's whole catalog`
+          + `${total > buyable ? `, ${buyable} of them available to order now` : ''}):`,
+        shelfShape(named, unclassified),
+        answerWithCategories(canShowCards),
+        lines,
+      ].join('\n'),
     };
   }
 
   const categories = await listCategories(businessId);
-  const named = categories.filter((c) => c.productCount > 0);
-  const unclassified = total - named.reduce((sum, c) => sum + c.productCount, 0);
-
-  const shape = named.length
-    ? `Categories: ${named.map((c) => `${c.name} (${c.productCount})`).join(', ')}`
-      + (unclassified > 0 ? `; plus ${unclassified} with no category` : '')
-    : 'None of them are grouped into categories, so there is no category to offer.';
+  const populated = categories
+    .filter((c) => c.productCount > 0)
+    .map((c) => ({ name: c.name, count: c.productCount }));
+  const unclassified = total - populated.reduce((sum, c) => sum + c.count, 0);
 
   const howToAnswer = canShowCards
-    ? 'To answer what the shop has: name the categories above, or call show_products with no query'
-      + ' for the first page and offer the next one. Never say a customer has seen everything.'
+    ? 'To answer what the shop has: name the categories above and offer one shelf, or call show_products'
+      + ' with no query for the first page and offer the next one. Never say a customer has seen everything.'
     : 'To answer what the shop has: name the categories above and describe a few in your own words.'
       + ' You cannot show a product list here, so never imply the customer has seen everything the store holds.';
 
@@ -76,9 +116,10 @@ export async function buildCatalogSummary(
     summary: [
       `Catalog: this store has ${total} products on sale — far more than one message can show,`
         + ` so the list below is a sample (the ${firstPage.length} that come first by name), NOT the range.`,
-      shape,
+      shelfShape(populated, unclassified),
+      answerWithCategories(canShowCards),
       howToAnswer,
-      ...firstPage.map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}`),
+      ...firstPage.map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
     ].join('\n'),
   };
 }

@@ -633,6 +633,10 @@ export async function searchProducts(
     where: catalogMatch(businessId, query, options.categoryId),
     with: {
       variants: { where: isNull(variants.deletedAt) },
+      // The shelf name rides the read the page already performs — one primary-key probe per row in the
+      // same statement — because telling a customer what kinds a shop groups by is a question about the
+      // catalog as a whole, and a window that arrives without its shelves cannot answer it.
+      category: { columns: { id: true, name: true } },
     },
     orderBy: [asc(products.name), asc(products.id)],
     limit,
