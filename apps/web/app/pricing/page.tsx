@@ -3,8 +3,9 @@ import { ArrowLeft, Check, CreditCard } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cachedPublicPlans } from '@/app/_cache/queries';
 import type { PublicPlan } from '@/lib/api';
+import { COMPANY_NAME } from '@/lib/brand';
 
-export const metadata = { title: 'Pricing — Oryxa' };
+export const metadata = { title: `Pricing — ${COMPANY_NAME}` };
 
 /**
  * The same four offers the migration seeds, written down. If `/api/v1/plans` does not
@@ -124,7 +125,7 @@ export default async function PricingPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-2 font-geist text-xl font-black tracking-tight">
             <CreditCard className="h-5 w-5 text-primary" />
-            Oryxa
+            {COMPANY_NAME}
             <span className="text-[8px] font-extrabold uppercase tracking-widest text-muted-foreground">
               pricing
             </span>
@@ -205,7 +206,7 @@ export default async function PricingPage() {
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Oryxa
+            Back to {COMPANY_NAME}
           </Link>
           <div className="flex items-center gap-5 text-sm text-muted-foreground">
             <Link href="/terms" className="transition-colors hover:text-foreground">

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Trash2, ShieldAlert, Mail, Settings, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export default function DataDeleteInstructionsPage() {
   return (
@@ -25,7 +26,7 @@ export default function DataDeleteInstructionsPage() {
             </svg>
             <div className="flex flex-col">
               <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                Oryxa
+                {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
                 by RR Computer
@@ -69,7 +70,7 @@ export default function DataDeleteInstructionsPage() {
            {/* Instructions Content */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              Oryxa, a product of <strong>RR Computer</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to delete your data or disconnect your channels.
+              {COMPANY_NAME}, a product of <strong>RR Computer</strong>, values your control over your data. In compliance with Meta's developer regulations and standard privacy protocols, we provide clear instructions on how to delete your data or disconnect your channels.
             </p>
 
             {/* Primary Method: Highlighted */}
@@ -82,7 +83,7 @@ export default function DataDeleteInstructionsPage() {
                 This is the fastest and recommended way to completely delete all data associated with your business.
               </p>
               <ol className="list-decimal pl-5 space-y-2 text-foreground/90">
-                <li>Log in to your <strong>Oryxa Dashboard</strong>.</li>
+                <li>Log in to your <strong>{COMPANY_NAME} Dashboard</strong>.</li>
                 <li>In the left sidebar, navigate to the <strong>Settings</strong> page.</li>
                 <li>Scroll down to the <strong>Danger zone</strong> section at the bottom.</li>
                 <li>Click the red <strong>Delete My Data</strong> button.</li>
@@ -111,7 +112,7 @@ export default function DataDeleteInstructionsPage() {
                     <h3>Option A: Disconnect a Specific Page Channel</h3>
                   </div>
                   <p className="text-xs">
-                    To stop the Oryxa AI agent from replying on a specific page without deleting your business profile completely:
+                    To stop the {COMPANY_NAME} AI agent from replying on a specific page without deleting your business profile completely:
                   </p>
                   <ol className="list-decimal pl-5 space-y-1 text-xs">
                     <li>Go to the <strong>Channels</strong> section in the dashboard.</li>
@@ -127,12 +128,12 @@ export default function DataDeleteInstructionsPage() {
                     <h3>Option B: Revoke App Permissions via Facebook Account</h3>
                   </div>
                   <p className="text-xs">
-                    To disconnect Oryxa directly from your Meta / Facebook account settings:
+                    To disconnect {COMPANY_NAME} directly from your Meta / Facebook account settings:
                   </p>
                   <ol className="list-decimal pl-5 space-y-1 text-xs">
                     <li>Go to your Facebook Profile&apos;s <strong>Settings &amp; Privacy &gt; Settings</strong>.</li>
                     <li>In the left sidebar, click <strong>Apps and Websites</strong>.</li>
-                    <li>Find <strong>Oryxa</strong> in the active list and click <strong>Remove</strong>.</li>
+                    <li>Find <strong>{COMPANY_NAME}</strong> in the active list and click <strong>Remove</strong>.</li>
                   </ol>
                 </section>
 
@@ -147,7 +148,7 @@ export default function DataDeleteInstructionsPage() {
                   </p>
                   <ul className="list-disc pl-5 space-y-1 text-xs">
                     <li>Email: <strong className="text-foreground">alamsarwar@hotmail.com</strong></li>
-                    <li>Subject: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[10px]">Oryxa Data Deletion Request</code></li>
+                    <li>Subject: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[10px]">{COMPANY_NAME} Data Deletion Request</code></li>
                     <li>Include: your Business Name, account email address, and connected Facebook Page ID(s).</li>
                     <li>Processing time: <strong>7 business days</strong>.</li>
                   </ul>
@@ -186,7 +187,7 @@ export default function DataDeleteInstructionsPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 Oryxa. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.
       </footer>
     </div>
   );

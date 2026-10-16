@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { COMPANY_NAME } from '@/lib/brand';
 import type { Tiktoken } from 'js-tiktoken/lite';
 import {
   getDefaultAgent,
@@ -880,7 +881,7 @@ export function PlaygroundClient({
                   These two blocks are what the agent is told about <em>how</em> to answer — the
                   Messenger one for chats, the comment one for public threads and the comment
                   playground. Editing either applies to the next test run. Leave a box on the
-                  built-in text, or empty it, to keep following Oryxa’s wording as it changes.
+                  built-in text, or empty it, to keep following {COMPANY_NAME}’s wording as it changes.
                 </p>
               </div>
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { SignOutForm } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export default function BusinessesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -13,7 +14,7 @@ export default function BusinessesLayout({ children }: { children: React.ReactNo
               O
             </div>
             <span className="font-geist text-lg font-bold tracking-tight bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-foreground">
-              Oryxa
+              {COMPANY_NAME}
             </span>
           </Link>
           <div className="flex items-center gap-3">

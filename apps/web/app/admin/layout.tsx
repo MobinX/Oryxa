@@ -5,6 +5,7 @@ import { AdminTabs } from '@/components/admin-tabs';
 import { SignOutForm } from '@/components/sign-out-button';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { logsBearer } from '@/lib/logs-session';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The tabs are the chrome of a signed-in console, so the sign-in page does not
@@ -21,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               O
             </div>
             <span className="font-geist text-lg font-bold tracking-tight text-foreground">
-              Oryxa
+              {COMPANY_NAME}
             </span>
             <span className="text-sm text-muted-foreground">/ admin</span>
           </Link>

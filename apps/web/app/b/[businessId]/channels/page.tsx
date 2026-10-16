@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { cachedChannels } from '@/app/_cache/queries';
 import type { Channel } from '@/lib/api';
+import { COMPANY_NAME } from '@/lib/brand';
 import { Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { FacebookConnectButton } from '@/components/facebook-connect-button';
@@ -146,7 +147,7 @@ async function ChannelsContent({
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Connected channels</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Each connected page replies to its customers with your Oryxa assistant, already trained on
+          Each connected page replies to its customers with your {COMPANY_NAME} assistant, already trained on
           your products and orders. Disconnecting a page stops the replies and frees the page for
           another store.
         </p>

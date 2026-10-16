@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Scale, Shield, AlertTriangle, FileCheck, HelpCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export default function TermsPage() {
   return (
@@ -25,7 +26,7 @@ export default function TermsPage() {
             </svg>
             <div className="flex flex-col">
               <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                Oryxa
+                {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
                 by RR Computer
@@ -61,7 +62,7 @@ export default function TermsPage() {
                 Terms &amp; Conditions
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • Oryxa is a product of RR Computer
+                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of RR Computer
               </p>
             </div>
           </div>
@@ -69,7 +70,7 @@ export default function TermsPage() {
           {/* Terms Text */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              Welcome to Oryxa! These Terms &amp; Conditions ("Terms") govern your access to and use of Oryxa ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>RR Computer</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
+              Welcome to {COMPANY_NAME}! These Terms &amp; Conditions ("Terms") govern your access to and use of {COMPANY_NAME} ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>RR Computer</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
             </p>
 
             <section className="space-y-3">
@@ -93,7 +94,7 @@ export default function TermsPage() {
                 <h2>2. Channel Integration &amp; Compliance</h2>
               </div>
               <p>
-                Oryxa connects to third-party social platforms (Facebook Messenger, Instagram, WhatsApp) to auto-reply to customers.
+                {COMPANY_NAME} connects to third-party social platforms (Facebook Messenger, Instagram, WhatsApp) to auto-reply to customers.
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>You must comply with Meta's developer and platform policies, terms of service, and messaging policies.</li>
@@ -123,7 +124,7 @@ export default function TermsPage() {
                 <h2>4. Intellectual Property</h2>
               </div>
               <p>
-                All rights, titles, and interests in the Oryxa platform, its database schemas, backend code (Hono framework), agent configurations, web app layouts, designs, and brand logos are and remain the exclusive intellectual property of <strong>RR Computer</strong> and its licensors. You may not copy, modify, distribute, or reverse-engineer the source code.
+                All rights, titles, and interests in the {COMPANY_NAME} platform, its database schemas, backend code (Hono framework), agent configurations, web app layouts, designs, and brand logos are and remain the exclusive intellectual property of <strong>RR Computer</strong> and its licensors. You may not copy, modify, distribute, or reverse-engineer the source code.
               </p>
             </section>
 
@@ -171,7 +172,7 @@ export default function TermsPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 Oryxa. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.
       </footer>
     </div>
   );

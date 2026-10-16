@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { COMPANY_NAME } from '@/lib/brand';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Oryxa — AI Commerce',
+  title: `${COMPANY_NAME} — AI Commerce`,
   description: 'Multi-channel AI auto-reply for e-commerce',
 };
 

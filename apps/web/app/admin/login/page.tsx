@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AdminLoginForm } from '@/components/admin-login-form';
 import { hasLogsSession, logsOperatorUser, operatorAccountEmail } from '@/lib/logs-session';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export const metadata = {
   title: 'Admin — sign in',
-  description: 'Sign in to the Oryxa admin console.',
+  description: `Sign in to the ${COMPANY_NAME} admin console.`,
 };
 
 const MESSAGES: Record<string, string> = {

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME } from '@/lib/brand';
 import { 
   Bot, 
   Inbox, 
@@ -264,7 +265,7 @@ export default function Home() {
             </svg>
             <div className="flex flex-col">
               <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                Oryxa
+                {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
                 by RR Computer
@@ -1167,7 +1168,7 @@ export default function Home() {
               </svg>
               <div className="flex flex-col">
                 <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                  Oryxa
+                  {COMPANY_NAME}
                 </span>
                 <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
                   by RR Computer
@@ -1175,7 +1176,7 @@ export default function Home() {
               </div>
             </Link>
             <p className="font-inter text-muted-foreground leading-relaxed text-xs">
-              A specialized AI-powered product developed by <strong>RR Computer</strong>. Oryxa automates customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
+              A specialized AI-powered product developed by <strong>RR Computer</strong>. {COMPANY_NAME} automates customer support and product sales on WhatsApp, Instagram, and Messenger with intelligent, custom-trained AI agents.
             </p>
           </div>
 
@@ -1217,7 +1218,7 @@ export default function Home() {
 
         {/* Bottom Bar */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-border/10 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-inter text-[11px]">
-          <div>© 2026 Oryxa. A product of RR Computer. All rights reserved.</div>
+          <div>© 2026 {COMPANY_NAME}. A product of RR Computer. All rights reserved.</div>
           <div className="flex items-center gap-6">
             <span className="hover:text-foreground transition-colors cursor-pointer">Twitter</span>
             <span className="hover:text-foreground transition-colors cursor-pointer">GitHub</span>
@@ -1463,7 +1464,7 @@ export default function Home() {
                   Demo Request Submitted!
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Thank you for requesting a demo of Oryxa. Our sales team will reach out to you shortly to schedule your session.
+                  Thank you for requesting a demo of {COMPANY_NAME}. Our sales team will reach out to you shortly to schedule your session.
                 </p>
                 <button
                   type="button"

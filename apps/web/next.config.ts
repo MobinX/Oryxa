@@ -2,6 +2,15 @@
 const nextConfig = {
   cacheComponents: true,
   allowedDevOrigins: ['dev.oryxa.us', 'dev-api.oryxa.us'],
+  /**
+   * `COMPANY_NAME` is the brand word the UI prints (see lib/brand.ts) and `'use client'` pages
+   * print it too. Without this line a non-`NEXT_PUBLIC_` variable is server-only, and the sidebar,
+   * the login card and the legal footers would render an empty brand in the browser. Listing it
+   * here inlines the value into both bundles at build time, so one env name serves both sides.
+   */
+  env: {
+    COMPANY_NAME: process.env.COMPANY_NAME,
+  },
   transpilePackages: ['@repo/utils'],
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '**' }],

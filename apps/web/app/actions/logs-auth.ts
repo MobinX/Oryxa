@@ -5,6 +5,7 @@ import { clearAuthCookie, setAuthCookie } from '@/lib/auth';
 import { syncUser } from '@/lib/api';
 import { clearLogsSession, operatorAccountEmail, startLogsSession } from '@/lib/logs-session';
 import { verifyOperatorToken } from '@/lib/operator-login';
+import { COMPANY_NAME } from '@/lib/brand';
 
 /**
  * Finishes the sign-in the browser started against Firebase.
@@ -31,7 +32,7 @@ export async function operatorSignInAction(idToken: string) {
 
   await syncUser({
     firebaseUid: verified.uid,
-    name: 'Oryxa Operator',
+    name: `${COMPANY_NAME} Operator`,
     email: verified.email ?? undefined,
     signInMethod: 'password',
   });
