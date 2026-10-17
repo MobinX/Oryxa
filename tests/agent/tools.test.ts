@@ -287,14 +287,15 @@ describe('Agent Tools', () => {
     expect(order.id).toMatch(/[0-9a-f-]{36}/i);
     // The payload is what the webhook turns back into a message, so the order id
     // has to be in it — a button that only says "Track order" tells the agent nothing.
+    // The row carries the receipt: quantity, the variant's shelf label and its name, the total.
     expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.stringMatching(/^Pending — 2 × Test T-Shirt, \$59\.98$/),
+      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98$/),
       [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toContain(`Pending — 2 × Test T-Shirt, $59.98`);
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98 \(Track order\)/);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {

@@ -75,6 +75,8 @@ export async function createOrder(input: unknown) {
       // string here would make it look like a customer with an unknown id rather than no id.
       customerPlatformId: parsed.customerPlatformId?.trim() ? parsed.customerPlatformId.trim() : null,
       totalPrice: totalPrice.toFixed(2),
+      shippingCost: (parsed.shippingCost ?? 0).toFixed(2),
+      paymentMethod: parsed.paymentMethod?.trim() ? parsed.paymentMethod.trim() : null,
       state: 'pending',
     })
     .returning();
@@ -96,6 +98,8 @@ export async function createOrder(input: unknown) {
   return {
     id: order.id,
     totalPrice,
+    shippingCost: parsed.shippingCost ?? 0,
+    paymentMethod: parsed.paymentMethod ?? null,
     state: order.state,
     customerId: order.customerId,
   };
@@ -124,6 +128,8 @@ export async function getOrderById(businessId: string, orderId: string) {
     variantId: order.variantId,
     productName: productActive?.name ?? null,
     variantName: variantActive?.name ?? null,
+    /** The five-character shelf label the buyer can find on the photo or the parcel. */
+    variantShortId: variantActive?.variantId ?? null,
     variantImageUrl,
     count: order.count,
     variantPrice: parseFloat(order.variantPrice),
@@ -132,6 +138,8 @@ export async function getOrderById(businessId: string, orderId: string) {
     customerAddress: order.customerAddress,
     state: order.state,
     totalPrice: parseFloat(order.totalPrice),
+    shippingCost: parseFloat(order.shippingCost),
+    paymentMethod: order.paymentMethod,
     conversationId: order.conversationId,
     createdAt: order.createdAt,
   };

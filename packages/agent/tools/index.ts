@@ -343,8 +343,8 @@ export function createCatalogTools(context: {
   );
 
   const createOrderTool = tool(
-    async ({ productId, variantId, count, customerAddress, customerPhone }) => {
-      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone } });
+    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod }) => {
+      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
 
       // 5-minute active Pending duplicate order guard
@@ -412,6 +412,10 @@ export function createCatalogTools(context: {
           customerName: context.customerName ?? 'Customer',
           customerPhone,
           customerAddress,
+          // Only what the buyer actually agreed to: a shipping charge nobody quoted and a payment
+          // method nobody named are absences, and the confirmation card says nothing about them.
+          shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
+          paymentMethod: paymentMethod?.trim() ? paymentMethod.trim() : undefined,
           conversationId: context.conversationId,
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
@@ -438,6 +442,12 @@ export function createCatalogTools(context: {
         count: z.number().int().min(1),
         customerAddress: z.string().nullable(),
         customerPhone: z.string().nullable(),
+        shippingCost: z.number().min(0).nullable().optional().describe(
+          'The delivery charge quoted to the customer and agreed by them, in Taka. Omit when nobody quoted one — the confirmation card then says nothing about shipping.',
+        ),
+        paymentMethod: z.string().max(40).nullable().optional().describe(
+          'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
+        ),
       }),
     },
   );
@@ -688,20 +698,49 @@ export function createAgentTools(
     return true;
   }
 
+  /**
+   * The receipt the buyer scans right after they confirmed: the variant they chose in its own
+   * photo, how many they took, which one by its shelf label, what it costs, what delivery adds
+   * and how they are paying. Meta reads about 80 characters of the subtitle, so the parts are
+   * ordered by what a buyer asks first and the least important falls off first.
+   *
+   * A variant without a photo cannot be a card — the generic template requires an image — so that
+   * order falls back to the button row, carrying the same numbers in text.
+   */
   const trackCreatedOrder = async (order: { id: string; totalPrice: string | number }) => {
     if (!context.conversationId) return;
     const orderDetails = await getOrderById(context.businessId, order.id);
-    const text = oneLine(`${stateWord(orderDetails?.state ?? 'pending')} — ${orderDetails?.count ?? 1} × ${orderDetails?.productName ?? 'your order'}, ${money(order.totalPrice)}`, 160);
-    const buttons = [{ title: 'Track order', payload: `please track order with id ${order.id}` }];
+    if (!orderDetails) return;
+
+    const subtitle = oneLine(
+      [
+        `${orderDetails.count} pcs`,
+        orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
+        orderDetails.variantName,
+        `Total ${money(orderDetails.totalPrice)}`,
+        orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
+        orderDetails.paymentMethod,
+      ].filter(Boolean).join(' · '),
+      80,
+    );
+    const buttons = [{ title: 'Track order', payload: `please track order with id ${orderDetails.id}` }];
+    const title = oneLine(orderDetails.productName ?? 'Your order', 60);
+    const content = `${title} — ${subtitle} (Track order)`;
+
     const budget = await takeMessageUnit(!context.sendMessageOverride);
     if (!budget.allowed) return;
     try {
-      await sendButtonRow(text, buttons);
+      if (orderDetails.variantImageUrl) {
+        await sendCards([
+          { title, subtitle, imageUrl: orderDetails.variantImageUrl, button: buttons[0]! },
+        ]);
+      } else {
+        await sendButtonRow(`${title} — ${subtitle}`, buttons);
+      }
     } catch (err) {
       await returnMessageUnit(budget.period);
       throw err;
     }
-    const content = `${text} (Track order)`;
     await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
     onSent?.(content, 'card');
   };

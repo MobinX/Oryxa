@@ -9,6 +9,13 @@ export const createOrderInputSchema = z.object({
   customerName: z.string().min(1).max(255),
   customerPhone: z.string().max(20).optional(),
   customerAddress: z.string().optional(),
+  /**
+   * What delivery adds on top of the items, as quoted to the buyer before they confirmed. Absent
+   * means nobody quoted one, and the confirmation card simply says nothing about shipping.
+   */
+  shippingCost: z.number().min(0).optional(),
+  /** In the buyer's own words — "Cash on delivery", "bKash" — not a code, so the card reads as speech. */
+  paymentMethod: z.string().min(1).max(40).optional(),
   conversationId: uuidSchema.optional(),
   /**
    * The Messenger id of the buyer, so their own order history is findable later. Optional because an
@@ -22,6 +29,8 @@ export const createOrderBodySchema = createOrderInputSchema.omit({ businessId: t
 export const createOrderOutputSchema = z.object({
   id: uuidSchema,
   totalPrice: z.number(),
+  shippingCost: z.number().optional(),
+  paymentMethod: z.string().nullable().optional(),
   state: orderStateSchema,
   /** The card this order matched by phone; null when the buyer gave no number to match. */
   customerId: uuidSchema.nullable(),

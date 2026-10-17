@@ -210,6 +210,14 @@ export const orders = pgTable('orders', {
   customerPlatformId: varchar('customer_platform_id', { length: 120 }),
   state: orderStateEnum('state').default('pending').notNull(),
   totalPrice: numeric('total_price', { precision: 10, scale: 2 }).notNull(),
+  /**
+   * What delivery adds on top of the items, as the buyer was told when they confirmed — shown on
+   * the confirmation card beside the total rather than folded into it, so the two numbers the
+   * customer agreed to stay the two numbers the merchant can reconcile. Zero when none was quoted.
+   */
+  shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
+  /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
+  paymentMethod: varchar('payment_method', { length: 40 }),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
