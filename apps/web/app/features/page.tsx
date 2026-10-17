@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Cpu } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export default function FeaturesPage() {
   return (
@@ -24,7 +25,7 @@ export default function FeaturesPage() {
               />
             </svg>
             <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity">
-              Oryxa
+              {COMPANY_NAME}
             </span>
           </Link>
           <div className="flex items-center gap-4">
@@ -68,7 +69,7 @@ export default function FeaturesPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 Oryxa. All rights reserved.
+        © 2026 {COMPANY_NAME}. All rights reserved.
       </footer>
     </div>
   );

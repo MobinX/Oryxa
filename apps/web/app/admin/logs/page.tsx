@@ -26,6 +26,7 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { COMPANY_NAME } from '@/lib/brand';
 
 const LIMITS = [25, 50, 100, 200];
 const HOURS = [1, 6, 24, 72, 168];
@@ -36,7 +37,7 @@ type RawParams = Record<string, string | string[] | undefined>;
 
 export const metadata = {
   title: 'Event log — admin',
-  description: 'Every request, webhook, agent run and error the Oryxa API recorded.',
+  description: `Every request, webhook, agent run and error the ${COMPANY_NAME} API recorded.`,
 };
 
 function one(value: string | string[] | undefined): string | undefined {

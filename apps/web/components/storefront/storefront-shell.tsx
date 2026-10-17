@@ -3,6 +3,7 @@ import { CartDrawer } from '@/components/storefront/cart-drawer';
 import { CartProvider } from '@/components/storefront/cart-context';
 import { StorefrontHeader } from '@/components/storefront/storefront-header';
 import { isDarkStructure, storeStructure, themeVars } from '@/lib/storefront';
+import { COMPANY_NAME } from '@/lib/brand';
 import type { PublicStore } from '@/lib/storefront';
 import type { ReactNode } from 'react';
 
@@ -283,7 +284,7 @@ function StorefrontFooter({ store }: { store: PublicStore }) {
           <span>&copy; {store.name}</span>
           <span>
             Powered by{' '}
-            <span className="text-[var(--store-ink-2)]">Oryxa</span>
+            <span className="text-[var(--store-ink-2)]">{COMPANY_NAME}</span>
           </span>
         </div>
       </div>

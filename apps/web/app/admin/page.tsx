@@ -30,6 +30,7 @@ import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
 import { AdminSkeleton } from '@/components/admin-skeleton';
 import { AdminDailyChart } from '@/components/admin-daily-chart';
+import { BrandSwapButton } from '@/components/brand-swap-button';
 import {
   ApiError,
   getAdminStats,
@@ -40,6 +41,7 @@ import {
 import { compact, deltaOf, money, whole, type Delta } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { COMPANY_NAME } from '@/lib/brand';
 
 const RANGES = [7, 30, 90];
 const DEFAULT_DAYS = 30;
@@ -50,7 +52,7 @@ type RawParams = Record<string, string | string[] | undefined>;
 
 export const metadata = {
   title: 'Admin — platform',
-  description: 'Platform-wide analytics for the Oryxa operator console.',
+  description: `Platform-wide analytics for the ${COMPANY_NAME} operator console.`,
 };
 
 /** The links offer three ranges; anything the route can answer is accepted, so a pasted `?days=14` still works. */
@@ -376,6 +378,8 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
           </p>
         </>
       ) : null}
+
+      <BrandSwapButton />
     </div>
   );
 }

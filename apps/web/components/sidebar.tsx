@@ -26,6 +26,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SignOutForm } from '@/components/sign-out-button';
+import { COMPANY_NAME } from '@/lib/brand';
 
 const nav = [
   { href: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -149,7 +150,7 @@ export function Sidebar({
                   O
                 </div>
                 <span className="font-geist text-lg font-bold tracking-tight bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-foreground">
-                  Oryxa
+                  {COMPANY_NAME}
                 </span>
               </Link>
               <button
@@ -205,7 +206,7 @@ export function Sidebar({
                   Grow faster
                 </p>
                 <h4 className="font-geist text-sm font-bold mt-0.5">
-                  Meta & Oryxa
+                  Meta & {COMPANY_NAME}
                 </h4>
                 <Link
                   href={`/b/${businessId}/channels`}
@@ -247,7 +248,7 @@ export function Sidebar({
               O
             </div>
             <span className="font-geist text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-foreground">
-              Oryxa
+              {COMPANY_NAME}
             </span>
           </Link>
 
@@ -296,7 +297,7 @@ export function Sidebar({
               Grow faster with
             </p>
             <h4 className="font-geist text-base font-bold leading-tight mt-1">
-              Meta & Oryxa
+              Meta & {COMPANY_NAME}
             </h4>
             <p className="text-xs text-indigo-100/80 leading-relaxed mt-2">
               Connect your channels and boost your sales.

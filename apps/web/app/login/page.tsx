@@ -1,7 +1,8 @@
 import { AuthForm } from '@/components/auth-form';
+import { COMPANY_NAME } from '@/lib/brand';
 
 export const metadata = {
-  title: 'Sign in — Oryxa',
+  title: `Sign in — ${COMPANY_NAME}`,
   description: 'Sign in or create an account to manage your AI-powered e-commerce store.',
 };
 
@@ -13,7 +14,7 @@ export default function LoginPage() {
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[var(--primary)] text-white font-bold text-2xl shadow-lg mb-4">
           O
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">Oryxa</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">{COMPANY_NAME}</h1>
         <p className="mt-2 text-[var(--muted-foreground)] text-sm max-w-xs">
           AI-powered sales automation for your e-commerce store
         </p>

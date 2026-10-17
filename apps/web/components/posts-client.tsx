@@ -130,6 +130,14 @@ export function PostsClient({
   // without the picture nobody has finished sending.
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
+  /**
+   * What the server holds for the post on screen — the one thing that tells an unsaved edit apart
+   * from a draft already written. Text typed here exists only in this tab until it is sent, so a
+   * merchant who finishes typing and walks off without pressing Save leaves the feed showing
+   * "Empty post draft" over a post they believe they wrote.
+   */
+  const savedRef = useRef<{ id: string; content: string; mediaCount: number } | null>(null);
+
   /** Every write here goes straight to the API, so the cached list is expired by hand. */
   function refreshPostsCache(postId?: string) {
     void expirePostsCache(businessId, postId).catch(() => undefined);
@@ -212,6 +220,11 @@ export function PostsClient({
       // editing it tomorrow sees the same shelf they chose today.
       setSuggestProductId(fromList.productId ?? '');
       if (fromList.productId) setSelectedProductId(fromList.productId);
+      savedRef.current = {
+        id: selectedPostId,
+        content: fromList.content,
+        mediaCount: (fromList.mediaUrls || []).length,
+      };
       setLoadingDetail(false);
     } else {
       setLoadingDetail(true);
@@ -231,6 +244,11 @@ export function PostsClient({
         setScheduledAt(scheduleInputValue(detail.scheduledAt));
         setSuggestProductId(detail.productId ?? '');
         if (detail.productId) setSelectedProductId(detail.productId);
+        savedRef.current = {
+          id: selectedPostId,
+          content: detail.content,
+          mediaCount: (detail.mediaUrls || []).length,
+        };
       })
       .catch((err) => {
         if (cancelled || fromList) return;
@@ -311,7 +329,7 @@ export function PostsClient({
   }
 
   // 2. Save / update post content & settings
-  async function handleSavePost(newState?: PostState) {
+  async function handleSavePost(newState?: PostState, quiet = false) {
     if (!selectedPostId) return;
     setSaving(true);
     setErrorMsg(null);
@@ -328,7 +346,7 @@ export function PostsClient({
 
       // Update posts list
       setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, content, mediaUrls, postState: computedState, scheduledAt: scheduleDate } : p)));
-      
+
       // Update local detail
       if (selectedPostDetail) {
         setSelectedPostDetail({
@@ -340,7 +358,15 @@ export function PostsClient({
         });
       }
 
-      setSuccessMsg('Post draft saved.');
+      // Written, so the autosave below has nothing left to send until the next edit. Taken from
+      // the row the API answered with, not from what was typed: the two can differ, and the
+      // server's version is the one that is really stored.
+      savedRef.current = {
+        id: selectedPostId,
+        content: updated.content,
+        mediaCount: (updated.mediaUrls ?? mediaUrls).length,
+      };
+      if (!quiet) setSuccessMsg('Post draft saved.');
       refreshPostsCache(selectedPostId);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to save post');
@@ -348,6 +374,32 @@ export function PostsClient({
       setSaving(false);
     }
   }
+
+  // A draft is written on a pause in the typing, not only when Save is pressed. The AI tab already
+  // creates its row with the copy in it, so manual drafts were the ones left behind: the row the
+  // feed shows is a server row, and an unsaved paragraph simply is not there yet.
+  //
+  // It holds off while anything else is in flight — an upload, a load, a save already running —
+  // and says nothing when it works, because a toast every second would drown the page.
+  useEffect(() => {
+    if (!selectedPostId || loadingDetail || saving || uploadingMedia) return;
+    if (selectedPostDetail?.postState === 'published') return;
+    if (!content.trim() && mediaUrls.length === 0) return;
+    const saved = savedRef.current;
+    if (
+      saved &&
+      saved.id === selectedPostId &&
+      saved.content === content &&
+      saved.mediaCount === mediaUrls.length
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => void handleSavePost(undefined, true), 1200);
+    return () => clearTimeout(timer);
+    // `handleSavePost` is rebuilt on every render, so naming it as a dependency would restart
+    // this timer on any unrelated re-render — and a merchant who keeps typing would never settle
+    // into a save at all. The state it reads is already listed above.
+  }, [content, mediaUrls, selectedPostId, selectedPostDetail?.postState, loadingDetail, saving, uploadingMedia]);
 
   // 3. Delete Post
   async function handleDeletePost(postId: string, e: React.MouseEvent) {
@@ -396,6 +448,8 @@ export function PostsClient({
       }
 
       setSuccessMsg('Post published to page feed successfully!');
+      // What the publish just wrote is what the row now holds, published or not.
+      savedRef.current = { id: selectedPostId, content, mediaCount: mediaUrls.length };
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Publish failed. Verify API token scopes.');
       // Keep state as failed
@@ -479,6 +533,12 @@ export function PostsClient({
       });
       // Update list
       setPosts(posts.map((p) => (p.id === selectedPostId ? { ...p, content: updated.content } : p)));
+      // The tuning endpoint wrote the row itself, so this text is already saved.
+      savedRef.current = {
+        id: selectedPostId,
+        content: updated.content,
+        mediaCount: mediaUrls.length,
+      };
       setAiInstruction('');
       refreshPostsCache(selectedPostId);
       setSuccessMsg('Draft optimized by AI.');
@@ -812,9 +872,12 @@ export function PostsClient({
                       </div>
                     ))}
 
-                    {/* Upload new image button */}
+                    {/* Upload new image button.
+                        It owns a full row rather than one 80px tile, because the uploader paints a
+                        progress bar under its own label: inside a square the width of a stamp, that
+                        bar is four pixels of nothing and the merchant has no idea how long to wait. */}
                     {selectedPostDetail.postState !== 'published' && mediaUrls.length < MAX_POST_MEDIA && (
-                      <div className="min-h-20 w-20 rounded-xl border border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center p-2 text-center transition-all bg-muted/5 hover:bg-muted/10">
+                      <div className="flex min-h-20 w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/5 p-3 text-center transition-all hover:border-primary/50 hover:bg-muted/10">
                         <ImageUpload
                           token={token}
                           businessId={businessId}

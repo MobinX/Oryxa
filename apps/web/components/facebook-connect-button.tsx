@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { connectFacebookAction } from '@/app/actions/channels';
+import { COMPANY_NAME } from '@/lib/brand';
 
 interface FacebookConnectButtonProps {
   businessId: string;
@@ -77,7 +78,7 @@ export function FacebookConnectButton({
 
               <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0">
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  To enable AI-powered customer support and automated replies on your Facebook Page, Oryxa will request the following permissions:
+                  To enable AI-powered customer support and automated replies on your Facebook Page, {COMPANY_NAME} will request the following permissions:
                 </p>
 
                 <div className="space-y-3">
@@ -90,7 +91,7 @@ export function FacebookConnectButton({
                     {
                       icon: '📋',
                       permission: 'View your Pages list',
-                      why: 'To let you choose which Facebook Page to connect to Oryxa.',
+                      why: `To let you choose which Facebook Page to connect to ${COMPANY_NAME}.`,
                     },
                     {
                       icon: '🔔',
@@ -259,7 +260,7 @@ export function FacebookConnectButton({
 
               <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0">
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  You can request complete deletion of all your business data from Oryxa at any time. Here's how:
+                  You can request complete deletion of all your business data from {COMPANY_NAME} at any time. Here's how:
                 </p>
 
                 <div className="space-y-3">
@@ -284,7 +285,7 @@ export function FacebookConnectButton({
                 </div>
 
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  You can also remove Oryxa from your Facebook Page directly in your{' '}
+                  You can also remove {COMPANY_NAME} from your Facebook Page directly in your{' '}
                   <a
                     href="https://www.facebook.com/settings/?tab=business_tools"
                     target="_blank"

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { updateDefaultAgentAction } from '@/app/actions/default-agent';
 import type { PlatformAgent } from '@/lib/api';
+import { COMPANY_NAME } from '@/lib/brand';
 
 /** The limits `updatePlatformAgentInputSchema` enforces, spelled here so a long paste fails in the browser, not as a 400. */
 const PROMPT_LIMIT = 40_000;
@@ -19,9 +20,9 @@ const WORDING_LIMIT = 12_000;
 function wordingState(written: string | null, reviewed: string | undefined) {
   const reviewedChars = reviewed?.trim().length ?? 0;
   if (written?.trim()) {
-    return `Answering with this text (${written.trim().length} chars) for every store still following the default. Emptying the box hands the wording back to Oryxa's reviewed block.`;
+    return `Answering with this text (${written.trim().length} chars) for every store still following the default. Emptying the box hands the wording back to ${COMPANY_NAME}'s reviewed block.`;
   }
-  return `Empty, so every following store answers with Oryxa's reviewed block (${reviewedChars} chars, shown greyed below) — it carries the rule that keeps replies in শুদ্ধ বাংলা and the send-message-once rule. Anything typed here replaces that whole block for every one of them.`;
+  return `Empty, so every following store answers with ${COMPANY_NAME}'s reviewed block (${reviewedChars} chars, shown greyed below) — it carries the rule that keeps replies in শুদ্ধ বাংলা and the send-message-once rule. Anything typed here replaces that whole block for every one of them.`;
 }
 
 /**

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ShieldCheck, Mail, Lock, Eye, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
 
 export default function PrivacyPage() {
   return (
@@ -25,10 +26,10 @@ export default function PrivacyPage() {
             </svg>
             <div className="flex flex-col">
               <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                Oryxa
+                {COMPANY_NAME}
               </span>
               <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by RR Computer
+                by {PARENT_COMPANY_NAME}
               </span>
             </div>
           </Link>
@@ -61,7 +62,7 @@ export default function PrivacyPage() {
                 Privacy Policy
               </h1>
               <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • Oryxa is a product of RR Computer
+                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
               </p>
             </div>
           </div>
@@ -69,7 +70,7 @@ export default function PrivacyPage() {
           {/* Privacy Text */}
           <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
             <p>
-              At Oryxa, we are committed to protecting your privacy. This Privacy Policy explains how Oryxa (referred to as "we," "us," or "our"), a specialized product of <strong>RR Computer</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
+              At {COMPANY_NAME}, we are committed to protecting your privacy. This Privacy Policy explains how {COMPANY_NAME} (referred to as "we," "us," or "our"), a specialized product of <strong>{PARENT_COMPANY_NAME}</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
             </p>
 
             <section className="space-y-3">
@@ -109,7 +110,7 @@ export default function PrivacyPage() {
                 <h2>3. Data Sharing and Third-Party API Integrations</h2>
               </div>
               <p>
-                We do not sell merchant or customer data. To deliver Oryxa's core functionality, data is processed through the following secure third-party systems:
+                We do not sell merchant or customer data. To deliver {COMPANY_NAME}'s core functionality, data is processed through the following secure third-party systems:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li><strong>Meta APIs (Facebook &amp; Instagram):</strong> We fetch messages and dispatch AI replies via the Meta Graph Send API.</li>
@@ -125,7 +126,7 @@ export default function PrivacyPage() {
                 <h2>4. Data Deletion and Deactivation</h2>
               </div>
               <p>
-                Merchants retain full control over their integrations. When you disconnect a Facebook Page or delete a channel from Oryxa:
+                Merchants retain full control over their integrations. When you disconnect a Facebook Page or delete a channel from {COMPANY_NAME}:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>We automatically call Meta APIs to unsubscribe our webhook from your Page events.</li>
@@ -140,7 +141,7 @@ export default function PrivacyPage() {
                 If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, you can follow our <Link href="/data-delete-instructions" className="text-primary hover:underline font-semibold">Data Deletion Instructions</Link> or contact us at:
               </p>
               <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
-                <p><strong className="text-foreground">RR Computer - Software Division</strong></p>
+                <p><strong className="text-foreground">{PARENT_COMPANY_NAME} - Software Division</strong></p>
                 <p>Email: alamsarwar@hotmail.com</p>
                 <p>
                   Address:<br />
@@ -175,7 +176,7 @@ export default function PrivacyPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 Oryxa. A product of RR Computer. All rights reserved.
+        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
       </footer>
     </div>
   );
