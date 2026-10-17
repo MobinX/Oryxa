@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bot, CreditCard, Cpu, FileText, LayoutDashboard, ScrollText } from 'lucide-react';
+import { Bot, CreditCard, Cpu, FileText, LayoutDashboard, ScrollText, Settings } from 'lucide-react';
 
 const TABS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -11,6 +11,7 @@ const TABS = [
   { href: '/admin/default-agent', label: 'Default', icon: FileText, exact: true },
   { href: '/admin/agent-playground', label: 'Playground', icon: Bot, exact: false },
   { href: '/admin/logs', label: 'Event log', icon: ScrollText, exact: false },
+  { href: '/admin/settings', label: 'Settings', icon: Settings, exact: true },
 ];
 
 export function AdminTabs() {
