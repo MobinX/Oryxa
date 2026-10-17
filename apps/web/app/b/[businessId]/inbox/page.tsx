@@ -53,10 +53,13 @@ async function InboxContent({
         />
       </div>
 
-      <section className={cn('min-w-0 flex-1 flex-col bg-background/40', selectedId ? 'flex' : 'hidden lg:flex')} aria-label="Message thread">
+      {/* min-h-0 is what keeps this section a scroll box instead of a grows-to-fit box: without it
+          a flex child's min-height:auto sizes it to the whole thread, and on mobile everything past
+          the container's clip — the rest of the thread and the reply box — becomes unreachable. */}
+      <section className={cn('min-h-0 min-w-0 flex-1 flex-col bg-background/40', selectedId ? 'flex' : 'hidden lg:flex')} aria-label="Message thread">
         {selected && messages ? (
           <>
-            <header className="flex min-h-[76px] items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3 sm:px-6">
+            <header className="flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3 sm:px-6">
               <div className="flex min-w-0 items-center gap-3">
                 <Link href={`/b/${businessId}/inbox`} className="rounded-lg p-2 text-muted-foreground hover:bg-muted lg:hidden" aria-label="Back to conversations"><ArrowLeft className="h-4 w-4" /></Link>
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{(selected.customerName || 'C').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div>
