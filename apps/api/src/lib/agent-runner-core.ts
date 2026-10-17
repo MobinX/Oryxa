@@ -7,13 +7,15 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
 
 /**
- * How many of a thread's pictures are still handed to the model as pixels.
+ * How many of the customer's turns a picture stays pixels for. Counted in turns rather than raw
+ * rows, because the agent's own answers are rows too — a single reply that went out as three
+ * messages used to push a one-turn-old photo out of a rows-based window on its own.
  *
  * Each one costs roughly a thousand tokens and is re-sent on every reply, so the window is a
- * trade: wide enough that a photo and the question about it survive arriving as two deliveries,
- * narrow enough that a long thread does not pay for its whole photo album.
+ * trade: wide enough that a photo and the question about it survive arriving as two deliveries
+ * and a few exchanges, narrow enough that a long thread does not pay for its whole photo album.
  */
-const PHOTO_MEMORY = 3;
+const PHOTO_MEMORY_TURNS = 6;
 
 export interface AgentRunOptions {
   /**
@@ -125,19 +127,23 @@ export async function runAgentCore(
   const orderedHistory = [...historyById.values()]
     .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-  // A picture stays pixels for the last few the customer sent, not only for the ones being
-  // answered this second. "Do you have this?" and the photo it belongs to routinely land as two
-  // deliveries a second apart: the first run looks at the picture, the second one is left holding
-  // the sentence and replies that it cannot see anything. Anything older than that window is the
-  // note in `Agent.ts` — the model still knows a picture was sent, and stops asking for it.
-  const seenRecently = new Set(
-    orderedHistory
-      .slice(-PHOTO_MEMORY)
-      .filter((m) => m.imageKeys.length > 0)
-      .map((m) => m.id),
-  );
+  // A picture stays pixels until six of the customer's turns have passed after it, not only for
+  // the ones being answered this second. "Do you have this?" and the photo it belongs to routinely
+  // land as two deliveries a second apart, and the question that matters rarely arrives in the
+  // same turn as the picture. Anything older than that window is the note in `Agent.ts` — the
+  // model still knows a picture was sent, and stops asking for it. Counted from the newest message
+  // backwards: an image's age is how many customer turns came after it, whatever the agent's own
+  // replies did to the row count in between.
+  const pixelsWanted = new Set<string>();
+  let customerTurnsSeen = 0;
+  for (let i = orderedHistory.length - 1; i >= 0; i--) {
+    const m = orderedHistory[i]!;
+    if (m.from !== 'customer') continue;
+    if (m.imageKeys.length > 0 && customerTurnsSeen < PHOTO_MEMORY_TURNS) pixelsWanted.add(m.id);
+    customerTurnsSeen += 1;
+  }
   const history = orderedHistory.map((m) => {
-    const asPixels = pendingIds.has(m.id) || seenRecently.has(m.id);
+    const asPixels = pendingIds.has(m.id) || pixelsWanted.has(m.id);
     return {
       from: m.from,
       content: m.content,

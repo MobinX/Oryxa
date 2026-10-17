@@ -41,7 +41,10 @@ export async function getConversationWithHistory(conversationId: string) {
       messages: {
         where: isNull(messages.deletedAt),
         orderBy: [desc(messages.time)],
-        limit: 12,
+        // Wide enough to span the runner's six-turn photo window even when the agent answered in
+        // several rows per turn — a picture that fell out of the context would be gone as pixels
+        // no matter what the pixel window decided.
+        limit: 24,
       },
       channel: {
         with: { agent: true, business: true },
