@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useEffect, useState } from 'react';
+import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertDialog } from '@/components/alert-dialog';
@@ -27,18 +28,21 @@ export function InboxReplyForm({
     <>
       <form
         action={action}
-        className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row sm:flex-wrap"
+        className="border-t border-border/70 bg-card p-3 sm:px-5 sm:py-4"
       >
-        <Input
-          name="content"
-          placeholder="Type a reply (bypasses AI)…"
-          required
-          className="flex-1"
-          disabled={pending}
-        />
-        <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
-          Send
-        </Button>
+        <div className="flex items-center gap-2 rounded-2xl border border-border bg-background p-1.5 pl-3 shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
+          <Input
+            name="content"
+            placeholder="Type a message..."
+            required
+            className="h-10 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+            disabled={pending}
+          />
+          <Button type="submit" aria-label="Send message" className="h-10 w-10 shrink-0 rounded-xl p-0" disabled={pending}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="mt-2 px-1 text-[10px] text-muted-foreground">Replies are sent directly to the customer.</p>
       </form>
       <AlertDialog
         open={dialogOpen && Boolean(state.error)}

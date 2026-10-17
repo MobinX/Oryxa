@@ -574,7 +574,7 @@ export function PlaygroundClient({
   async function handleAttachPhoto(file: File) {
     setUploadingPhoto(true);
     try {
-      const photo = await uploadVariantImageDirect(businessId, file);
+      const photo = await uploadVariantImageDirect(businessId, file, undefined, token);
       setPendingPhotos((prev) => (prev.length >= 4 ? prev : [...prev, photo]));
     } catch (err) {
       console.error('Failed to attach a picture to the test run:', err);

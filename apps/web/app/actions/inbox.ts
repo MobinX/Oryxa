@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { sendMessage, deleteConversation } from '@/lib/api';
+import { sendMessage, deleteConversation, updateConversationState } from '@/lib/api';
 
 /**
  * `redirect()` and `notFound()` work by throwing, and their error has no useful message — only a
@@ -51,6 +51,16 @@ export async function deleteConversationAction(
 ) {
   const token = await requireAuth();
   await deleteConversation(token, businessId, conversationId);
+  revalidatePath(`/b/${businessId}/inbox`);
+}
+
+export async function updateConversationStateAction(
+  businessId: string,
+  conversationId: string,
+  state: 'pending' | 'working' | 'done',
+) {
+  const token = await requireAuth();
+  await updateConversationState(token, businessId, conversationId, state);
   revalidatePath(`/b/${businessId}/inbox`);
 }
 

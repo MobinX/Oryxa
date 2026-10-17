@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p ${API2_PORT:-3500}",
+    "dev": "bun --env-file=../../.env run next dev -p ${API2_PORT:-3500}",
     "build": "next build",
-    "start": "next start -p ${API2_PORT:-3500}",
+    "start": "bun --env-file=../../.env run next start -p ${API2_PORT:-3500}",
     "brand:toggle": "bun scripts/toggle-brand.ts"
   },
   "dependencies": {

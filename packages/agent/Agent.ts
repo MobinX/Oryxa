@@ -9,6 +9,12 @@ import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 import type { ConversationAgentState } from '@repo/shared';
+import {
+  formatCompactAgentState,
+  detectTurnLanguage,
+  classifyTurnIntent,
+  validateAndSanitizeReply,
+} from '@repo/shared';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
@@ -270,8 +276,7 @@ export class Agent {
       : 'oryxa:messenger:v1');
 
     // `photos` is not a field a history row carries — `imageKeys` is what arrived, `hadImages` is
-    // what an older turn was summarised from. Reading a nonexistent field made this always false,
-    // so a photo turn never raised the reasoning effort the way it was meant to.
+    // what an older turn was summarised from.
     const hasPhotosInTurn = this.config.history
       .slice(-3)
       .some((m) => (m.imageKeys?.length ?? 0) > 0 || Boolean(m.hadImages));
@@ -334,19 +339,34 @@ export class Agent {
     const systemContent = [this.config.systemPrompt, replyGuidance]
       .filter(Boolean)
       .join('\n');
+
+    const latestCustomerMsg = [...this.config.history].reverse().find((m) => m.from === 'customer')?.content ?? '';
+    const turnLanguage = detectTurnLanguage(latestCustomerMsg, this.config.agentState);
+    const turnIntent = classifyTurnIntent(latestCustomerMsg, this.config.agentState, this.config.postContext);
+
+    // Save detected language to agentState
+    if (this.config.agentState) {
+      this.config.agentState.lastReplyLanguage = turnLanguage;
+    }
+
+    const compactState = this.config.agentState ? formatCompactAgentState(this.config.agentState) : null;
     const dynamicContent = [
       `You are a sales rep for ${this.config.business.name}.`,
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
-      this.config.agentState ? `Conversation state (verified facts):\n${JSON.stringify(this.config.agentState)}` : '',
+      compactState ? `Conversation state (verified facts):\n${JSON.stringify(compactState)}` : '',
+      `Reply language: ${turnLanguage === 'bn' ? 'Bangla (শুদ্ধ বাংলা)' : 'English'} (strict matching required).`,
+      turnIntent ? `Turn intent: ${turnIntent}.` : '',
     ].filter(Boolean).join('\n');
 
-    console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length}`);
+    console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length} lang=${turnLanguage} intent=${turnIntent}`);
     emitSse?.('agent_start', {
       conversationId: this.config.conversationId,
       business: this.config.business.name,
       historyLen: this.config.history.length,
+      turnLanguage,
+      turnIntent,
     });
 
     const messages: BaseMessage[] = [
@@ -358,7 +378,18 @@ export class Agent {
     const result = await agent.invoke({ messages }, { recursionLimit: 6 });
     const latencyMs = Date.now() - startTime;
     const lastMessage = result.messages[result.messages.length - 1];
-    const replyText = contentText(lastMessage.content);
+    let replyText = contentText(lastMessage.content);
+
+    // Post-generation validation & sanitization
+    const validation = validateAndSanitizeReply(replyText, {
+      expectedLanguage: turnLanguage,
+      channel: this.config.tools ? 'comment' : 'messenger',
+      isSilentExpected: turnIntent === 'comment_silent',
+    });
+    replyText = validation.sanitizedText;
+    if (!validation.isValid) {
+      console.log(`[agent] reply sanitized violations: ${validation.violations.join(', ')}`);
+    }
 
     // Aggregate usage metadata across all AI messages in the React loop
     let inputTokens = 0;

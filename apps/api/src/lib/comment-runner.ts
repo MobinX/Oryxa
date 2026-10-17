@@ -6,6 +6,7 @@ import { quotaGate, type TriggerOptions, type TriggerVerdict } from '@api/lib/qu
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { publicCommentReplyViolation } from '@agent/tools/comment';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
+import { stripEmDashes } from '@repo/shared';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 const INTERNAL_KEY = process.env.INTERNAL_KEY ?? 'dev-internal-key';
@@ -184,25 +185,26 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     }
 
     let postContext = thread.postContext;
-    if (!postContext) {
-      const fetched = await getFacebookPostContext(thread.channel.apiToken, thread.platformItemId);
-      if (fetched) {
-        postContext = fetched;
-        await setCommentThreadPostContext(thread.id, fetched);
-      }
+    const [fetchedPostContext, doneHistory, catalog, answering] = await Promise.all([
+      !postContext
+        ? getFacebookPostContext(thread.channel.apiToken, thread.platformItemId)
+        : Promise.resolve(null),
+      listDoneCommentHistory(thread.id),
+      buildCatalogSummary(thread.businessId, { canShowCards: false }),
+      resolveAnsweringAgent(thread.channel.agent),
+    ]);
+
+    if (fetchedPostContext) {
+      postContext = fetchedPostContext;
+      await setCommentThreadPostContext(thread.id, fetchedPostContext).catch(() => {});
     }
 
-    const doneHistory = await listDoneCommentHistory(thread.id);
     const history = [
       ...doneHistory.map((c) => ({ from: c.from, content: c.content })),
       { from: 'customer' as const, content: current.content },
     ];
 
-    // A comment thread has no card tools, so the catalog block must not send it to show_products.
-    const catalog = await buildCatalogSummary(thread.businessId, { canShowCards: false });
     const catalogSummary = catalog.summary;
-
-    const answering = await resolveAnsweringAgent(thread.channel.agent);
     emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
@@ -269,6 +271,10 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         // never counts against the plan.
         emitAnomaly('token_metrics_unrecorded', { detail: metricErr });
         emit('error', errorFields(metricErr), { dedupe: null });
+      }
+
+      if (replyText) {
+        replyText = stripEmDashes(replyText);
       }
 
       if (sentCommentTexts.length === 0 && replyText && replyText.trim() !== 'SILENT') {

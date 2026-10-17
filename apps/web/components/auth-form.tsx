@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '@/lib/firebase';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset } from '@/lib/firebase';
 import { setAuthSession } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,13 +27,35 @@ export function AuthForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState<'google' | 'email' | null>(null);
+  const [loading, setLoading] = useState<'google' | 'email' | 'reset' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const handlePasswordReset = async () => {
+    const address = email.trim();
+    if (!address) { setError('Enter your email address first.'); return; }
+    setLoading('reset');
+    setError(null);
+    setNotice(null);
+    try {
+      await sendPasswordReset(address);
+      setNotice('If an account exists for that email, Firebase will send password reset instructions.');
+    } catch (e: any) {
+      setError(e?.code === 'auth/invalid-email'
+        ? 'Enter a valid email address.'
+        : e?.code === 'auth/network-request-failed'
+          ? 'Could not reach Firebase. Check your connection and try again.'
+          : e?.message || 'Could not start password recovery. Please try again.');
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const handleGoogle = async () => {
     if (loading) return;
     setLoading('google');
     setError(null);
+    setNotice(null);
     try {
       const cred = await signInWithGoogle();
       const idToken = await cred.user.getIdToken();
@@ -63,6 +85,7 @@ export function AuthForm() {
     e.preventDefault();
     if (loading) return;
     setError(null);
+    setNotice(null);
 
     if (mode === 'signup') {
       if (!name.trim()) { setError('Please enter your name.'); return; }
@@ -155,6 +178,13 @@ export function AuthForm() {
             autoComplete="email"
           />
         </div>
+        {mode === 'signin' && (
+          <div className="-mt-2 text-right">
+            <button type="button" onClick={handlePasswordReset} disabled={loading !== null} className="text-xs font-medium text-[var(--primary)] hover:underline disabled:opacity-50">
+              {loading === 'reset' ? 'Sending instructions…' : 'Forgot password?'}
+            </button>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-[var(--foreground)] mb-1.5">Password</label>
           <Input
@@ -187,6 +217,7 @@ export function AuthForm() {
             {error}
           </div>
         )}
+        {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
 
         <Button
           type="submit"

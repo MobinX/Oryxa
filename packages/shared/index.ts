@@ -16,6 +16,7 @@ export * from '@shared/schemas/logs';
 export * from '@shared/schemas/plan';
 export * from '@shared/schemas/billing';
 export * from './prompts/agent';
+export * from './language';
 export * from '@shared/timezone';
 
 export { z } from '@hono/zod-openapi';

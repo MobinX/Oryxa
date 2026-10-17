@@ -4,7 +4,7 @@ import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
-import { parseConversationAgentState } from '@repo/shared';
+import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
 
 /**
  * How many of a thread's pictures are still handed to the model as pixels.
@@ -149,19 +149,27 @@ export async function runAgentCore(
   const agentState = parseConversationAgentState(conv.agentState);
   const latestCustomerText = [...pendingMsgs].reverse().find((m) => m.content.trim())?.content ?? '';
   const orderTap = latestCustomerText.match(/^place order with ([\da-f-]{36}) and (.*?)(?: variant ([\da-f-]{36}))?$/i);
-  if (orderTap) {
-    const { getProductById } = await import('@repo/db/crud/product');
-    const product = await getProductById(conv.businessId, orderTap[1]).catch(() => null);
-    if (product) {
-      agentState.currentProduct = { id: product.id, name: product.name, price: String(product.price) };
-      agentState.pendingOrder = {
-        ...agentState.pendingOrder,
-        productId: product.id,
-        productName: product.name,
-        ...(orderTap[3] ? { variantId: orderTap[3] } : {}),
-      };
-    }
+
+  const [productFromTap, latestOrderRes, catalog] = await Promise.all([
+    orderTap
+      ? import('@repo/db/crud/product').then(({ getProductById }) => getProductById(conv.businessId, orderTap[1]).catch(() => null))
+      : Promise.resolve(null),
+    !agentState.lastOrder
+      ? import('@repo/db/crud/order').then(({ getOrdersByPlatformId }) => getOrdersByPlatformId(conv.businessId, conv.customerPlatformId, { limit: 1 }).catch(() => ({ orders: [] })))
+      : Promise.resolve(null),
+    buildCatalogSummary(conv.businessId),
+  ]);
+
+  if (productFromTap) {
+    agentState.currentProduct = { id: productFromTap.id, name: productFromTap.name, price: String(productFromTap.price) };
+    agentState.pendingOrder = {
+      ...agentState.pendingOrder,
+      productId: productFromTap.id,
+      productName: productFromTap.name,
+      ...(orderTap?.[3] ? { variantId: orderTap[3] } : {}),
+    };
   }
+
   const phone = latestCustomerText.match(/(?:\+?88)?01[3-9]\d{8}/)?.[0];
   if (phone) {
     agentState.pendingOrder = {
@@ -183,25 +191,21 @@ export async function runAgentCore(
       }
     }
   }
-  if (!agentState.lastOrder) {
-    const { getOrdersByPlatformId } = await import('@repo/db/crud/order');
-    const latest = (await getOrdersByPlatformId(conv.businessId, conv.customerPlatformId, { limit: 1 })).orders[0];
-    if (latest) {
-      const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
-      agentState.lastOrder = {
-        id: latest.id,
-        productName: latest.productName ?? 'Order',
-        variantName: latest.variantName,
-        count: latest.count,
-        totalPrice: latest.totalPrice.toFixed(2),
-        state: stateWords[latest.state as keyof typeof stateWords] ?? 'Pending',
-        createdAt: latest.createdAt.toISOString(),
-      };
-    }
-  }
-  await updateConversationAgentState(conv.id, agentState);
 
-  const catalog = await buildCatalogSummary(conv.businessId);
+  if (latestOrderRes && latestOrderRes.orders.length > 0) {
+    const latest = latestOrderRes.orders[0];
+    const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
+    agentState.lastOrder = {
+      id: latest.id,
+      productName: latest.productName ?? 'Order',
+      variantName: latest.variantName,
+      count: latest.count,
+      totalPrice: latest.totalPrice.toFixed(2),
+      state: stateWords[latest.state as keyof typeof stateWords] ?? 'Pending',
+      createdAt: latest.createdAt.toISOString(),
+    };
+  }
+
   console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);
   console.log(`[agent-runner-core] catalog loaded — ${catalog.total} products`);
   const catalogSummary = catalog.summary;
@@ -295,6 +299,16 @@ export async function runAgentCore(
       emitAnomaly('token_metrics_unrecorded', { detail: metricErr });
       emit('error', errorFields(metricErr), { dedupe: null });
     }
+
+    // Strip em-dashes and ensure clean reply text
+    if (replyText) {
+      replyText = stripEmDashes(replyText);
+    }
+
+    // Persist conversation agent state once at the end of the turn
+    await updateConversationAgentState(conv.id, agentState).catch((err) => {
+      console.error('[agent-runner-core] failed to persist agentState at turn end:', err);
+    });
 
     // The model's final text is delivered here. Product and order cards sent during tool calls do
     // not replace that text; an empty or SILENT response produces no text message.

@@ -14,13 +14,13 @@ export async function setAuthSession(
     signInMethod?: string;
   },
 ) {
-  await setAuthCookie(idToken);
   await syncUser({
     firebaseUid: profile.firebaseUid,
     name: profile.name,
     email: profile.email,
     signInMethod: profile.signInMethod ?? 'google',
   });
+  await setAuthCookie(idToken);
   redirect('/businesses');
 }
 

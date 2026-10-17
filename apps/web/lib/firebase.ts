@@ -5,6 +5,7 @@ import {
   signInWithPopup,
   signOut,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   createUserWithEmailAndPassword,
   updateProfile,
   EmailAuthProvider,
@@ -49,6 +50,12 @@ export async function signInWithEmail(email: string, password: string) {
   const auth = getFirebaseAuth();
   if (!auth) throw new Error('Firebase not configured');
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function sendPasswordReset(email: string) {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase not configured');
+  return firebaseSendPasswordResetEmail(auth, email);
 }
 
 export async function signUpWithEmail(email: string, password: string, name: string) {

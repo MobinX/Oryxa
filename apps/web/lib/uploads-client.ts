@@ -39,10 +39,16 @@ export async function uploadVariantImageDirect(
   businessId: string,
   file: File,
   onProgress?: (percent: number) => void,
+  token?: string,
 ): Promise<UploadedImage> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const signRes = await fetch(`/api/uploads/sign?businessId=${encodeURIComponent(businessId)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       contentType: file.type || 'application/octet-stream',
       size: file.size,

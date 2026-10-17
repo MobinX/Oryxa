@@ -39,7 +39,17 @@ export async function apiFetch<T>(
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const res = await fetch(`${baseUrl}${cleanPath}`, { ...init, headers });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    let err: { error?: string } = {};
+    try {
+      const text = await res.text();
+      try {
+        err = JSON.parse(text);
+      } catch {
+        err = { error: text || res.statusText };
+      }
+    } catch {
+      err = { error: res.statusText };
+    }
     if (res.status === 401) {
       // `null` says the caller signs the redirect itself: a route with its own
       // sign-in page must not bounce the reader to the app's.
@@ -508,6 +518,17 @@ export const listMessages = (
   >(
     `/api/v1/${businessId}/conversations/${conversationId}/messages`,
     { token },
+  );
+
+export const updateConversationState = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  state: 'pending' | 'working' | 'done',
+) =>
+  apiFetch<{ id: string; updatedState: 'pending' | 'working' | 'done' }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/state`,
+    { method: 'PATCH', token, body: JSON.stringify({ state }) },
   );
 
 export const sendMessage = (
