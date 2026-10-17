@@ -24,7 +24,18 @@ const NAMED_PRODUCT_LIMIT = 10;
  */
 export type CatalogSummary = { summary: string; total: number };
 
-export type CatalogSummary = { summary: string; total: number };
+const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+const catalogCache = new Map<string, { summary: CatalogSummary; expiresAt: number }>();
+
+export function invalidateCatalogSummaryCache(businessId?: string): void {
+  if (businessId) {
+    for (const key of catalogCache.keys()) {
+      if (key.startsWith(`${businessId}:`)) catalogCache.delete(key);
+    }
+  } else {
+    catalogCache.clear();
+  }
+}
 
 /** The shelves this store groups by, in the one sentence form both branches use. */
 function shelfShape(named: Array<{ name: string; count: number }>, unclassified: number): string {
@@ -57,13 +68,21 @@ export async function buildCatalogSummary(
   options: { canShowCards?: boolean } = {},
 ): Promise<CatalogSummary> {
   const canShowCards = options.canShowCards !== false;
+  const cacheKey = `${businessId}:${canShowCards}`;
+  const cached = catalogCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.summary;
+  }
+
   const [total, firstPage] = await Promise.all([
     countSearchResults(businessId, ''),
     searchProducts(businessId, '', NAMED_PRODUCT_LIMIT),
   ]);
 
   if (total === 0) {
-    return { total, summary: 'Catalog: this store has no products on sale right now. Say so rather than inventing one.' };
+    const emptyResult = { total, summary: 'Catalog: this store has no products on sale right now. Say so rather than inventing one.' };
+    catalogCache.set(cacheKey, { summary: emptyResult, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS });
+    return emptyResult;
   }
 
   if (total <= NAMED_PRODUCT_LIMIT) {
@@ -85,9 +104,9 @@ export async function buildCatalogSummary(
     const unclassified = firstPage.length - named.reduce((sum, c) => sum + c.count, 0);
 
     const lines = firstPage
-      .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
+      .map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
       .join('\n');
-    return {
+    const result = {
       total,
       summary: [
         `Catalog (${total} product${total === 1 ? '' : 's'} — this is the store's whole catalog`
@@ -97,6 +116,8 @@ export async function buildCatalogSummary(
         lines,
       ].join('\n'),
     };
+    catalogCache.set(cacheKey, { summary: result, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS });
+    return result;
   }
 
   const categories = await listCategories(businessId);
@@ -111,7 +132,7 @@ export async function buildCatalogSummary(
     : 'To answer what the shop has: name the categories above and describe a few in your own words.'
       + ' You cannot show a product list here, so never imply the customer has seen everything the store holds.';
 
-  return {
+  const result = {
     total,
     summary: [
       `Catalog: this store has ${total} products on sale — far more than one message can show,`
@@ -119,7 +140,9 @@ export async function buildCatalogSummary(
       shelfShape(populated, unclassified),
       answerWithCategories(canShowCards),
       howToAnswer,
-      ...firstPage.map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
+      ...firstPage.map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
     ].join('\n'),
   };
+  catalogCache.set(cacheKey, { summary: result, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS });
+  return result;
 }

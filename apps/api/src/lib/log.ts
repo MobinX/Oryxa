@@ -234,10 +234,10 @@ function describeEvent(evt: Evt, f: Fields): string {
           : byTool + direct === 0
             ? 'NOTHING SENT — this customer got no reply'
             : direct > 0 && byTool > 0
-              ? `${byTool + direct} sent (${byTool} by tool, ${direct} written by the model itself)`
+              ? `${byTool + direct} sent (${byTool} by display tool, ${direct} final replies)`
               : direct > 0
-                ? `${direct} sent directly — the model replied without calling send_message`
-                : `${byTool} sent by send_message`;
+                ? `${direct} sent directly as the final model reply`
+                : `${byTool} sent by display tool`;
       add(
         f.ok === false ? 'run FAILED' : 'run over',
         plural(f.pendingClaimed, 'message', 'messages'),
@@ -716,6 +716,7 @@ export const ANOMALY_KINDS = [
   'claim_lost',
   'backlog_claimed_but_unanswered',
   'comment_unanswered',
+  'comment_reply_blocked',
   'double_send',
   'run_loop_depth',
   'token_metrics_unrecorded',

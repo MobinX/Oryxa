@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { Agent } from '@repo/agent';
-import { createSendMessageFakeLlm } from '../helpers/fake-llm';
+import { createDefaultReplyFakeLlm } from '../helpers/fake-llm';
 
-const sendMessageMock = vi.fn(async () => undefined);
+const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
 }));
@@ -24,7 +24,7 @@ describe('Agent', () => {
       customerPlatformId: 'fb-customer',
       customerName: 'Buyer',
       catalogSummary: '- Test T-Shirt ($29.99) SKU: TSH-01',
-      llm: createSendMessageFakeLlm('Yes, we have shirts in stock!'),
+      llm: createDefaultReplyFakeLlm('Yes, we have shirts in stock!'),
     });
 
     const { replyText, metrics } = await agent.run();
@@ -45,7 +45,7 @@ describe('Agent', () => {
       conversationId: seed.conversation.id,
       pageToken: 'tok',
       customerPlatformId: 'cust',
-      llm: createSendMessageFakeLlm('How can I help?'),
+      llm: createDefaultReplyFakeLlm('How can I help?'),
     });
 
     const result = await agent.run();

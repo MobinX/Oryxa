@@ -123,13 +123,13 @@ describe('agent trace adapter', () => {
   it('reports a call that never got a result — the signature of a tool that threw', async () => {
     const trace = createAgentTrace();
     const events = await captured(() => {
-      trace.emitSse('tool_call', { name: 'send_message', args: { text: 'hello' } });
+      trace.emitSse('tool_call', { name: 'show_products', args: { query: 'hello' } });
       trace.emitSse('tool_call', { name: 'get_order', args: { orderId: 'o-1' } });
       trace.emitSse('tool_result', { name: 'get_order', result: '{}' });
     });
 
     expect(of(events, 'tool_result')).toHaveLength(1);
-    expect(trace.unresolved()).toBe('send_message:1');
+    expect(trace.unresolved()).toBe('show_products:1');
   });
 
   it('survives a malformed agent event and never steals a pairing from another tool', async () => {

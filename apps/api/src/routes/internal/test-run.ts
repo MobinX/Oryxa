@@ -71,8 +71,12 @@ testRunRouter.post('/test-run', async (c) => {
   // ── Open SSE stream ───────────────────────────────────────────────────────
   return streamSSE(c, async (stream) => {
     /** Write one SSE event to the stream. */
+    let finalMetrics: unknown = null;
     const emitSse: SseEmitter = (event, data) => {
       console.log(`[test-run][sse] ${event}`, data);
+      if (data && typeof data === 'object' && 'metrics' in data && (data as any).metrics) {
+        finalMetrics = (data as any).metrics;
+      }
       // streamSSE.writeSSE is async but we intentionally do not await it inside
       // the synchronous emitSse callback to keep the agent loop non-blocking.
       // Any write errors are surfaced by the SSE framework.
@@ -136,7 +140,7 @@ testRunRouter.post('/test-run', async (c) => {
       // ── Final event ────────────────────────────────────────────────────────
       await stream.writeSSE({
         event: 'done',
-        data: JSON.stringify({ conversationId }),
+        data: JSON.stringify({ conversationId, metrics: finalMetrics }),
       });
 
       console.log(`[test-run] done — conversationId=${conversationId}`);
@@ -196,8 +200,12 @@ testRunRouter.post('/test-comment-run', async (c) => {
   console.log(`[test-comment] comment="${comment}" historyRows=${history?.length ?? 0}`);
 
   return streamSSE(c, async (stream) => {
+    let finalMetrics: unknown = null;
     const emitSse: SseEmitter = (event, data) => {
       console.log(`[test-comment][sse] ${event}`, data);
+      if (data && typeof data === 'object' && 'metrics' in data && (data as any).metrics) {
+        finalMetrics = (data as any).metrics;
+      }
       stream.writeSSE({ event, data: JSON.stringify(data) }).catch((err) =>
         console.error('[test-comment][sse] write error:', err),
       );
@@ -232,7 +240,7 @@ testRunRouter.post('/test-comment-run', async (c) => {
         emitSse,
       );
 
-      await write('done', { commenterPlatformId });
+      await write('done', { commenterPlatformId, metrics: finalMetrics });
     } catch (err) {
       console.error('[test-comment] unexpected error:', err);
       await write('error', { message: String(err) });

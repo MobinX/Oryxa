@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createSendMessageFakeLlm,
+  createDefaultReplyFakeLlm,
   createProductSearchFakeLlm,
   createOrderFakeLlm,
   createErrorFakeLlm,
 } from '../helpers/fake-llm';
 
 describe('Fake LLM helpers', () => {
-  it('createSendMessageFakeLlm returns a bindable chat model', () => {
-    const llm = createSendMessageFakeLlm('Hello!');
+  it('createDefaultReplyFakeLlm returns a bindable chat model', () => {
+    const llm = createDefaultReplyFakeLlm('Hello!');
     expect(typeof llm.bindTools).toBe('function');
     expect(typeof llm.invoke).toBe('function');
   });

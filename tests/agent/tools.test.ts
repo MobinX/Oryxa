@@ -7,6 +7,13 @@ import { createProduct } from '@repo/db/crud/product';
 import { listMessages } from '@repo/db/crud/conversation';
 import type { MessengerCard } from '@repo/integrations/facebook';
 
+const orderDefaults = {
+  variantId: null,
+  count: 1,
+  customerPhone: '555-0000',
+  customerAddress: '1 Test Street',
+};
+
 // Rest-arg signatures, so a recorded call can be read back as its real arguments.
 const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 const sendButtonsMock = vi.fn(async (..._args: unknown[]) => undefined);
@@ -52,6 +59,16 @@ describe('Agent Tools', () => {
     expect(result).toContain('Test T-Shirt');
   });
 
+  it('get_product_options answers variant questions without sending cards', async () => {
+    const seed = await seedTestWorld();
+    sendMessageMock.mockClear();
+    const tool = createAgentTools(agentContext(seed)).find((item) => item.name === 'get_product_options')!;
+    const result = JSON.parse(await tool.invoke({ productId: seed.productDetail.id }));
+    expect(result.name).toBe('Test T-Shirt');
+    expect(result.variants[0]).toMatchObject({ name: 'Red M', stock: 10, available: true });
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
   it('create_order tool writes to database', async () => {
     const seed = await seedTestWorld();
     const tools = createAgentTools({
@@ -63,7 +80,7 @@ describe('Agent Tools', () => {
     });
     const createOrderTool = tools.find((t) => t.name === 'create_order')!;
 
-    const result = await createOrderTool.invoke({
+    const result = await createOrderTool.invoke({ ...orderDefaults,
       productId: seed.productDetail.id,
       variantId: seed.productDetail.variants[0]?.id,
       count: 1,
@@ -85,7 +102,7 @@ describe('Agent Tools', () => {
     const updateOrderTool = tools.find((t) => t.name === 'update_order')!;
 
     const created = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         variantId: seed.productDetail.variants[0]?.id,
         count: 1,
@@ -114,7 +131,7 @@ describe('Agent Tools', () => {
     const updateOrderTool = tools.find((t) => t.name === 'update_order')!;
 
     const created = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         variantId: seed.productDetail.variants[0]?.id,
         count: 1,
@@ -138,7 +155,7 @@ describe('Agent Tools', () => {
     const cancelOrderTool = tools.find((t) => t.name === 'cancel_order')!;
 
     const created = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         variantId: seed.productDetail.variants[0]?.id,
         count: 1,
@@ -152,7 +169,7 @@ describe('Agent Tools', () => {
     expect(result).not.toMatch(/'done'/);
   });
 
-  it('send_message tool calls Facebook API', async () => {
+  it('does not expose a send tool for the final text reply', async () => {
     const seed = await seedTestWorld();
     sendMessageMock.mockClear();
     const tools = createAgentTools({
@@ -161,11 +178,8 @@ describe('Agent Tools', () => {
       pageToken: 'page-tok',
       customerPlatformId: 'fb-user-1',
     });
-    const sendMessageTool = tools.find((t) => t.name === 'send_message')!;
-
-    const result = await sendMessageTool.invoke({ text: 'Hello from tool' });
-    expect(result).toContain('sent');
-    expect(sendMessageMock).toHaveBeenCalledWith('page-tok', 'fb-user-1', 'Hello from tool');
+    expect(tools.some((tool) => String(tool.name) === 'send_message')).toBe(false);
+    expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
   it('show_products sends a card per product, with the Order button carrying its id', async () => {
@@ -223,7 +237,7 @@ describe('Agent Tools', () => {
 
     expect(result.sent).toBe(false);
     expect(result.reason).toMatch(/photo/i);
-    expect(result.instruction).toMatch(/send_message/);
+    expect(result.instruction).toMatch(/final reply/);
     expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
@@ -255,25 +269,22 @@ describe('Agent Tools', () => {
     expect(delivered).toEqual(['Dry Hoodie — $44.00 — For the test panel']);
   });
 
-  it('offer_tracking sends the Track order button for the order it was given', async () => {
+  it('create_order automatically sends the Track order button', async () => {
     const seed = await seedTestWorld();
     sendButtonsMock.mockClear();
 
     const tools = createAgentTools(agentContext(seed));
     const createOrderTool = tools.find((t) => t.name === 'create_order')!;
-    const offerTrackingTool = tools.find((t) => t.name === 'offer_tracking')!;
 
     const order = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         variantId: seed.productDetail.variants[0]?.id,
         count: 2,
         customerPhone: '555-0002',
       }),
     );
-    const result = JSON.parse(await offerTrackingTool.invoke({ orderId: order.id }));
-
-    expect(result.sent).toBe(true);
+    expect(order.id).toMatch(/[0-9a-f-]{36}/i);
     // The payload is what the webhook turns back into a message, so the order id
     // has to be in it — a button that only says "Track order" tells the agent nothing.
     expect(sendButtonsMock).toHaveBeenCalledWith(
@@ -303,7 +314,7 @@ describe('Agent Tools', () => {
     const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
 
     const order = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: (await searchProductsForTest(seed.business.id, 'History Hoodie'))[0]!.id,
         count: 1,
         customerPhone: '555-0077',
@@ -312,7 +323,8 @@ describe('Agent Tools', () => {
 
     const result = JSON.parse(await showOrdersTool.invoke({}));
     expect(result.sent).toBe(true);
-    expect(result.orders.map((o: { id: string }) => o.id)).toEqual([order.id]);
+    expect(result.cardsSent).toBe(1);
+    expect(result.showing).toBe('1-1');
 
     // The card carries the payload the webhook already knows how to read, so a tap on it is a
     // tracking question and needs no new plumbing anywhere in the app.
@@ -344,7 +356,7 @@ describe('Agent Tools', () => {
     const wanted = ['pending', 'acknowledged', 'onDelivery', 'done'];
     for (const state of wanted) {
       const order = JSON.parse(
-        await createOrderTool.invoke({ productId, count: 1, customerPhone: '555-0120' }),
+        await createOrderTool.invoke({ ...orderDefaults, productId, count: 1, customerPhone: '555-0120' }),
       );
       await updateOrderState(seed.business.id, order.id, { state });
     }
@@ -364,19 +376,17 @@ describe('Agent Tools', () => {
     }
     expect(JSON.stringify(cards).toLowerCase()).not.toMatch(/just placed|recently|today|hours ago/);
     // The prose the model writes comes from this same field, so a card cannot be honest beside a lie.
-    expect(result.orders.map((o: { state: string }) => o.state).sort()).toEqual(
-      ['Acknowledged', 'Done', 'On delivery', 'Pending'],
-    );
+    expect(result.cardsSent).toBe(4);
   });
 
-  it('show_orders refuses another customer\'s id and sends nothing while refusing', async () => {
+  it('show_orders never accepts a customer id from the model', async () => {
     const seed = await seedTestWorld();
     sendMessageMock.mockClear();
 
     const tools = createAgentTools(agentContext(seed));
     const showOrdersTool = tools.find((t) => t.name === 'show_orders')!;
 
-    const result = JSON.parse(await showOrdersTool.invoke({ messengerId: 'psid-of-somebody-else' }));
+    const result = JSON.parse(String(await showOrdersTool.invoke({ messengerId: 'psid-of-somebody-else' } as any)));
     expect(result.sent).toBe(false);
     expect(JSON.stringify(result)).not.toContain('psid-of-somebody-else');
     expect(sendMessageMock).not.toHaveBeenCalled();
@@ -405,14 +415,14 @@ describe('Agent Tools', () => {
     const createOrderTool = tools.find((t) => t.name === 'create_order')!;
     const productId = (await searchProductsForTest(seed.business.id, 'Paging Jacket'))[0]!.id;
     for (let i = 0; i < 2; i++) {
-      await createOrderTool.invoke({ productId, count: 1, customerPhone: '555-0088' });
+      await createOrderTool.invoke({ ...orderDefaults, productId, count: 1, customerPhone: '555-0088' });
     }
 
     const page = JSON.parse(await showOrdersTool.invoke({ startingLimit: 0, endLimit: 1 }));
     expect(page.sent).toBe(true);
     expect(page.showing).toBe('1-1');
     expect(page.hasMore).toBe(true);
-    expect(page.instruction).toContain('startingLimit=1');
+    expect(page.cardsSent).toBe(1);
   });
   it('show_product_info cards every size that is actually on offer', async () => {
     const seed = await seedTestWorld();
@@ -527,7 +537,7 @@ describe('Agent Tools', () => {
 
     const tools = createAgentTools(agentContext(seed));
     const result = JSON.parse(
-      await tools.find((t) => t.name === 'create_order')!.invoke({ productId, count: 1, customerPhone: '555-0099' }),
+      await tools.find((t) => t.name === 'create_order')!.invoke({ ...orderDefaults, productId, count: 1, customerPhone: '555-0099' }),
     );
 
     expect(result.error).toMatch(/variants/);
@@ -546,7 +556,7 @@ describe('Agent Tools', () => {
 
     const chosen = seed.productDetail.variants[0]!;
     const byTap = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         variantId: chosen.id,
         count: 1,
@@ -555,7 +565,7 @@ describe('Agent Tools', () => {
     );
     // The single size answers the question the customer never had to ask.
     const byDefault = JSON.parse(
-      await createOrderTool.invoke({
+      await createOrderTool.invoke({ ...orderDefaults,
         productId: seed.productDetail.id,
         count: 1,
         customerPhone: '555-0101',
@@ -578,7 +588,7 @@ describe('Agent Tools', () => {
 
     // Guidance tells the model to relay these results, so an enum token here becomes English jargon
     // inside a শুদ্ধ বাংলা reply — the exact thing that happened on the virsys page.
-    const order = JSON.parse(await createOrderTool.invoke({
+    const order = JSON.parse(await createOrderTool.invoke({ ...orderDefaults,
       productId: seed.productDetail.id,
       count: 1,
       customerPhone: '555-0130',
@@ -618,15 +628,16 @@ describe('Agent Tools', () => {
     expect({ showing: first.showing, matchingProducts: first.matchingProducts, hasMore: first.hasMore })
       .toEqual({ showing: '1-2', matchingProducts: 3, hasMore: true });
     expect((lastSend(sendMessageMock)[2] as MessengerCard[]).map((c) => c.title)).toEqual(['Aaa Hat', 'Bbb Hat']);
-    expect(first.instruction).toMatch(/are NOT shown/);
-    expect(first.instruction).toContain('startingLimit=2');
-    expect(first.instruction).not.toContain('These are all');
+    expect(first.hasMore).toBe(true);
+    expect(first.matchingProducts).toBe(3);
+    expect(first.showing).toBe('1-2');
 
     const second = JSON.parse(await showProductsTool.invoke({ query: 'Hat', startingLimit: 2, endLimit: 4 }));
     expect({ showing: second.showing, matchingProducts: second.matchingProducts, hasMore: second.hasMore })
       .toEqual({ showing: '3-3', matchingProducts: 3, hasMore: false });
     expect((lastSend(sendMessageMock)[2] as MessengerCard[]).map((c) => c.title)).toEqual(['Ccc Hat']);
-    expect(second.instruction).toContain('These are all 3 products');
+    expect(second.hasMore).toBe(false);
+    expect(second.matchingProducts).toBe(3);
 
     // Stable order is what makes the two pages a page and not a reshuffle.
     const titles = [
@@ -789,9 +800,7 @@ describe('Agent Tools', () => {
     const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
     expect(cards).toHaveLength(1);
     expect(cards[0]!.subtitle).toBe('$25.00 · 7 in stock · the only photo');
-    expect(result.instruction).toContain('ONLY picture');
-    expect(result.instruction).toMatch(/never say more pictures, all pictures or every picture/i);
-    expect(result.instruction).not.toMatch(/can now see all 1 pictures/i);
+    expect(result.photosTotal).toBe(1);
   });
 
   it('show_variant_photos tells the truth when the store holds no picture', async () => {
@@ -881,7 +890,7 @@ describe('Agent Tools', () => {
     ]);
   });
 
-  it('get_product tells the model how many pictures each size actually has', async () => {
+  it('get_product_options tells the model how many pictures each size actually has', async () => {
     const seed = await seedTestWorld();
     await createProduct({
       businessId: seed.business.id,
@@ -899,10 +908,10 @@ describe('Agent Tools', () => {
     });
 
     const tools = createAgentTools(agentContext(seed));
-    const found = JSON.parse(
-      await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'Counted Scarf' }),
+    const productId = (await searchProductsForTest(seed.business.id, 'Counted Scarf'))[0]!.id;
+    const scarf = JSON.parse(
+      await tools.find((t) => t.name === 'get_product_options')!.invoke({ productId }),
     );
-    const scarf = found[0];
     expect(scarf.variants.map((v: { name: string; photos: number }) => [v.name, v.photos]))
       .toEqual([['Wool', 3], ['Silk', 0]]);
     expect(scarf.variants[0].label).toMatch(/^[A-Z0-9]{5}$/);

@@ -15,6 +15,8 @@ import { DefaultAgentOverrides } from './default-agent-overrides';
  * Not cached: it is the console's own text, read a handful of times, and a stale copy of a prompt an
  * operator just changed is the one thing this page must never show.
  */
+export const instant = false;
+
 export default async function DefaultAgentPage() {
   const bearer = await requireConsoleBearer();
 

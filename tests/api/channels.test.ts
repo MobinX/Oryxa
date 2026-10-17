@@ -125,7 +125,7 @@ describe('Channels & Agents API', () => {
     expect(untouched.replyGuidance).toBeNull();
     expect(untouched.commentReplyGuidance).toBeNull();
     // The playground shows the built-in wording behind an empty box, so it travels with the row.
-    expect(untouched.guidanceDefaults.replyGuidance).toContain('send_message');
+    expect(untouched.guidanceDefaults.replyGuidance).toContain('automatically delivered');
     expect(untouched.guidanceDefaults.commentReplyGuidance).toContain('send_private_message');
 
     expect(await write({ replyGuidance: 'Answer in one line.', commentReplyGuidance: 'Never DM.' })).toBe(200);

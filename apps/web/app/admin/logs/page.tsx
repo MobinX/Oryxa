@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { Suspense } from 'react';
 import { AlertTriangle, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { requireConsoleBearer } from '@/lib/admin-access';
+
+export const instant = false;
 import {
   TZ_COOKIE,
   clockInZone,

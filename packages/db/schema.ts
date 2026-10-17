@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
+import type { ConversationAgentState } from '@repo/shared';
 
 export type StoreTheme = {
   accentColor?: string;
@@ -283,6 +284,7 @@ export const conversations = pgTable('conversations', {
   customerPlatformId: varchar('customer_platform_id', { length: 255 }).notNull(),
   customerName: varchar('customer_name', { length: 255 }),
   customerAvatar: varchar('customer_avatar', { length: 500 }),
+  agentState: jsonb('agent_state').$type<ConversationAgentState>().default(sql`'{}'::jsonb`).notNull(),
   lastMessageState: messageStateEnum('last_message_state').default('done').notNull(),
   /** Tracks when lastMessageState last changed — used by the stale-runner watchdog. */
   lastStateAt: timestamp('last_state_at').defaultNow().notNull(),

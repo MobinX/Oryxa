@@ -7,7 +7,7 @@ import { getOrCreateConversation, listMessages } from '@repo/db/crud/conversatio
 
 // A fresh id per call: `comments.external_id` is unique, and one pglite database serves
 // every test in this file.
-const replyToFacebookCommentMock = vi.fn(async () => `NEW_REPLY_ID-${crypto.randomUUID()}`);const sendCommenterMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
+const replyToFacebookCommentMock = vi.fn(async (..._args: unknown[]) => `NEW_REPLY_ID-${crypto.randomUUID()}`);const sendCommenterMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   replyToFacebookComment: (...args: unknown[]) => replyToFacebookCommentMock(...args),
   sendCommenterMessage: (...args: unknown[]) => sendCommenterMessageMock(...args),
@@ -40,6 +40,9 @@ describe('comment agent tools: reply_comment', () => {
     });
     const replyTool = tools.find((t) => t.name === 'reply_comment')!;
     expect(replyTool).toBeDefined();
+    expect(tools.map((item) => item.name)).not.toContain('create_order');
+    expect(tools.map((item) => item.name)).not.toContain('update_order');
+    expect(tools.map((item) => item.name)).not.toContain('cancel_order');
 
     const result = await replyTool.invoke({ text: 'Thanks for your comment!' });
 
@@ -59,6 +62,27 @@ describe('comment agent tools: reply_comment', () => {
     expect(self?.externalId).toMatch(/^NEW_REPLY_ID-/);
     expect(self?.parentExternalId).toBe('PARENT_COMMENT_ID');
     expect(self?.state).toBe('done');
+  }, 30_000);
+
+  it('blocks private purchase details from a public reply', async () => {
+    const seed = await seedTestWorld();
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_PRIVATE_ONLY',
+      'COMMENTER_PRIVATE_ONLY',
+    );
+    const tools = createCommentAgentTools({
+      businessId: seed.business.id,
+      commentThreadId: thread.id,
+      pageToken: 'page-token-test',
+      parentCommentExternalId: 'PARENT_PRIVATE_ONLY',
+    });
+    const result = await tools.find((item) => item.name === 'reply_comment')!.invoke({
+      text: 'The price is $59. Please check your inbox.',
+    });
+    expect(String(result)).toMatch(/blocked/i);
+    expect(replyToFacebookCommentMock).not.toHaveBeenCalled();
   }, 30_000);
 
   it('sends the private answer to the inbox, then posts publicly only what the agent wrote', async () => {

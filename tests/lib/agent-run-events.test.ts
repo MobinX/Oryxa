@@ -18,12 +18,12 @@ vi.mock('@repo/integrations/facebook', () => ({
 // wiring being proven here.
 vi.mock('@repo/agent', async () => {
   const mod = await import('../../packages/agent/index');
-  const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
+  const { createDefaultReplyFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,
     Agent: class PatchedAgent extends mod.Agent {
       constructor(config: AgentConfig) {
-        super({ ...config, llm: config.llm ?? createSendMessageFakeLlm('Automated reply from test agent') });
+        super({ ...config, llm: config.llm ?? createDefaultReplyFakeLlm('Automated reply from test agent') });
       }
     },
   };
@@ -31,7 +31,6 @@ vi.mock('@repo/agent', async () => {
 
 type RunInstance = {
   sentTexts: string[];
-  sentByReplyTool: boolean;
   config: { emitSse?: (event: string, data: unknown) => void };
 };
 
@@ -90,11 +89,10 @@ describe('agent run outcome logging', () => {
       // Production runs used to leave the agent with no emitter at all; the
       // runner now always supplies one, so the tools have somewhere to report.
       expect(typeof this.config.emitSse).toBe('function');
-      this.config.emitSse?.('tool_call', { name: 'send_message', args: { text: 'Yes, 10 left.' } });
-      this.config.emitSse?.('tool_result', { name: 'send_message', result: 'Message successfully sent' });
-      this.sentTexts = ['Yes, 10 left.'];
-      this.sentByReplyTool = true;
-      return agentRunResult('Yes, 10 left.', ['Yes, 10 left.']);
+      this.config.emitSse?.('tool_call', { name: 'show_products', args: { query: 'T-shirt' } });
+      this.config.emitSse?.('tool_result', { name: 'show_products', result: 'Cards sent' });
+      this.sentTexts = ['T-shirt card'];
+      return agentRunResult('Yes, 10 left.', ['T-shirt card']);
     });
 
     const { events } = await runAndCapture(seed.conversation.id);
@@ -108,7 +106,7 @@ describe('agent run outcome logging', () => {
     const calls = of(events, 'tool_call');
     const results = of(events, 'tool_result');
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ tool: 'send_message', args: '{"text":"Yes, 10 left."}' });
+    expect(calls[0]).toMatchObject({ tool: 'show_products', args: '{"query":"T-shirt"}' });
     expect(results).toHaveLength(1);
     expect(results[0].toolCallId).toBe(calls[0].toolCallId);
 
@@ -119,14 +117,15 @@ describe('agent run outcome logging', () => {
       pendingClaimed: 1,
       repliedCount: 1,
       sentViaTool: 1,
-      sentViaFallback: 0,
-      fallbackUsed: false,
+      sentViaFallback: 1,
+      fallbackUsed: true,
       stateSetTo: 'done',
       toolCallCount: 1,
       replyText: 'Yes, 10 left.',
       provider: 'test-provider',
       model: 'test-model',
     });
+    expect(sendMessageMock).toHaveBeenCalledWith(expect.anything(), seed.conversation.customerPlatformId, 'Yes, 10 left.');
     expect(typeof runs[0].durationMs).toBe('number');
     // The reply is stated once: on the outcome event, never on a second one.
     expect(events.filter((e) => e.replyText !== undefined)).toEqual([runs[0]]);
@@ -164,7 +163,7 @@ describe('agent run outcome logging', () => {
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: RunInstance) {
       // A tool that throws mid-run reports its call and never its result.
-      this.config.emitSse?.('tool_call', { name: 'send_message', args: { text: 'partial' } });
+      this.config.emitSse?.('tool_call', { name: 'show_products', args: { query: 'partial' } });
       throw new Error('graph send failed');
     });
 
@@ -297,7 +296,6 @@ describe('agent run chain', () => {
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: RunInstance) {
       this.sentTexts = ['ok'];
-      this.sentByReplyTool = true;
       return agentRunResult('ok', ['ok']);
     });
 
@@ -327,7 +325,6 @@ describe('agent run chain', () => {
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: RunInstance) {
       this.sentTexts = ['ok'];
-      this.sentByReplyTool = true;
       return agentRunResult('ok', ['ok']);
     });
     const conversationCrud = await import('@repo/db/crud/conversation');

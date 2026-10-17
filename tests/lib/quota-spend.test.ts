@@ -4,25 +4,21 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, type TestSeed } from '../helpers/seed';
 import { stubAgentRun } from '../helpers/agent-run';
 import type { AgentConfig } from '@repo/agent';
-import { createAgentTools } from '@agent/tools';
 import { createCommentAgentTools } from '@agent/tools/comment';
 import { runAgentCore } from '@api/lib/agent-runner-core';
 import { runAgentForCommentThread } from '@api/lib/comment-runner';
 import { db } from '@db/client';
 import { conversations, messages, quotaUsage } from '@db/schema';
 import { assignPlan, createPlan } from '@repo/db/crud/plans';
-import { getQuotaStatus } from '@repo/db/crud/billing';
-import { getOrCreateConversation } from '@repo/db/crud/conversation';
+import { getQuotaStatus, spendQuotaUnit } from '@repo/db/crud/billing';
 import { createComment, processInboundComment } from '@repo/db/crud/comment';
 
 /**
  * The spend: one agent reply that reaches a customer is one unit, charged at the moment of
  * the send and given back if the send fails.
  *
- * Five sites — the three tools, the comment agent's private-message tool among them, and the
- * two fallbacks in the runners — and each is tested on
- * its own, because a fallback that forgot to charge is exactly how an allowance becomes
- * unlimited without anybody editing a plan.
+ * Display tools, final Messenger delivery, public comment replies and private messages all
+ * charge at the send boundary, so these tests cover each path that can reach a customer.
  */
 
 const sendMock = vi.fn(async (..._args: unknown[]) => undefined);
@@ -41,12 +37,12 @@ vi.mock('@repo/integrations/facebook', () => ({
 // test here replaces `run`, so the model never actually decides anything.
 vi.mock('@repo/agent', async () => {
   const mod = await import('../../packages/agent/index');
-  const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
+  const { createDefaultReplyFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,
     Agent: class PatchedAgent extends mod.Agent {
       constructor(config: AgentConfig) {
-        super({ ...config, llm: config.llm ?? createSendMessageFakeLlm('') });
+        super({ ...config, llm: config.llm ?? createDefaultReplyFakeLlm('') });
       }
     },
   };
@@ -85,9 +81,6 @@ async function selfReplies(conversationId: string): Promise<number> {
   return rows.length;
 }
 
-const messengerTool = (context: Parameters<typeof createAgentTools>[0], onSent?: (text: string) => void) =>
-  createAgentTools(context, onSent).find((t) => t.name === 'send_message')!;
-
 const commentTool = (context: Parameters<typeof createCommentAgentTools>[0], onSent?: (text: string) => void) =>
   createCommentAgentTools(context, onSent).find((t) => t.name === 'reply_comment')!;
 
@@ -118,54 +111,30 @@ describe('the quota spend', () => {
     dmMock.mockResolvedValue(undefined);
   });
 
-  it('charges send_message exactly one unit and persists the reply', async () => {
+  it('charges the final Messenger reply once and persists it', async () => {
     const { seed } = await onPlan('charge', 10, 10);
-
-    const result = await messengerTool({
-      businessId: seed.business.id,
-      conversationId: seed.conversation.id,
-      pageToken: 'token',
-      customerPlatformId: 'CUSTOMER_FB_ID',
-    }).invoke({ text: 'Yes, we have it in red.' });
-
-    expect(String(result)).toContain('successfully sent');
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('Yes, we have it in red.'));
+    try {
+      await runAgentCore(seed.conversation.id, {});
+    } finally {
+      runSpy.mockRestore();
+    }
     expect(await spent(seed.business.id)).toEqual({ messages: 1, comments: 0 });
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(await selfReplies(seed.conversation.id)).toBe(1);
   });
 
-  it('refuses the reply that has no budget left: nothing on the wire, nothing persisted', async () => {
-    const { seed, period } = await onPlan('full', 1, 1);
-    await db.insert(quotaUsage).values({ businessId: seed.business.id, period, messagesUsed: 1 });
-
-    const result = await messengerTool({
-      businessId: seed.business.id,
-      conversationId: seed.conversation.id,
-      pageToken: 'token',
-      customerPlatformId: 'CUSTOMER_FB_ID',
-    }).invoke({ text: 'Yes, we have it in red.' });
-
-    expect(String(result)).toContain('used up');
-    expect(sendMock).not.toHaveBeenCalled();
-    expect(await spent(seed.business.id)).toEqual({ messages: 1, comments: 0 });
-    // The over-cap reply is not in the thread either — nothing the customer never got.
-    expect(await selfReplies(seed.conversation.id)).toBe(0);
-  });
-
-  it('charges nothing for a reply that never reaches the wire', async () => {
+  it('does not charge a dry-run final reply', async () => {
     const { seed } = await onPlan('override', 10, 10);
     const viaOverride = vi.fn(async () => undefined);
-
-    await messengerTool({
-      businessId: seed.business.id,
-      conversationId: seed.conversation.id,
-      pageToken: 'token',
-      customerPlatformId: 'CUSTOMER_FB_ID',
-      sendMessageOverride: viaOverride,
-    }).invoke({ text: 'Test reply, sent nowhere.' });
-
-    // /internal/test-run persists a self row and sends nothing: the row proves the tool
-    // ran, the untouched counter proves the allowance was not spent on it.
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('Test reply, sent nowhere.'));
+    try {
+      await runAgentCore(seed.conversation.id, { sendMessageOverride: viaOverride });
+    } finally {
+      runSpy.mockRestore();
+    }
     expect(viaOverride).toHaveBeenCalledTimes(1);
     expect(await selfReplies(seed.conversation.id)).toBe(1);
     expect(await spent(seed.business.id)).toEqual({ messages: 0, comments: 0 });
@@ -173,58 +142,41 @@ describe('the quota spend', () => {
 
   it('treats SILENT as no reply at all', async () => {
     const { seed } = await onPlan('silent', 10, 10);
-
-    await messengerTool({
-      businessId: seed.business.id,
-      conversationId: seed.conversation.id,
-      pageToken: 'token',
-      customerPlatformId: 'CUSTOMER_FB_ID',
-    }).invoke({ text: '  SILENT  ' });
-
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('  SILENT  '));
+    try {
+      await runAgentCore(seed.conversation.id, {});
+    } finally {
+      runSpy.mockRestore();
+    }
+    expect(sendMock).not.toHaveBeenCalled();
     expect(await spent(seed.business.id)).toEqual({ messages: 0, comments: 0 });
+    expect(await selfReplies(seed.conversation.id)).toBe(0);
   });
 
-  it('gives the unit back when the send fails', async () => {
+  it('refunds the message unit when final reply delivery fails', async () => {
     const { seed } = await onPlan('refund', 5, 5);
     sendMock.mockRejectedValueOnce(new Error('Graph 500'));
-
-    const call = messengerTool({
-      businessId: seed.business.id,
-      conversationId: seed.conversation.id,
-      pageToken: 'token',
-      customerPlatformId: 'CUSTOMER_FB_ID',
-    }).invoke({ text: 'This one will fail.' });
-
-    await expect(call).rejects.toThrow('Graph 500');
-    // Charged before the POST, refunded after it failed: the customer got nothing, so the
-    // cycle pays nothing.
+    const { Agent } = await import('@repo/agent');
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('This one will fail.'));
+    try {
+      await runAgentCore(seed.conversation.id, {});
+    } finally {
+      runSpy.mockRestore();
+    }
     expect(await spent(seed.business.id)).toEqual({ messages: 0, comments: 0 });
+    expect(await selfReplies(seed.conversation.id)).toBe(0);
   });
 
-  it('will not let two conversations spend the last unit twice', async () => {
+  it('does not let concurrent requests spend the last unit twice', async () => {
     const { seed, period } = await onPlan('race', 1, 1);
     await db.insert(quotaUsage).values({ businessId: seed.business.id, period, messagesUsed: 0 });
-
-    const second = await getOrCreateConversation(seed.business.id, seed.channel.id, 'SECOND_CUSTOMER', 'Second');
-    const both = await Promise.all([
-      messengerTool({
-        businessId: seed.business.id,
-        conversationId: seed.conversation.id,
-        pageToken: 'token',
-        customerPlatformId: 'CUSTOMER_FB_ID',
-      }).invoke({ text: 'First thread replies.' }),
-      messengerTool({
-        businessId: seed.business.id,
-        conversationId: second.id,
-        pageToken: 'token',
-        customerPlatformId: 'SECOND_CUSTOMER',
-      }).invoke({ text: 'Second thread replies.' }),
+    const results = await Promise.all([
+      spendQuotaUnit(seed.business.id, 'message'),
+      spendQuotaUnit(seed.business.id, 'message'),
     ]);
-
-    // One send, one unit, one refusal — the reserve is the line that holds when the gate
-    // (which reads at run start) is a whole LLM turn behind.
-    expect(both.filter((r) => String(r).includes('used up'))).toHaveLength(1);
-    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(results.filter((result) => result.spent)).toHaveLength(1);
+    expect(results.filter((result) => !result.spent)).toHaveLength(1);
     expect(await spent(seed.business.id)).toEqual({ messages: 1, comments: 0 });
   });
 

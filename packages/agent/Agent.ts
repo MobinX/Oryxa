@@ -7,7 +7,8 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
-import { DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
+import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
+import type { ConversationAgentState } from '@repo/shared';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
@@ -86,6 +87,12 @@ export interface AgentConfig {
   customerPlatformId: string;
   customerName?: string | null;
   catalogSummary?: string;
+  /** Per-thread facts, kept after the stable prompt prefix for cache reuse. */
+  agentState?: ConversationAgentState;
+  persistAgentState?: (state: ConversationAgentState) => Promise<void>;
+  onOrderCreated?: (orderId: string) => Promise<void>;
+  /** Facebook post text, supplied only for comment replies. */
+  postContext?: string | null;
   /** Inject a fake or test chat model (defaults to Gemini in production). */
   llm?: BaseChatModel;
   /** Select the LLM provider to use (defaults to 'openai' if OPENAI_API_KEY is set, otherwise 'gemini'). */
@@ -94,6 +101,9 @@ export interface AgentConfig {
   tools?: StructuredTool[];
   /** Override the default Messenger reply guidance in the system prompt. */
   replyGuidance?: string;
+  promptCacheKey?: string;
+  /** Reasoning effort for OpenAI reasoning deployments (defaults to 'low' for text, 'medium' for photos). */
+  reasoningEffort?: 'low' | 'medium' | 'high';
   /**
    * If provided, the agent emits structured debug events for every tool
    * call, tool result, and final reply. Production runs leave this undefined.
@@ -130,12 +140,6 @@ export interface AgentRunResult {
 export class Agent {
   /** Every text that reached Messenger during `run()` — a reply, a card row, a button row. */
   sentTexts: string[] = [];
-  /**
-   * Whether the reply tool (`send_message`) was the thing that spoke. A closing line from the model is
-   * worth sending after a card the customer cannot talk back to, and worth dropping after a reply that
-   * already carried those exact words.
-   */
-  sentByReplyTool = false;
 
   constructor(private config: AgentConfig) {}
 
@@ -149,6 +153,15 @@ export class Agent {
       provider === 'openai'
         ? (process.env.OPENAI_MODEL || 'gpt-6-luna')
         : 'gemini-flash-lite-latest';
+    const replyGuidance = this.config.replyGuidance ?? DEFAULT_REPLY_GUIDANCE;
+    const promptCacheKey = this.config.promptCacheKey ?? (replyGuidance === COMMENT_REPLY_GUIDANCE
+      ? 'oryxa:comment:v1'
+      : 'oryxa:messenger:v1');
+
+    const hasPhotosInTurn = this.config.history.slice(-3).some((m) => (m.photos?.length ?? 0) > 0);
+    const reasoningEffort = this.config.reasoningEffort
+      ?? (process.env.OPENAI_REASONING_EFFORT as 'low' | 'medium' | 'high' | undefined)
+      ?? (hasPhotosInTurn ? 'medium' : 'low');
 
     const llm =
       this.config.llm ??
@@ -163,7 +176,8 @@ export class Agent {
             // completions LangChain names the reply cap from its own model test — o\d and gpt-5* — so a
             // deployment called gpt-6-luna gets `max_tokens`, which Azure rejects with a 400. No cap and
             // no temperature are set, which is what this model expects.
-            reasoning: { effort: 'medium' },
+            reasoning: { effort: reasoningEffort },
+            promptCacheKey,
             useResponsesApi: true,
           })
         : new ChatGoogleGenerativeAI({
@@ -192,25 +206,25 @@ export class Agent {
           customerName: this.config.customerName,
           emitSse,
           sendMessageOverride,
+          onOrderCreated: this.config.onOrderCreated,
+          agentState: this.config.agentState,
+          persistAgentState: this.config.persistAgentState,
         },
-        (text, kind) => {
-          sentTexts.push(text);
-          if (kind === 'reply') this.sentByReplyTool = true;
-        },
+        (text) => sentTexts.push(text),
       );
 
     const agent = createReactAgent({ llm, tools });
 
-    const replyGuidance = this.config.replyGuidance ?? DEFAULT_REPLY_GUIDANCE;
-    const systemContent = [
-      this.config.systemPrompt,
-      `You are a sales rep for ${this.config.business.name}.`,
-      this.config.business.description ? `Business: ${this.config.business.description}` : '',
-      this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
-      replyGuidance,
-    ]
+    const systemContent = [this.config.systemPrompt, replyGuidance]
       .filter(Boolean)
       .join('\n');
+    const dynamicContent = [
+      `You are a sales rep for ${this.config.business.name}.`,
+      this.config.business.description ? `Business: ${this.config.business.description}` : '',
+      this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
+      this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
+      this.config.agentState ? `Conversation state (verified facts):\n${JSON.stringify(this.config.agentState)}` : '',
+    ].filter(Boolean).join('\n');
 
     console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length}`);
     emitSse?.('agent_start', {
@@ -221,10 +235,11 @@ export class Agent {
 
     const messages: BaseMessage[] = [
       new SystemMessage(systemContent),
+      ...(dynamicContent ? [new SystemMessage(dynamicContent)] : []),
       ...(await this.historyMessages(canReadPhotos, provider === 'openai')),
     ];
 
-    const result = await agent.invoke({ messages });
+    const result = await agent.invoke({ messages }, { recursionLimit: 6 });
     const latencyMs = Date.now() - startTime;
     const lastMessage = result.messages[result.messages.length - 1];
     const replyText = contentText(lastMessage.content);

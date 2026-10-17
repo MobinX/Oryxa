@@ -1,4 +1,4 @@
-import { eq, and, or, lt, isNull, inArray, asc } from 'drizzle-orm';
+import { eq, and, or, lt, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { commentThreads, comments } from '@db/schema';
 
@@ -317,14 +317,16 @@ export async function checkPendingComments(threadId: string): Promise<boolean> {
  * are excluded so history stays clean.
  */
 export async function listDoneCommentHistory(threadId: string) {
-  return db.query.comments.findMany({
+  const history = await db.query.comments.findMany({
     where: and(
       eq(comments.commentThreadId, threadId),
       eq(comments.state, 'done'),
       isNull(comments.deletedAt),
     ),
-    orderBy: [asc(comments.time)],
+    orderBy: [desc(comments.time)],
+    limit: 8,
   });
+  return history.reverse();
 }
 
 export async function markCommentDone(commentId: string): Promise<void> {

@@ -6,9 +6,9 @@ import { listComments } from '@repo/db/crud/comment';
 import type { AgentConfig } from '@repo/agent';
 import { agentRunResult, stubAgentRun } from '../helpers/agent-run';
 
-const replyToFacebookCommentMock = vi.fn(async () => `reply-id-${Math.random()}`);
-const sendMessageMock = vi.fn(async () => undefined);
-const getFacebookPostContextMock = vi.fn(async () => null);
+const replyToFacebookCommentMock = vi.fn(async (..._args: unknown[]) => `reply-id-${Math.random()}`);
+const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
+const getFacebookPostContextMock = vi.fn(async (..._args: unknown[]): Promise<string | null> => null);
 vi.mock('@repo/integrations/facebook', () => ({
   replyToFacebookComment: (...args: unknown[]) => replyToFacebookCommentMock(...args),
   sendCommenterMessage: vi.fn(async () => undefined),
@@ -18,12 +18,12 @@ vi.mock('@repo/integrations/facebook', () => ({
 
 vi.mock('@repo/agent', async () => {
   const mod = await import('../../packages/agent/index');
-  const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
+  const { createDefaultReplyFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,
     Agent: class PatchedAgent extends mod.Agent {
       constructor(config: AgentConfig) {
-        super({ ...config, llm: config.llm ?? createSendMessageFakeLlm('') });
+        super({ ...config, llm: config.llm ?? createDefaultReplyFakeLlm('') });
       }
     },
   };
@@ -31,7 +31,7 @@ vi.mock('@repo/agent', async () => {
 
 async function seedCommentThread(seed: {
   business: { id: string };
-  channel: { id: string; platformChannelId: string };
+  channel: { id: string };
 }, commenterId: string, postSuffix: string) {
   const { processInboundComment } = await import('@repo/db/crud/comment');
   const postId = `POST_${postSuffix}`;
@@ -230,16 +230,16 @@ describe('Comment Runner', () => {
     vi.unstubAllGlobals();
   });
 
-  it('injects cached post context into the agent system prompt', async () => {
+  it('passes cached post context as dynamic agent context', async () => {
     const seed = await seedTestWorld();
     const threadId = await seedCommentThread(seed, 'USER_POST', 'PCTX');
     const { setCommentThreadPostContext } = await import('@repo/db/crud/comment');
     await setCommentThreadPostContext(threadId, 'Post caption: Big sale this weekend!');
 
     const { Agent } = await import('@repo/agent');
-    let capturedSystemPrompt = '';
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { systemPrompt: string } }) {
-      capturedSystemPrompt = this.config.systemPrompt;
+    let capturedPostContext = '';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { postContext?: string } }) {
+      capturedPostContext = this.config.postContext ?? '';
       // Silent reply: prompt construction is under test here, not delivery.
       return agentRunResult('');
     });
@@ -249,8 +249,7 @@ describe('Comment Runner', () => {
 
     // Cached context is used; no Graph call is made.
     expect(getFacebookPostContextMock).not.toHaveBeenCalled();
-    expect(capturedSystemPrompt).toContain('Big sale this weekend!');
-    expect(capturedSystemPrompt.startsWith('Post being commented on:')).toBe(true);
+    expect(capturedPostContext).toContain('Big sale this weekend!');
 
     runSpy.mockRestore();
   }, 30_000);
@@ -261,9 +260,9 @@ describe('Comment Runner', () => {
 
     getFacebookPostContextMock.mockResolvedValueOnce('Post caption: New drop!');
     const { Agent } = await import('@repo/agent');
-    let capturedSystemPrompt = '';
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { systemPrompt: string } }) {
-      capturedSystemPrompt = this.config.systemPrompt;
+    let capturedPostContext = '';
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { config: { postContext?: string } }) {
+      capturedPostContext = this.config.postContext ?? '';
       // Silent reply: prompt construction is under test here, not delivery.
       return agentRunResult('');
     });
@@ -271,7 +270,7 @@ describe('Comment Runner', () => {
     await runAgentForCommentThread(threadId);
 
     expect(getFacebookPostContextMock).toHaveBeenCalledWith('page-token-test', 'POST_PFETCH');
-    expect(capturedSystemPrompt).toContain('New drop!');
+    expect(capturedPostContext).toContain('New drop!');
 
     // Cached on the thread so the next run won't re-fetch.
     const { getCommentThreadWithChannel } = await import('@repo/db/crud/comment');
