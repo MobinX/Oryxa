@@ -118,6 +118,24 @@ export function VariantPhotoDialog({
   const stampedRef = useRef<Blob | null>(null);
 
   const gate = useUploadGate();
+  const begin = gate?.begin;
+  const end = gate?.end;
+  const report = gate?.report;
+
+  // Every phase that can lose a picture holds the form's save button: reading the file into the
+  // page, redrawing it with the variant's id, and the PUT to storage. None of them is instant — a
+  // 4 MB shot takes seconds to read and encode — and a save that lands mid-phase writes the
+  // product without the photo nobody has finished.
+  //
+  // Between phases the button frees again, and so it does the moment a phase fails: an error is
+  // not work in progress, and holding a form hostage to a picture that will never arrive is its
+  // own kind of broken.
+  const working = uploading || stamping || (step === 'prepare' && !ready && !error);
+  useEffect(() => {
+    if (!working || !begin || !end) return;
+    begin();
+    return () => end();
+  }, [working, begin, end]);
 
   // Reading the file is the only work step one does, and it is undone on any exit — including
   // the merchant cancelling out of a picture they no longer want.
@@ -233,12 +251,15 @@ export function VariantPhotoDialog({
     setError(null);
     setUploading(true);
     setUploadPercent(0);
-    gate?.begin();
+    report?.(0);
     try {
       const edited = new File([blob], label ? `variant-${label}.jpg` : 'variant.jpg', {
         type: 'image/jpeg',
       });
-      const result = await uploadVariantImageDirect(businessId, edited, setUploadPercent);
+      const result = await uploadVariantImageDirect(businessId, edited, (percent) => {
+        setUploadPercent(percent);
+        report?.(percent);
+      });
       onUploaded(result);
     } catch (err) {
       setError(
@@ -249,8 +270,8 @@ export function VariantPhotoDialog({
             : 'The edited picture could not be stored.',
       );
       setUploadPercent(0);
+      report?.(0);
     } finally {
-      gate?.end();
       setUploading(false);
     }
   }
