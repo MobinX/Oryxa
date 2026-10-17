@@ -102,6 +102,8 @@ export interface AgentConfig {
   /** Override the default Messenger reply guidance in the system prompt. */
   replyGuidance?: string;
   promptCacheKey?: string;
+  /** Reasoning effort for OpenAI reasoning deployments (defaults to 'low' for text, 'medium' for photos). */
+  reasoningEffort?: 'low' | 'medium' | 'high';
   /**
    * If provided, the agent emits structured debug events for every tool
    * call, tool result, and final reply. Production runs leave this undefined.
@@ -156,6 +158,11 @@ export class Agent {
       ? 'oryxa:comment:v1'
       : 'oryxa:messenger:v1');
 
+    const hasPhotosInTurn = this.config.history.slice(-3).some((m) => (m.photos?.length ?? 0) > 0);
+    const reasoningEffort = this.config.reasoningEffort
+      ?? (process.env.OPENAI_REASONING_EFFORT as 'low' | 'medium' | 'high' | undefined)
+      ?? (hasPhotosInTurn ? 'medium' : 'low');
+
     const llm =
       this.config.llm ??
       (provider === 'openai'
@@ -169,7 +176,7 @@ export class Agent {
             // completions LangChain names the reply cap from its own model test — o\d and gpt-5* — so a
             // deployment called gpt-6-luna gets `max_tokens`, which Azure rejects with a 400. No cap and
             // no temperature are set, which is what this model expects.
-            reasoning: { effort: 'medium' },
+            reasoning: { effort: reasoningEffort },
             promptCacheKey,
             useResponsesApi: true,
           })

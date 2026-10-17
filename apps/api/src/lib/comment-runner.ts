@@ -169,6 +169,20 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       return;
     }
 
+    const trimmedComment = current.content.trim();
+    const isFriendMention = trimmedComment.startsWith('@') &&
+      !/[?？]/u.test(trimmedComment) &&
+      !/(?:দাম|মূল্য|কত|স্টক|সাইজ|অর্ডার|ডেলিভারি|কুরিয়ার|price|cost|how much|koto|stock|size|order|delivery|available|buy)/iu.test(trimmedComment);
+
+    if (isFriendMention) {
+      console.log(`[comment-runner] user-to-user mention detected ("${trimmedComment.slice(0, 40)}") — short-circuiting to SILENT (0 LLM tokens)`);
+      replyText = 'SILENT';
+      await markCommentDone(current.id);
+      clearedCount = 1;
+      current = null;
+      return;
+    }
+
     let postContext = thread.postContext;
     if (!postContext) {
       const fetched = await getFacebookPostContext(thread.channel.apiToken, thread.platformItemId);
