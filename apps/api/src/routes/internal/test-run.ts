@@ -32,6 +32,7 @@ export const testRunRouter = new Hono();
  *   tool_result         { name, result }
  *   message_sent        { text, fallback? }
  *   reply               { text }
+ *   trace               { messages }        ← the whole turn at once, after it ends
  *   runner_done         { conversationId }
  *   runner_error        { conversationId, error }
  *   done                { conversationId }   ← final event, stream closes after this
@@ -135,7 +136,16 @@ testRunRouter.post('/test-run', async (c) => {
       };
 
       // ── Run the agent ──────────────────────────────────────────────────────
-      await runAgentCore(conversationId, { emitSse, sendMessageOverride });
+      const run = await runAgentCore(conversationId, { emitSse, sendMessageOverride });
+
+      // The turn is over, so the whole transcript goes out in one event: every message the model
+      // saw or wrote, and the usage each model call charged. The events above told the story as it
+      // happened; this is the record a person reads afterwards, and it rides last so it can never
+      // interleave with them. Absent on a failed run — the error event already said that.
+      await stream.writeSSE({
+        event: 'trace',
+        data: JSON.stringify({ messages: run?.messages ?? [] }),
+      });
 
       // ── Final event ────────────────────────────────────────────────────────
       await stream.writeSSE({

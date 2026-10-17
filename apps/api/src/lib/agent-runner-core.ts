@@ -1,4 +1,4 @@
-import type { SseEmitter, TokenUsageMetrics } from '@repo/agent';
+import type { AgentRunResult, SseEmitter, TokenUsageMetrics } from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
@@ -44,7 +44,7 @@ export interface AgentRunOptions {
 export async function runAgentCore(
   conversationId: string,
   opts: AgentRunOptions = {},
-): Promise<void> {
+): Promise<AgentRunResult | undefined> {
   // The caller's emitter (test webhook SSE) keeps receiving every event; the
   // trace adapter adds the logged copy of the tool calls.
   const trace = createAgentTrace(opts.emitSse);
@@ -258,13 +258,14 @@ export async function runAgentCore(
   let ok = false;
   let replyText = '';
   let metrics: TokenUsageMetrics | undefined;
+  let run: AgentRunResult | undefined;
   let sentViaFallback = 0;
   let clearedCount = 0;
   let stateSetTo = 'working';
   let runError: unknown;
 
   try {
-    const run = await agent.run();
+    run = await agent.run();
     replyText = run.replyText;
     metrics = run.metrics;
 
@@ -421,4 +422,8 @@ export async function runAgentCore(
     // next one is gated on a fresh read rather than on whatever was known when it started.
     await triggerAgentRun(conversationId, { businessId: conv.businessId });
   }
+
+  // Undefined on a failed run: the caller streaming a playground gets the error event instead of
+  // a trace of a turn that never finished.
+  return run;
 }

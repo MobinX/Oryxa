@@ -34,6 +34,8 @@ import {
   Activity,
   Paperclip,
   X,
+  Sigma,
+  Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -142,6 +144,31 @@ interface LogEvent {
   data: any;
 }
 
+/** What one model call charged, as the provider reported it — the shape `packages/agent` ships on the `trace` event. */
+interface TraceUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+}
+
+interface TraceToolCall {
+  id: string;
+  name: string;
+  args: unknown;
+}
+
+/** One message of the agent's turn: who said it, what it said, what it charged. */
+interface TraceMessage {
+  role: 'system' | 'user' | 'ai' | 'tool';
+  content: string;
+  toolCalls?: TraceToolCall[];
+  toolCallId?: string;
+  toolName?: string;
+  usage?: TraceUsage | null;
+}
+
 export function PlaygroundClient({
   token,
   businessId,
@@ -235,6 +262,8 @@ export function PlaygroundClient({
     null,
   );
   const [logs, setLogs] = useState<LogEvent[]>([]);
+  /** The whole turn as the model saw it, handed over in one `trace` event when the run ends. */
+  const [trace, setTrace] = useState<TraceMessage[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
 
   // The comment playground: one made-up public comment, whatever came before it on the post,
@@ -465,6 +494,7 @@ export function PlaygroundClient({
     const myRun = ++runIdRef.current;
     setRun({ id: myRun, pane: 'chat', convId: selectedConvId });
     setLogs([]);
+    setTrace([]);
     try {
       const response = await fetch('/api/playground/test-run', {
         method: 'POST',
@@ -489,6 +519,7 @@ export function PlaygroundClient({
           conversationId = data.conversationId;
           claimChatRun(myRun, conversationId);
         }
+        if (event === 'trace') setTrace(Array.isArray(data.messages) ? data.messages : []);
       });
       await loadConversations();
       // Read the thread back once the run is over. `conversation_ready` selects it mid-stream, and
@@ -566,6 +597,7 @@ export function PlaygroundClient({
     const myRun = ++runIdRef.current;
     setRun({ id: myRun, pane: 'chat', convId });
     setLogs([]); // Reset log panel for new run
+    setTrace([]); // And the transcript panel: the next run's trace must not mix with this one's
 
     // Optimistically push customer message to the chat view
     const optimisticMsg: Message = {
@@ -599,7 +631,9 @@ export function PlaygroundClient({
         return;
       }
 
-      await parseSseStream(response);
+      await parseSseStream(response, (event, data) => {
+        if (event === 'trace') setTrace(Array.isArray(data.messages) ? data.messages : []);
+      });
       await refreshChat(convId);
     } catch (err) {
       console.error('Failed during agent test run stream:', err);
@@ -716,7 +750,10 @@ export function PlaygroundClient({
             const rawData = trimmed.slice(6).trim();
             try {
               const data = JSON.parse(rawData);
-              addLog(event, data);
+              // The trace event carries the whole transcript in one payload; the terminal shows a
+              // count, and the panel beneath the stream is where the transcript itself is read.
+              if (event === 'trace') addLog(event, { count: Array.isArray(data.messages) ? data.messages.length : 0 });
+              else addLog(event, data);
               onEvent?.(event, data);
 
               // Auto-select conversation if it was created
@@ -745,6 +782,18 @@ export function PlaygroundClient({
 
     if (finished) reader.cancel().catch(() => {});
   }
+
+  // One row per model call, in the order they happened — the header counts and sums what the
+  // turn actually charged, and each row below carries its own numbers beside its own message.
+  const usageRows = trace.filter((msg) => msg.usage);
+  const traceTotals = usageRows.reduce(
+    (acc, msg) => ({
+      in: acc.in + (msg.usage?.inputTokens ?? 0),
+      out: acc.out + (msg.usage?.outputTokens ?? 0),
+      cache: acc.cache + (msg.usage?.cacheReadTokens ?? 0),
+    }),
+    { in: 0, out: 0, cache: 0 },
+  );
 
   return (
     <div className="flex h-full min-h-[calc(100vh-10rem)] flex-col gap-6 text-slate-100">
@@ -1449,6 +1498,52 @@ export function PlaygroundClient({
               <div ref={logsEndRef} />
             </div>
           </div>
+
+          {/* Token Analysis: the transcript the run just finished, in the order the model met it.
+              The live stream above says what happened while it happened; this says what was
+              actually sent, what came back, and what every model call charged for it. */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950 p-4 flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Sigma className="h-4.5 w-4.5 text-emerald-400" />
+                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Token Analysis
+                </h2>
+              </div>
+              {usageRows.length > 0 ? (
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[8px] font-bold text-emerald-400 border border-emerald-500/20">
+                  {usageRows.length} metered {usageRows.length === 1 ? 'call' : 'calls'}
+                </span>
+              ) : null}
+            </div>
+
+            {usageRows.length > 0 ? (
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {[
+                  { label: 'In', value: traceTotals.in, tone: 'text-blue-300' },
+                  { label: 'Out', value: traceTotals.out, tone: 'text-violet-300' },
+                  { label: 'Cache', value: traceTotals.cache, tone: 'text-emerald-300' },
+                  { label: 'Total', value: traceTotals.in + traceTotals.out, tone: 'text-slate-200' },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-xl border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-center">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-500">{stat.label}</p>
+                    <p className={cn('text-sm font-bold tabular-nums', stat.tone)}>{stat.value.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[640px]">
+              {trace.length === 0 ? (
+                <div className="text-slate-600 text-center py-10 text-xs">
+                  The transcript lands here when a run ends — every message the model saw, each tool
+                  call it made, and what each of its calls charged.
+                </div>
+              ) : (
+                trace.map((msg, index) => <TraceRow key={index} msg={msg} />)
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1524,6 +1619,127 @@ export function PlaygroundClient({
         </div>
       )}
 
+    </div>
+  );
+}
+
+/** A read-only transcript is the one place a code block is the honest presentation of a tool's answer. */
+function TraceContent({ text }: { text: string }) {
+  return (
+    <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-200">
+      {text || '(empty)'}
+    </p>
+  );
+}
+
+function TraceUsagePanel({ usage }: { usage: TraceUsage }) {
+  const hitPercent =
+    usage.inputTokens > 0 ? Math.round((usage.cacheReadTokens / usage.inputTokens) * 100) : 0;
+
+  return (
+    <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/80 p-2.5">
+      <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+        <Sigma className="h-3 w-3 text-emerald-500" />
+        Token usage — this model call
+      </p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {[
+          { label: 'Input', value: usage.inputTokens.toLocaleString(), tone: 'text-blue-300 border-blue-500/20 bg-blue-500/5' },
+          {
+            label: 'Output',
+            value: usage.outputTokens.toLocaleString(),
+            tone: 'text-violet-300 border-violet-500/20 bg-violet-500/5',
+            hint: usage.reasoningTokens > 0 ? `${usage.reasoningTokens.toLocaleString()} reasoning` : undefined,
+          },
+          {
+            label: 'Cache read',
+            value: usage.cacheReadTokens.toLocaleString(),
+            tone: 'text-emerald-300 border-emerald-500/20 bg-emerald-500/5',
+            hint: `${hitPercent}% of input`,
+          },
+          { label: 'Total', value: usage.totalTokens.toLocaleString(), tone: 'text-slate-200 border-slate-700 bg-slate-900' },
+        ].map((stat) => (
+          <div key={stat.label} className={cn('rounded-lg border px-1.5 py-1 text-center', stat.tone)}>
+            <p className="text-[7px] font-bold uppercase tracking-wider opacity-70">{stat.label}</p>
+            <p className="text-[11px] font-bold tabular-nums">{stat.value}</p>
+            {stat.hint ? <p className="text-[7px] opacity-60 truncate">{stat.hint}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One message of the finished turn, drawn the way the conversation it belongs to would draw it:
+ * the customer on the right, the agent on the left, tool traffic full-width between them, and the
+ * price of each model call attached to the message that incurred it.
+ */
+function TraceRow({ msg }: { msg: TraceMessage }) {
+  if (msg.role === 'system') {
+    return (
+      <details className="group rounded-xl border border-slate-800 bg-slate-900/30">
+        <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300">
+          <Shield className="h-3 w-3" />
+          System prompt ({msg.content.length.toLocaleString()} chars)
+        </summary>
+        <div className="border-t border-slate-800/60 px-3 py-2 font-mono text-[9px] leading-relaxed text-slate-500 max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
+          {msg.content}
+        </div>
+      </details>
+    );
+  }
+
+  if (msg.role === 'tool') {
+    return (
+      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+        <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider text-emerald-400 mb-1.5">
+          <Wrench className="h-3 w-3" />
+          {msg.toolName || 'tool'} result
+          <span className="text-slate-600 font-mono normal-case">{msg.toolCallId}</span>
+        </p>
+        <div className="max-h-44 overflow-y-auto font-mono">
+          <TraceContent text={msg.content} />
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm border border-slate-700 bg-slate-800/60 px-3 py-2">
+          <p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-slate-500 mb-1 justify-end">
+            <User className="h-3 w-3" /> Customer
+          </p>
+          <TraceContent text={msg.content} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start">
+      <div className="max-w-[92%] rounded-2xl rounded-bl-sm border border-indigo-500/25 bg-indigo-500/10 px-3 py-2">
+        <p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-indigo-300 mb-1">
+          <Bot className="h-3 w-3" /> Agent
+        </p>
+        <TraceContent text={msg.content} />
+      </div>
+
+      {(msg.toolCalls ?? []).map((call) => (
+        <div key={call.id} className="mt-1.5 w-full rounded-xl border border-amber-500/25 bg-amber-500/5 p-2.5">
+          <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider text-amber-400 mb-1">
+            <Wrench className="h-3 w-3" />
+            {call.name}
+          </p>
+          <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[9px] leading-relaxed text-amber-200/70">
+            {JSON.stringify(call.args, null, 2)}
+          </pre>
+        </div>
+      ))}
+
+      {msg.usage ? <TraceUsagePanel usage={msg.usage} /> : null}
     </div>
   );
 }

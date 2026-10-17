@@ -135,6 +135,117 @@ export interface AgentRunResult {
   replyText: string;
   sentTexts: string[];
   metrics: TokenUsageMetrics;
+  /**
+   * The whole turn as the model saw it — system, history, every tool call and result, every
+   * reply — flattened for the wire. Production callers can ignore it; the playground streams it
+   * to the operator's screen, where the per-message usage numbers are the point.
+   */
+  messages: TraceMessage[];
+}
+
+/** What one model call charged, as the provider reported it. */
+export interface TraceUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** Tokens answered from the prompt cache, when the provider says so. */
+  cacheReadTokens: number;
+  /** Tokens the provider spent thinking, when it reports that at all. */
+  reasoningTokens: number;
+}
+
+/** One tool the model decided to call, with the arguments it chose. */
+export interface TraceToolCall {
+  id: string;
+  name: string;
+  args: unknown;
+}
+
+/** One message of the turn, flattened to what a screen needs. */
+export interface TraceMessage {
+  role: 'system' | 'user' | 'ai' | 'tool';
+  content: string;
+  /** On an `ai` message: the tools it asked for. The results follow as `tool` messages. */
+  toolCalls?: TraceToolCall[];
+  /** On a `tool` message: which call this answers, and which tool wrote it. */
+  toolCallId?: string;
+  toolName?: string;
+  /** Present on the `ai` messages the provider metered; that is one per model call, not one per turn. */
+  usage?: TraceUsage | null;
+}
+
+/** Content for the wire: prose kept, a picture said in one word, nothing else survives. */
+function traceContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        const block = part as Record<string, unknown>;
+        if (block.type === 'text' && typeof block.text === 'string') return block.text;
+        if (block.type === 'image_url' || block.type === 'image' || block.type === 'media') return '[photo]';
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return content == null ? '' : String(content);
+}
+
+function traceUsage(msg: BaseMessage): TraceUsage | null {
+  const usage = (msg as AIMessage).usage_metadata;
+  if (!usage) return null;
+  const details = (usage as { input_token_details?: Record<string, number> }).input_token_details;
+  return {
+    inputTokens: usage.input_tokens || 0,
+    outputTokens: usage.output_tokens || 0,
+    totalTokens: usage.total_tokens || 0,
+    cacheReadTokens: details?.cache_read || details?.cached_tokens || 0,
+    reasoningTokens: details?.reasoning || 0,
+  };
+}
+
+/**
+ * Flattens the LangGraph result into plain objects that survive `JSON.stringify` to a browser.
+ *
+ * A `BaseMessage` is a class with getters, content blocks and tool-call objects; shipped raw it
+ * arrives as an empty-looking shell. This is the one place that knows which parts of each message
+ * a person wants to read, so the SSE layer stays dumb.
+ */
+export function serializeTraceMessages(messages: BaseMessage[]): TraceMessage[] {
+  return messages.map((msg) => {
+    const kind = msg._getType();
+
+    if (kind === 'ai') {
+      const ai = msg as AIMessage;
+      const calls = (ai.tool_calls ?? []).map((call) => ({
+        id: String(call.id ?? ''),
+        name: call.name,
+        args: call.args,
+      }));
+      return {
+        role: 'ai' as const,
+        content: traceContent(msg.content),
+        ...(calls.length > 0 ? { toolCalls: calls } : {}),
+        usage: traceUsage(msg),
+      };
+    }
+
+    if (kind === 'tool') {
+      const tool = msg as AIMessage & { tool_call_id?: string; name?: string };
+      return {
+        role: 'tool' as const,
+        content: traceContent(msg.content),
+        toolCallId: tool.tool_call_id,
+        toolName: tool.name,
+      };
+    }
+
+    return {
+      role: kind === 'human' ? ('user' as const) : ('system' as const),
+      content: traceContent(msg.content),
+    };
+  });
 }
 
 export class Agent {
@@ -158,7 +269,12 @@ export class Agent {
       ? 'oryxa:comment:v1'
       : 'oryxa:messenger:v1');
 
-    const hasPhotosInTurn = this.config.history.slice(-3).some((m) => (m.photos?.length ?? 0) > 0);
+    // `photos` is not a field a history row carries — `imageKeys` is what arrived, `hadImages` is
+    // what an older turn was summarised from. Reading a nonexistent field made this always false,
+    // so a photo turn never raised the reasoning effort the way it was meant to.
+    const hasPhotosInTurn = this.config.history
+      .slice(-3)
+      .some((m) => (m.imageKeys?.length ?? 0) > 0 || Boolean(m.hadImages));
     const reasoningEffort = this.config.reasoningEffort
       ?? (process.env.OPENAI_REASONING_EFFORT as 'low' | 'medium' | 'high' | undefined)
       ?? (hasPhotosInTurn ? 'medium' : 'low');
@@ -293,6 +409,7 @@ export class Agent {
       replyText,
       sentTexts: this.sentTexts,
       metrics,
+      messages: serializeTraceMessages(result.messages),
     };
   }
 
