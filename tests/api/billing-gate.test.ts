@@ -261,7 +261,8 @@ describe('the quota gate', () => {
 
     // The customer is kept, not dropped: the merchant must see what arrived while shut,
     // and it is still there to answer when the cycle resets or the plan gets bigger.
-    const [conversation] = await listConversations(seed.business.id, { limit: 5 });
+    const conversations = await listConversations(seed.business.id, { limit: 5 });
+    const conversation = conversations.find((c) => c.customerPlatformId === 'GATE_SENDER_1') ?? conversations[0];
     if (!conversation) throw new Error('the webhook stored no conversation');
     const messages = await listMessages(conversation.id, seed.business.id);
     expect(messages?.filter((m) => m.from === 'customer')).toHaveLength(1);
