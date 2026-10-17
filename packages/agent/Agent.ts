@@ -375,7 +375,13 @@ export class Agent {
       ...(await this.historyMessages(canReadPhotos, provider === 'openai')),
     ];
 
-    const result = await agent.invoke({ messages }, { recursionLimit: 6 });
+    // LangGraph counts every node the loop executes — one model call, one tool run, alternating. Six
+    // bought two tool calls and nothing else: a third call, however legitimate (a search that came
+    // back empty, a retry, a card that could not be sent), left the graph one step over the limit
+    // with the customer's reply unwritten, and the run died in GraphRecursionError. Twenty-five is
+    // LangGraph's own default — eleven tool calls' worth — and costs nothing unless the model
+    // actually makes them; a genuine loop still trips it instead of running away.
+    const result = await agent.invoke({ messages }, { recursionLimit: 25 });
     const latencyMs = Date.now() - startTime;
     const lastMessage = result.messages[result.messages.length - 1];
     let replyText = contentText(lastMessage.content);
