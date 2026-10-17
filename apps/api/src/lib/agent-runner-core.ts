@@ -352,7 +352,7 @@ export async function runAgentCore(
     await updateConversationState(conv.id, 'done');
     stateSetTo = 'done';
     console.log(`[agent-runner-core] conversation ${conversationId} state → done`);
-    emitSse('runner_done', { conversationId });
+    emitSse('runner_done', { conversationId, metrics });
     ok = true;
   } catch (err) {
     console.error('[agent-runner-core] agent run failed:', err);

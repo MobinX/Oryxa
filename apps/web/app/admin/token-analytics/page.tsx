@@ -19,6 +19,8 @@ import { AdminMonthPills } from '@/components/admin-month-pills';
 import { compact, money, whole } from '@/lib/format';
 import type { AdminTokenUsage } from '@/lib/api';
 
+export const instant = false;
+
 export const metadata = {
   title: 'Admin — token usage',
   description: 'What the agent cost each business, month by month.',

@@ -1426,10 +1426,20 @@ export function PlaygroundClient({
                           text: "{log.data.text}"
                         </p>
                       )}
-                      {log.event === 'error' && (
+                      {(log.event === 'error' || log.event === 'runner_error') && (
                         <p className="text-red-400 font-semibold truncate">
-                          {log.data.message}
+                          {log.data.message || log.data.error || 'An error occurred'}
                         </p>
+                      )}
+                      {(log.event === 'done' || log.event === 'runner_done') && log.data?.metrics && (
+                        <div className="text-[8px] space-y-0.5 mt-1 font-mono">
+                          <p className="text-purple-300 font-semibold">
+                            Tokens: {Number(log.data.metrics.totalTokens || 0).toLocaleString()} (in: {Number(log.data.metrics.inputTokens || 0).toLocaleString()} / out: {Number(log.data.metrics.outputTokens || 0).toLocaleString()})
+                          </p>
+                          <p className="text-slate-400">
+                            Cache: {log.data.metrics.cacheHitPercent}% • Cost: ${Number(log.data.metrics.estimatedCostUsd || 0).toFixed(5)} • {log.data.metrics.latencyMs}ms
+                          </p>
+                        </div>
                       )}
                     </div>
                   );
@@ -1465,6 +1475,43 @@ export function PlaygroundClient({
                 Close
               </button>
             </div>
+
+            {selectedLog.data?.metrics && (
+              <div className="mb-4 p-3.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-100 font-mono text-[11px] space-y-2">
+                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                  <span className="text-purple-300 font-bold">Total Tokens:</span>
+                  <span className="text-white font-extrabold text-sm">
+                    {Number(selectedLog.data.metrics.totalTokens || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <span className="text-purple-300/70">Input Tokens:</span>{' '}
+                    <span className="text-slate-200 font-semibold">{Number(selectedLog.data.metrics.inputTokens || 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-purple-300/70">Output Tokens:</span>{' '}
+                    <span className="text-slate-200 font-semibold">{Number(selectedLog.data.metrics.outputTokens || 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-purple-300/70">Prompt Cache Hit:</span>{' '}
+                    <span className="text-emerald-400 font-semibold">{selectedLog.data.metrics.cacheHitPercent}%</span>
+                  </div>
+                  <div>
+                    <span className="text-purple-300/70">Estimated Cost:</span>{' '}
+                    <span className="text-emerald-400 font-semibold">${Number(selectedLog.data.metrics.estimatedCostUsd || 0).toFixed(6)}</span>
+                  </div>
+                  <div>
+                    <span className="text-purple-300/70">Latency:</span>{' '}
+                    <span className="text-slate-200 font-semibold">{selectedLog.data.metrics.latencyMs} ms</span>
+                  </div>
+                  <div>
+                    <span className="text-purple-300/70">Model:</span>{' '}
+                    <span className="text-slate-200 font-semibold">{selectedLog.data.metrics.model || 'default'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 overflow-auto rounded-xl border border-slate-900 bg-slate-900/20 p-4 font-mono text-[10px] leading-relaxed">
               <p className="text-slate-500 mb-2">// Timestamp: {selectedLog.timestamp}</p>

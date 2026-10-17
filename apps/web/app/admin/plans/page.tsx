@@ -6,6 +6,8 @@ import { cachedAdminBusinessPlans, cachedPlans } from '@/app/_cache/queries';
 import { ApiError } from '@/lib/api';
 import { PlansConsole } from './plans-table';
 
+export const instant = false;
+
 export default async function AdminPlansPage() {
   const bearer = await requireConsoleBearer();
 

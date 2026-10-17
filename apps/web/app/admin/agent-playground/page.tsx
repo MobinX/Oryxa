@@ -18,6 +18,8 @@ export const metadata = {
   description: 'Try a system prompt against the sandbox store and watch the agent answer it.',
 };
 
+export const instant = false;
+
 export default async function AdminAgentPlaygroundPage() {
   // The playground drives the merchant endpoints — sandbox channels, test conversations, the agent
   // row — so it needs an account token, not just a console session. That token is checked against

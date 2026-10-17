@@ -7,6 +7,7 @@ import {
   Bot,
   CircleDollarSign,
   Cpu,
+  Download,
   Eye,
   Globe,
   LayoutDashboard,
@@ -22,6 +23,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { requireConsoleBearer } from '@/lib/admin-access';
+
+export const instant = false;
 import { TZ_COOKIE, clockInZone, validZone } from '@/lib/logs-time';
 import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
@@ -108,6 +111,12 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/api/admin/export">
+            <Button variant="outline" size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+          </Link>
           <div className="flex items-center rounded-full border border-border/40 bg-muted/40 p-1">
             {RANGES.map((range) => (
               <Link

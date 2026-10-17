@@ -146,9 +146,12 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
   });
 
   let replyText = '';
+  let metrics: unknown = null;
   try {
     const run = await agent.run();
     replyText = run.replyText;
+    metrics = run.metrics;
+    emitSse('runner_done', { threadId: thread.id, metrics });
   } catch (err) {
     emitSse('error', { message: String(err) });
   } finally {
@@ -156,5 +159,5 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     await updateCommentThreadState(thread.id, 'done');
   }
 
-  if (!delivered) emitSse('no_reply', { text: replyText, silent: replyText.trim() === 'SILENT' });
+  if (!delivered) emitSse('no_reply', { text: replyText, silent: replyText.trim() === 'SILENT', metrics });
 }
