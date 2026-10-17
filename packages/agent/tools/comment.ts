@@ -7,6 +7,26 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { replyToFacebookComment, sendCommenterMessage } from '@repo/integrations/facebook';
 import type { SseEmitter } from '@agent/Agent';
 
+/** Reject public drafts that could expose private purchase or contact details. */
+export function publicCommentReplyViolation(
+  text: string,
+  privateMessageSent: boolean,
+  customerName?: string | null,
+): string | null {
+  if (text.trim() === 'SILENT') return 'SILENT is a no-reply signal and must never be posted publicly.';
+  if (!privateMessageSent && /\b(?:inbox|messenger|dm|check your messages|sent you a message)\b|ইনবক্স|মেসেঞ্জার|মেসেজ পাঠিয়েছি|মেসেজ পাঠিয়েছি/i.test(text)) {
+    return 'Do not direct the commenter to Messenger unless a private message succeeded in this turn.';
+  }
+  const normalized = text.normalize('NFKC').toLocaleLowerCase();
+  if (customerName?.trim() && normalized.includes(customerName.trim().normalize('NFKC').toLocaleLowerCase())) {
+    return 'Do not include the commenter’s personal name in a public reply.';
+  }
+  if (/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|(?:\+?\d[\d ()-]{7,}\d)|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b|[$৳]|\b(?:BDT|taka|tk)\b|[\d০-৯][\d০-৯,.]*\s*(?:টাকা|৳)|(?:price|cost|stock|left|available|pieces|units|pcs|দাম|মূল্য|স্টক|বাকি)[^.!?]{0,24}[\d০-৯]|[\d০-৯][^.!?]{0,24}(?:price|cost|stock|left|available|pieces|units|pcs|দাম|মূল্য|স্টক|বাকি)|(?:\b(?:house|flat|apartment|road|street|address|block)\b|বাসা|বাড়ি|বাড়ি|রোড|ঠিকানা|ফ্ল্যাট)[^.!?]{0,24}[\d০-৯]|[\d০-৯][^.!?]{0,24}(?:\b(?:house|flat|apartment|road|street|address|block)\b|বাসা|বাড়ি|বাড়ি|রোড|ঠিকানা|ফ্ল্যাট)/i.test(text)) {
+    return 'Public comments cannot contain customer contact details, internal IDs, exact prices, or exact stock counts.';
+  }
+  return null;
+}
+
 /**
  * Tool set for the comment agent. Two delivery tools, and the agent picks which one the
  * question deserves: `reply_comment` says the given text under the comment, and
@@ -42,7 +62,7 @@ export function createCommentAgentTools(
      */
     sendPrivateMessageOverride?: (pageToken: string, commentId: string, text: string) => Promise<void>;
   },
-  onSent?: (text: string) => void,
+  onSent?: (text: string, kind: 'public' | 'private') => void,
 ) {
   /**
    * Claimed before the first await: the model can emit two reply_comment calls
@@ -50,9 +70,15 @@ export function createCommentAgentTools(
    * Graph POST keeps a duplicated reply off the public thread.
    */
   let replyClaimed = false;
+  let privateMessageSent = false;
 
   const replyCommentTool = tool(
     async ({ text }) => {
+      const violation = publicCommentReplyViolation(text, privateMessageSent, context.customerName);
+      if (violation) {
+        context.emitSse?.('tool_result', { name: 'reply_comment', result: `Blocked: ${violation}` });
+        return `Blocked: ${violation} Provide a safe public answer or end the turn.`;
+      }
       if (replyClaimed) {
         console.log(`[agent-tool] reply_comment rejected — a reply is already in flight for this turn`);
         return 'Error: The reply to this comment is already posted. Do not call reply_comment again. Stop calling tools and end the turn.';
@@ -130,7 +156,7 @@ export function createCommentAgentTools(
         state: 'done',
       });
 
-      onSent?.(text);
+      onSent?.(text, 'public');
       console.log(`[agent-tool] reply_comment done — commentId=${newCommentId}`);
       context.emitSse?.('tool_result', { name: 'reply_comment', result: 'Reply posted to the comment.' });
       return 'Reply posted to the comment.';
@@ -189,6 +215,7 @@ export function createCommentAgentTools(
       const sendFn = context.sendPrivateMessageOverride ?? sendCommenterMessage;
       try {
         await sendFn(context.pageToken, context.parentCommentExternalId, text);
+        privateMessageSent = true;
       } catch (err) {
         console.error('[agent-tool] send_private_message failed:', err);
         if (chargedPeriod) {
@@ -204,6 +231,8 @@ export function createCommentAgentTools(
         context.emitSse?.('tool_result', { name: 'send_private_message', result: unreachable });
         return `${unreachable} Answer in the comment with reply_comment instead. End the turn.`;
       }
+
+      onSent?.(text, 'private');
 
       try {
         const conversation = await getOrCreateConversation(
@@ -246,7 +275,7 @@ export function createCommentAgentTools(
       businessId: context.businessId,
       customerName: context.customerName,
       emitSse: context.emitSse,
-    }),
+    }, { includeOrderTools: false }),
     replyCommentTool,
     sendPrivateMessageTool,
   ];

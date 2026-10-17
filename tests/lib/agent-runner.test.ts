@@ -7,7 +7,7 @@ import { getConversationForBusiness } from '@repo/db/crud/conversation';
 import type { AgentConfig } from '@repo/agent';
 import { agentRunResult, stubAgentRun } from '../helpers/agent-run';
 
-const sendMessageMock = vi.fn(async () => undefined);
+const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   senderAction: vi.fn(async () => undefined),
@@ -15,14 +15,14 @@ vi.mock('@repo/integrations/facebook', () => ({
 
 vi.mock('@repo/agent', async () => {
   const mod = await import('../../packages/agent/index');
-  const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
+  const { createDefaultReplyFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,
     Agent: class PatchedAgent extends mod.Agent {
       constructor(config: AgentConfig) {
         super({
           ...config,
-          llm: config.llm ?? createSendMessageFakeLlm('Automated reply from test agent'),
+          llm: config.llm ?? createDefaultReplyFakeLlm('Automated reply from test agent'),
         });
       }
     },
@@ -118,22 +118,18 @@ describe('Agent Runner', () => {
     vi.unstubAllGlobals();
   }, 30_000);
 
-  it('runAgentForConversation does not double-send when the agent used send_message', async () => {
-    // #8: when the agent called send_message (sentTexts populated), the tool is
-    // the source of truth — the runner must NOT send or save a fallback reply.
+  it('runAgentForConversation does not send SILENT as a Messenger reply', async () => {
     const seed = await seedTestWorld();
     const { Agent } = await import('@repo/agent');
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(
-      stubAgentRun('final summary that must not be sent', ['reply via tool']),
-    );
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('SILENT'));
 
     sendMessageMock.mockClear();
     await runAgentForConversation(seed.conversation.id);
 
-    expect(sendMessageMock).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'final summary that must not be sent');
+    expect(sendMessageMock).not.toHaveBeenCalled();
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
-    expect(selfContents).not.toContain('final summary that must not be sent');
+    expect(selfContents).not.toContain('SILENT');
 
     runSpy.mockRestore();
   }, 30_000);
@@ -145,7 +141,7 @@ describe('Agent Runner', () => {
     const seed = await seedTestWorld();
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(
-      stubAgentRun('Which size would you like?', ['Kurti — 1200 (Order)'], { replyTool: false }),
+      stubAgentRun('Which size would you like?', ['Kurti — 1200 (Order)']),
     );
 
     sendMessageMock.mockClear();
@@ -158,9 +154,7 @@ describe('Agent Runner', () => {
     expect(selfContents).toContain('Which size would you like?');
   }, 30_000);
 
-  it('runAgentForConversation falls back to send+save when the agent did not use send_message', async () => {
-    // #8 fallback path: agent produced a reply but never called send_message,
-    // so the runner sends and persists that reply itself.
+  it('runAgentForConversation sends the model final text itself', async () => {
     const seed = await seedTestWorld();
     const { Agent } = await import('@repo/agent');
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(stubAgentRun('fallback reply'));
@@ -193,10 +187,9 @@ describe('Agent Runner', () => {
     const { Agent } = await import('@repo/agent');
     const sentViaTool = ['reply'];
     let capturedHistory: Array<{ from: string; content: string }> = [];
-    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { sentTexts: string[]; sentByReplyTool: boolean; config: { history: Array<{ from: string; content: string }> } }) {
+    const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: { sentTexts: string[]; config: { history: Array<{ from: string; content: string }> } }) {
       capturedHistory = [...this.config.history];
       this.sentTexts = sentViaTool;
-      this.sentByReplyTool = sentViaTool.length > 0;
       return agentRunResult('done', sentViaTool);
     });
 
@@ -209,8 +202,8 @@ describe('Agent Runner', () => {
       .sort((a, b) => a - b);
     expect(burstIndices).toEqual(Array.from({ length: 12 }, (_, i) => i));
 
-    const msgs = await listMessages(seed.conversation.id, seed.business.id);
-    const stillPending = msgs?.filter((m) => m.from === 'customer' && m.state === 'pending');
+    const { listPendingCustomerMessages } = await import('@repo/db/crud/conversation');
+    const stillPending = await listPendingCustomerMessages(seed.conversation.id);
     expect(stillPending?.length).toBe(0);
 
     runSpy.mockRestore();
@@ -259,12 +252,10 @@ describe('Agent Runner', () => {
     let capturedHistory: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> = [];
     const runSpy = vi.spyOn(Agent.prototype, 'run').mockImplementation(async function (this: {
       sentTexts: string[];
-      sentByReplyTool: boolean;
       config: { history: Array<{ content: string; imageKeys: string[]; hadImages?: boolean }> };
     }) {
       capturedHistory = [...this.config.history];
       this.sentTexts = ['reply'];
-      this.sentByReplyTool = true;
       return agentRunResult('done', ['reply']);
     });
 

@@ -99,11 +99,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
   const catalogSummary = catalog.summary;
 
   const answering = await resolveAnsweringAgent(full.channel.agent);
-  const systemPrompt = full.postContext
-    ? `Post being commented on:\n${full.postContext}\n\n${answering.systemPrompt}`
-    : answering.systemPrompt;
-
-  emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt }));
+  emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
   let delivered = false;
   const tools = createCommentAgentTools(
@@ -134,7 +130,8 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
   );
 
   const agent = new Agent({
-    systemPrompt,
+    systemPrompt: answering.systemPrompt,
+    postContext: full.postContext,
     business: full.business ?? { id: input.businessId, name: 'Store' },
     history,
     conversationId: thread.id,
@@ -144,6 +141,7 @@ export async function runCommentTest(input: CommentTestInput, forward?: SseEmitt
     catalogSummary,
     tools,
     replyGuidance: answering.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
+    promptCacheKey: 'oryxa:comment:v1',
     emitSse,
   });
 

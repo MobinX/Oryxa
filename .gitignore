@@ -60,3 +60,17 @@ ui/*
 # Tool cache (refact agent memory)
 # =========================
 .refact/
+
+# Paths containing literal fraction slash characters
+oryxa⁄env
+~⁄Oryxa⁄apps⁄api2⁄.env
+
+# =========================
+# Local analysis & notes
+# =========================
+graphify-out/
+graphify/
+Bugs/
+bugs/
+bug/
+

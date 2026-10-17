@@ -4,6 +4,7 @@ import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
+import { parseConversationAgentState } from '@repo/shared';
 
 /**
  * How many of a thread's pictures are still handed to the model as pixels.
@@ -53,6 +54,7 @@ export async function runAgentCore(
   const {
     getConversationWithHistory,
     updateConversationState,
+    updateConversationAgentState,
     createMessage,
     claimConversationForAgentRun,
     markMessagesDoneByIds,
@@ -130,8 +132,8 @@ export async function runAgentCore(
   // note in `Agent.ts` — the model still knows a picture was sent, and stops asking for it.
   const seenRecently = new Set(
     orderedHistory
-      .filter((m) => m.imageKeys.length > 0)
       .slice(-PHOTO_MEMORY)
+      .filter((m) => m.imageKeys.length > 0)
       .map((m) => m.id),
   );
   const history = orderedHistory.map((m) => {
@@ -143,6 +145,61 @@ export async function runAgentCore(
       hadImages: !asPixels && m.imageKeys.length > 0,
     };
   });
+
+  const agentState = parseConversationAgentState(conv.agentState);
+  const latestCustomerText = [...pendingMsgs].reverse().find((m) => m.content.trim())?.content ?? '';
+  const orderTap = latestCustomerText.match(/^place order with ([\da-f-]{36}) and (.*?)(?: variant ([\da-f-]{36}))?$/i);
+  if (orderTap) {
+    const { getProductById } = await import('@repo/db/crud/product');
+    const product = await getProductById(conv.businessId, orderTap[1]).catch(() => null);
+    if (product) {
+      agentState.currentProduct = { id: product.id, name: product.name, price: String(product.price) };
+      agentState.pendingOrder = {
+        ...agentState.pendingOrder,
+        productId: product.id,
+        productName: product.name,
+        ...(orderTap[3] ? { variantId: orderTap[3] } : {}),
+      };
+    }
+  }
+  const phone = latestCustomerText.match(/(?:\+?88)?01[3-9]\d{8}/)?.[0];
+  if (phone) {
+    agentState.pendingOrder = {
+      ...agentState.pendingOrder,
+      customerPhone: phone,
+    };
+  }
+  if (/\b(?:don't like|do not like|not this|another|different|doesn't suit|does not suit)\b|পছন্দ না|ভালো লাগছে না|হবে না|অন্য (?:রং|কালার|সাইজ)/i.test(latestCustomerText)) {
+    const customerText = latestCustomerText.normalize('NFKC').toLocaleLowerCase();
+    for (const variant of agentState.shownVariants) {
+      const terms = variant.name.split(/[\s/-]+/).map((part) => part.trim()).filter((part) => part.length > 1);
+      for (const term of terms) {
+        if (!customerText.includes(term.toLocaleLowerCase())) continue;
+        if (/^(?:xs|s|m|l|xl|xxl|xxxl|\d+)$/i.test(term)) {
+          if (!agentState.rejectedSizes.includes(term)) agentState.rejectedSizes.push(term);
+        } else if (!agentState.rejectedColors.includes(term)) {
+          agentState.rejectedColors.push(term);
+        }
+      }
+    }
+  }
+  if (!agentState.lastOrder) {
+    const { getOrdersByPlatformId } = await import('@repo/db/crud/order');
+    const latest = (await getOrdersByPlatformId(conv.businessId, conv.customerPlatformId, { limit: 1 })).orders[0];
+    if (latest) {
+      const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
+      agentState.lastOrder = {
+        id: latest.id,
+        productName: latest.productName ?? 'Order',
+        variantName: latest.variantName,
+        count: latest.count,
+        totalPrice: latest.totalPrice.toFixed(2),
+        state: stateWords[latest.state as keyof typeof stateWords] ?? 'Pending',
+        createdAt: latest.createdAt.toISOString(),
+      };
+    }
+  }
+  await updateConversationAgentState(conv.id, agentState);
 
   const catalog = await buildCatalogSummary(conv.businessId);
   console.log(`[agent-runner-core] history compiled — ${history.length} messages (${pendingMsgs.length} pending, ${conv.messages.length} from context)`);
@@ -172,6 +229,29 @@ export async function runAgentCore(
     // Already resolved: the store's own block, else the platform default's, else undefined and Agent
     // falls back to the reviewed text in @agent/guidance.
     replyGuidance: answering.replyGuidance ?? undefined,
+    agentState,
+    persistAgentState: (state) => updateConversationAgentState(conv.id, state),
+    onOrderCreated: async (orderId) => {
+      const { getOrderById } = await import('@repo/db/crud/order');
+      const order = await getOrderById(conv.businessId, orderId);
+      if (!order?.productId) return;
+      const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
+      agentState.currentProduct = { id: order.productId, name: order.productName ?? 'Order', price: order.variantPrice.toFixed(2) };
+      agentState.currentVariant = order.variantId
+        ? { id: order.variantId, name: order.variantName ?? '', price: order.variantPrice.toFixed(2) }
+        : null;
+      agentState.pendingOrder = null;
+      agentState.lastOrder = {
+        id: order.id,
+        productName: order.productName ?? 'Order',
+        variantName: order.variantName,
+        count: order.count,
+        totalPrice: order.totalPrice.toFixed(2),
+        state: stateWords[order.state as keyof typeof stateWords] ?? 'Pending',
+        createdAt: order.createdAt.toISOString(),
+      };
+      await updateConversationAgentState(conv.id, agentState);
+    },
   });
 
   const started = performance.now();
@@ -215,13 +295,10 @@ export async function runAgentCore(
       emit('error', errorFields(metricErr), { dedupe: null });
     }
 
-    // The closing line is sent whenever the reply tool did not speak, and only then. Nothing sent:
-    // the customer would otherwise get no answer at all. A card sent (product list, Track-order row):
-    // the card is a picture with buttons, not a reply, so the model's line after it is what asks the
-    // customer what they want. The reply tool sent: those words are already in the thread, and
-    // sending them again is the double reply the old rule was written to stop.
-    if (!agent.sentByReplyTool && replyText) {
-      console.log(`[agent-runner-core] sending the model's closing line — the reply tool did not speak (${agent.sentTexts.length} send(s) of another kind before it)`);
+    // The model's final text is delivered here. Product and order cards sent during tool calls do
+    // not replace that text; an empty or SILENT response produces no text message.
+    if (replyText && replyText.trim() !== 'SILENT') {
+      console.log(`[agent-runner-core] sending the model's final text (${agent.sentTexts.length} other send(s) during tool calls)`);
 
       // The same charge as the tool path, because this is a reply the customer receives:
       // the tool simply never ran. A test override puts nothing on the wire and pays
@@ -298,15 +375,9 @@ export async function runAgentCore(
   const unresolved = trace.unresolved();
   if (unresolved) {
     // A tool that reported a call but no result threw inside it — for
-    // send_message that is either the Graph send or the history write failing,
+    // a Messenger delivery that is either the Graph send or the history write failing,
     // and LangGraph feeds the error back to the model as a tool message.
     emitAnomaly('tool_call_unresolved', { detail: unresolved });
-  }
-  if (agent.sentByReplyTool && sentViaFallback > 0) {
-    // The one way a customer gets the same words twice: the reply tool sent them, and the closing line
-    // went out as well. The gate above makes this unreachable, so a hit here means that gate moved.
-    // A card plus a closing line is not a double send — the card is buttons, not an answer.
-    emitAnomaly('double_send');
   }
   if (ok && clearedCount > 0 && sentViaTool + sentViaFallback === 0) {
     // The defect the 200 response hides: the backlog was marked answered after

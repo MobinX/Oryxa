@@ -4,6 +4,7 @@ import { currentContext, outboundRunHeaders, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
 import { quotaGate, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
+import { publicCommentReplyViolation } from '@agent/tools/comment';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 
 const AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
@@ -135,6 +136,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   }
 
   const sentCommentTexts: string[] = [];
+  let privateMessageDelivered = false;
   let current: Awaited<ReturnType<typeof getOldestPendingComment>> | null = null;
 
   try {
@@ -187,11 +189,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     const catalogSummary = catalog.summary;
 
     const answering = await resolveAnsweringAgent(thread.channel.agent);
-    const systemPrompt = postContext
-      ? `Post being commented on:\n${postContext}\n\n${answering.systemPrompt}`
-      : answering.systemPrompt;
-
-    emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt }));
+    emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
     const tools = createCommentAgentTools(
@@ -206,11 +204,15 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         commenterPlatformId: thread.commenterPlatformId,
         emitSse: trace.emitSse,
       },
-      (text) => sentCommentTexts.push(text),
+      (text, kind) => {
+        if (kind === 'private') privateMessageDelivered = true;
+        else sentCommentTexts.push(text);
+      },
     );
 
     const agent = new Agent({
-      systemPrompt,
+      systemPrompt: answering.systemPrompt,
+      postContext,
       business: thread.business ?? { id: thread.businessId, name: 'Store' },
       history,
       conversationId: thread.id,
@@ -220,6 +222,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       catalogSummary,
       tools,
       replyGuidance: answering.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
+      promptCacheKey: 'oryxa:comment:v1',
     });
 
     try {
@@ -256,6 +259,11 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
 
       if (sentCommentTexts.length === 0 && replyText && replyText.trim() !== 'SILENT') {
         console.log(`[comment-runner] fallback: agent did not call reply_comment, sending final reply directly`);
+
+        const blocked = publicCommentReplyViolation(replyText, privateMessageDelivered, thread.commenterName);
+        if (blocked) {
+          emitAnomaly('comment_reply_blocked', { detail: blocked });
+        } else {
 
         const existingFallbackReply = await db.query.comments.findFirst({
           where: and(
@@ -317,6 +325,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           console.log(`[comment-runner] fallback skipped: already replied to comment ${current.externalId}`);
           emitAnomaly('duplicate_reply_prevented', { detail: current.externalId ?? undefined });
           replyPreexisting = true;
+        }
         }
       }
     } catch (err) {

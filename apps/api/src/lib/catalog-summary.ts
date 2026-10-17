@@ -24,8 +24,6 @@ const NAMED_PRODUCT_LIMIT = 10;
  */
 export type CatalogSummary = { summary: string; total: number };
 
-export type CatalogSummary = { summary: string; total: number };
-
 /** The shelves this store groups by, in the one sentence form both branches use. */
 function shelfShape(named: Array<{ name: string; count: number }>, unclassified: number): string {
   return named.length
@@ -85,7 +83,7 @@ export async function buildCatalogSummary(
     const unclassified = firstPage.length - named.reduce((sum, c) => sum + c.count, 0);
 
     const lines = firstPage
-      .map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
+      .map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
       .join('\n');
     return {
       total,
@@ -119,7 +117,7 @@ export async function buildCatalogSummary(
       shelfShape(populated, unclassified),
       answerWithCategories(canShowCards),
       howToAnswer,
-      ...firstPage.map((p) => `- ${p.name} ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
+      ...firstPage.map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
     ].join('\n'),
   };
 }

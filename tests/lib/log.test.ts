@@ -154,7 +154,7 @@ describe('constraint B — every log is unique', () => {
     const { events } = await captured(() => {
       emit('tool_call', { tool: 'search_products', toolCallId: 'call-1' });
       emit('tool_call', { tool: 'search_products', toolCallId: 'call-1' });
-      emit('tool_call', { tool: 'send_message', toolCallId: 'call-2' });
+      emit('tool_call', { tool: 'show_products', toolCallId: 'call-2' });
     });
     const calls = events.filter((e) => e.evt === 'tool_call');
     expect(calls).toHaveLength(2);

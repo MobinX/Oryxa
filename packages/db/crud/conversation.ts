@@ -1,6 +1,7 @@
 import { eq, and, or, lt, desc, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
+import type { ConversationAgentState } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 
 export async function getOrCreateConversation(
@@ -40,7 +41,7 @@ export async function getConversationWithHistory(conversationId: string) {
       messages: {
         where: isNull(messages.deletedAt),
         orderBy: [desc(messages.time)],
-        limit: 40,
+        limit: 12,
       },
       channel: {
         with: { agent: true, business: true },
@@ -87,6 +88,16 @@ export async function updateConversationState(
   await db
     .update(conversations)
     .set({ lastMessageState: state, lastStateAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+}
+
+export async function updateConversationAgentState(
+  conversationId: string,
+  agentState: ConversationAgentState,
+) {
+  await db
+    .update(conversations)
+    .set({ agentState })
     .where(eq(conversations.id, conversationId));
 }
 

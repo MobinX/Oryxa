@@ -20,6 +20,7 @@ import {
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import type { SseEmitter } from '@agent/Agent';
+import type { ConversationAgentState } from '@repo/shared';
 
 /** A catalog row with its variants, exactly as `searchProducts` hands it back. */
 type SearchedProduct = Awaited<ReturnType<typeof searchProducts>>[number];
@@ -145,31 +146,34 @@ export function createCatalogTools(context: {
   customerPlatformId?: string | null;
   customerName?: string | null;
   emitSse?: SseEmitter;
-}) {
+  agentState?: ConversationAgentState;
+  persistAgentState?: (state: ConversationAgentState) => Promise<void>;
+}, options: {
+  includeOrderTools?: boolean;
+  onOrderCreated?: (order: { id: string; totalPrice: string | number }) => Promise<void>;
+} = {}) {
   const getProductTool = tool(
     async ({ query }) => {
       context.emitSse?.('tool_call', { name: 'get_product', args: { query } });
       console.log(`[agent-tool] get_product called with query="${query}"`);
 
-      const products = await searchProducts(context.businessId, query, 5);
+      const products = await searchProducts(context.businessId, query, 3);
       const result = JSON.stringify(
         products.map((p) => ({
           id: p.id,
           name: p.name,
           price: p.price,
           sku: p.sku,
-          description: p.description,
-          variants: p.variants.map((v) => ({
-            id: v.id,
+          description: oneLine(p.description, 120),
+          variantCount: p.variants.length,
+          availableVariantCount: p.variants.filter((v) => v.isAvailable && v.stock > 0).length,
+          variants: p.variants.slice(0, 8).map((v) => ({
             name: v.name,
-            label: v.variantId ?? null,
             price: v.price,
             stock: v.stock,
-            isAvailable: v.isAvailable,
-            // The count is the fact that was missing: a model that knows a size has one picture does
-            // not promise the customer the rest of a set that does not exist.
-            photos: photoCount(v),
+            available: v.isAvailable && v.stock > 0,
           })),
+          remainingVariants: Math.max(0, p.variants.length - 8),
         })),
       );
 
@@ -265,6 +269,35 @@ export function createCatalogTools(context: {
     },
   );
 
+  const getProductOptionsTool = tool(
+    async ({ productId }) => {
+      const product = await getProductById(context.businessId, productId);
+      if (!product) return JSON.stringify({ found: false });
+      const variants = product.variants.map((v) => ({
+        id: v.id,
+        name: v.name,
+        label: v.variantId ?? null,
+        price: v.price ?? product.price,
+        stock: v.stock,
+        available: v.isAvailable && v.stock > 0,
+        photos: photoCount(v),
+      }));
+      return JSON.stringify({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        variantCount: variants.length,
+        availableCount: variants.filter((v) => v.available).length,
+        variants,
+      });
+    },
+    {
+      name: 'get_product_options',
+      description: 'Read product prices, sizes, colors, stock and photo counts without sending cards.',
+      schema: z.object({ productId: z.string().uuid() }),
+    },
+  );
+
   const createOrderTool = tool(
     async ({ productId, variantId, count, customerAddress, customerPhone }) => {
       context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone } });
@@ -277,7 +310,16 @@ export function createCatalogTools(context: {
        * show the customer later, and nothing for the merchant to pick off the shelf. One size left in
        * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
        */
-      let chosenVariantId = variantId;
+      if (!count || !customerAddress?.trim() || !customerPhone?.trim()) {
+        const result = JSON.stringify({
+          created: false,
+          missing: [!count ? 'quantity' : null, !customerPhone?.trim() ? 'phone' : null, !customerAddress?.trim() ? 'delivery address' : null].filter(Boolean),
+        });
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
+      let chosenVariantId = variantId ?? undefined;
       if (!chosenVariantId) {
         const product = await getProductById(context.businessId, productId).catch((err) => {
           console.error('[agent-tool] create_order could not load the product before choosing a variant:', err);
@@ -305,7 +347,7 @@ export function createCatalogTools(context: {
           businessId: context.businessId,
           productId,
           variantId: chosenVariantId,
-          count: count ?? 1,
+          count,
           customerName: context.customerName ?? 'Customer',
           customerPhone,
           customerAddress,
@@ -313,6 +355,9 @@ export function createCatalogTools(context: {
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
         result = JSON.stringify({ ...order, state: stateWord(order.state) });
+        await options.onOrderCreated?.({ id: order.id, totalPrice: order.totalPrice }).catch((err) => {
+          console.error('[agent-tool] order created but tracking delivery failed:', err);
+        });
       } catch (err) {
         result = err instanceof Error ? err.message : 'Failed to create order.';
       }
@@ -323,15 +368,15 @@ export function createCatalogTools(context: {
     },
     {
       name: 'create_order',
-      description: 'Create a NEW customer order. Always pass variantId: a product with several sizes must be ordered as one of them, and this tool refuses when it is not given one (show_product_info is how the customer chooses). If this tool returns an error (product not found, insufficient stock, no variant chosen), tell the customer that message. Do NOT use this tool to modify an existing order — use update_order instead.',
+      description: 'Create a new order only after the customer confirms product, variant, quantity, phone and delivery address. Do not use for changes to an existing order.',
       schema: z.object({
         productId: z.string().uuid(),
-        variantId: z.string().uuid().optional().describe(
+        variantId: z.string().uuid().nullable().describe(
           'The UUID of the size/variant the customer chose. Required whenever the product has variants; the Order button on a variant card carries it.',
         ),
-        count: z.number().int().min(1).optional(),
-        customerAddress: z.string().optional(),
-        customerPhone: z.string().optional(),
+        count: z.number().int().min(1),
+        customerAddress: z.string().nullable(),
+        customerPhone: z.string().nullable(),
       }),
     },
   );
@@ -438,9 +483,10 @@ export function createCatalogTools(context: {
     },
   );
 
+  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool];
+  if (options.includeOrderTools === false) return readOnlyTools;
   return [
-    getProductTool,
-    getProductByVariantIdTool,
+    ...readOnlyTools,
     createOrderTool,
     getOrderTool,
     updateOrderTool,
@@ -458,6 +504,9 @@ export function createAgentTools(
     emitSse?: SseEmitter;
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
+    onOrderCreated?: (orderId: string) => Promise<void>;
+    agentState?: ConversationAgentState;
+    persistAgentState?: (state: ConversationAgentState) => Promise<void>;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
@@ -467,9 +516,6 @@ export function createAgentTools(
    */
   onSent?: (text: string, kind: 'reply' | 'card') => void,
 ) {
-  const sendFn = context.sendMessageOverride ?? fbSendMessage;
-  let sentCount = 0;
-
   /**
    * One thing that reaches Messenger is one unit of the message budget, whether it arrived
    * as a paragraph or as a row of cards. Claimed before the send and never after: the model
@@ -569,63 +615,23 @@ export function createAgentTools(
     return true;
   }
 
-  const sendMessageTool = tool(
-    async ({ text }) => {
-      if (sentCount > 0) {
-        console.log(`[agent-tool] send_message rejected — already sent in this turn`);
-        return 'Error: You have already sent a message to the customer in this turn. You are not allowed to call send_message again. You must stop calling tools and end the turn now.';
-      }
-
-      context.emitSse?.('tool_call', { name: 'send_message', args: { text } });
-      console.log(`[agent-tool] send_message called — text="${text}"`);
-
-      // Claimed before the first await: the model can emit two send_message
-      // calls in one turn, and they run concurrently — counting after the send
-      // let both pass the guard above and post the same reply twice.
-      sentCount++;
-
-      // One reply that actually reaches Messenger is one unit of the message budget.
-      // Never charged for the test override — it persists a row but puts nothing on the
-      // wire — and never for SILENT, which is not a reply. A merchant typing in the inbox
-      // is not this code path at all.
-      const chargeable = !context.sendMessageOverride && text.trim() !== 'SILENT';
-      const budget = await takeMessageUnit(chargeable);
-      if (!budget.allowed) {
-        console.log(`[agent-tool] send_message refused — the message allowance is used up`);
-        context.emitSse?.('tool_result', { name: 'send_message', result: BUDGET_REFUSED });
-        return BUDGET_REFUSED;
-      }
-
-      // Send to Messenger (or test override), then persist the EXACT text that
-      // was sent as the self message. This is the single source of truth for
-      // what the customer received.
-      try {
-        await sendFn(context.pageToken, context.customerPlatformId, text);
-      } catch (err) {
-        await returnMessageUnit(budget.period);
-        throw err;
-      }
-      await createMessage({
-        conversationId: context.conversationId,
-        from: 'self',
-        content: text,
-        state: 'done',
-      });
-      onSent?.(text, 'reply');
-
-      console.log(`[agent-tool] send_message done — message persisted`);
-      const result = 'Message successfully sent to the customer. You have completed your turn. Do not call send_message again or call any other tools. Stop and finish now.';
-      context.emitSse?.('tool_result', { name: 'send_message', result });
-      return result;
-    },
-    {
-      name: 'send_message',
-      description: 'Send a reply message to the customer on Facebook Messenger. Always use this tool for your final response.',
-      schema: z.object({
-        text: z.string().describe('The message text to send to the customer'),
-      }),
-    },
-  );
+  const trackCreatedOrder = async (order: { id: string; totalPrice: string | number }) => {
+    if (!context.conversationId) return;
+    const orderDetails = await getOrderById(context.businessId, order.id);
+    const text = oneLine(`${stateWord(orderDetails?.state ?? 'pending')} — ${orderDetails?.count ?? 1} × ${orderDetails?.productName ?? 'your order'}, ${money(order.totalPrice)}`, 160);
+    const buttons = [{ title: 'Track order', payload: `please track order with id ${order.id}` }];
+    const budget = await takeMessageUnit(!context.sendMessageOverride);
+    if (!budget.allowed) return;
+    try {
+      await sendButtonRow(text, buttons);
+    } catch (err) {
+      await returnMessageUnit(budget.period);
+      throw err;
+    }
+    const content = `${text} (Track order)`;
+    await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
+    onSent?.(content, 'card');
+  };
 
   const showProductsTool = tool(
     async ({ query, category, startingLimit, endLimit }) => {
@@ -769,7 +775,7 @@ export function createAgentTools(
             ? `Nothing here could be sent, but ${total - shownThrough} more products ${scope} have not been looked at yet — keep paging with ${nextPageArgs} before you say the store has nothing to show. Do not tell the customer about these ones unless they ask.`
             : products.length === 0
               ? 'Nothing here is buyable and there is no further page. Say the store cannot take an order for that right now, and never that it has no such product.'
-              : 'A card needs a photo and none of these has one, so nothing was sent. Describe them in one send_message instead.',
+              : 'A card needs a photo and none of these has one, so nothing was sent. Describe them in your final reply instead.',
         }));
       }
 
@@ -783,29 +789,29 @@ export function createAgentTools(
         return logResult(BUDGET_REFUSED);
       }
 
+      if (context.agentState) {
+        if (products.length === 1) {
+          const product = products[0];
+          context.agentState.currentProduct = { id: product.id, name: product.name, price: product.price };
+        }
+        context.agentState.catalogCursor = {
+          ...(word ? { query: word } : {}),
+          ...(categoryHit ? { category: categoryHit.name } : {}),
+          nextOffset: shownThrough,
+          total,
+        };
+        await context.persistAgentState?.(context.agentState);
+      }
+
       return logResult(JSON.stringify({
         sent: true,
         showing: `${from + 1}-${shownThrough}`,
-        // The number that makes "these are all we have" a claim the model can only make when it is true.
         matchingProducts: total,
         ...(categoryHit ? { category: categoryHit.name } : {}),
         products: cards.map((card) => card.title),
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(unavailable.length ? { notBuyable: unavailable } : {}),
         hasMore,
-        instruction: [
-          'The customer can now see these products with a photo, price and an Order button each. Do NOT repeat their names, prices or descriptions in text.',
-          photoless.length
-            ? `No photo exists for ${photoless.join(', ')}, so those are not on cards — say they can be described on request rather than leaving them out silently.`
-            : '',
-          unavailable.length
-            ? `${unavailable.join(', ')} are on this page but not available to order — mention that only if the customer asks about one.`
-            : '',
-          hasMore
-            ? `The store has ${total} products ${scope}; ${total - shownThrough} are NOT shown, so never say this is everything, all the products, or the full range. Offer to show more, and if the customer says yes call show_products again with ${nextPageArgs} — the window you sent is kept in the message record, so a "more" in a later turn pages from it rather than starting over.`
-            : `These are all ${total} products ${scope} — only now may you say the customer has seen everything that matches.`,
-          'Any send_message from here is one short question at most, such as asking which one they want or whether they want the next page.',
-        ].filter(Boolean).join(' '),
       }));
     },
     {
@@ -829,67 +835,8 @@ export function createAgentTools(
     },
   );
 
-  const offerTrackingTool = tool(
-    async ({ orderId }) => {
-      context.emitSse?.('tool_call', { name: 'offer_tracking', args: { orderId } });
-      console.log(`[agent-tool] offer_tracking called — orderId=${orderId}`);
-
-      const order = await getOrderById(context.businessId, orderId);
-      if (!order) {
-        const missing = 'Order not found.';
-        context.emitSse?.('tool_result', { name: 'offer_tracking', result: missing });
-        return missing;
-      }
-
-      const state = stateWord(order.state);
-      const text = oneLine(
-        `${state} — ${order.count} × ${order.productName ?? 'your order'}, ${money(order.totalPrice)}`,
-        160,
-      );
-      const buttons = [{ title: 'Track order', payload: `please track order with id ${order.id}` }];
-
-      const budget = await takeMessageUnit(!context.sendMessageOverride);
-      if (!budget.allowed) {
-        console.log(`[agent-tool] offer_tracking refused — the message allowance is used up`);
-        context.emitSse?.('tool_result', { name: 'offer_tracking', result: BUDGET_REFUSED });
-        return BUDGET_REFUSED;
-      }
-
-      const content = `${text} (${buttons[0].title})`;
-      try {
-        await sendButtonRow(text, buttons);
-      } catch (err) {
-        await returnMessageUnit(budget.period);
-        throw err;
-      }
-      await createMessage({
-        conversationId: context.conversationId,
-        from: 'self',
-        content,
-        state: 'done',
-      });
-      onSent?.(content, 'card');
-
-      const result = JSON.stringify({
-        sent: true,
-        orderId: order.id,
-        instruction: 'The customer has a Track order button now. Do not describe the order again, and end the turn.',
-      });
-      console.log(`[agent-tool] offer_tracking result: ${result}`);
-      context.emitSse?.('tool_result', { name: 'offer_tracking', result });
-      return result;
-    },
-    {
-      name: 'offer_tracking',
-      description: 'Once an order is created and confirmed, send the customer a Track order button for it. Call with the order ID from create_order or update_order.',
-      schema: z.object({
-        orderId: z.string().uuid().describe('The UUID of the order the customer just placed'),
-      }),
-    },
-  );
-
   const showOrdersTool = tool(
-    async ({ startingLimit, endLimit, messengerId }) => {
+    async ({ startingLimit, endLimit }) => {
       const from = Math.max(0, Math.trunc(startingLimit ?? 0));
       const to = Math.max(from + 1, Math.trunc(endLimit ?? from + CARD_LIST_LIMIT));
       // One Messenger card list holds ten; wider asks are cut rather than silently truncated later.
@@ -904,18 +851,6 @@ export function createAgentTools(
         return result;
       };
 
-      // The customer id comes from the conversation the run belongs to. An argument may name one, but it
-      // is checked against that id and refused, because a model told "look up 1234567" must not be able to
-      // read somebody else's order history out of another person's chat.
-      const askedFor = messengerId?.trim();
-      if (askedFor && askedFor !== context.customerPlatformId) {
-        return logResult(JSON.stringify({
-          sent: false,
-          reason: 'that Messenger id belongs to a different customer than the one in this conversation',
-          instruction: 'Do not send any id back to the customer. Say you can only see the orders in this chat, and offer to look those up.',
-        }));
-      }
-
       const { orders: page, hasMore } = await getOrdersByPlatformId(
         context.businessId,
         context.customerPlatformId,
@@ -927,7 +862,7 @@ export function createAgentTools(
           sent: false,
           orders: [],
           reason: from > 0 ? 'no older orders than the ones already shown' : 'this customer has no orders at this store',
-          instruction: 'Say so in one short send_message and offer to help them order something. Do not invent an order.',
+          instruction: 'Say so briefly and offer to help them order something. Do not invent an order.',
         }));
       }
 
@@ -965,7 +900,7 @@ export function createAgentTools(
           orders: summary,
           hasMore,
           reason: 'none of these orders has a product photo, and a card needs one',
-          instruction: 'Name them in one short send_message by item, date and status — never by an order id, product id or variant id, which a customer cannot read or use.',
+          instruction: 'Name them briefly by item, date and status — never by an order id, product id or variant id, which a customer cannot read or use.',
         }));
       }
 
@@ -984,19 +919,8 @@ export function createAgentTools(
         // the customer's orders, and a range that quietly shrinks with it misreads the next page.
         showing: `${from + 1}-${from + page.length}`,
         cardsSent: cards.length,
-        orders: summary,
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         hasMore,
-        instruction: [
-          // Without this the model narrated the whole list a second time, order UUIDs included.
-          'The cards are the list. Do not write it out again in text and never put an order id, product id or variant id in a message to the customer — they cannot tap a UUID in a sentence, and every card already carries its own Track order button.',
-          photoless.length
-            ? `No photo could be found for ${photoless.join(', ')}, so those are not on the cards. Say that in one short line and name them by item and date.`
-            : '',
-          hasMore
-            ? `These are the ${page.length} most recent of at least ${from + page.length + 1} orders. Ask in your closing line whether they want the older ones; if they say yes, call show_orders again with startingLimit=${from + size} and endLimit=${from + size * 2}.`
-            : 'That is every order they have. Your closing line can ask which one they want to track.',
-        ].filter(Boolean).join(' '),
       }));
     },
     {
@@ -1009,9 +933,6 @@ export function createAgentTools(
         ),
         endLimit: z.number().int().min(1).optional().describe(
           'Index to stop at, exclusive. Defaults to startingLimit + 10; a page shows at most 10 cards, so ask for 0..10, then 10..20 for older ones.',
-        ),
-        messengerId: z.string().max(120).optional().describe(
-          'Leave empty. Only ever the id of the customer in THIS conversation; any other id is refused.',
         ),
       }),
     },
@@ -1064,7 +985,7 @@ export function createAgentTools(
           sent: false,
           product: { ...line, variants: product.variants.map((v) => v.name) },
           reason: `every variant of ${product.name} is out of stock`,
-          instruction: `Say in one short send_message that ${product.name} is sold out in ${product.variants.length} sizes and offer what else the store has. Do not offer an Order button.`,
+          instruction: `Say briefly that ${product.name} is sold out in ${product.variants.length} sizes and offer what else the store has. Do not offer an Order button.`,
         }));
       }
 
@@ -1103,7 +1024,7 @@ export function createAgentTools(
           product: line,
           variants: listed,
           reason: 'none of these sizes has a photo, and a card needs one',
-          instruction: 'Name the sizes with their prices in one short send_message and ask which one they want — by name, never by an id, which the customer cannot read.',
+          instruction: 'Name the sizes with their prices briefly and ask which one they want — by name, never by an id, which the customer cannot read.',
         }));
       }
 
@@ -1112,15 +1033,22 @@ export function createAgentTools(
         return logResult(BUDGET_REFUSED);
       }
 
+      if (context.agentState) {
+        context.agentState.currentProduct = { ...line, price: String(line.price) };
+        context.agentState.currentVariant = null;
+        context.agentState.shownVariants = [
+          ...context.agentState.shownVariants.filter((v) => !listed.some((item) => item.id === v.id)),
+          ...listed.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })),
+        ].slice(-24);
+        await context.persistAgentState?.(context.agentState);
+      }
+
       return logResult(JSON.stringify({
         sent: true,
         product: line,
         variants: listed,
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(soldOut.length ? { hiddenOutOfStock: soldOut } : {}),
-        instruction: photoless.length
-          ? `The customer can see ${cards.length} of the ${onOffer.length} sizes of ${product.name}; no picture exists for ${photoless.join(', ')}, so those are not on cards. Say so in one short line. Do not repeat the prices or the stock, and never ask the customer for an id — the sizes are listed above with what they answer to.`
-          : `The customer can now see all ${cards.length} sizes of ${product.name}, each with its own Order button, and this result gives you each size's id, label and picture count. Do not repeat the prices or the stock; one short line asking which size they want is enough. Tapping a card orders THAT size.`,
       }));
     },
     {
@@ -1225,7 +1153,7 @@ export function createAgentTools(
             : {
                 reason: `this size has no picture on record at all`,
                 instruction:
-                  `Say in one short send_message that we have no picture of ${variant.name}. Do not send, promise, describe or apologise for `
+                  `Say briefly that we have no picture of ${variant.name}. Do not send, promise, describe or apologise for `
                   + 'a photo the store does not have. Give the written details instead, or offer another size with show_product_info.',
               }),
         }));
@@ -1250,13 +1178,20 @@ export function createAgentTools(
         return logResult(BUDGET_REFUSED);
       }
 
-      // Only the branch where the whole set went out may use the word "all". A one-picture size gets
-      // told it is the only one, which is what stops the next turn being spent on a set that does not exist.
-      const counted = photos.length === 1
-        ? `One picture of ${variant.name} went out, and it is the ONLY picture this store has of that size — there is nothing further to send. Say that it is the only picture we have; never say more pictures, all pictures or every picture.`
-        : last < photos.length
-          ? `This message carried ${last} pictures of ${variant.name}, numbered 1-${last} of the ${photos.length} this size has. The other ${photos.length - last} are NOT sent and the customer has not seen them, so never say all or every picture.`
-          : `The customer can now see all ${photos.length} pictures of ${variant.name} — that is the whole set this store holds for this size, and nothing is left to send.`;
+      if (context.agentState) {
+        context.agentState.currentProduct = { id: product.id, name: product.name, price: String(product.price) };
+        context.agentState.currentVariant = {
+          id: variant.id,
+          name: variant.name,
+          price: String(variant.price ?? product.price),
+          stock: variant.stock,
+        };
+        context.agentState.shownVariants = [
+          ...context.agentState.shownVariants.filter((v) => v.id !== variant.id),
+          { id: variant.id, name: variant.name, price: String(variant.price ?? product.price), stock: variant.stock },
+        ].slice(-24);
+        await context.persistAgentState?.(context.agentState);
+      }
 
       return logResult(JSON.stringify({
         sent: true,
@@ -1268,7 +1203,6 @@ export function createAgentTools(
         ...(stored > photos.length
           ? { photosUndeliverable: stored - photos.length }
           : {}),
-        instruction: `${counted} Same item, same price, an Order button on each card that orders this exact size. Do not repeat the price or the stock, do not list the other sizes unless asked, and never promise a picture you have not sent.`,
       }));
     },
     {
@@ -1284,5 +1218,57 @@ export function createAgentTools(
     },
   );
 
-  return [...createCatalogTools(context), sendMessageTool, showProductsTool, offerTrackingTool, showOrdersTool, showProductInfoTool, showVariantPhotosTool];
+  const suggestAlternativesTool = tool(
+    async ({ productId, excludeColors, excludeSizes, inStockOnly }) => {
+      const product = await getProductById(context.businessId, productId);
+      if (!product) return JSON.stringify({ found: false, variants: [] });
+      const excluded = [...excludeColors, ...excludeSizes]
+        .map((value) => value.normalize('NFKC').trim().toLocaleLowerCase())
+        .filter(Boolean);
+      const variants = product.variants
+        .filter((variant) => !inStockOnly || (variant.isAvailable && variant.stock > 0))
+        .filter((variant) => {
+          const name = variant.name.normalize('NFKC').toLocaleLowerCase();
+          return !excluded.some((value) => name.includes(value));
+        })
+        .slice(0, CARD_LIST_LIMIT)
+        .map((variant) => ({
+          id: variant.id,
+          name: variant.name,
+          price: variant.price ?? product.price,
+          stock: variant.stock,
+          photos: photoCount(variant),
+        }));
+      return JSON.stringify({ productId: product.id, productName: product.name, variants });
+    },
+    {
+      name: 'suggest_alternatives',
+      description: 'Find in-stock variants of a product, excluding colors and sizes the customer rejected.',
+      schema: z.object({
+        productId: z.string().uuid(),
+        excludeColors: z.array(z.string()),
+        excludeSizes: z.array(z.string()),
+        inStockOnly: z.boolean(),
+      }),
+    },
+  );
+
+  return [
+    ...createCatalogTools(context, {
+      onOrderCreated: async ({ id }) => {
+        await context.onOrderCreated?.(id).catch((err) => {
+          console.error('[agent-tool] order created but conversation state could not be saved:', err);
+        });
+        await trackCreatedOrder({
+          id,
+          totalPrice: (await getOrderById(context.businessId, id))?.totalPrice ?? '0',
+        });
+      },
+    }),
+    showProductsTool,
+    showOrdersTool,
+    showProductInfoTool,
+    showVariantPhotosTool,
+    suggestAlternativesTool,
+  ];
 }

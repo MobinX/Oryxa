@@ -18,12 +18,12 @@ vi.mock('@repo/integrations/facebook', () => ({
 
 vi.mock('@repo/agent', async () => {
   const mod = await import('../../packages/agent/index');
-  const { createSendMessageFakeLlm } = await import('../helpers/fake-llm');
+  const { createDefaultReplyFakeLlm } = await import('../helpers/fake-llm');
   return {
     ...mod,
     Agent: class PatchedAgent extends mod.Agent {
       constructor(config: AgentConfig) {
-        super({ ...config, llm: config.llm ?? createSendMessageFakeLlm('') });
+        super({ ...config, llm: config.llm ?? createDefaultReplyFakeLlm('') });
       }
     },
   };
