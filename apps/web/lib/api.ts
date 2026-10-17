@@ -1214,14 +1214,17 @@ export const adminMakeAgentFollowDefault = (bearer: string, agentId: string) =>
  * report a swap that had not happened.
  */
 export type BrandSwapResult = {
-  project: string;
-  projectId: string;
-  from: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string };
-  to: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string };
-  redeployedFrom: string;
-  deploymentId: string;
-  deploymentUrl: string;
-  readyState: string;
+  from: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string; WEB_URL: string };
+  to: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string; WEB_URL: string };
+  /** One per project the swap rebuilt — the web app that prints the name, and the API whose links follow it. */
+  builds: {
+    project: string;
+    projectId: string;
+    redeployedFrom: string;
+    deploymentId: string;
+    deploymentUrl: string;
+    readyState: string;
+  }[];
   dryRun: boolean;
 };
 

@@ -29,7 +29,9 @@ export function BrandSwapButton() {
         result.ok
           ? {
               tone: 'ok',
-              text: `Wrote ${result.result.to.COMPANY_NAME} and started a production build (${result.result.deploymentId}). Every page keeps printing ${COMPANY_NAME} until that build is promoted.`,
+              text: `Wrote ${result.result.to.COMPANY_NAME} and started production builds for ${result.result.builds
+                .map((build) => `${build.project} (${build.deploymentId})`)
+                .join(' and ')}. Every page keeps printing ${COMPANY_NAME} until those builds are promoted.`,
             }
           : { tone: 'bad', text: result.error },
       );
@@ -50,9 +52,9 @@ export function BrandSwapButton() {
             <span className="text-muted-foreground">{OTHER_COMPANY_NAME}</span>
           </p>
           <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Writes <code>COMPANY_NAME</code> and <code>PARENT_COMPANY_NAME</code> on the web project
-            in Vercel and redeploys it, because both names are baked into the build. Pressing it again
-            brings the current name back.
+            Writes the name, the legal entity behind it and the storefront address on Vercel, then
+            redeploys the web app and the API that links to it — all of it is baked into a build.
+            Pressing it again brings the current name back.
           </p>
         </div>
 

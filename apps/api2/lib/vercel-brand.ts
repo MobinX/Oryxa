@@ -2,14 +2,20 @@
  * The re-brand, spoken to Vercel rather than to Postgres.
  *
  * `COMPANY_NAME` and `PARENT_COMPANY_NAME` are build-time inlined (`env` in apps/web/next.config.ts),
- * so a new value only reaches a customer once the web deployment has been built again — writing the
- * variables and leaving the deployment alone would change nothing a visitor could see. This module
- * therefore always does both halves: patch the two variables, then redeploy.
+ * and `WEB_URL` names the storefront the API links back to, so a new value only reaches a customer
+ * once the deployment has been built again — writing the variables and leaving the deployments alone
+ * would change nothing a visitor could see. A swap therefore always does both halves: patch the
+ * variables, then redeploy both projects.
  *
- * The two names move together rather than independently, because they are one decision. "OnlyOrders"
- * is the same shop wearing its own name as the entity on the Terms page; "Oryxa" is a product of
- * RR Computer. A swap that changed one and not the other would leave the navbar naming a product
- * that the legal footer says belongs to somebody else.
+ * The names move together rather than independently, because they are one decision. "OnlyOrders"
+ * is the same shop wearing its own name as the entity on the Terms page and its own domain; "Oryxa"
+ * is a product of RR Computer on a subdomain of theirs. A swap that changed the name and not the
+ * domain would leave a page calling itself OnlyOrders while linking customers to the old address.
+ *
+ * The direction is read from `COMPANY_NAME` on the web project, which is the one variable whose
+ * value Vercel returns. `WEB_URL` is stored encrypted and cannot be read back, so it is written
+ * from the map alone — which is also why the map, not the project, is the record of what a brand
+ * is called.
  *
  * Nothing here is stored: the token is read from `VERCEL_PERSONA_KEY` per call, so a long-lived
  * credential never outlives the request that needed it.
@@ -17,24 +23,33 @@
 
 const VERCEL_API = 'https://api.vercel.com';
 
-/** The variable a customer-facing name lives in, and the legal entity beside it. */
-export type BrandEnvKey = 'COMPANY_NAME' | 'PARENT_COMPANY_NAME';
+/** The variable a customer-facing name lives in, the legal entity beside it, and the domain the API links to. */
+export type BrandEnvKey = 'COMPANY_NAME' | 'PARENT_COMPANY_NAME' | 'WEB_URL';
 
-/** What a brand is called, in the two places a name is printed. */
-export type BrandNames = Record<BrandEnvKey, string>;
+/** What a brand is called, in every place a name or an address is printed. */
+export type Brand = Record<BrandEnvKey, string>;
 
 /**
- * Where each product name sends both variables. Keyed by the name the web app is answering with
- * now, so the swap is a lookup rather than a chain of conditionals that has to stay in step with
- * itself in two directions.
+ * Where each product name sends all three variables. Keyed by the name the web app is answering
+ * with now, so the swap is a lookup rather than a chain of conditionals that has to stay in step
+ * with itself in two directions.
  */
-export const BRAND_SWAPS: Record<string, BrandNames> = {
-  Oryxa: { COMPANY_NAME: 'OnlyOrders', PARENT_COMPANY_NAME: 'OnlyOrders' },
-  OnlyOrders: { COMPANY_NAME: 'Oryxa', PARENT_COMPANY_NAME: 'RR Computer' },
+export const BRAND_SWAPS: Record<string, Brand> = {
+  Oryxa: {
+    COMPANY_NAME: 'OnlyOrders',
+    PARENT_COMPANY_NAME: 'OnlyOrders',
+    WEB_URL: 'https://www.onlyorders.tech/',
+  },
+  OnlyOrders: {
+    COMPANY_NAME: 'Oryxa',
+    PARENT_COMPANY_NAME: 'RR Computer',
+    WEB_URL: 'https://oryxa.rrcomputer.com.bd/',
+  },
 };
 
-/** The project the console re-brands when nothing names another. */
-export const DEFAULT_BRAND_PROJECT = 'oryxa-web';
+/** The project whose name decides the direction, and the one whose links follow it. */
+export const DEFAULT_WEB_PROJECT = 'oryxa-web';
+export const DEFAULT_API_PROJECT = 'oryxa-api2';
 
 export class VercelApiError extends Error {
   constructor(
@@ -46,41 +61,48 @@ export class VercelApiError extends Error {
   }
 }
 
-/**
- * The env values a swap needs, with the Vercel id of the row each one is written to. `target` is
- * kept for the error text: a variable scoped to preview only would be patched happily and still
- * show the old name in production, which is the one outcome an operator would call a bug.
- */
-export interface BrandEnvRows {
-  companyId: string;
-  parentId: string;
-  from: BrandNames;
-  targets: Record<BrandEnvKey, string[]>;
+/** One env row as Vercel holds it: where to write, and — for a plain row — what it says. */
+export interface EnvRow {
+  id: string;
+  target: string[];
+  /** Absent on `sensitive` and `encrypted` rows, which Vercel never returns. */
+  value?: string;
+}
+
+/** The env values a swap writes, with the Vercel id of the row each one is written to. */
+export type BrandEnvRows = Record<BrandEnvKey, EnvRow>;
+
+export interface ProjectBuild {
+  project: string;
+  projectId: string;
+  redeployedFrom: string;
+  deploymentId: string;
+  deploymentUrl: string;
+  readyState: string;
 }
 
 export interface BrandSwapResult {
-  project: string;
-  projectId: string;
-  from: BrandNames;
-  to: BrandNames;
-  redeployedFrom: string;
-  deploymentId: string;
-  /** A real swap names the build it started; a rehearsal names the production build it would replace. */
-  deploymentUrl: string;
-  readyState: string;
+  from: Brand;
+  to: Brand;
+  builds: ProjectBuild[];
   /** True when the variables were not written and no build was started, because the caller asked for a rehearsal. */
   dryRun: boolean;
 }
 
 export interface BrandSwapOptions {
   token: string;
-  projectName?: string;
+  webProjectName?: string;
+  apiProjectName?: string;
   /** Reports what would change and stops, which is the only safe way to point this at a live project. */
   dryRun?: boolean;
 }
 
-function brandProjectName(): string {
-  return process.env.VERCEL_WEB_PROJECT?.trim() || DEFAULT_BRAND_PROJECT;
+function vercelWebProject(): string {
+  return process.env.VERCEL_WEB_PROJECT?.trim() || DEFAULT_WEB_PROJECT;
+}
+
+function vercelApiProject(): string {
+  return process.env.VERCEL_API_PROJECT?.trim() || DEFAULT_API_PROJECT;
 }
 
 /** The token, or nothing. Every caller is a route a person pressed, so a missing key is a setup gap and must say so. */
@@ -115,7 +137,7 @@ async function vercel<T = Record<string, unknown>>(
 }
 
 /**
- * Looks the project up by name. The direct read is the common path; the list is the fallback for a
+ * Looks a project up by name. The direct read is the common path; the list is the fallback for a
  * token whose team is not its default, where Vercel resolves a slug only inside a team scope.
  */
 export async function findBrandProject(
@@ -138,51 +160,53 @@ export async function findBrandProject(
 }
 
 /**
- * Reads the two brand variables. A missing row is an error rather than a licence to create one:
- * `COMPANY_NAME` absent means the deployment is answering with the fallback in lib/brand.ts, and
- * silently adding the variable would change the name on the next build of every environment.
+ * Reads the rows a swap writes. A missing row is an error rather than a licence to create one: a
+ * variable that is not there means the deployment is answering with a fallback in code, and silently
+ * adding it would change a name on the next build of every environment. An unreadable value is fine
+ * here — only `COMPANY_NAME` is ever read, and the caller asks for that itself.
  */
-export async function readBrandEnv(token: string, projectId: string): Promise<BrandEnvRows> {
+export async function readEnvRows(
+  token: string,
+  projectId: string,
+  keys: BrandEnvKey[],
+): Promise<BrandEnvRows> {
   const rows = await vercel<{
-    envs?: { id: string; key: string; value?: string; type?: string; target?: string[] }[];
+    envs?: { id: string; key: string; value?: string; target?: string[] }[];
   }>(token, `/v9/projects/${projectId}/env?decrypt=true`);
 
   const byKey = new Map((rows.envs ?? []).map((e) => [e.key, e]));
-  const company = byKey.get('COMPANY_NAME');
-  const parent = byKey.get('PARENT_COMPANY_NAME');
-  if (!company?.id || !parent?.id) {
-    const absent = [!company?.id && 'COMPANY_NAME', !parent?.id && 'PARENT_COMPANY_NAME'].filter(Boolean);
-    throw new VercelApiError(`The Vercel project has no ${absent.join(' or ')} variable`, 404);
-  }
-  // A `sensitive` row never returns its value, so the current name is unknown and the direction of
-  // the swap cannot be chosen. Converting the row is the operator's call, not a guess made here.
-  if (typeof company.value !== 'string' || typeof parent.value !== 'string') {
-    throw new VercelApiError('The brand variables are stored as secrets, so their current values cannot be read', 409);
+  const picked = {} as BrandEnvRows;
+  const absent: string[] = [];
+
+  for (const key of keys) {
+    const row = byKey.get(key);
+    if (!row?.id) {
+      absent.push(key);
+      continue;
+    }
+    picked[key] = { id: row.id, target: row.target ?? [], value: row.value };
   }
 
-  return {
-    companyId: company.id,
-    parentId: parent.id,
-    from: { COMPANY_NAME: company.value, PARENT_COMPANY_NAME: parent.value },
-    targets: { COMPANY_NAME: company.target ?? [], PARENT_COMPANY_NAME: parent.target ?? [] },
-  };
+  if (absent.length) {
+    throw new VercelApiError(`A brand project has no ${absent.join(' or ')} variable`, 404);
+  }
+  return picked;
 }
 
 /**
- * Writes one variable. Only `production` is sent in the swap when the row is not scoped to it —
- * `target` is a replacement, not an addition, so a row that lives on preview and production must
- * not come back preview-only after the write.
+ * Writes one variable. `target` is sent back unchanged, because it is a replacement and not an
+ * addition: a row scoped to preview and production must not come back preview-only after a write
+ * that only meant to change a value.
  */
-async function writeBrandEnv(
+export async function writeEnvRow(
   token: string,
   projectId: string,
-  envId: string,
+  row: EnvRow,
   value: string,
-  target: string[],
 ): Promise<void> {
-  await vercel(token, `/v9/projects/${projectId}/env/${envId}`, {
+  await vercel(token, `/v9/projects/${projectId}/env/${row.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ value, target }),
+    body: JSON.stringify({ value, target: row.target }),
   });
 }
 
@@ -229,60 +253,85 @@ export async function redeployProduction(
   return { id, url: created.url ?? '', readyState: created.readyState ?? 'QUEUED' };
 }
 
-/** The name a swap starts from, or the error that says what the project is actually called. */
-export function brandSwapTarget(from: BrandNames): BrandNames {
-  const next = BRAND_SWAPS[from.COMPANY_NAME];
+/** The brand a swap starts from, or the error that says what the project is actually called. */
+export function brandSwapTarget(currentProductName: string): Brand {
+  const next = BRAND_SWAPS[currentProductName];
   if (!next) {
     throw new VercelApiError(
-      `COMPANY_NAME is "${from.COMPANY_NAME}", which is not a brand this swap knows how to leave`,
+      `COMPANY_NAME is "${currentProductName}", which is not a brand this swap knows how to leave`,
       409,
     );
   }
   return next;
 }
 
+async function redeployOne(
+  token: string,
+  project: { id: string; name: string },
+  live: { uid: string; url: string },
+): Promise<ProjectBuild> {
+  const created = await redeployProduction(token, project.name, live.uid);
+  return {
+    project: project.name,
+    projectId: project.id,
+    redeployedFrom: live.uid,
+    deploymentId: created.id,
+    deploymentUrl: created.url,
+    readyState: created.readyState,
+  };
+}
+
 /**
- * Reads the live brand, writes the other one, and rebuilds what serves it. Everything before the
- * first write is read-only, so a rehearsal and a real swap share the whole path up to the point
- * where a person decided to press the button.
+ * Reads the live brand, writes the other one, and rebuilds both projects that serve it. Everything
+ * before the first write is read-only, so a rehearsal and a real swap share the whole path up to
+ * the point where a person decided to press the button.
+ *
+ * The two builds are started back to back, so neither project is left serving a name the other has
+ * already dropped: the web project's variables are written, then the API's link, then both rebuild.
  */
 export async function swapBrand(options: BrandSwapOptions): Promise<BrandSwapResult> {
-  const projectName = options.projectName?.trim() || brandProjectName();
   const token = options.token;
+  const webName = options.webProjectName?.trim() || vercelWebProject();
+  const apiName = options.apiProjectName?.trim() || vercelApiProject();
 
-  const project = await findBrandProject(token, projectName);
-  const env = await readBrandEnv(token, project.id);
-  const to = brandSwapTarget(env.from);
-  const source = await latestProductionDeployment(token, project.id);
+  const web = await findBrandProject(token, webName);
+  const api = await findBrandProject(token, apiName);
+
+  const webRows = await readEnvRows(token, web.id, ['COMPANY_NAME', 'PARENT_COMPANY_NAME']);
+  // The one value the direction is decided by. It has to be readable: guessing a direction would
+  // rename the site to what it may already be called.
+  const currentName = webRows.COMPANY_NAME.value;
+  if (typeof currentName !== 'string') {
+    throw new VercelApiError('COMPANY_NAME is stored as a secret, so its current value cannot be read', 409);
+  }
+  const to = brandSwapTarget(currentName);
+  // `WEB_URL` cannot be read back (encrypted), so where the swap leaves from is said by the map.
+  const from: Brand = { ...BRAND_SWAPS[to.COMPANY_NAME], COMPANY_NAME: currentName };
+
+  const apiRows = await readEnvRows(token, api.id, ['WEB_URL']);
+  const webLive = await latestProductionDeployment(token, web.id);
+  const apiLive = await latestProductionDeployment(token, api.id);
 
   if (options.dryRun) {
     return {
-      project: project.name,
-      projectId: project.id,
-      from: env.from,
+      from,
       to,
-      redeployedFrom: source.uid,
-      deploymentId: '(not created — dry run)',
-      deploymentUrl: source.url,
-      readyState: 'DRY_RUN',
+      builds: [
+        { project: web.name, projectId: web.id, redeployedFrom: webLive.uid, deploymentId: '(not created — dry run)', deploymentUrl: webLive.url, readyState: 'DRY_RUN' },
+        { project: api.name, projectId: api.id, redeployedFrom: apiLive.uid, deploymentId: '(not created — dry run)', deploymentUrl: apiLive.url, readyState: 'DRY_RUN' },
+      ],
       dryRun: true,
     };
   }
 
-  await writeBrandEnv(token, project.id, env.companyId, to.COMPANY_NAME, env.targets.COMPANY_NAME);
-  await writeBrandEnv(token, project.id, env.parentId, to.PARENT_COMPANY_NAME, env.targets.PARENT_COMPANY_NAME);
+  await writeEnvRow(token, web.id, webRows.COMPANY_NAME, to.COMPANY_NAME);
+  await writeEnvRow(token, web.id, webRows.PARENT_COMPANY_NAME, to.PARENT_COMPANY_NAME);
+  await writeEnvRow(token, api.id, apiRows.WEB_URL, to.WEB_URL);
 
-  const created = await redeployProduction(token, project.name, source.uid);
+  const builds = [
+    await redeployOne(token, web, webLive),
+    await redeployOne(token, api, apiLive),
+  ];
 
-  return {
-    project: project.name,
-    projectId: project.id,
-    from: env.from,
-    to,
-    redeployedFrom: source.uid,
-    deploymentId: created.id,
-    deploymentUrl: created.url,
-    readyState: created.readyState,
-    dryRun: false,
-  };
+  return { from, to, builds, dryRun: false };
 }
