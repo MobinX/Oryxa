@@ -1,7 +1,31 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { getAuthToken } from '@/lib/auth';
-import { logsBearer, operatorAccountEmail } from '@/lib/logs-session';
+import { isOperatorEmail, logsBearer, operatorAccountEmail } from '@/lib/logs-session';
 import { verifyOperatorToken } from '@/lib/operator-login';
+
+export const OPERATOR_AUTH_COOKIE = 'oryxa_operator_token';
+
+export async function getOperatorAuthToken(): Promise<string | null> {
+  const store = await cookies();
+  return store.get(OPERATOR_AUTH_COOKIE)?.value ?? null;
+}
+
+export async function setOperatorAuthCookie(token: string) {
+  const store = await cookies();
+  store.set(OPERATOR_AUTH_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60, // 1 hour — matches Firebase ID token lifetime
+  });
+}
+
+export async function clearOperatorAuthCookie() {
+  const store = await cookies();
+  store.delete(OPERATOR_AUTH_COOKIE);
+}
 
 /**
  * The console used to accept the reader's own account token as proof that they were the operator,
@@ -24,15 +48,25 @@ export async function requireConsoleBearer(): Promise<string> {
   redirect('/admin/login');
 }
 
-/** The browser's account token, but only once Google says it is the operator's own. */
+/** The browser's account token, but only once Google says it is an operator account. */
 export async function operatorToken(): Promise<string | null> {
-  const token = await getAuthToken();
-  if (!token) return null;
+  const opToken = await getOperatorAuthToken();
+  if (opToken) {
+    const verified = await verifyOperatorToken(opToken);
+    if (verified?.email && isOperatorEmail(verified.email)) {
+      return opToken;
+    }
+  }
 
-  const verified = await verifyOperatorToken(token);
-  if (!verified?.email) return null;
+  const authToken = await getAuthToken();
+  if (authToken) {
+    const verified = await verifyOperatorToken(authToken);
+    if (verified?.email && isOperatorEmail(verified.email)) {
+      return authToken;
+    }
+  }
 
-  return verified.email.toLowerCase() === operatorAccountEmail().toLowerCase() ? token : null;
+  return null;
 }
 
 /**

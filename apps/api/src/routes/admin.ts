@@ -12,8 +12,10 @@ import {
 } from '@repo/shared';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
-import { queryLogs } from '@api/lib/log-query';
+import { queryLogs, MAX_LIMIT } from '@api/lib/log-query';
 import { emit, errorFields } from '@api/lib/log';
+import { toRecordsCsv } from '@api/lib/csv';
+import { getPlatformBusinessExportData } from '@repo/db/crud/business-export';
 import {
   getOverrideReport,
   getPlatformAgent,
@@ -47,6 +49,62 @@ export const adminRouter = new OpenAPIHono({
 });
 
 adminRouter.use('*', logsAuthMiddleware);
+
+const exportCsvRoute = createRoute({
+  method: 'get',
+  path: '/admin/export.csv',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { 'text/csv': { schema: z.string() } },
+      description: 'Platform business records and retained event logs as CSV',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No valid operator session',
+    },
+    502: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'The event log store could not be queried',
+    },
+  },
+});
+
+adminRouter.openapi(exportCsvRoute, async (c) => {
+  const endTime = new Date();
+  // Event logs have a 31-day query limit and the configured store retains about a month.
+  const startTime = new Date(endTime.getTime() - LOG_RETENTION_MS).toISOString();
+  const businessGroups = await getPlatformBusinessExportData();
+  const logRows: Array<{ time: string; evt: string; [key: string]: unknown }> = [];
+  let pageEndTime = endTime.toISOString();
+
+  try {
+    while (true) {
+      const page = await queryLogs({ startTime, endTime: pageEndTime, limit: MAX_LIMIT });
+      logRows.push(
+        ...page.events.map((event) => ({ time: event.time, evt: event.evt, ...event.fields })),
+      );
+      const oldest = page.events.at(-1)?.time;
+      if (!page.nextCursor || !oldest || Date.parse(oldest) <= Date.parse(startTime)) break;
+      if (oldest === pageEndTime) break;
+      pageEndTime = oldest;
+    }
+  } catch (err) {
+    emit('error', errorFields(err));
+    return c.json({ error: 'Event log store query failed' }, 502);
+  }
+
+  const csv = toRecordsCsv([
+    ...businessGroups,
+    { type: 'event_log', rows: logRows },
+  ]);
+  return c.body(csv, 200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': 'attachment; filename="oryxa-admin-export.csv"',
+    'Cache-Control': 'private, no-store',
+  });
+});
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 30;

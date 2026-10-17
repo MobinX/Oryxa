@@ -112,6 +112,33 @@ function photoCount(variant: { imageUrls?: string[] | null; imageUrl?: string | 
 }
 
 /**
+ * Token-safe color and size extraction from a variant name (e.g. "Black XL", "Navy M", "Crimson").
+ */
+export function parseVariantAttributes(name: string): { color: string | null; size: string | null } {
+  let norm = (name || '').trim();
+  // If variant name is formatted as "Product Name - Variant Details", isolate variant details
+  if (norm.includes(' - ')) {
+    norm = norm.split(' - ').slice(1).join(' - ').trim();
+  } else if (norm.includes(' — ')) {
+    norm = norm.split(' — ').slice(1).join(' — ').trim();
+  }
+
+  const tokens = norm.split(/\s+/);
+  const knownSizes = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'SMALL', 'MEDIUM', 'LARGE', 'FREE', 'FREESIZE']);
+  let size: string | null = null;
+  const colorTokens: string[] = [];
+  for (const t of tokens) {
+    if (knownSizes.has(t.toUpperCase())) {
+      size = t;
+    } else {
+      colorTokens.push(t);
+    }
+  }
+  const color = colorTokens.length > 0 ? colorTokens.join(' ') : null;
+  return { color, size };
+}
+
+/**
  * The order's state, said plainly. Every earlier version of this map claimed a time as well as a status
  * — "Just placed" for pending — and a state column that only the merchant can move does not age with the
  * order, so a June sale still read "Just placed" beside its own June date. The word is now the state and
@@ -167,12 +194,19 @@ export function createCatalogTools(context: {
           description: oneLine(p.description, 120),
           variantCount: p.variants.length,
           availableVariantCount: p.variants.filter((v) => v.isAvailable && v.stock > 0).length,
-          variants: p.variants.slice(0, 8).map((v) => ({
-            name: v.name,
-            price: v.price,
-            stock: v.stock,
-            available: v.isAvailable && v.stock > 0,
-          })),
+          variants: p.variants.slice(0, 8).map((v) => {
+            const attrs = parseVariantAttributes(v.name);
+            return {
+              id: v.id,
+              name: v.name,
+              color: attrs.color,
+              size: attrs.size,
+              price: v.price,
+              stock: v.stock,
+              available: v.isAvailable && v.stock > 0,
+              photos: photoCount(v),
+            };
+          }),
           remainingVariants: Math.max(0, p.variants.length - 8),
         })),
       );
@@ -183,7 +217,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product',
-      description: 'Search the product catalog by name or SKU. Returns matching products with variants.',
+      description: 'Read-only search by product name or SKU. Use when answering text questions about price, stock, or specs without a productId; do NOT use to send cards.',
       schema: z.object({
         query: z.string().describe('Product name or SKU to search for'),
       }),
@@ -252,9 +286,8 @@ export function createCatalogTools(context: {
           isAvailable: variant.isAvailable,
         },
         instruction: context.conversationId
-          ? `This is the exact item the stamped label belongs to: ${product.name}, variant ${variant.name}. `
-            + 'Show it with show_products (query the product name) so the customer gets the card, and name that variant in one line.'
-          : `This is the exact item the stamped label belongs to: ${product.name}, variant ${variant.name}. Answer with it.`,
+          ? `Found matching variant: ${product.name}, variant ${variant.name}. Call show_products(query="${product.name}") to display it. Never mention the 5-character photo code in customer text.`
+          : `Found matching variant: ${product.name}, variant ${variant.name}. Answer with it without mentioning the 5-character code.`,
       });
       console.log(`[agent-tool] get_product_by_variant_id result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
       context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
@@ -262,7 +295,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product_by_variant_id',
-      description: 'Find the exact product and variant a customer means from the short label stamped on a photo they sent — five characters, three letters and two digits, often written with a # in front ("#AFG23"). USE THIS FIRST whenever a message contains such a code, whether the customer typed it or it is printed on a picture. Only when this finds nothing should you describe the photo and search by words instead.',
+      description: 'Read-only lookup of a 5-character alphanumeric photo stamp (e.g. AFG23). Use first when a photo or message shows a 5-char code; do NOT pass size/color words.',
       schema: z.object({
         variantId: z.string().min(1).max(40).describe('The stamped label, with or without its #'),
       }),
@@ -273,19 +306,30 @@ export function createCatalogTools(context: {
     async ({ productId }) => {
       const product = await getProductById(context.businessId, productId);
       if (!product) return JSON.stringify({ found: false });
-      const variants = product.variants.map((v) => ({
-        id: v.id,
-        name: v.name,
-        label: v.variantId ?? null,
-        price: v.price ?? product.price,
-        stock: v.stock,
-        available: v.isAvailable && v.stock > 0,
-        photos: photoCount(v),
-      }));
+      const variants = product.variants.map((v) => {
+        const attrs = parseVariantAttributes(v.name);
+        return {
+          id: v.id,
+          name: v.name,
+          color: attrs.color,
+          size: attrs.size,
+          label: v.variantId ?? null,
+          price: v.price ?? product.price,
+          stock: v.stock,
+          available: v.isAvailable && v.stock > 0,
+          photos: photoCount(v),
+        };
+      });
+      const colors = Array.from(new Set(variants.map((v) => v.color).filter((c): c is string => Boolean(c))));
+      const sizes = Array.from(new Set(variants.map((v) => v.size).filter((s): s is string => Boolean(s))));
+      const totalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
       return JSON.stringify({
         id: product.id,
         name: product.name,
         price: product.price,
+        colors,
+        sizes,
+        totalStock,
         variantCount: variants.length,
         availableCount: variants.filter((v) => v.available).length,
         variants,
@@ -293,7 +337,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product_options',
-      description: 'Read product prices, sizes, colors, stock and photo counts without sending cards.',
+      description: 'Read-only lookup of colors, sizes, prices, stock, and photo counts for one productId. Use for \'how many colors/sizes?\' or stock questions; do NOT use when customer wants cards.',
       schema: z.object({ productId: z.string().uuid() }),
     },
   );
@@ -303,6 +347,25 @@ export function createCatalogTools(context: {
       context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
 
+      // 5-minute active Pending duplicate order guard
+      if (context.agentState?.lastOrder?.state === 'Pending') {
+        const last = context.agentState.lastOrder;
+        const timeSince = Date.now() - new Date(last.createdAt).getTime();
+        if (timeSince < 5 * 60 * 1000 && last.productName) {
+          const dupResult = JSON.stringify({
+            id: last.id,
+            state: 'Pending',
+            productName: last.productName,
+            variantName: last.variantName,
+            count: last.count,
+            totalPrice: last.totalPrice,
+            note: 'Order already created and active.',
+          });
+          context.emitSse?.('tool_result', { name: 'create_order', result: dupResult });
+          return dupResult;
+        }
+      }
+
       let result: string;
 
       /**
@@ -311,10 +374,8 @@ export function createCatalogTools(context: {
        * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
        */
       if (!count || !customerAddress?.trim() || !customerPhone?.trim()) {
-        const result = JSON.stringify({
-          created: false,
-          missing: [!count ? 'quantity' : null, !customerPhone?.trim() ? 'phone' : null, !customerAddress?.trim() ? 'delivery address' : null].filter(Boolean),
-        });
+        const missing = [!count ? 'quantity' : null, !customerPhone?.trim() ? 'phone' : null, !customerAddress?.trim() ? 'delivery address' : null].filter(Boolean);
+        const result = JSON.stringify({ created: false, missing });
         context.emitSse?.('tool_result', { name: 'create_order', result });
         return result;
       }
@@ -368,10 +429,10 @@ export function createCatalogTools(context: {
     },
     {
       name: 'create_order',
-      description: 'Create a new order only after the customer confirms product, variant, quantity, phone and delivery address. Do not use for changes to an existing order.',
+      description: 'Creates a new customer order. Use ONLY when productId, variantId, count, customerPhone, and customerAddress are all known; do NOT use to edit an existing order.',
       schema: z.object({
         productId: z.string().uuid(),
-        variantId: z.string().uuid().nullable().describe(
+        variantId: z.string().uuid().nullable().optional().describe(
           'The UUID of the size/variant the customer chose. Required whenever the product has variants; the Order button on a variant card carries it.',
         ),
         count: z.number().int().min(1),
@@ -383,10 +444,14 @@ export function createCatalogTools(context: {
 
   const getOrderTool = tool(
     async ({ orderId }) => {
-      context.emitSse?.('tool_call', { name: 'get_order', args: { orderId } });
-      console.log(`[agent-tool] get_order called — orderId=${orderId}`);
+      const targetOrderId = orderId || context.agentState?.lastOrder?.id;
+      if (!targetOrderId) {
+        return 'Order not found. Please provide an order ID or tap Track Order.';
+      }
+      context.emitSse?.('tool_call', { name: 'get_order', args: { orderId: targetOrderId } });
+      console.log(`[agent-tool] get_order called — orderId=${targetOrderId}`);
 
-      const order = await getOrderById(context.businessId, orderId);
+      const order = await getOrderById(context.businessId, targetOrderId);
       const result = order
         ? JSON.stringify({ ...order, state: order.state ? stateWord(order.state) : order.state })
         : 'Order not found.';
@@ -397,19 +462,23 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_order',
-      description: 'Retrieve order details (like status, shipping address, and items) by order ID.',
+      description: 'Read-only lookup of status and details for one orderId (or latest order in State). Use for Track button taps or status questions; do NOT use for full order history.',
       schema: z.object({
-        orderId: z.string().uuid().describe('The UUID of the order to retrieve'),
+        orderId: z.string().uuid().nullable().optional().describe('Order UUID; omit or null to use State.lastOrder.id'),
       }),
     },
   );
 
   const updateOrderTool = tool(
     async ({ orderId, count, customerPhone, customerAddress }) => {
-      context.emitSse?.('tool_call', { name: 'update_order', args: { orderId, count, customerPhone, customerAddress } });
-      console.log(`[agent-tool] update_order called — orderId=${orderId}`);
+      const targetOrderId = orderId || context.agentState?.lastOrder?.id;
+      if (!targetOrderId) {
+        return 'Order not found. Please specify which order to update.';
+      }
+      context.emitSse?.('tool_call', { name: 'update_order', args: { orderId: targetOrderId, count, customerPhone, customerAddress } });
+      console.log(`[agent-tool] update_order called — orderId=${targetOrderId}`);
 
-      const order = await getOrderById(context.businessId, orderId);
+      const order = await getOrderById(context.businessId, targetOrderId);
       if (!order) {
         const result = 'Order not found.';
         context.emitSse?.('tool_result', { name: 'update_order', result });
@@ -417,14 +486,14 @@ export function createCatalogTools(context: {
       }
 
       if (order.state !== 'pending') {
-        const result = `Cannot update order. It is ${stateWord(order.state)}, and changes are only allowed while it is Pending. Say that to the customer in their own language — do not repeat the state word as-is if they wrote in another.`;
+        const result = `Cannot update order. It is ${stateWord(order.state)}, and changes are only allowed while it is Pending. Say that to the customer in their own language.`;
         context.emitSse?.('tool_result', { name: 'update_order', result });
         return result;
       }
 
       let result: string;
       try {
-        const updateResult = await updateOrder(context.businessId, orderId, {
+        const updateResult = await updateOrder(context.businessId, targetOrderId, {
           count,
           customerPhone,
           customerAddress,
@@ -440,9 +509,9 @@ export function createCatalogTools(context: {
     },
     {
       name: 'update_order',
-      description: 'Update a pending order (quantity, phone, or address). If this tool returns an error (order not found, not pending, or insufficient stock), tell the customer that message. Do NOT call create_order first. If the customer did not give an order ID, look it up in conversation history.',
+      description: 'Updates address, phone, or quantity of an existing order. Use when customer wants to change an existing order; do NOT use create_order.',
       schema: z.object({
-        orderId: z.string().uuid().describe('The UUID of the order to update'),
+        orderId: z.string().uuid().nullable().optional().describe('The UUID of the order to update (or null for latest order in State)'),
         count: z.number().int().min(1).optional(),
         customerPhone: z.string().optional(),
         customerAddress: z.string().optional(),
@@ -452,10 +521,14 @@ export function createCatalogTools(context: {
 
   const cancelOrderTool = tool(
     async ({ orderId }) => {
-      context.emitSse?.('tool_call', { name: 'cancel_order', args: { orderId } });
-      console.log(`[agent-tool] cancel_order called — orderId=${orderId}`);
+      const targetOrderId = orderId || context.agentState?.lastOrder?.id;
+      if (!targetOrderId) {
+        return 'Order not found. Please specify which order to cancel.';
+      }
+      context.emitSse?.('tool_call', { name: 'cancel_order', args: { orderId: targetOrderId } });
+      console.log(`[agent-tool] cancel_order called — orderId=${targetOrderId}`);
 
-      const order = await getOrderById(context.businessId, orderId);
+      const order = await getOrderById(context.businessId, targetOrderId);
       if (!order) {
         const result = 'Order not found.';
         context.emitSse?.('tool_result', { name: 'cancel_order', result });
@@ -468,17 +541,17 @@ export function createCatalogTools(context: {
         return result;
       }
 
-      await deleteOrder(context.businessId, orderId);
-      const result = JSON.stringify({ id: orderId, cancelled: true });
+      await deleteOrder(context.businessId, targetOrderId);
+      const result = JSON.stringify({ id: targetOrderId, cancelled: true });
       console.log(`[agent-tool] cancel_order result: ${result}`);
       context.emitSse?.('tool_result', { name: 'cancel_order', result });
       return result;
     },
     {
       name: 'cancel_order',
-      description: 'Cancel an unfulfilled order. If this tool returns an error (not found or already fulfilled), tell the customer that message. Search conversation history for the order ID if the customer did not provide one.',
+      description: 'Cancels an existing order in Pending or Acknowledged state. Use when customer asks to cancel; do NOT use to edit an order.',
       schema: z.object({
-        orderId: z.string().uuid().describe('The UUID of the order to cancel'),
+        orderId: z.string().uuid().nullable().optional().describe('The UUID of the order to cancel (or null for latest order in State)'),
       }),
     },
   );
@@ -800,7 +873,6 @@ export function createAgentTools(
           nextOffset: shownThrough,
           total,
         };
-        await context.persistAgentState?.(context.agentState);
       }
 
       return logResult(JSON.stringify({
@@ -809,6 +881,11 @@ export function createAgentTools(
         matchingProducts: total,
         ...(categoryHit ? { category: categoryHit.name } : {}),
         products: cards.map((card) => card.title),
+        items: products.slice(0, cards.length).map((p) => ({
+          title: oneLine(p.name, 60),
+          price: displayPrice(p),
+          stock: p.variants.reduce((acc, v) => acc + (v.isAvailable ? v.stock : 0), 0),
+        })),
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(unavailable.length ? { notBuyable: unavailable } : {}),
         hasMore,
@@ -816,8 +893,7 @@ export function createAgentTools(
     },
     {
       name: 'show_products',
-      description:
-        'Show products to the customer as Messenger cards — photo, name, price, short summary and an Order button each, stacked as a vertical list in one message. USE THIS INSTEAD OF describing products in text whenever the customer asks what is available, wants to see or buy something, or asks about a product. A card list carries ten products at a time, so for a big catalog this shows one page: narrow it with category (named in words) or query, page it with startingLimit/endLimit, and the result tells you how many products the store actually has — never imply the page shown is the whole catalog. "What do you have?" is answered with no query at all; "what sarees do you have?" is answered with category only.',
+      description: 'Display tool: sends up to 10 product cards with photo, price, and Order button. Use when customer asks to see or browse products; do NOT use for text count/info questions or category lists.',
       schema: z.object({
         query: z.string().optional().describe(
           'Product name or SKU to search for. Leave it out when the customer asks what the store has, or asks for a whole category — then filter with category alone.',
@@ -925,8 +1001,7 @@ export function createAgentTools(
     },
     {
       name: 'show_orders',
-      description:
-        'Show the customer their OWN previous orders with this store, as a vertical list of Messenger cards (item, status, price, date, and a Track order button each). USE THIS whenever they ask about their order history — "what did I order", "my previous orders", "can you show my past purchases" — instead of guessing an order id. It needs no arguments: the customer is whoever this conversation belongs to. Do not use it to look up one known order (get_order does that) and never call it to create or change anything.',
+      description: 'Display tool: sends the customer’s past orders as Messenger cards (10 per page, newest first). Use for order history questions; do NOT use for single-order status (use get_order).',
       schema: z.object({
         startingLimit: z.number().int().min(0).optional().describe(
           'Index of the first order to show, newest first. 0 (the default) is the most recent order.',
@@ -1040,7 +1115,6 @@ export function createAgentTools(
           ...context.agentState.shownVariants.filter((v) => !listed.some((item) => item.id === v.id)),
           ...listed.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })),
         ].slice(-24);
-        await context.persistAgentState?.(context.agentState);
       }
 
       return logResult(JSON.stringify({
@@ -1053,10 +1127,9 @@ export function createAgentTools(
     },
     {
       name: 'show_product_info',
-      description:
-        'Show one product as a vertical list of Messenger cards — one card per size/variant it comes in, each with that variant\'s photo, price, how many are left and its own Order button. Use it when the customer wants to see or buy a product that has several variants, and whenever create_order has refused because no variant was chosen. A tap on a card orders that exact variant.',
+      description: 'Display tool: sends one Messenger card per in-stock variant/size of a product so the customer can pick and tap Order. Use when customer wants to see or choose sizes; do NOT use for text count questions (use get_product_options).',
       schema: z.object({
-        productId: z.string().uuid().describe('The UUID of the product whose variants should be listed'),
+        productId: z.string().uuid().describe('Product UUID whose variant cards should be displayed'),
       }),
     },
   );
@@ -1190,7 +1263,6 @@ export function createAgentTools(
           ...context.agentState.shownVariants.filter((v) => v.id !== variant.id),
           { id: variant.id, name: variant.name, price: String(variant.price ?? product.price), stock: variant.stock },
         ].slice(-24);
-        await context.persistAgentState?.(context.agentState);
       }
 
       return logResult(JSON.stringify({
@@ -1207,12 +1279,11 @@ export function createAgentTools(
     },
     {
       name: 'show_variant_photos',
-      description:
-        'Show every photo of ONE size of a product, as a vertical list of Messenger cards that all carry the same price, the same stock and an Order button that orders that exact size. Use it when the customer wants a closer look — another picture, the back of it, the label. Name the size the way the customer named it ("Fg", "black xl", "#DAA03", or the id a card tap carried); you never need an id from the customer, and the result tells you honestly how many pictures this store actually has.',
+      description: 'Display tool: sends all photos of ONE specific variant/size as Messenger cards. Use when customer wants a closer look at one named size/color; NEVER use for "how many colors/sizes?" questions.',
       schema: z.object({
-        productId: z.string().uuid().describe('The UUID of the product'),
+        productId: z.string().uuid().describe('Product UUID'),
         variantId: z.string().min(1).max(120).describe(
-          'Which size to show, as the customer said it: the size word ("Fg", "Black XL"), the five-character label printed on its photo ("DAA03"), or a variant UUID from a search you already did.',
+          'Variant name (e.g. Black XL), 5-char label (DAA03), or variant UUID',
         ),
       }),
     },
@@ -1222,46 +1293,65 @@ export function createAgentTools(
     async ({ productId, excludeColors, excludeSizes, inStockOnly }) => {
       const product = await getProductById(context.businessId, productId);
       if (!product) return JSON.stringify({ found: false, variants: [] });
-      const excluded = [...excludeColors, ...excludeSizes]
-        .map((value) => value.normalize('NFKC').trim().toLocaleLowerCase())
-        .filter(Boolean);
+      const excludedColorsNorm = (excludeColors ?? []).map((c) => c.normalize('NFKC').trim().toLocaleLowerCase()).filter(Boolean);
+      const excludedSizesNorm = (excludeSizes ?? []).map((s) => s.normalize('NFKC').trim().toLocaleLowerCase()).filter(Boolean);
+
       const variants = product.variants
         .filter((variant) => !inStockOnly || (variant.isAvailable && variant.stock > 0))
         .filter((variant) => {
-          const name = variant.name.normalize('NFKC').toLocaleLowerCase();
-          return !excluded.some((value) => name.includes(value));
+          const attrs = parseVariantAttributes(variant.name);
+          const colorLower = attrs.color?.toLocaleLowerCase() ?? '';
+          const sizeLower = attrs.size?.toLocaleLowerCase() ?? '';
+          const nameLower = variant.name.normalize('NFKC').toLocaleLowerCase();
+
+          const colorMatches = excludedColorsNorm.some((c) =>
+            colorLower === c || new RegExp(`(^|[\\s_-])${c}([\\s_-]|$)`, 'i').test(nameLower)
+          );
+          if (colorMatches) return false;
+
+          const sizeMatches = excludedSizesNorm.some((s) =>
+            sizeLower === s || new RegExp(`(^|[\\s_-])${s}([\\s_-]|$)`, 'i').test(nameLower)
+          );
+          if (sizeMatches) return false;
+
+          return true;
         })
         .slice(0, CARD_LIST_LIMIT)
-        .map((variant) => ({
-          id: variant.id,
-          name: variant.name,
-          price: variant.price ?? product.price,
-          stock: variant.stock,
-          photos: photoCount(variant),
-        }));
+        .map((variant) => {
+          const attrs = parseVariantAttributes(variant.name);
+          return {
+            id: variant.id,
+            name: variant.name,
+            color: attrs.color,
+            size: attrs.size,
+            price: variant.price ?? product.price,
+            stock: variant.stock,
+            photos: photoCount(variant),
+          };
+        });
       return JSON.stringify({ productId: product.id, productName: product.name, variants });
     },
     {
       name: 'suggest_alternatives',
-      description: 'Find in-stock variants of a product, excluding colors and sizes the customer rejected.',
+      description: 'Read-only deterministic selector returning next in-stock variants excluding rejected colors/sizes. Use when customer dislikes current color or size; do NOT use for initial browse.',
       schema: z.object({
-        productId: z.string().uuid(),
-        excludeColors: z.array(z.string()),
-        excludeSizes: z.array(z.string()),
-        inStockOnly: z.boolean(),
+        productId: z.string().uuid().describe('Product UUID'),
+        excludeColors: z.array(z.string()).describe('Rejected colors'),
+        excludeSizes: z.array(z.string()).describe('Rejected sizes'),
+        inStockOnly: z.boolean().describe('True to return only in-stock variants'),
       }),
     },
   );
 
   return [
     ...createCatalogTools(context, {
-      onOrderCreated: async ({ id }) => {
+      onOrderCreated: async ({ id, totalPrice }) => {
         await context.onOrderCreated?.(id).catch((err) => {
           console.error('[agent-tool] order created but conversation state could not be saved:', err);
         });
         await trackCreatedOrder({
           id,
-          totalPrice: (await getOrderById(context.businessId, id))?.totalPrice ?? '0',
+          totalPrice,
         });
       },
     }),

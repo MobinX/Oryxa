@@ -46,6 +46,8 @@ export const conversationAgentStateSchema = z.object({
     nextOffset: z.number().int().nonnegative(),
     total: z.number().int().nonnegative(),
   }).nullable().default(null),
+  languageOverride: z.enum(['bn', 'en']).nullable().optional().default(null),
+  lastReplyLanguage: z.enum(['bn', 'en']).nullable().optional().default(null),
 });
 
 export type ConversationAgentState = z.infer<typeof conversationAgentStateSchema>;
@@ -53,4 +55,30 @@ export type ConversationAgentState = z.infer<typeof conversationAgentStateSchema
 export function parseConversationAgentState(value: unknown): ConversationAgentState {
   const parsed = conversationAgentStateSchema.safeParse(value);
   return parsed.success ? parsed.data : conversationAgentStateSchema.parse({});
+}
+
+/**
+ * Formats ConversationAgentState by omitting null, undefined, and empty array/object keys.
+ * Reduces state injection payload from ~110 tokens to ~15-35 tokens on average.
+ */
+export function formatCompactAgentState(state: ConversationAgentState): string {
+  const compact: Record<string, unknown> = {};
+
+  if (state.currentProduct) compact.currentProduct = state.currentProduct;
+  if (state.currentVariant) compact.currentVariant = state.currentVariant;
+  if (state.shownVariants && state.shownVariants.length > 0) {
+    compact.shownVariants = state.shownVariants.map((v) => ({ id: v.id, name: v.name, color: v.color, size: v.size }));
+  }
+  if (state.rejectedColors && state.rejectedColors.length > 0) compact.rejectedColors = state.rejectedColors;
+  if (state.rejectedSizes && state.rejectedSizes.length > 0) compact.rejectedSizes = state.rejectedSizes;
+  if (state.preferredAttributes && Object.keys(state.preferredAttributes).length > 0) {
+    compact.preferredAttributes = state.preferredAttributes;
+  }
+  if (state.pendingOrder) compact.pendingOrder = state.pendingOrder;
+  if (state.lastOrder) compact.lastOrder = state.lastOrder;
+  if (state.catalogCursor) compact.catalogCursor = state.catalogCursor;
+  if (state.languageOverride) compact.languageOverride = state.languageOverride;
+  if (state.lastReplyLanguage) compact.lastReplyLanguage = state.lastReplyLanguage;
+
+  return Object.keys(compact).length > 0 ? JSON.stringify(compact) : '';
 }

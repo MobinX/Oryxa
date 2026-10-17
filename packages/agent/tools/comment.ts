@@ -163,12 +163,7 @@ export function createCommentAgentTools(
     },
     {
       name: 'reply_comment',
-      description:
-        'Post this text as a public reply under the customer’s comment. Use it for what anyone may read: an '
-        + 'honest answer about the product, or — after send_private_message — one short courteous line telling '
-        + 'the customer their details are waiting in Messenger. Never post prices, stock counts, or anything '
-        + 'the customer would have to share privately to get. Only use this when the comment is directed at '
-        + 'the page/business; do not reply to user-to-user conversation.',
+      description: "Post a public reply under this customer's Facebook comment. Use for general product questions; do NOT use for prices, stock counts, order details, or em dashes (—).",
       schema: z.object({
         text: z.string().describe('The exact words to show publicly under the comment'),
       }),
@@ -212,9 +207,10 @@ export function createCommentAgentTools(
         }
       }
 
+      const cleanText = text.replace(/\s*[—–]\s*/g, ', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
       const sendFn = context.sendPrivateMessageOverride ?? sendCommenterMessage;
       try {
-        await sendFn(context.pageToken, context.parentCommentExternalId, text);
+        await sendFn(context.pageToken, context.parentCommentExternalId, cleanText);
         privateMessageSent = true;
       } catch (err) {
         console.error('[agent-tool] send_private_message failed:', err);
@@ -232,7 +228,7 @@ export function createCommentAgentTools(
         return `${unreachable} Answer in the comment with reply_comment instead. End the turn.`;
       }
 
-      onSent?.(text, 'private');
+      onSent?.(cleanText, 'private');
 
       try {
         const conversation = await getOrCreateConversation(
@@ -244,7 +240,7 @@ export function createCommentAgentTools(
         await createMessage({
           conversationId: conversation.id,
           from: 'self',
-          content: text,
+          content: cleanText,
           state: 'done',
         });
       } catch (err) {
@@ -259,11 +255,7 @@ export function createCommentAgentTools(
     },
     {
       name: 'send_private_message',
-      description:
-        'Send the text into this commenter’s own Messenger inbox instead of posting it publicly. Use it when '
-        + 'the answer is a price, a stock or quantity count, a delivery area, or anything about buying — and '
-        + 'whenever the customer would have to share their own details to get it. A genuine question about '
-        + 'the product itself belongs in the comment, not here. One call per reply.',
+      description: "Send a private message to this commenter's Messenger inbox. Use FIRST for prices, stock counts, shipping or order questions; do NOT use for general public chat.",
       schema: z.object({
         text: z.string().describe('The private answer to deliver in Messenger — the details themselves, in full'),
       }),

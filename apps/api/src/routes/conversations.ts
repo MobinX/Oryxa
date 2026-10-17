@@ -87,12 +87,17 @@ const listMessagesRoute = createRoute({
 });
 
 conversationsRouter.openapi(listMessagesRoute, async (c) => {
-  const businessId = c.req.param('businessId');
-  const conversationId = c.req.param('conversationId');
-  const query = c.req.valid('query');
-  const msgs = await listMessages(conversationId, businessId, query.limit);
-  if (!msgs) return c.json({ error: 'Conversation not found' }, 404);
-  return c.json(msgs);
+  try {
+    const businessId = c.req.param('businessId');
+    const conversationId = c.req.param('conversationId');
+    const query = c.req.valid('query');
+    const msgs = await listMessages(conversationId, businessId, query.limit);
+    if (!msgs) return c.json({ error: 'Conversation not found' }, 404);
+    return c.json(msgs);
+  } catch (err) {
+    console.error('[conversationsRouter] listMessages failed:', err);
+    return c.json({ error: err instanceof Error ? err.message : 'Internal Server Error' }, 500);
+  }
 });
 
 const createMessageRoute = createRoute({
