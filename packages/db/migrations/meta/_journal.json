@@ -225,6 +225,13 @@
       "when": 1792799900000,
       "tag": "0031_order_shipping_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792886300000,
+      "tag": "0032_orders_human_order_number",
+      "breakpoints": true
     }
   ]
 }
