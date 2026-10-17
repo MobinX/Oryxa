@@ -27,6 +27,7 @@ import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
 import { AdminSkeleton } from '@/components/admin-skeleton';
 import { AdminDailyChart } from '@/components/admin-daily-chart';
+import { BrandSwapButton } from '@/components/brand-swap-button';
 import {
   ApiError,
   getAdminStats,
@@ -368,6 +369,8 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
           </p>
         </>
       ) : null}
+
+      <BrandSwapButton />
     </div>
   );
 }

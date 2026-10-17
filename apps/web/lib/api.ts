@@ -1207,6 +1207,37 @@ export const adminMakeAgentFollowDefault = (bearer: string, agentId: string) =>
     body: JSON.stringify({ agentId }),
   });
 
+/**
+ * The two names a brand swap moves, as the API read them off Vercel just before writing the other
+ * pair. `from` is what the project said, not what this app is printing — the console keeps the old
+ * name until the rebuilt deployment takes over, and a result that echoed the local name would
+ * report a swap that had not happened.
+ */
+export type BrandSwapResult = {
+  project: string;
+  projectId: string;
+  from: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string };
+  to: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string };
+  redeployedFrom: string;
+  deploymentId: string;
+  deploymentUrl: string;
+  readyState: string;
+  dryRun: boolean;
+};
+
+/**
+ * Hands the other brand to Vercel and starts the build that makes it live. Not `/api2` like the
+ * rest of the console: this one is a plain route handler in api2 rather than a Hono route, because
+ * it holds the Vercel token and has no business being compiled into `apps/api`, which is deployed
+ * on its own without the console at all.
+ */
+export const adminSwapBrand = (bearer: string, { dryRun = false }: { dryRun?: boolean } = {}) =>
+  apiFetch<BrandSwapResult>(`/api/brand/toggle${dryRun ? '?dryRun=1' : ''}`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+  });
+
 // Customers (scoped through the business's company)
 export type Customer = {
   id: string;

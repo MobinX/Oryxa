@@ -42,6 +42,17 @@ function sameSecret(candidate: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+/**
+ * Whether a request's `Authorization` header is the operator secret. One definition, because the
+ * Hono routes below and the plain route handlers beside them (api2's `/api/brand`) must not be two
+ * doors that disagree about who holds the console.
+ */
+export function isOperatorBearer(header: string | null | undefined): boolean {
+  const operator = logsOperatorPassword();
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  return Boolean(operator && bearer && sameSecret(bearer, operator));
+}
+
 export const logsAccessMiddleware: MiddlewareHandler = async (c, next) => {
   const user = c.get('user');
   const allowed = logsAllowlist();
@@ -62,10 +73,8 @@ export const logsAccessMiddleware: MiddlewareHandler = async (c, next) => {
  * without copying its logic.
  */
 export const logsAuthMiddleware: MiddlewareHandler = async (c, next) => {
-  const operator = logsOperatorPassword();
   const header = c.req.header('Authorization');
-  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
-  if (operator && bearer && sameSecret(bearer, operator)) {
+  if (isOperatorBearer(header)) {
     emit('auth', { reason: 'logs_operator', uid: logsOperatorUser() });
     return next();
   }

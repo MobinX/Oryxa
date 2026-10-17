@@ -17,3 +17,13 @@
  */
 export const COMPANY_NAME = process.env.COMPANY_NAME?.trim() || 'Oryxa';
 export const PARENT_COMPANY_NAME = process.env.PARENT_COMPANY_NAME?.trim() || 'RR Computer';
+
+/**
+ * The name the admin panel offers to switch to, so the button and the swap agree on the two brands
+ * without either of them hard-coding the other.
+ *
+ * Anything that is not one of the two known names reads as the first brand's opposite, because the
+ * swap on the API side refuses an unknown `COMPANY_NAME` outright — a button that offered to become
+ * what the project already is would be pressed for nothing.
+ */
+export const OTHER_COMPANY_NAME = COMPANY_NAME === 'OnlyOrders' ? 'Oryxa' : 'OnlyOrders';

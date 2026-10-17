@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p ${API2_PORT:-3500}",
     "build": "next build",
-    "start": "next start -p ${API2_PORT:-3500}"
+    "start": "next start -p ${API2_PORT:-3500}",
+    "brand:toggle": "bun scripts/toggle-brand.ts"
   },
   "dependencies": {
     "@repo/api": "workspace:*",
