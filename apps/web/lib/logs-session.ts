@@ -26,6 +26,20 @@ export function operatorAccountEmail(): string {
   return `${logsOperatorUser()}@${process.env.ADMIN_SIGNIN_DOMAIN?.trim() || 'oryxa.app'}`;
 }
 
+/** Check if an email is an authorized operator (default operator or configured admin) */
+export function isOperatorEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+  const defaultOp = operatorAccountEmail().toLowerCase().trim();
+  if (normalized === defaultOp) return true;
+
+  const allowed = (process.env.ADMIN_EMAILS || 'mobin.devx@gmail.com')
+    .split(',')
+    .map((e) => e.toLowerCase().trim())
+    .filter(Boolean);
+  return allowed.includes(normalized);
+}
+
 /** Undefined in production unless `LOGS_UI_PASSWORD` is set — no guessable default. */
 export function logsOperatorPassword(): string | undefined {
   const configured = process.env.LOGS_UI_PASSWORD?.trim();
@@ -103,7 +117,8 @@ export async function hasLogsSession(): Promise<boolean> {
   const time = Number(at);
   if (!Number.isFinite(time) || time < Date.now()) return false;
 
-  return who.join('|').toLowerCase() === operatorAccountEmail().toLowerCase();
+  const email = who.join('|');
+  return isOperatorEmail(email);
 }
 
 /**

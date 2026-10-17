@@ -1,4 +1,5 @@
 import { getAuthToken } from '@/lib/auth';
+import { getOperatorAuthToken } from '@/lib/admin-access';
 
 export type PlaygroundAuth = { status: number; error: string } | null;
 
@@ -16,24 +17,34 @@ export type PlaygroundAuth = { status: number; error: string } | null;
  * tokens, which is why "this store" has to be proven rather than taken from the request body.
  */
 export async function authorizePlaygroundRun(businessId: string, channelId: string): Promise<PlaygroundAuth> {
-  const token = await getAuthToken();
-  if (!token) return { status: 401, error: 'Sign in to your account first' };
+  const opToken = await getOperatorAuthToken();
+  const authToken = await getAuthToken();
+  const tokens = [opToken, authToken].filter((t): t is string => Boolean(t));
+  if (tokens.length === 0) return { status: 401, error: 'Sign in to your account first' };
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   const base = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
-  const headers = { Authorization: `Bearer ${token}` };
 
-  const [agentRes, channelRes] = await Promise.all([
-    fetch(`${base}/api/v1/${businessId}/agents/default`, { headers, cache: 'no-store' }),
-    fetch(`${base}/api/v1/${businessId}/channels`, { headers, cache: 'no-store' }),
-  ]);
-  // Anything other than a 200 is the API saying this account cannot see that store.
-  if (!agentRes.ok || !channelRes.ok) return { status: 403, error: 'This store is not yours' };
+  let lastStatus = 403;
+  let lastError = 'This store is not yours';
 
-  const channels: unknown = await channelRes.json();
-  if (!Array.isArray(channels) || !channels.some((c) => (c as { id?: string }).id === channelId)) {
-    return { status: 403, error: 'That channel belongs to another store' };
+  for (const token of tokens) {
+    const headers = { Authorization: `Bearer ${token}` };
+    const [agentRes, channelRes] = await Promise.all([
+      fetch(`${base}/api/v1/${businessId}/agents/default`, { headers, cache: 'no-store' }),
+      fetch(`${base}/api/v1/${businessId}/channels`, { headers, cache: 'no-store' }),
+    ]);
+
+    if (agentRes.ok && channelRes.ok) {
+      const channels: unknown = await channelRes.json();
+      if (Array.isArray(channels) && channels.some((c) => (c as { id?: string }).id === channelId)) {
+        return null;
+      }
+      lastError = 'That channel belongs to another store';
+    } else {
+      lastStatus = agentRes.status !== 200 ? agentRes.status : channelRes.status;
+    }
   }
 
-  return null;
+  return { status: lastStatus, error: lastError };
 }
