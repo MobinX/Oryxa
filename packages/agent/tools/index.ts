@@ -327,6 +327,9 @@ export function createCatalogTools(context: {
         id: product.id,
         name: product.name,
         price: product.price,
+        // The declared options and every value they take — the answer to "which colors/sizes does
+        // it come in?", carried here so the model never has to ask the customer or guess one.
+        options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
         colors,
         sizes,
         totalStock,
@@ -337,8 +340,127 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product_options',
-      description: 'Read-only lookup of colors, sizes, prices, stock, and photo counts for one productId. Use for \'how many colors/sizes?\' or stock questions; do NOT use when customer wants cards.',
+      description: 'Read-only lookup of one productId\u2019s declared options with every value they take, plus parsed colors/sizes, prices, stock and photo counts. Use for \u2018how many colors/sizes?\u2019 or stock questions; do NOT use when customer wants cards.',
       schema: z.object({ productId: z.string().uuid() }),
+    },
+  );
+
+  /**
+   * Pins the one variant a customer means, from the option values they gave. The product's
+   * declared options ride in the product details and in get_product_options, so this tool is
+   * called once the values are already known — never as a way to discover them.
+   */
+  const findVariantTool = tool(
+    async ({ productId, options }) => {
+      context.emitSse?.('tool_call', { name: 'find_variant', args: { productId, options } });
+      console.log(`[agent-tool] find_variant called — productId=${productId} options=${JSON.stringify(options)}`);
+      const logResult = (result: string) => {
+        console.log(`[agent-tool] find_variant result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
+        context.emitSse?.('tool_result', { name: 'find_variant', result });
+        return result;
+      };
+
+      const product = await getProductById(context.businessId, productId).catch(() => null);
+      if (!product) {
+        return logResult(JSON.stringify({
+          found: false,
+          reason: 'no product with that id in this store',
+          instruction: 'Search the catalog with show_products first. Do not invent a product.',
+        }));
+      }
+
+      const declared = (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) }));
+      if (declared.length === 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          product: { id: product.id, name: product.name },
+          reason: 'this product declares no options — its variants are free-named rows',
+          variants: product.variants.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, price: v.price ?? product.price, stock: v.stock })),
+          instruction: 'Pick the variant by name with show_variant_photos(productId, variantId="<name>"), or put them all on cards with show_product_info.',
+        }));
+      }
+
+      // Fold what the model sent onto the declared names and values, so "red" pins "Red" and a
+      // misspelled option name still lands on the option it belongs to. What comes back is the
+      // store's own spelling, which is what the variant row carries.
+      const chosen: Record<string, string> = {};
+      const unknown: string[] = [];
+      for (const [key, value] of Object.entries(options)) {
+        const option = declared.find((o) => foldName(o.name) === foldName(key));
+        if (!option) {
+          unknown.push(key);
+          continue;
+        }
+        const match = option.values.find((v) => foldName(v) === foldName(String(value)));
+        if (!match) {
+          return logResult(JSON.stringify({
+            found: false,
+            product: { id: product.id, name: product.name },
+            reason: `"${value}" is not a ${option.name} this product offers`,
+            option: { name: option.name, values: option.values },
+            instruction: `Offer the ${option.name}s that exist: ${option.values.join(', ')}. Do not invent one, and do not apologize for the store.`,
+          }));
+        }
+        chosen[option.name] = match;
+      }
+      if (unknown.length > 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          reason: `this product declares no option named ${unknown.map((u) => `"${u}"`).join(' or ')}`,
+          options: declared,
+          instruction: `The options are: ${declared.map((o) => o.name).join(', ')}. Choose values from those, and tell the customer what exists.`,
+        }));
+      }
+
+      const matches = product.variants.filter((v) => {
+        const row = v.options ?? {};
+        return Object.entries(chosen).every(([name, value]) => (row[name] ?? '').toLowerCase() === value.toLowerCase());
+      });
+
+      if (matches.length === 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          chosen,
+          combinations: product.variants.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, options: v.options ?? {}, stock: v.stock })),
+          instruction: 'Nothing matches that combination. Offer the combinations above that are in stock, or say this one is not available.',
+        }));
+      }
+
+      if (matches.length > 1) {
+        return logResult(JSON.stringify({
+          found: true,
+          multiple: true,
+          matches: matches.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, options: v.options ?? {}, price: v.price ?? product.price, stock: v.stock })),
+          instruction: 'More than one variant answers that — an option is still undecided. Ask the customer for it, or put the matches on cards with show_product_info.',
+        }));
+      }
+
+      const variant = matches[0]!;
+      return logResult(JSON.stringify({
+        found: true,
+        variant: {
+          id: variant.id,
+          name: variant.name,
+          label: variant.variantId ?? null,
+          options: variant.options ?? {},
+          price: variant.price ?? product.price,
+          stock: variant.stock,
+          available: variant.isAvailable && variant.stock > 0,
+        },
+        instruction: context.conversationId
+          ? `Variant pinned: ${variant.name}. Call show_variant_photos(productId="${product.id}", variantId="${variant.id}") to show its pictures, then offer to order it. Never mention ids in customer text.`
+          : `Variant pinned: ${variant.name}. Answer with it without mentioning ids.`,
+      }));
+    },
+    {
+      name: 'find_variant',
+      description: 'Pins the exact variant of ONE product from option values the customer gave, e.g. {"Color":"Red","Size":"XL"}. Call after the product is known, then show_variant_photos with the returned variant id. The product\u2019s declared options ride in the product details and get_product_options — read them there instead of asking the customer.',
+      schema: z.object({
+        productId: z.string().uuid().describe('Product UUID'),
+        options: z.record(z.string().min(1), z.string().min(1)).describe(
+          'Option name to the value the customer chose, e.g. {"Color":"Red","Size":"XL"}',
+        ),
+      }),
     },
   );
 
@@ -566,7 +688,7 @@ export function createCatalogTools(context: {
     },
   );
 
-  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool];
+  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool, findVariantTool];
   if (options.includeOrderTools === false) return readOnlyTools;
   return [
     ...readOnlyTools,
@@ -1159,6 +1281,9 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         product: line,
+        // The declared options ride along: the next "do you have it in blue?" is answerable from
+        // this result alone, without another lookup or a question to the customer.
+        options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
         variants: listed,
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(soldOut.length ? { hiddenOutOfStock: soldOut } : {}),
@@ -1166,7 +1291,7 @@ export function createAgentTools(
     },
     {
       name: 'show_product_info',
-      description: 'Display tool: sends one Messenger card per in-stock variant/size of a product so the customer can pick and tap Order. Use when customer wants to see or choose sizes; do NOT use for text count questions (use get_product_options).',
+      description: 'Display tool: sends one Messenger card per in-stock variant/size of a product so the customer can pick and tap Order. Use when customer wants to see or choose sizes; do NOT use for text count questions (use get_product_options). The result carries the product\u2019s declared options.',
       schema: z.object({
         productId: z.string().uuid().describe('Product UUID whose variant cards should be displayed'),
       }),

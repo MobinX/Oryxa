@@ -521,6 +521,53 @@ describe('Agent Tools', () => {
     expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
+  it('find_variant pins a variant from folded option values and offers what exists when nothing matches', async () => {
+    const seed = await seedTestWorld();
+    const created = await createProduct({
+        businessId: seed.business.id,
+        name: 'Optioned Saree',
+        price: 4600,
+        sku: `OPT-${Date.now()}`,
+        options: [
+          { name: 'Color', values: ['Red', 'Blue'] },
+          { name: 'Size', values: ['M', 'XL'] },
+        ],
+        variants: [
+          { name: 'Red / M', stock: 3, options: { Color: 'Red', Size: 'M' } },
+          { name: 'Blue / XL', stock: 1, options: { Color: 'Blue', Size: 'XL' } },
+        ],
+      });
+    const tools = createAgentTools(agentContext(seed));
+    const findVariantTool = tools.find((t) => t.name === 'find_variant')!;
+
+    // Lower-case, partial: the tool folds what the model sent onto the declared names and values,
+    // and one variant answers — pinned, with the show-photos instruction carrying its id.
+    const pinned = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { color: 'red' } }),
+    );
+    expect(pinned.found).toBe(true);
+    expect(pinned.variant).toMatchObject({
+      name: 'Red / M',
+      options: { Color: 'Red', Size: 'M' },
+      available: true,
+    });
+    expect(pinned.instruction).toContain('show_variant_photos');
+
+    // A value the option does not offer is refused with the values that exist, never invented.
+    const refused = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { Color: 'Green' } }),
+    );
+    expect(refused.found).toBe(false);
+    expect(refused.option).toEqual({ name: 'Color', values: ['Red', 'Blue'] });
+
+    // A real value with no matching row hands the model every combination that does exist.
+    const empty = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { Color: 'Red', Size: 'XL' } }),
+    );
+    expect(empty.found).toBe(false);
+    expect(empty.combinations).toHaveLength(2);
+  });
+
   it('create_order refuses to guess a size when the product has several', async () => {
     const seed = await seedTestWorld();
     await createProduct({
