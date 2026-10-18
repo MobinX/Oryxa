@@ -10,7 +10,21 @@ export const baseProductSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),
   sku: z.string().max(100).openapi({ example: 'TS-COT-001' }),
   description: z.string().optional(),
+  /** The merchant marking the default price down; the percent is what comes off it. */
+  hasDiscount: z.boolean().default(false),
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
+  tags: z.array(z.string().min(1).max(40)).max(20).default([]),
+  showInStorefront: z.boolean().default(true),
 }).openapi('Product');
+
+/** One knob a product is sold in — "Color", "Size" — and the values it may take. */
+export const productOptionInputSchema = z.object({
+  name: z.string().min(1).max(80),
+  values: z.array(z.string().min(1).max(80)).min(1).max(50),
+}).openapi('ProductOption');
+
+/** What one variant is, read off the product's options: `{"Color":"Red","Size":"XL"}`. */
+export const variantOptionsSchema = z.record(z.string().min(1), z.string().min(1));
 
 export const baseVariantSchema = z.object({
   productId: uuidSchema,
@@ -43,12 +57,18 @@ export const variantInputSchema = baseVariantSchema
      * business already uses it.
      */
     variantId: z.string().regex(/^[A-Z0-9]{5}$/).optional(),
+    /** The combination this variant is. Required (complete and allowed) whenever the product declares options. */
+    options: variantOptionsSchema.optional(),
   });
 
 export const insertProductSchema = baseProductSchema.omit({ slug: true });
 
 export const createProductInputSchema = insertProductSchema.extend({
   categoryName: z.string().optional(),
+  /** A slug the merchant typed; the name is folded into one when they did not. */
+  slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
+  /** At most three knobs — Color, Size, Material — declared for this product. */
+  options: z.array(productOptionInputSchema).max(3).default([]),
   variants: z.array(variantInputSchema).default([]),
 });
 
@@ -79,12 +99,21 @@ export const variantOutputSchema = baseVariantSchema.extend({
   imageKey: z.string().nullable().optional(),
   /** The stored keys behind `imageUrls`, so a form can resubmit the pictures it did not change. */
   imageKeys: z.array(z.string()).optional(),
+  options: variantOptionsSchema.optional(),
+});
+
+export const productOptionOutputSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  position: z.number().int(),
+  values: z.array(z.object({ id: uuidSchema, value: z.string(), position: z.number().int() })),
 });
 
 export const getProductByIdOutputSchema = selectProductSchema.extend({
   category: z.object({ id: uuidSchema, name: z.string() }).nullable(),
   customer: z.object({ id: uuidSchema, name: z.string() }).nullable(),
   variants: z.array(variantOutputSchema),
+  options: z.array(productOptionOutputSchema).optional(),
 });
 
 export const listProductsQuerySchema = z.object({
@@ -119,6 +148,13 @@ export const updateProductInputSchema = z.object({
   categoryId: uuidSchema.optional(),
   categoryName: z.string().min(1).max(255).optional(),
   customerId: uuidSchema.nullable().optional(),
+  slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
+  hasDiscount: z.boolean().optional(),
+  discountPercent: z.coerce.number().min(0).max(100).optional(),
+  tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+  showInStorefront: z.boolean().optional(),
+  /** Present means replace the product's options wholesale; absent leaves them alone. */
+  options: z.array(productOptionInputSchema).max(3).optional(),
   variants: z.array(updateVariantInputSchema).optional(),
 });
 

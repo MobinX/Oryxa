@@ -64,7 +64,9 @@ async function mapProduct(p: {
 
 async function loadStoreProducts(businessId: string) {
   const rows = await db.query.products.findMany({
-    where: and(eq(products.businessId, businessId), isNull(products.deletedAt)),
+    // A product the merchant took off the storefront is still in the catalog — it just is not
+    // for sale here, so the public read skips it rather than the dashboard losing the row.
+    where: and(eq(products.businessId, businessId), isNull(products.deletedAt), eq(products.showInStorefront, true)),
     with: {
       category: true,
       variants: { where: isNull(variants.deletedAt) },
@@ -124,7 +126,12 @@ export async function getPublicProduct(slug: string, productId: string) {
   if (!business || !business.storePublished) return null;
 
   const rows = await db.query.products.findMany({
-    where: and(eq(products.businessId, business.id), eq(products.id, productId), isNull(products.deletedAt)),
+    where: and(
+      eq(products.businessId, business.id),
+      eq(products.id, productId),
+      eq(products.showInStorefront, true),
+      isNull(products.deletedAt),
+    ),
     with: { category: true, variants: { where: isNull(variants.deletedAt) } },
     limit: 1,
   });

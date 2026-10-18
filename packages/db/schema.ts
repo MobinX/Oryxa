@@ -146,6 +146,16 @@ export const products = pgTable('products', {
   slug: varchar('slug', { length: 255 }).notNull(),
   sku: varchar('sku', { length: 100 }).notNull(),
   description: text('description'),
+  /**
+   * The default price is what a variant without its own price override answers with; a discount
+   * is the merchant marking the default down, and the percent is what comes off it.
+   */
+  hasDiscount: boolean('has_discount').default(false).notNull(),
+  discountPercent: numeric('discount_percent', { precision: 5, scale: 2 }).default('0').notNull(),
+  /** Free-form labels the storefront and the merchant's own filtering can read. */
+  tags: text('tags').array().default(sql`'{}'::text[]`).notNull(),
+  /** False hides the product from the public store without deleting it from the catalog. */
+  showInStorefront: boolean('show_in_storefront').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -178,11 +188,52 @@ export const variants = pgTable(
     stock: integer('stock').default(0).notNull(),
     isAvailable: boolean('is_available').default(true).notNull(),
     rating: numeric('rating', { precision: 3, scale: 2 }),
+    /**
+     * The combination this variant is, read off the product's declared options: `{"Color":"Red",
+     * "Size":"XL"}`. Empty on a variant of a product that declared no options — a product may
+     * skip options entirely, but a product that declares them has no variant without a full set.
+     */
+    options: jsonb('options').$type<Record<string, string>>().default(sql`'{}'::jsonb`).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
   },
   (t) => ({
     labelIdx: index('variants_variant_id_idx').on(t.variantId),
+  }),
+);
+
+/**
+ * The knobs a product is sold in — Color, Size — at most three per product, each with its own
+ * list of allowed values. Declaring them is optional; declaring them obliges every variant of
+ * the product to carry one value of each, which is what turns a row into a combination.
+ */
+export const productOptions = pgTable(
+  'product_options',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id')
+      .references(() => products.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: varchar('name', { length: 80 }).notNull(),
+    position: integer('position').default(0).notNull(),
+  },
+  (t) => ({
+    productIdx: index('product_options_product_idx').on(t.productId),
+  }),
+);
+
+export const productOptionValues = pgTable(
+  'product_option_values',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    optionId: uuid('option_id')
+      .references(() => productOptions.id, { onDelete: 'cascade' })
+      .notNull(),
+    value: varchar('value', { length: 80 }).notNull(),
+    position: integer('position').default(0).notNull(),
+  },
+  (t) => ({
+    optionIdx: index('product_option_values_option_idx').on(t.optionId),
   }),
 );
 

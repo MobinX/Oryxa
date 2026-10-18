@@ -218,6 +218,18 @@ export type ProductDetail = {
   category: { id: string; name: string } | null;
   customerId?: string | null;
   customer: { id: string; name: string } | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** The product's declared options with their values, in the order the merchant hung them. */
+  options?: Array<{
+    id: string;
+    name: string;
+    position: number;
+    values: Array<{ id: string; value: string; position: number }>;
+  }>;
   variants: Array<{
     id: string;
     /** The short label this variant is read by, unique inside the business. */
@@ -231,6 +243,8 @@ export type ProductDetail = {
     price?: number;
     stock: number;
     isAvailable: boolean;
+    /** The combination this row is, when the product declares options. */
+    options?: Record<string, string>;
   }>;
   createdAt: string;
 };
@@ -243,6 +257,13 @@ export type CreateProductInput = {
   categoryName?: string;
   categoryId?: string;
   customerId?: string | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** Declared options — at most three; every variant must then answer each one. */
+  options?: Array<{ name: string; values: string[] }>;
   variants?: Array<{
     name: string;
     /** The short label the row's pictures carry. */
@@ -252,6 +273,8 @@ export type CreateProductInput = {
     price?: number;
     stock: number;
     isAvailable?: boolean;
+    /** The combination this row is, when the product declares options. */
+    options?: Record<string, string>;
   }>;
 };
 
@@ -263,6 +286,13 @@ export type UpdateProductInput = {
   categoryId?: string;
   categoryName?: string;
   customerId?: string | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** Present replaces the product's options wholesale; absent leaves them alone. */
+  options?: Array<{ name: string; values: string[] }>;
   variants?: Array<{
     id?: string;
     name: string;
@@ -274,6 +304,7 @@ export type UpdateProductInput = {
     price?: number;
     stock: number;
     isAvailable?: boolean;
+    options?: Record<string, string>;
   }>;
 };
 

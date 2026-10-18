@@ -26,7 +26,36 @@ type ParsedVariant = {
   imageUrl?: string;
   imageUrls?: string[];
   clearImage?: boolean;
+  /** The combination this row is, when the product declares options. */
+  options?: Record<string, string>;
 };
+
+/** One declared option of the product, with the values it may take. */
+type ParsedOption = { name: string; values: string[] };
+
+/** Reads a hidden JSON field the wizard wrote, or nothing when it is absent or malformed. */
+function parseJsonField<T>(formData: FormData, name: string): T | undefined {
+  const raw = String(formData.get(name) ?? '').trim();
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseOptions(formData: FormData): ParsedOption[] | undefined {
+  const raw = parseJsonField<Array<{ name?: unknown; values?: unknown }>>(formData, 'options');
+  if (!raw) return undefined;
+  return raw
+    .map((option) => ({
+      name: String(option.name ?? '').trim(),
+      values: Array.isArray(option.values)
+        ? option.values.map((v) => String(v).trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((option) => option.name && option.values.length > 0);
+}
 
 /**
  * Parses an arbitrary number of variant rows from FormData.
@@ -81,6 +110,16 @@ async function parseVariants(
 
     const imageUrls = [...new Set(imageKeys)];
 
+    const options = parseJsonField<Record<string, string>>(formData, `variant_${i}_options`);
+    const cleanOptions =
+      options && typeof options === 'object'
+        ? Object.fromEntries(
+            Object.entries(options)
+              .map(([key, value]) => [key.trim(), String(value ?? '').trim()])
+              .filter(([key, value]) => key && value),
+          )
+        : undefined;
+
     variants.push({
       id,
       variantId,
@@ -91,6 +130,7 @@ async function parseVariants(
       imageUrl: imageUrls[0],
       imageUrls,
       clearImage: clearImage && imageUrls.length === 0,
+      ...(cleanOptions && Object.keys(cleanOptions).length > 0 ? { options: cleanOptions } : {}),
     });
   }
 
@@ -110,11 +150,20 @@ export async function createProductAction(businessId: string, formData: FormData
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const categoryName = String(formData.get('categoryName') ?? '').trim();
   const customerId = String(formData.get('customerId') ?? '').trim();
+  const slug = String(formData.get('slug') ?? '').trim();
+  const hasDiscount = formData.get('hasDiscount') === '1';
+  const discountPercent = parseFloat(String(formData.get('discountPercent') ?? '0')) || 0;
+  const showInStorefront = formData.get('showInStorefront') !== '0';
+  const tags = String(formData.get('tags') ?? '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 
   if (!name || !sku || !price) {
     redirect(`/b/${businessId}/products/new?error=required`);
   }
 
+  const options = parseOptions(formData);
   const variants = await parseVariants(token, businessId, formData);
 
   await createProduct(token, businessId, {
@@ -126,6 +175,12 @@ export async function createProductAction(businessId: string, formData: FormData
     categoryName: categoryName || undefined,
     categoryId: categoryName ? undefined : categoryId || undefined,
     customerId: customerId || undefined,
+    slug: slug || undefined,
+    hasDiscount,
+    discountPercent,
+    tags,
+    showInStorefront,
+    ...(options ? { options } : {}),
     variants,
   });
 
@@ -154,6 +209,21 @@ export async function updateProductAction(
   const customerId =
     rawCustomerId === null ? undefined : String(rawCustomerId).trim() || null;
 
+  const slug = String(formData.get('slug') ?? '').trim();
+  const rawDiscount = formData.get('hasDiscount');
+  // Absent means the form never carried the toggle, so the saved value is left alone.
+  const hasDiscount = rawDiscount === null ? undefined : rawDiscount === '1';
+  const rawPercent = String(formData.get('discountPercent') ?? '').trim();
+  const discountPercent = rawPercent === '' ? undefined : parseFloat(rawPercent) || 0;
+  const rawTags = formData.get('tags');
+  const tags =
+    rawTags === null
+      ? undefined
+      : String(rawTags).split(',').map((tag) => tag.trim()).filter(Boolean);
+  const rawStorefront = formData.get('showInStorefront');
+  const showInStorefront = rawStorefront === null ? undefined : rawStorefront !== '0';
+  const options = parseOptions(formData);
+
   const variants = await parseVariants(token, businessId, formData);
 
   try {
@@ -166,6 +236,12 @@ export async function updateProductAction(
       categoryName: categoryName || undefined,
       categoryId: categoryName ? undefined : categoryId || undefined,
       customerId,
+      slug: slug || undefined,
+      hasDiscount,
+      discountPercent,
+      tags,
+      showInStorefront,
+      ...(options ? { options } : {}),
       variants,
     });
   } catch (err) {
