@@ -17,11 +17,9 @@ const orderDefaults = {
 // Rest-arg signatures, so a recorded call can be read back as its real arguments.
 const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 const sendButtonsMock = vi.fn(async (..._args: unknown[]) => undefined);
-const sendReceiptMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   sendButtons: (...args: unknown[]) => sendButtonsMock(...args),
-  sendReceipt: (...args: unknown[]) => sendReceiptMock(...args),
 }));
 
 /** The arguments a mocked send was called with. */
@@ -271,10 +269,10 @@ describe('Agent Tools', () => {
     expect(delivered).toEqual(['Dry Hoodie — $44.00 — For the test panel']);
   });
 
-  it('create_order automatically sends the Track order button', async () => {
+  it('create_order draws the receipt: header, item card, totals', async () => {
     const seed = await seedTestWorld();
+    sendMessageMock.mockClear();
     sendButtonsMock.mockClear();
-    sendReceiptMock.mockClear();
 
     const tools = createAgentTools(agentContext(seed));
     const createOrderTool = tools.find((t) => t.name === 'create_order')!;
@@ -288,31 +286,30 @@ describe('Agent Tools', () => {
       }),
     );
     expect(order.id).toMatch(/[0-9a-f-]{36}/i);
-    // The receipt is Meta's own invoice template: who is buying, a human order number they can
-    // quote, how they are paying, and the item row with quantity, shelf label and unit price.
-    // The seed variant has no photo and nobody quoted delivery, so both are simply absent.
-    expect(sendReceiptMock).toHaveBeenCalledWith(
+    // The receipt is three bubbles in the order a receipt reads: who is buying, which order, how
+    // they are paying — then the item itself — then the money. The seed variant has no photo, so
+    // the item bubble is a line of text and the Track order button rides on the totals.
+    expect(sendMessageMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.objectContaining({
-        recipientName: 'Tool Buyer',
-        orderNumber: expect.stringMatching(/^\d{5,}$/),
-        currency: 'BDT',
-        paymentMethod: 'Cash on Delivery',
-        items: [
-          expect.objectContaining({
-            title: 'Test T-Shirt',
-            subtitle: expect.stringMatching(/Red M/),
-            quantity: 2,
-            price: 29.99,
-          }),
-        ],
-        subtotal: 59.98,
-        total: 59.98,
-      }),
+      expect.stringMatching(/^🧾 RECEIPT\nTool Buyer\nOrder #\d+\nPayment method · Cash on Delivery$/),
+    );
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      'page-tok',
+      'fb-user-1',
+      // The shelf label is assigned at creation, so the test reads its shape rather than its value.
+      expect.stringMatching(/^Test T-Shirt — ৳59\.98 · কোড [A-Z0-9]{5} · Red M · Qty 2$/),
+    );
+    expect(sendButtonsMock).toHaveBeenCalledWith(
+      'page-tok',
+      'fb-user-1',
+      'Subtotal ৳59.98\nTotal ৳59.98',
+      [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toMatch(/Order #\d+ · Test T-Shirt × 2 · #[A-Z0-9]{5} · Total \$59\.98/);
+    expect(messages?.at(-1)?.content).toContain('🧾 RECEIPT');
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — ৳59\.98 · কোড [A-Z0-9]{5} · Red M · Qty 2/);
+    expect(messages?.at(-1)?.content).toContain('Total ৳59.98');
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
@@ -345,8 +342,12 @@ describe('Agent Tools', () => {
     expect(result.showing).toBe('1-1');
 
     // The card carries the payload the webhook already knows how to read, so a tap on it is a
-    // tracking question and needs no new plumbing anywhere in the app.
-    const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
+    // tracking question and needs no new plumbing anywhere in the app. The confirmation now sends
+    // three bubbles (header, item card, totals), so the card is the call whose third argument is
+    // an array rather than whichever text bubble happened to go out last.
+    const cards = sendMessageMock.mock.calls
+      .map((call) => call[2])
+      .find((content) => Array.isArray(content)) as unknown as MessengerCard[];
     expect(cards[0]!.button.payload).toBe(`please track order with id ${order.id}`);
     expect(cards[0]!.title).toContain('History Hoodie');
 

@@ -16,7 +16,6 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
-  sendReceipt as fbSendReceipt,
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
@@ -39,6 +38,14 @@ function oneLine(value: string | null | undefined, limit: number): string {
 function money(value: string | number | null | undefined): string {
   const amount = typeof value === 'number' ? value : parseFloat(value ?? '');
   return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : '';
+}
+
+/**
+ * The receipt's own sign and grouping: a Bangladeshi buyer reads ৳1,720, not $1,720.00 — and
+ * Meta draws nothing for us here, because this receipt is text the way the buyer sees it drawn.
+ */
+function taka(value: number): string {
+  return `৳${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
 /** Meta's generic template holds ten cards; more than that is a page the buyer scrolls past. */
@@ -700,71 +707,78 @@ export function createAgentTools(
   }
 
   /**
-   * The receipt the buyer scans right after they confirmed — Meta's receipt template, the same
-   * structure an invoice has: a header naming who is buying, the order number they can quote on
-   * the phone and how they are paying; one row per item with its photo, quantity and shelf label;
-   * and the Subtotal / Delivery / Total block underneath. The amounts go over as numbers with an
-   * ISO currency, so Meta renders the symbol the buyer expects.
+   * The receipt, drawn the way a receipt reads rather than handed to Meta as one template: three
+   * bubbles in order — a header naming who is buying, which order it is and how they are paying;
+   * the item itself as a card with its own photo and the Track order button under it; and the
+   * Subtotal / Shipping / Total block to close. Three sends, one reply: the whole receipt takes a
+   * single message unit, the way a row of cards already does.
    *
-   * The text twin of the receipt exists for the test panel and the stored thread: neither can
-   * render a template, and a dry run that shows nothing would teach the operator nothing.
+   * A variant with no photo cannot be a card — the generic template requires an image — so that
+   * row falls back to a line of text and the button moves onto the totals.
    */
   const trackCreatedOrder = async (order: { id: string; totalPrice: string | number }) => {
     if (!context.conversationId) return;
     const orderDetails = await getOrderById(context.businessId, order.id);
     if (!orderDetails) return;
 
+    const header = [
+      '🧾 RECEIPT',
+      orderDetails.customerName ?? 'Customer',
+      `Order #${orderDetails.orderNumber}`,
+      `Payment method · ${orderDetails.paymentMethod ?? 'Cash on Delivery'}`,
+    ].join('\n');
+
     const itemSubtitle = oneLine(
       [
-        orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
+        orderDetails.variantShortId ? `কোড ${orderDetails.variantShortId}` : null,
         orderDetails.variantName,
+        `Qty ${orderDetails.count}`,
       ].filter(Boolean).join(' · '),
       80,
     );
-    const grandTotal = orderDetails.totalPrice + orderDetails.shippingCost;
-    const text = oneLine(
-      [
-        `Order #${orderDetails.orderNumber}`,
-        `${orderDetails.productName ?? 'Your order'} × ${orderDetails.count}`,
-        orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
-        `Total ${money(grandTotal)}`,
-        orderDetails.shippingCost > 0 ? `(delivery ${money(orderDetails.shippingCost)})` : null,
-        orderDetails.paymentMethod,
-      ].filter(Boolean).join(' · '),
-      300,
-    );
+    const card: MessengerCard = {
+      title: oneLine(`${orderDetails.productName ?? 'Your order'} — ${taka(orderDetails.totalPrice)}`, 60),
+      subtitle: itemSubtitle,
+      imageUrl: orderDetails.variantImageUrl ?? '',
+      button: { title: 'Track order', payload: `please track order with id ${orderDetails.id}` },
+    };
+    const itemText = orderDetails.variantImageUrl
+      ? cardsAsText([card])
+      : oneLine(`${card.title} · ${itemSubtitle}`, 300);
+    const totals = [
+      `Subtotal ${taka(orderDetails.totalPrice)}`,
+      orderDetails.shippingCost > 0 ? `Shipping ${taka(orderDetails.shippingCost)}` : null,
+      `Total ${taka(orderDetails.totalPrice + orderDetails.shippingCost)}`,
+    ].filter(Boolean).join('\n');
 
     const budget = await takeMessageUnit(!context.sendMessageOverride);
     if (!budget.allowed) return;
     try {
       if (context.sendMessageOverride) {
-        await context.sendMessageOverride(context.pageToken, context.customerPlatformId, text);
+        // The test panel cannot draw a template either; it reads the receipt as its three lines.
+        await context.sendMessageOverride(context.pageToken, context.customerPlatformId, header);
+        await context.sendMessageOverride(context.pageToken, context.customerPlatformId, itemText);
+        await context.sendMessageOverride(context.pageToken, context.customerPlatformId, totals);
       } else {
-        await fbSendReceipt(context.pageToken, context.customerPlatformId, {
-          recipientName: orderDetails.customerName ?? 'Customer',
-          orderNumber: String(orderDetails.orderNumber),
-          currency: 'BDT',
-          paymentMethod: orderDetails.paymentMethod ?? 'Cash on Delivery',
-          items: [
-            {
-              title: oneLine(orderDetails.productName ?? 'Your order', 60),
-              ...(itemSubtitle ? { subtitle: itemSubtitle } : {}),
-              quantity: orderDetails.count,
-              price: orderDetails.variantPrice,
-              ...(orderDetails.variantImageUrl ? { imageUrl: orderDetails.variantImageUrl } : {}),
-            },
-          ],
-          subtotal: orderDetails.totalPrice,
-          ...(orderDetails.shippingCost > 0 ? { shippingCost: orderDetails.shippingCost } : {}),
-          total: grandTotal,
-        });
+        await fbSendMessage(context.pageToken, context.customerPlatformId, header);
+        if (orderDetails.variantImageUrl) {
+          await fbSendMessage(context.pageToken, context.customerPlatformId, [
+            { ...card, imageUrl: orderDetails.variantImageUrl },
+          ]);
+        } else {
+          await fbSendMessage(context.pageToken, context.customerPlatformId, itemText);
+        }
+        await fbSendButtons(context.pageToken, context.customerPlatformId, totals, [
+          { title: 'Track order', payload: `please track order with id ${orderDetails.id}` },
+        ]);
       }
     } catch (err) {
       await returnMessageUnit(budget.period);
       throw err;
     }
-    await createMessage({ conversationId: context.conversationId, from: 'self', content: text, state: 'done' });
-    onSent?.(text, 'card');
+    const content = [header, itemText, totals].join('\n');
+    await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
+    onSent?.(content, 'card');
   };
 
   const showProductsTool = tool(

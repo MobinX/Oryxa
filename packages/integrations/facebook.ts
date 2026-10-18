@@ -300,29 +300,6 @@ type MessengerAttachment =
         text: string;
         buttons: Array<{ type: 'postback'; title: string; payload: string }>;
       };
-    }
-  | {
-      type: 'template';
-      payload: {
-        template_type: 'receipt';
-        recipient_name: string;
-        order_number: string;
-        currency: string;
-        payment_method: string;
-        elements: Array<{
-          title: string;
-          subtitle?: string;
-          quantity?: number;
-          price: number;
-          currency: string;
-          image_url?: string;
-        }>;
-        summary: {
-          subtotal?: number;
-          shipping_cost?: number;
-          total_cost: number;
-        };
-      };
     };
 
 type SendPayload = {
@@ -571,74 +548,6 @@ export async function sendButtons(
             title: button.title,
             payload: button.payload,
           })),
-        },
-      },
-    },
-    messaging_type: 'RESPONSE',
-  });
-}
-
-export type MessengerReceiptItem = {
-  title: string;
-  /** Meta reads about 80 characters — the shelf label and the variant name live here. */
-  subtitle?: string;
-  quantity?: number;
-  /** The unit price; Meta multiplies by `quantity` for the row's own display. */
-  price: number;
-  imageUrl?: string;
-};
-
-/**
- * Meta's receipt template: the structure a buyer reads as an invoice — a header naming who is
- * buying, which order it is and how it will be paid; a row per item with its photo; and a
- * Subtotal / Shipping / Total block underneath. Meta only wants this sent after a purchase,
- * which is exactly the one moment an order confirmation exists.
- */
-export type MessengerReceipt = {
-  recipientName: string;
-  /** A number a person can say on the phone — never the raw uuid. */
-  orderNumber: string;
-  /** ISO 4217 — Meta renders the symbol itself, so the amounts go over as numbers. */
-  currency: string;
-  paymentMethod: string;
-  items: MessengerReceiptItem[];
-  subtotal?: number;
-  shippingCost?: number;
-  total: number;
-};
-
-/** Ten is the same ceiling the generic template holds; a receipt with more rows is a cart, not an order. */
-export async function sendReceipt(
-  pageToken: string,
-  recipientId: string,
-  receipt: MessengerReceipt,
-): Promise<void> {
-  await postMessengerSend(pageToken, {
-    recipient: { id: recipientId },
-    message: {
-      attachment: {
-        type: 'template',
-        payload: {
-          template_type: 'receipt',
-          recipient_name: receipt.recipientName,
-          order_number: receipt.orderNumber,
-          currency: receipt.currency,
-          payment_method: receipt.paymentMethod,
-          elements: receipt.items.slice(0, GENERIC_CARD_LIMIT).map((item) => ({
-            title: item.title,
-            ...(item.subtitle ? { subtitle: item.subtitle } : {}),
-            ...(item.quantity !== undefined ? { quantity: item.quantity } : {}),
-            price: item.price,
-            currency: receipt.currency,
-            ...(item.imageUrl ? { image_url: item.imageUrl } : {}),
-          })),
-          summary: {
-            ...(receipt.subtotal !== undefined ? { subtotal: receipt.subtotal } : {}),
-            ...(receipt.shippingCost !== undefined && receipt.shippingCost > 0
-              ? { shipping_cost: receipt.shippingCost }
-              : {}),
-            total_cost: receipt.total,
-          },
         },
       },
     },
