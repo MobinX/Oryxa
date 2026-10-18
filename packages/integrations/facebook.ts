@@ -521,6 +521,18 @@ export async function sendCommenterMessage(
   }
 }
 
+/**
+ * Which page a page token actually answers as. Meta resolves `subscribed_apps` calls by the
+ * token's own page — not by the id in the URL path — so before any subscribe or unsubscribe
+ * acts on a page, the token has to prove which page it is. Null when the token is dead.
+ */
+export async function getPageIdForToken(pageToken: string): Promise<string | null> {
+  const res = await loggedFetch(`${GRAPH_API}/me?access_token=${encodeURIComponent(pageToken)}`);
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { id?: string } | null;
+  return body?.id ?? null;
+}
+
 /** Three is the ceiling Meta accepts for a button template. */
 const BUTTON_LIMIT = 3;
 /**

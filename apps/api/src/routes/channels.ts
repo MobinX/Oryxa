@@ -47,6 +47,7 @@ import {
   verifyFacebookPagesSelectionToken,
   subscribeFacebookPageToWebhooks,
   unsubscribeFacebookPageFromWebhooks,
+  getPageIdForToken,
   getGrantedPermissions,
   getPortfolioPages,
   type FacebookPageOption,
@@ -365,8 +366,20 @@ channelsRouter.openapi(deleteChannelRoute, async (c) => {
 
   if (channelRow?.platform === 'facebook' && channelRow.apiToken) {
     try {
-      await unsubscribeFacebookPageFromWebhooks(channelRow.platformChannelId, channelRow.apiToken);
-      console.log('[delete-channel] unsubscribed page from webhooks', { channelId, pageId: channelRow.platformChannelId });
+      // Meta resolves subscribed_apps by the token's own page, not by the id in the path — an
+      // unsubscribe with a stale or mismatched token would silently disconnect whichever page
+      // that token answers as. So the token names this channel's page before it may unsubscribe.
+      const tokenPageId = await getPageIdForToken(channelRow.apiToken);
+      if (tokenPageId !== channelRow.platformChannelId) {
+        console.warn('[delete-channel] webhook unsubscribe skipped — the stored token answers as a different page', {
+          channelId,
+          pageId: channelRow.platformChannelId,
+          tokenPageId: tokenPageId ?? 'invalid token',
+        });
+      } else {
+        await unsubscribeFacebookPageFromWebhooks(channelRow.platformChannelId, channelRow.apiToken);
+        console.log('[delete-channel] unsubscribed page from webhooks', { channelId, pageId: channelRow.platformChannelId });
+      }
     } catch (err) {
       // Log but don't block deletion — page token may have expired
       console.warn('[delete-channel] webhook unsubscription failed (continuing with delete)', {
@@ -496,6 +509,19 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
     const page = pageById.get(pageId);
     if (!page) {
       skipped.push(pageId);
+      continue;
+    }
+
+    // The stored token is what sends and unsubscribes act with for this page, so it has to
+    // answer as the page it is stored under. Meta resolves subscribed_apps by the token, not
+    // by the path — a mismatched token would mean a channel that cannot reply and whose
+    // deletion unsubscribes a different page. Refuse the page instead of storing that.
+    const tokenPageId = await getPageIdForToken(page.access_token);
+    if (tokenPageId !== page.id) {
+      failed.push({
+        pageId: page.id,
+        error: 'The page token Facebook handed over does not match this page — reconnect and try again',
+      });
       continue;
     }
 
