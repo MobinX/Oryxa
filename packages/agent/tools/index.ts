@@ -16,7 +16,6 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
-  sendReceipt as fbSendReceipt,
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
@@ -700,71 +699,50 @@ export function createAgentTools(
   }
 
   /**
-   * The receipt the buyer scans right after they confirmed — Meta's receipt template, the same
-   * structure an invoice has: a header naming who is buying, the order number they can quote on
-   * the phone and how they are paying; one row per item with its photo, quantity and shelf label;
-   * and the Subtotal / Delivery / Total block underneath. The amounts go over as numbers with an
-   * ISO currency, so Meta renders the symbol the buyer expects.
+   * The receipt the buyer scans right after they confirmed: the variant they chose in its own
+   * photo, how many they took, which one by its shelf label, what it costs, what delivery adds
+   * and how they are paying. Meta reads about 80 characters of the subtitle, so the parts are
+   * ordered by what a buyer asks first and the least important falls off first.
    *
-   * The text twin of the receipt exists for the test panel and the stored thread: neither can
-   * render a template, and a dry run that shows nothing would teach the operator nothing.
+   * A variant without a photo cannot be a card — the generic template requires an image — so that
+   * order falls back to the button row, carrying the same numbers in text.
    */
   const trackCreatedOrder = async (order: { id: string; totalPrice: string | number }) => {
     if (!context.conversationId) return;
     const orderDetails = await getOrderById(context.businessId, order.id);
     if (!orderDetails) return;
 
-    const itemSubtitle = oneLine(
+    const subtitle = oneLine(
       [
+        `${orderDetails.count} pcs`,
         orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
         orderDetails.variantName,
+        `Total ${money(orderDetails.totalPrice)}`,
+        orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
+        orderDetails.paymentMethod,
       ].filter(Boolean).join(' · '),
       80,
     );
-    const grandTotal = orderDetails.totalPrice + orderDetails.shippingCost;
-    const text = oneLine(
-      [
-        `Order #${orderDetails.orderNumber}`,
-        `${orderDetails.productName ?? 'Your order'} × ${orderDetails.count}`,
-        orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
-        `Total ${money(grandTotal)}`,
-        orderDetails.shippingCost > 0 ? `(delivery ${money(orderDetails.shippingCost)})` : null,
-        orderDetails.paymentMethod,
-      ].filter(Boolean).join(' · '),
-      300,
-    );
+    const buttons = [{ title: 'Track order', payload: `please track order with id ${orderDetails.id}` }];
+    const title = oneLine(orderDetails.productName ?? 'Your order', 60);
+    const content = `${title} — ${subtitle} (Track order)`;
 
     const budget = await takeMessageUnit(!context.sendMessageOverride);
     if (!budget.allowed) return;
     try {
-      if (context.sendMessageOverride) {
-        await context.sendMessageOverride(context.pageToken, context.customerPlatformId, text);
+      if (orderDetails.variantImageUrl) {
+        await sendCards([
+          { title, subtitle, imageUrl: orderDetails.variantImageUrl, button: buttons[0]! },
+        ]);
       } else {
-        await fbSendReceipt(context.pageToken, context.customerPlatformId, {
-          recipientName: orderDetails.customerName ?? 'Customer',
-          orderNumber: String(orderDetails.orderNumber),
-          currency: 'BDT',
-          paymentMethod: orderDetails.paymentMethod ?? 'Cash on Delivery',
-          items: [
-            {
-              title: oneLine(orderDetails.productName ?? 'Your order', 60),
-              ...(itemSubtitle ? { subtitle: itemSubtitle } : {}),
-              quantity: orderDetails.count,
-              price: orderDetails.variantPrice,
-              ...(orderDetails.variantImageUrl ? { imageUrl: orderDetails.variantImageUrl } : {}),
-            },
-          ],
-          subtotal: orderDetails.totalPrice,
-          ...(orderDetails.shippingCost > 0 ? { shippingCost: orderDetails.shippingCost } : {}),
-          total: grandTotal,
-        });
+        await sendButtonRow(`${title} — ${subtitle}`, buttons);
       }
     } catch (err) {
       await returnMessageUnit(budget.period);
       throw err;
     }
-    await createMessage({ conversationId: context.conversationId, from: 'self', content: text, state: 'done' });
-    onSent?.(text, 'card');
+    await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
+    onSent?.(content, 'card');
   };
 
   const showProductsTool = tool(

@@ -28,7 +28,6 @@ export const createOrderBodySchema = createOrderInputSchema.omit({ businessId: t
 
 export const createOrderOutputSchema = z.object({
   id: uuidSchema,
-  orderNumber: z.number().optional(),
   totalPrice: z.number(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),

@@ -17,11 +17,9 @@ const orderDefaults = {
 // Rest-arg signatures, so a recorded call can be read back as its real arguments.
 const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 const sendButtonsMock = vi.fn(async (..._args: unknown[]) => undefined);
-const sendReceiptMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   sendButtons: (...args: unknown[]) => sendButtonsMock(...args),
-  sendReceipt: (...args: unknown[]) => sendReceiptMock(...args),
 }));
 
 /** The arguments a mocked send was called with. */
@@ -274,7 +272,6 @@ describe('Agent Tools', () => {
   it('create_order automatically sends the Track order button', async () => {
     const seed = await seedTestWorld();
     sendButtonsMock.mockClear();
-    sendReceiptMock.mockClear();
 
     const tools = createAgentTools(agentContext(seed));
     const createOrderTool = tools.find((t) => t.name === 'create_order')!;
@@ -288,31 +285,17 @@ describe('Agent Tools', () => {
       }),
     );
     expect(order.id).toMatch(/[0-9a-f-]{36}/i);
-    // The receipt is Meta's own invoice template: who is buying, a human order number they can
-    // quote, how they are paying, and the item row with quantity, shelf label and unit price.
-    // The seed variant has no photo and nobody quoted delivery, so both are simply absent.
-    expect(sendReceiptMock).toHaveBeenCalledWith(
+    // The payload is what the webhook turns back into a message, so the order id
+    // has to be in it — a button that only says "Track order" tells the agent nothing.
+    // The row carries the receipt: quantity, the variant's shelf label and its name, the total.
+    expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.objectContaining({
-        recipientName: 'Tool Buyer',
-        orderNumber: expect.stringMatching(/^\d{5,}$/),
-        currency: 'BDT',
-        paymentMethod: 'Cash on Delivery',
-        items: [
-          expect.objectContaining({
-            title: 'Test T-Shirt',
-            subtitle: expect.stringMatching(/Red M/),
-            quantity: 2,
-            price: 29.99,
-          }),
-        ],
-        subtotal: 59.98,
-        total: 59.98,
-      }),
+      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98$/),
+      [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toMatch(/Order #\d+ · Test T-Shirt × 2 · #[A-Z0-9]{5} · Total \$59\.98/);
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98 \(Track order\)/);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {

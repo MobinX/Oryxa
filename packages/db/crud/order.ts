@@ -97,7 +97,6 @@ export async function createOrder(input: unknown) {
 
   return {
     id: order.id,
-    orderNumber: order.orderNumber,
     totalPrice,
     shippingCost: parsed.shippingCost ?? 0,
     paymentMethod: parsed.paymentMethod ?? null,
@@ -125,8 +124,6 @@ export async function getOrderById(businessId: string, orderId: string) {
   return {
     id: order.id,
     businessId: order.businessId,
-    /** The receipt number — the one identifier a buyer can read aloud or quote back. */
-    orderNumber: order.orderNumber,
     productId: order.productId,
     variantId: order.variantId,
     productName: productActive?.name ?? null,

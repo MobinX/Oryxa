@@ -218,13 +218,6 @@ export const orders = pgTable('orders', {
   shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
   /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
   paymentMethod: varchar('payment_method', { length: 40 }),
-  /**
-   * The number a person says on the phone and reads on the receipt card — sequential, because
-   * nobody can read a uuid aloud. Assigned by the database sequence at insert time.
-   */
-  orderNumber: integer('order_number')
-    .notNull()
-    .default(sql`nextval('orders_order_number_seq')`),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
