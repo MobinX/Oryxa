@@ -34,15 +34,17 @@ export interface ParsedProduct {
   variants: ParsedVariant[];
 }
 
-const HANDLE_ALIASES = ['handle'];
+// Shopify's 2025+ export template leads with Title and calls the handle "URL handle"; older
+// exports lead with Handle. Both are read, along with both vintages of every renamed column.
+const HANDLE_ALIASES = ['urlhandle', 'handle'];
 const TITLE_ALIASES = ['title'];
-const BODY_ALIASES = ['bodyhtml', 'body'];
+const BODY_ALIASES = ['description', 'bodyhtml', 'body'];
 const TAGS_ALIASES = ['tags'];
-const PUBLISHED_ALIASES = ['published'];
+const PUBLISHED_ALIASES = ['publishedononlinestore', 'published'];
 const STATUS_ALIASES = ['status'];
-const VARIANT_SKU_ALIASES = ['variantsku'];
-const VARIANT_PRICE_ALIASES = ['variantprice'];
-const VARIANT_QTY_ALIASES = ['variantinventoryqty'];
+const VARIANT_SKU_ALIASES = ['sku', 'variantsku'];
+const VARIANT_PRICE_ALIASES = ['price', 'variantprice'];
+const VARIANT_QTY_ALIASES = ['inventoryquantity', 'variantinventoryqty'];
 const PRODUCT_IMAGE_ALIASES = ['productimageurl', 'imagesrc'];
 const IMAGE_POSITION_ALIASES = ['imageposition', 'productimageposition'];
 const VARIANT_IMAGE_ALIASES = ['variantimageurl', 'variantimage'];
@@ -234,12 +236,12 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
       // delimiter itself is consumed by the split, so the cell usually reads "sep=".
       if (/^sep=[,;\t]?$/i.test(row[0].trim()) && row.slice(1).every((value) => value === '')) return;
       headers = row.map(normalizeHeader);
-      if (!headers.includes('handle')) {
+      if (!headers.includes('handle') && !headers.includes('urlhandle')) {
         failed = true;
         const seen = row.slice(0, 6).map((value) => value.trim()).filter(Boolean).join(', ').slice(0, 140);
         handlers.onError(
           new Error(
-            `This file has no "Handle" column — its first row reads: "${seen}". Export Products from your Shopify admin: Orders and Customers exports have no Handle, and re-saving in Excel can merge the columns.`,
+            `This file has no "Handle" or "URL handle" column — its first row reads: "${seen}". Export Products from your Shopify admin: Orders and Customers exports have no handle, and re-saving in Excel can merge the columns.`,
           ),
         );
       }
@@ -249,7 +251,7 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
     for (let i = 0; i < headers.length && i < row.length; i++) {
       if (headers[i] !== '') normalized[headers[i]] = row[i] ?? '';
     }
-    const rowHandle = (normalized['handle'] ?? '').trim();
+    const rowHandle = (normalized['handle'] ?? normalized['urlhandle'] ?? '').trim();
     if (!rowHandle) return;
     if (rowHandle !== currentHandle) {
       flush();
@@ -382,6 +384,8 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   let decoder = new TextDecoder('utf-8');
   let encodingChosen = false;
   let sniffed = false;
+  let prelude = '';
+  let headerDone = false;
   let bytes = 0;
   let bomStripped = false;
   let lastActivity = Date.now();
@@ -423,11 +427,32 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
           sniffed = true;
           sniffDelimiter(text);
         }
-        feed(text);
+        let toFeed = text;
+        if (!headerDone) {
+          prelude += text;
+          const nl = prelude.search(/[\r\n]/);
+          if (nl === -1 && prelude.length < 1_000_000) {
+            if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size), bytes);
+            continue;
+          }
+          headerDone = true;
+          const headerLine = nl === -1 ? prelude : prelude.slice(0, nl);
+          toFeed = nl === -1 ? '' : prelude.slice(nl);
+          prelude = '';
+          // Header cells never contain the delimiter, so quote characters on this line are
+          // artifacts of an export that wrapped or escaped the first cell oddly
+          // (`"""""""" Title,URL handle,...`) — dropping them recovers the real names.
+          emitRow(headerLine.replace(/"/g, '').split(delimiter).map((cell) => cell.trim()));
+        }
+        if (toFeed) feed(toFeed);
         if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size), bytes);
       }
       clearInterval(watchdog);
       if (stopped || failed) return;
+      if (!headerDone && prelude) {
+        emitRow(prelude.replace(/"/g, '').split(delimiter).map((cell) => cell.trim()));
+        prelude = '';
+      }
       feed(decoder.decode());
       finish();
     } catch (err) {
