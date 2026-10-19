@@ -16,11 +16,12 @@ import { uploadVariantImageDirect } from '@/lib/uploads-client';
 const BUCKET_LIMIT_BYTES = 4 * 1024 * 1024;
 const QUALITIES = [0.9, 0.8, 0.68, 0.55];
 const MAX_EDGE = 2048;
-/** Eight canvases edit in parallel; eight PUTs upload in parallel. */
-const CANVAS_LANES = 8;
-const UPLOAD_LANES = 8;
+/** Sixteen canvases edit in parallel; sixteen PUTs upload in parallel. */
+const CANVAS_LANES = 16;
+const UPLOAD_LANES = 16;
 /** A batch is stamped whole before any of its bytes leave the tab — two pictures per lane. */
 const IMAGE_WAVE = CANVAS_LANES * 2;
+/** Products move through the API in pages; each page is asked for, edited, uploaded, then written. */
 const PAGE_SIZE = 25;
 
 export interface ImportState {
@@ -30,6 +31,8 @@ export interface ImportState {
   totalBytes: number;
   totalProducts: number;
   totalVariants: number;
+  totalPages: number;
+  processedPages: number;
   processedProducts: number;
   imagesUploaded: number;
   imagesFailed: number;
@@ -47,6 +50,8 @@ export const initialImportState: ImportState = {
   totalBytes: 0,
   totalProducts: 0,
   totalVariants: 0,
+  totalPages: 0,
+  processedPages: 0,
   processedProducts: 0,
   imagesUploaded: 0,
   imagesFailed: 0,
@@ -306,6 +311,7 @@ export async function importShopifyCsv(opts: {
   }
   state.parseFraction = 1;
   state.bytesRead = file.size;
+  state.totalPages = Math.ceil(products.length / PAGE_SIZE);
   state.phase = 'importing';
   update();
 
@@ -385,6 +391,7 @@ export async function importShopifyCsv(opts: {
       state.createdProducts += result.created.length;
       state.failedProducts.push(...result.failed);
       state.relabeledCount += result.relabeledCount;
+      state.processedPages++;
       update();
     }
 

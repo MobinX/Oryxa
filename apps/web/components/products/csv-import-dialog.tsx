@@ -215,6 +215,9 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                   <>
                     <p className="truncate text-sm font-medium">{state.currentName ?? 'Working…'}</p>
                     <p className="text-sm text-[var(--muted-foreground)]">
+                      {state.totalPages > 0
+                        ? `Page ${Math.min(state.processedPages + 1, state.totalPages)} of ${state.totalPages} · `
+                        : ''}
                       {state.processedProducts} / {state.totalProducts} products ·{' '}
                       {state.imagesUploaded} images uploaded
                       {state.imagesFailed > 0 ? ` · ${state.imagesFailed} images skipped` : ''}
