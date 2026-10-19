@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Badge, Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { CsvDownloadButton } from '@/components/csv-download-button';
+import { ProductCsvImport } from '@/components/products/csv-import-dialog';
 import { deleteProductAction, deleteProductsBulkAction } from '@/app/actions/products';
 import ProductsSkeleton from './skeleton';
 
@@ -49,6 +50,7 @@ export default async function ProductsPage({
           <Suspense fallback={<div className="h-10 w-28 animate-pulse rounded-xl bg-muted" />}>
             <ProductCsv params={params} searchParams={searchParams} />
           </Suspense>
+          <ProductCsvImport businessId={businessId} />
           <Link href={`/b/${businessId}/products/new`}>
             <Button>Add product</Button>
           </Link>

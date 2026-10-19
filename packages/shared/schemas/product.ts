@@ -161,6 +161,43 @@ export const updateProductInputSchema = z.object({
 export const updateProductOutputSchema = z.object({ updated: z.boolean() });
 export const deleteProductOutputSchema = z.object({ deleted: z.boolean() });
 
+/**
+ * One product arriving from a browser-side catalog import (e.g. a Shopify CSV). Images were
+ * already pushed to B2 by the browser; only the object keys cross the wire.
+ */
+export const bulkImportProductSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().max(100000).optional(),
+  price: z.coerce.number().min(0).optional(),
+  slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
+  sku: z.string().max(100).optional(),
+  tags: z.array(z.string().min(1).max(40)).max(20).default([]),
+  showInStorefront: z.boolean().default(true),
+  variants: z.array(variantInputSchema).min(1).max(100).default([]),
+});
+
+export type BulkImportProduct = z.infer<typeof bulkImportProductSchema>;
+
+export const bulkCreateProductsBodySchema = z.object({
+  products: z.array(bulkImportProductSchema).min(1).max(25),
+});
+
+export const bulkCreateProductsOutputSchema = z.object({
+  created: z.array(
+    z.object({
+      id: uuidSchema,
+      name: z.string(),
+      slug: z.string(),
+      variantLabels: z.array(z.string()),
+    }),
+  ),
+  failed: z.array(
+    z.object({ name: z.string(), slug: z.string().nullable(), error: z.string() }),
+  ),
+  /** Labels the import wanted but the business already hands out — re-rolled server-side. */
+  relabeledCount: z.number().int(),
+});
+
 export const createCategoryInputSchema = z.object({
   name: z.string().min(1).max(255),
 });

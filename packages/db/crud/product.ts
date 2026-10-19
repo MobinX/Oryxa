@@ -1,7 +1,7 @@
 import { eq, and, asc, desc, sql, or, ilike, isNull, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { products, variants, categories, productOptions, productOptionValues } from '@db/schema';
-import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema } from '@repo/shared';
+import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema, type BulkImportProduct } from '@repo/shared';
 import { slugify, makeVariantId } from '@repo/utils';
 import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
 
@@ -298,6 +298,108 @@ export async function createProduct(input: unknown) {
     slug: product.slug,
     variantCount: parsed.variants.length,
   };
+}
+
+/**
+ * A whole page of products from a client-side catalog import, in one call. The browser already
+ * pushed the pictures to B2 and stamped each variant's wanted label on them, so labels are kept
+ * wherever they are legal — only a label this business already hands out (or a malformed one)
+ * gets re-rolled, and the caller learns how many of those happened.
+ *
+ * Products are written one at a time, outside a shared transaction, so one bad row (say, a slug
+ * the shop already sells under) fails alone and lands in `failed` instead of sinking the page.
+ */
+export async function bulkCreateProducts(businessId: string, items: BulkImportProduct[]) {
+  const wanted = items.flatMap((p) => p.variants.map((v) => v.variantId ?? null));
+  const held = await variantIdsTakenInBusiness(businessId, wanted.filter((w): w is string => !!w && LABEL.test(w)));
+  const needed = wanted.filter((w) => !w || !LABEL.test(w) || held.has(w)).length;
+  const rolled = await rollVariantIds(businessId, needed);
+  let next = 0;
+  let relabeledCount = 0;
+
+  const usedInBatch = new Set<string>();
+  const usedLabels = new Set<string>();
+  const slugFor = (item: BulkImportProduct): string => {
+    const base = slugify(item.slug || item.name) || 'product';
+    let candidate = base;
+    for (let n = 2; usedInBatch.has(candidate); n++) candidate = `${base}-${n}`;
+    usedInBatch.add(candidate);
+    return candidate;
+  };
+
+  const created: Array<{ id: string; name: string; slug: string; variantLabels: string[] }> = [];
+  const failed: Array<{ name: string; slug: string | null; error: string }> = [];
+
+  for (const item of items) {
+    const slug = slugFor(item);
+    try {
+      const price = item.price ?? item.variants.find((v) => v.price)?.price ?? 0;
+      const sku = (item.sku ?? '').slice(0, 100);
+      const [product] = await db
+        .insert(products)
+        .values({
+          businessId,
+          categoryId: null,
+          customerId: null,
+          name: item.name,
+          price: price.toFixed(2),
+          slug,
+          sku,
+          description: item.description,
+          hasDiscount: false,
+          discountPercent: '0',
+          tags: item.tags,
+          showInStorefront: item.showInStorefront,
+        })
+        .returning();
+
+      const labels = item.variants.map((v) => {
+        const want = v.variantId;
+        if (want && LABEL.test(want) && !held.has(want) && !usedLabels.has(want)) {
+          usedLabels.add(want);
+          return want;
+        }
+        relabeledCount++;
+        while (next < rolled.length && usedLabels.has(rolled[next])) next++;
+        const label = next < rolled.length ? rolled[next++] : null;
+        if (label) usedLabels.add(label);
+        return label;
+      });
+
+      const rows = await db
+        .insert(variants)
+        .values(
+          item.variants.map((v, i) => {
+            const photos = photoSetFor(v);
+            return {
+              productId: product!.id,
+              variantId: labels[i] ?? null,
+              name: v.name,
+              options: v.options ?? {},
+              imageUrl: photos.imageUrl,
+              imageUrls: photos.imageUrls,
+              price: v.price?.toFixed(2),
+              stock: v.stock,
+              isAvailable: v.isAvailable,
+              rating: v.rating?.toFixed(2),
+            };
+          }),
+        )
+        .returning();
+
+      created.push({
+        id: product!.id,
+        name: product!.name,
+        slug: product!.slug,
+        variantLabels: rows.map((r) => r.variantId).filter((l): l is string => !!l),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create product';
+      failed.push({ name: item.name, slug, error: message.slice(0, 300) });
+    }
+  }
+
+  return { created, failed, relabeledCount };
 }
 
 export async function getProductById(businessId: string, productId: string) {

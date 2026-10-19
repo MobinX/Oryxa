@@ -2,6 +2,8 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   createProductBodySchema,
   createProductOutputSchema,
+  bulkCreateProductsBodySchema,
+  bulkCreateProductsOutputSchema,
   getProductByIdOutputSchema,
   listProductsOutputSchema,
   listProductsQuerySchema,
@@ -15,6 +17,7 @@ import {
 } from '@repo/shared';
 import {
   createProduct,
+  bulkCreateProducts,
   getProductById,
   getProductByVariantId,
   listProducts,
@@ -106,6 +109,33 @@ productsRouter.openapi(createProductRoute, async (c) => {
   }
   const product = await createProduct({ ...data, businessId });
   return c.json(product, 201);
+});
+
+/**
+ * One page of a client-side catalog import. The browser already pushed every picture to B2 and
+ * stamped each variant's wanted label on it, so this only writes rows — labels are kept wherever
+ * the business has not handed them out yet, and per-product failures ride along in the response.
+ */
+const bulkCreateProductsRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/products/bulk',
+  tags: ['Catalog'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: bulkCreateProductsBodySchema } } },
+  },
+  responses: {
+    201: { content: { 'application/json': { schema: bulkCreateProductsOutputSchema } }, description: 'Import page written' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid payload' },
+  },
+});
+
+productsRouter.openapi(bulkCreateProductsRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const { products: items } = c.req.valid('json');
+  const result = await bulkCreateProducts(businessId, items);
+  return c.json(result, 201);
 });
 
 const listProductsRoute = createRoute({
