@@ -22,6 +22,8 @@ const PAGE_SIZE = 25;
 export interface ImportState {
   phase: 'parsing' | 'importing' | 'done' | 'error' | 'aborted';
   parseFraction: number;
+  bytesRead: number;
+  totalBytes: number;
   totalProducts: number;
   totalVariants: number;
   processedProducts: number;
@@ -37,6 +39,8 @@ export interface ImportState {
 export const initialImportState: ImportState = {
   phase: 'parsing',
   parseFraction: 0,
+  bytesRead: 0,
+  totalBytes: 0,
   totalProducts: 0,
   totalVariants: 0,
   processedProducts: 0,
@@ -220,7 +224,7 @@ export async function importShopifyCsv(opts: {
   signal: AbortSignal;
 }): Promise<ImportState> {
   const { file, businessId, onState, signal } = opts;
-  const state: ImportState = { ...initialImportState };
+  const state: ImportState = { ...initialImportState, totalBytes: file.size };
   const update = () => onState({ ...state });
 
   // Phase 1 — stream the CSV, keeping only product metas in memory.
@@ -232,8 +236,9 @@ export async function importShopifyCsv(opts: {
         state.totalProducts = products.length;
         state.totalVariants += product.variants.length;
       },
-      onProgress: (fraction) => {
+      onProgress: (fraction, bytesRead) => {
         state.parseFraction = fraction;
+        state.bytesRead = bytesRead;
         update();
       },
       onComplete: () => resolve(),
@@ -264,6 +269,7 @@ export async function importShopifyCsv(opts: {
     return state;
   }
   state.parseFraction = 1;
+  state.bytesRead = file.size;
   state.phase = 'importing';
   update();
 

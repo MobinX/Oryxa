@@ -175,7 +175,7 @@ export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
 
 export interface ShopifyCsvHandlers {
   onProduct: (product: ParsedProduct) => void;
-  onProgress?: (fraction: number) => void;
+  onProgress?: (fraction: number, bytesRead: number) => void;
   onComplete: (summary: { products: number; variants: number }) => void;
   onError: (error: Error) => void;
 }
@@ -299,7 +299,8 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
         i = n;
         break;
       }
-      field += text.slice(i, d);
+      // Anything between a closing quote and the delimiter is tolerated junk, not data.
+      if (state !== FieldState.QuoteClosed) field += text.slice(i, d);
       if (text[d] === '\r' || text[d] === '\n') {
         endRow();
         if (text[d] === '\r') pendingCR = true;
@@ -322,39 +323,55 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
       row = [];
     }
     flush();
-    handlers.onProgress?.(1);
+    handlers.onProgress?.(1, bytes);
     handlers.onComplete({ products: productCount, variants: variantCount });
   };
 
-  const reader = file.stream().getReader();
+  // Sliced Blob reads rather than file.stream(): every browser with a File can slice and decode a
+  // buffer, and a bad content-provider stream cannot wedge the import. One megabyte is the whole
+  // read window, so memory stays flat whatever the export's size.
+  const SLICE_BYTES = 1024 * 1024;
+  const STALL_MS = 20_000;
   const decoder = new TextDecoder('utf-8');
   let bytes = 0;
   let bomStripped = false;
+  let lastActivity = Date.now();
+
+  const watchdog = setInterval(() => {
+    if (stopped || failed) return;
+    if (Date.now() - lastActivity <= STALL_MS) return;
+    failed = true;
+    clearInterval(watchdog);
+    handlers.onError(
+      new Error(
+        `The browser stopped reading the file after ${(bytes / (1024 * 1024)).toFixed(1)} MB. Re-save the CSV on the device and pick it again — a locally stored copy avoids provider-backed files that stall.`,
+      ),
+    );
+  }, 2000);
 
   const pump = async () => {
     try {
-      for (;;) {
-        const { done, value } = await reader.read();
+      while (bytes < file.size && !stopped && !failed) {
+        const slice = file.slice(bytes, Math.min(bytes + SLICE_BYTES, file.size));
+        const buffer = await slice.arrayBuffer();
         if (stopped || failed) break;
-        if (done) break;
-        bytes += value.byteLength;
-        let text = decoder.decode(value, { stream: true });
+        if (buffer.byteLength === 0) break;
+        bytes += buffer.byteLength;
+        lastActivity = Date.now();
+        let text = decoder.decode(new Uint8Array(buffer), { stream: true });
         if (!bomStripped) {
           bomStripped = true;
           if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
         }
         feed(text);
-        if (stopped || failed) break;
-        if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size));
+        if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size), bytes);
       }
-      if (stopped) return;
-      if (failed) {
-        void reader.cancel().catch(() => {});
-        return;
-      }
+      clearInterval(watchdog);
+      if (stopped || failed) return;
       feed(decoder.decode());
       finish();
     } catch (err) {
+      clearInterval(watchdog);
       if (stopped || failed) return;
       failed = true;
       handlers.onError(new Error(`Could not read the CSV: ${err instanceof Error ? err.message : 'read failed'}`));
@@ -364,6 +381,6 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
 
   return () => {
     stopped = true;
-    void reader.cancel().catch(() => {});
+    clearInterval(watchdog);
   };
 }

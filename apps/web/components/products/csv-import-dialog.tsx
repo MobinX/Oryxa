@@ -45,6 +45,7 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
   const cancel = () => abortRef.current?.abort();
 
   const parsePercent = state ? Math.round(state.parseFraction * 100) : 0;
+  const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
 
   return (
     <>
@@ -88,6 +89,9 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                   <>
                     <p className="text-sm">
                       Reading CSV…{parsePercent > 0 ? ` ${parsePercent}%` : ''}
+                      {state.totalBytes > 0
+                        ? ` — ${megabytes(state.bytesRead)} of ${megabytes(state.totalBytes)} MB`
+                        : ''}
                       {state.totalProducts > 0 ? ` — ${state.totalProducts} products found so far` : ''}
                     </p>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]">
