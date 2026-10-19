@@ -55,7 +55,8 @@ export const initialImportState: ImportState = {
 
 interface LabeledVariant extends ParsedVariant {
   label: string;
-  imageKey: string | null;
+  /** One stored key per source image, in the CSV's order; holes are pictures that failed. */
+  imageKeys: Array<string | null>;
 }
 
 interface LabeledProduct {
@@ -65,6 +66,8 @@ interface LabeledProduct {
   tags: string[];
   showInStorefront: boolean;
   category: string | null;
+  slug: string | null;
+  discountPercent: number;
   sku: string;
   price: number | null;
   images: Array<{ url: string; position: number }>;
@@ -138,6 +141,7 @@ async function produceVariantImage(
   canvas: HTMLCanvasElement,
   url: string,
   label: string,
+  slot: number,
   businessId: string,
   signal: AbortSignal,
   onUploaded: () => void,
@@ -162,7 +166,7 @@ async function produceVariantImage(
         lastError = new Error('Image too large');
         continue;
       }
-      const file = new File([blob], `${label}.jpg`, { type: 'image/jpeg' });
+      const file = new File([blob], `${label}-${slot + 1}.jpg`, { type: 'image/jpeg' });
       try {
         const { key } = await uploadVariantImageDirect(businessId, file);
         onUploaded();
@@ -202,16 +206,19 @@ function payloadFor(product: LabeledProduct) {
     name: product.name,
     description: product.description?.slice(0, 100000) ?? undefined,
     price: product.price ?? 0,
-    slug: slugify(product.handle) || slugify(product.name) || undefined,
+    // Only an explicit slug crosses the wire; without one the server derives it from the name
+    // and walks suffixes until it is free.
+    ...(product.slug ? { slug: slugify(product.slug) || undefined } : {}),
     sku: product.sku.slice(0, 100),
     tags: product.tags,
     showInStorefront: product.showInStorefront,
+    ...(product.discountPercent > 0 ? { discountPercent: product.discountPercent } : {}),
     ...(product.category ? { categoryName: product.category.slice(0, 255) } : {}),
     variants: product.variants.map((v) => ({
       name: v.name.slice(0, 255),
       variantId: v.label,
       options: v.options,
-      imageUrls: v.imageKey ? [v.imageKey] : [],
+      imageUrls: v.imageKeys.filter((key): key is string => !!key).slice(0, 10),
       ...(v.price !== null && v.price > 0 ? { price: v.price } : {}),
       stock: v.qty,
       isAvailable: true,
@@ -291,7 +298,7 @@ export async function importShopifyCsv(opts: {
       let label = makeVariantId();
       while (used.has(label)) label = makeVariantId();
       used.add(label);
-      return { ...variant, label, imageKey: null };
+      return { ...variant, label, imageKeys: [] };
     }),
   }));
 
@@ -309,19 +316,28 @@ export async function importShopifyCsv(opts: {
         state.currentName = product.name;
         update();
 
-        // Four lanes: variants needing a photo flow through four canvases in parallel.
-        const jobs = product.variants
-          .map((variant) => ({ variant, url: variant.imageUrl ?? product.images[0]?.url ?? null }))
-          .filter((job): job is { variant: LabeledVariant; url: string } => !!job.url);
+        // Four lanes: every picture of every variant flows through four canvases in parallel.
+        // A variant's own image list wins; otherwise the product's first image is its picture
+        // (the Shopify layout, where one product photo serves all variants).
+        const jobs = product.variants.flatMap((variant) => {
+          const sources =
+            variant.imageUrls.length > 0
+              ? variant.imageUrls
+              : product.images[0]
+                ? [product.images[0].url]
+                : [];
+          return sources.slice(0, 10).map((url, slot) => ({ variant, url, slot }));
+        });
         let next = 0;
         const lanes = Array.from({ length: Math.min(CANVAS_LANES, jobs.length) }, (_, lane) =>
           (async () => {
             while (next < jobs.length) {
-              const { variant, url } = jobs[next++];
+              const { variant, url, slot } = jobs[next++];
               const key = await produceVariantImage(
                 canvases[lane],
                 url,
                 variant.label,
+                slot,
                 businessId,
                 signal,
                 () => {
@@ -329,7 +345,7 @@ export async function importShopifyCsv(opts: {
                   update();
                 },
               );
-              variant.imageKey = key;
+              variant.imageKeys[slot] = key;
               if (!key) state.imagesFailed++;
             }
           })(),

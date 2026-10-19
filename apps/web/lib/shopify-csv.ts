@@ -13,13 +13,44 @@
 
 export type ShopifyRow = Record<string, string | undefined>;
 
+/**
+ * The compact template's header, in order. Shared with the import dialog so a merchant sees the
+ * exact columns before picking a file. One row per variant; product fields live on the product's
+ * first row, continuation rows leave them blank; variant images are `|`-separated URLs.
+ */
+export const COMPACT_CSV_HEADERS = [
+  'Product Name',
+  'URL Slug',
+  'SKU',
+  'Price',
+  'Discount Percent',
+  'Description',
+  'Tags',
+  'Category',
+  'Show In Store',
+  'Option 1 Name',
+  'Option 1 Values',
+  'Option 2 Name',
+  'Option 2 Values',
+  'Option 3 Name',
+  'Option 3 Values',
+  'Variant SKU',
+  'Option 1 Value',
+  'Option 2 Value',
+  'Option 3 Value',
+  'Variant Price',
+  'Variant Stock',
+  'Variant Images',
+] as const;
+
 export interface ParsedVariant {
   name: string;
   sku: string;
   price: number | null;
   qty: number;
   options: Record<string, string>;
-  imageUrl: string | null;
+  /** Every picture for this variant, cover first. The importer stamps each with the short id. */
+  imageUrls: string[];
 }
 
 export interface ParsedProduct {
@@ -30,6 +61,9 @@ export interface ParsedProduct {
   showInStorefront: boolean;
   /** The merchant's Type when present, else the leaf of Shopify's product category taxonomy. */
   category: string | null;
+  /** An explicit slug (Shopify handle or compact URL Slug); null means "derive and make unique". */
+  slug: string | null;
+  discountPercent: number;
   sku: string;
   price: number | null;
   images: Array<{ url: string; position: number }>;
@@ -130,7 +164,7 @@ function variantFrom(row: ShopifyRow, productName: string, optionNames: string[]
     price: parsePrice(cell(row, VARIANT_PRICE_ALIASES)),
     qty: parseQty(cell(row, VARIANT_QTY_ALIASES)),
     options,
-    imageUrl: cell(row, VARIANT_IMAGE_ALIASES) || null,
+    imageUrls: cell(row, VARIANT_IMAGE_ALIASES) ? [cell(row, VARIANT_IMAGE_ALIASES)] : [],
   };
 }
 
@@ -170,7 +204,7 @@ export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
       price: parsePrice(cell(meta, VARIANT_PRICE_ALIASES)),
       qty: 0,
       options: {},
-      imageUrl: images[0]?.url ?? null,
+      imageUrls: images[0] ? [images[0].url] : [],
     });
   }
 
@@ -196,9 +230,95 @@ export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
         .pop()
         ?.slice(0, 255) ||
       null,
+    slug: cell(meta, HANDLE_ALIASES) || null,
+    discountPercent: 0,
     sku: variants[0]?.sku ?? '',
     price: variants[0]?.price ?? null,
     images,
+    variants,
+  };
+}
+
+/**
+ * Which compact-template row carries a variant: any variant cell is filled. Product-only rows
+ * (the head of a product that itemizes no variant) are not variants on their own.
+ */
+function isCompactVariantRow(row: ShopifyRow): boolean {
+  return (
+    [
+      'variantsku',
+      'option1value',
+      'option2value',
+      'option3value',
+      'variantprice',
+      'variantstock',
+      'variantimages',
+    ].some((key) => (row[key] ?? '').trim() !== '')
+  );
+}
+
+/**
+ * Folds one product's compact rows into the same shape the Shopify reader produces. Option names
+ * come from the product row (`Option 1 Name`); values come from each variant row, and image cells
+ * hold one or more `|`-separated URLs.
+ */
+export function groupCompactProduct(rows: ShopifyRow[]): ParsedProduct {
+  const meta = rows.find((row) => (row['productname'] ?? '').trim() !== '') ?? rows[0];
+  const name = (meta['productname'] ?? '').trim() || 'Untitled product';
+  const optionNames = [1, 2, 3].map((i) => (meta[`option${i}name`] ?? '').trim());
+
+  const variants: ParsedVariant[] = [];
+  for (const row of rows) {
+    if (!isCompactVariantRow(row)) continue;
+    const options: Record<string, string> = {};
+    const values: string[] = [];
+    for (const i of [1, 2, 3]) {
+      const value = (row[`option${i}value`] ?? '').trim();
+      if (!value) continue;
+      if (value.toLowerCase() === 'default title') continue;
+      const optionName = (row[`option${i}name`] ?? '').trim() || optionNames[i - 1] || `Option ${i}`;
+      if (optionName.toLowerCase() === 'title') continue;
+      options[optionName] = value;
+      values.push(value);
+    }
+    variants.push({
+      name: values.length > 0 ? values.join(' / ') : name,
+      sku: (row['variantsku'] ?? '').trim(),
+      price: parsePrice(row['variantprice'] ?? ''),
+      qty: parseQty(row['variantstock'] ?? ''),
+      options,
+      imageUrls: (row['variantimages'] ?? '')
+        .split('|')
+        .map((url) => url.trim())
+        .filter((url) => /^https?:\/\//i.test(url)),
+    });
+  }
+
+  if (variants.length === 0) {
+    variants.push({ name, sku: '', price: null, qty: 0, options: {}, imageUrls: [] });
+  }
+
+  const showRaw = (meta['showinstore'] ?? '').trim().toLowerCase();
+  const showInStorefront = showRaw ? ['true', '1', 'yes', 'y'].includes(showRaw) : true;
+  const discount = Number.parseFloat((meta['discountpercent'] ?? '').replace(/[^0-9.]/g, ''));
+  const price = parsePrice(meta['price'] ?? '');
+
+  return {
+    handle: '',
+    name: name.slice(0, 255),
+    description: (meta['description'] ?? '').trim() || null,
+    tags: (meta['tags'] ?? '')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0)
+      .slice(0, 20),
+    showInStorefront,
+    category: (meta['category'] ?? '').trim().slice(0, 255) || null,
+    slug: (meta['urlslug'] ?? '').trim() || null,
+    discountPercent: Number.isFinite(discount) ? Math.max(0, Math.min(100, discount)) : 0,
+    sku: ((meta['sku'] ?? '').trim() || variants[0]?.sku || '').slice(0, 100),
+    price: price ?? variants[0]?.price ?? null,
+    images: [],
     variants,
   };
 }
@@ -224,6 +344,9 @@ export interface ShopifyCsvHandlers {
 export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () => void {
   let currentHandle: string | null = null;
   let currentRows: ShopifyRow[] = [];
+  let compactName: string | null = null;
+  let compactRows: ShopifyRow[] = [];
+  let format: 'shopify' | 'compact' | null = null;
   let productCount = 0;
   let variantCount = 0;
   let failed = false;
@@ -231,9 +354,15 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   let headers: string[] | null = null;
 
   const flush = () => {
-    if (currentRows.length === 0) return;
-    const product = groupProduct(currentRows);
-    currentRows = [];
+    const rows = format === 'compact' ? compactRows : currentRows;
+    if (rows.length === 0) return;
+    const product = format === 'compact' ? groupCompactProduct(rows) : groupProduct(rows);
+    if (format === 'compact') {
+      compactRows = [];
+      compactName = null;
+    } else {
+      currentRows = [];
+    }
     productCount++;
     variantCount += product.variants.length;
     handlers.onProduct(product);
@@ -252,12 +381,14 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
       // delimiter itself is consumed by the split, so the cell usually reads "sep=".
       if (/^sep=[,;\t]?$/i.test(row[0].trim()) && row.slice(1).every((value) => value === '')) return;
       headers = row.map(normalizeHeader);
-      if (!headers.includes('handle') && !headers.includes('urlhandle')) {
+      if (headers.includes('handle') || headers.includes('urlhandle')) format = 'shopify';
+      else if (headers.includes('productname')) format = 'compact';
+      if (format === null) {
         failed = true;
         const seen = row.slice(0, 6).map((value) => value.trim()).filter(Boolean).join(', ').slice(0, 140);
         handlers.onError(
           new Error(
-            `This file has no "Handle" or "URL handle" column — its first row reads: "${seen}". Export Products from your Shopify admin: Orders and Customers exports have no handle, and re-saving in Excel can merge the columns.`,
+            `This CSV is not a supported format. Upload a Shopify product export (a "Handle" or "URL handle" column) or the compact Oryxa template (a "Product Name" column — its header is shown in the import dialog). Its first row reads: "${seen}".`,
           ),
         );
       }
@@ -266,6 +397,16 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
     const normalized: ShopifyRow = {};
     for (let i = 0; i < headers.length && i < row.length; i++) {
       if (headers[i] !== '') normalized[headers[i]] = row[i] ?? '';
+    }
+    if (format === 'compact') {
+      // A named row opens a product; unnamed rows continue it. Repeating the name on every row
+      // works too — consecutive rows of the same product are one group either way.
+      const rowName = (normalized['productname'] ?? '').trim();
+      if (!rowName && compactRows.length === 0) return;
+      if (rowName && compactRows.length > 0 && rowName !== compactName) flush();
+      if (rowName) compactName = rowName;
+      compactRows.push(normalized);
+      return;
     }
     const rowHandle = (normalized['handle'] ?? normalized['urlhandle'] ?? '').trim();
     if (!rowHandle) return;

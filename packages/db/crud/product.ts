@@ -350,10 +350,25 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
 
   const usedInBatch = new Set<string>();
   const usedLabels = new Set<string>();
-  const slugFor = (item: BulkImportProduct): string => {
+  const slugTaken = async (candidate: string) =>
+    !!(await db.query.products.findFirst({
+      where: and(eq(products.businessId, businessId), eq(products.slug, candidate), isNull(products.deletedAt)),
+      columns: { id: true },
+    }));
+  const slugFor = async (item: BulkImportProduct): Promise<string> => {
     const base = slugify(item.slug || item.name) || 'product';
+    // A slug the merchant wrote must be free as written; a derived one just has to end up free,
+    // so it walks -2, -3, ... past whatever this business already sells under.
+    if (item.slug) {
+      usedInBatch.add(base);
+      return base;
+    }
     let candidate = base;
-    for (let n = 2; usedInBatch.has(candidate); n++) candidate = `${base}-${n}`;
+    let n = 2;
+    while (usedInBatch.has(candidate) || (await slugTaken(candidate))) {
+      candidate = `${base}-${n++}`;
+      if (n > 500) throw new Error('Could not find a free URL slug for this product');
+    }
     usedInBatch.add(candidate);
     return candidate;
   };
@@ -383,8 +398,9 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
   };
 
   for (const item of items) {
-    const slug = slugFor(item);
+    let slug: string | null = null;
     try {
+      slug = await slugFor(item);
       const price = item.price ?? item.variants.find((v) => v.price)?.price ?? 0;
       const sku = (item.sku ?? '').slice(0, 100);
       const categoryId = item.categoryName ? await categoryIdFor(item.categoryName) : null;
@@ -399,8 +415,8 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
           slug,
           sku,
           description: item.description,
-          hasDiscount: false,
-          discountPercent: '0',
+          hasDiscount: item.discountPercent > 0,
+          discountPercent: item.discountPercent.toFixed(2),
           tags: item.tags,
           showInStorefront: item.showInStorefront,
         })
@@ -462,7 +478,13 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create product';
-      failed.push({ name: item.name, slug, error: message.slice(0, 300) });
+      failed.push({
+        name: item.name,
+        slug,
+        error: /products_business_slug_idx|duplicate key.*slug/i.test(message)
+          ? 'A product with this URL slug already exists'
+          : message.slice(0, 300),
+      });
     }
   }
 
@@ -647,6 +669,88 @@ export async function listProducts(
     products: mapped,
     totalCount: countResult?.count ?? 0,
   };
+}
+
+export interface ExportProduct {
+  name: string;
+  slug: string;
+  sku: string;
+  price: number;
+  discountPercent: number;
+  description: string | null;
+  tags: string[];
+  categoryName: string | null;
+  showInStorefront: boolean;
+  options: Array<{ name: string; values: string[] }>;
+  variants: Array<{
+    options: Record<string, string>;
+    price: number | null;
+    stock: number;
+    images: string[];
+  }>;
+}
+
+/**
+ * The whole live catalog, shaped for the compact CSV: every product with its declared options
+ * (or the set derived from its variants), and each variant with its pictures resolved to signed
+ * URLs so a fresh download can be fed straight back into the importer.
+ */
+export async function exportProducts(businessId: string): Promise<ExportProduct[]> {
+  const rows = await db.query.products.findMany({
+    where: and(eq(products.businessId, businessId), isNull(products.deletedAt)),
+    orderBy: [asc(products.name), asc(products.id)],
+    with: {
+      category: true,
+      variants: { where: isNull(variants.deletedAt) },
+    },
+  });
+
+  return Promise.all(
+    rows.map(async (product) => {
+      const declared = await loadProductOptions(product.id);
+      const options =
+        declared.length > 0
+          ? declared.map((option) => ({
+              name: option.name,
+              values: option.values.map((value) => value.value),
+            }))
+          : deriveImportedOptions(product.variants.map((variant) => ({ options: variant.options ?? {} })));
+
+      const variantsOut = await Promise.all(
+        product.variants.map(async (variant) => {
+          const keys =
+            variant.imageUrls && variant.imageUrls.length > 0
+              ? variant.imageUrls
+              : variant.imageUrl
+                ? [variant.imageUrl]
+                : [];
+          const images = (await Promise.all(keys.map((key) => resolveStoredImageUrl(key)))).filter(
+            (url): url is string => Boolean(url),
+          );
+          return {
+            options: variant.options ?? {},
+            price: variant.price ? Number.parseFloat(variant.price) : null,
+            stock: variant.stock,
+            images,
+          };
+        }),
+      );
+
+      return {
+        name: product.name,
+        slug: product.slug,
+        sku: product.sku,
+        price: Number.parseFloat(product.price),
+        discountPercent: product.hasDiscount ? Number.parseFloat(product.discountPercent) : 0,
+        description: product.description,
+        tags: product.tags,
+        categoryName: product.category && !product.category.deletedAt ? product.category.name : null,
+        showInStorefront: product.showInStorefront,
+        options,
+        variants: variantsOut,
+      };
+    }),
+  );
 }
 
 export async function updateProduct(businessId: string, productId: string, input: unknown) {

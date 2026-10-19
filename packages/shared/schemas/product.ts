@@ -175,6 +175,8 @@ export const bulkImportProductSchema = z.object({
   showInStorefront: z.boolean().default(true),
   /** A shelf to find or create for this business, e.g. the CSV's product type. */
   categoryName: z.string().min(1).max(255).optional(),
+  /** Percent off the listed price; zero means no discount. */
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
   variants: z.array(variantInputSchema).min(1).max(100).default([]),
 });
 

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { importShopifyCsv, initialImportState, type ImportState } from '@/lib/product-csv-import';
+import { COMPACT_CSV_HEADERS } from '@/lib/shopify-csv';
 
 /**
  * Upload a Shopify product export and let the browser do the whole import: the CSV streams in
@@ -63,10 +64,31 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
             {!state && (
               <div className="mt-4 space-y-4">
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Pick a product CSV exported from Shopify. Images are downloaded, stamped with each
-                  variant&apos;s short id, and uploaded from your browser — keep this tab open until
-                  it finishes.
+                  Pick a product CSV. Images are downloaded, stamped with each variant&apos;s short
+                  id, and uploaded from your browser — keep this tab open until it finishes.
                 </p>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)] p-3 text-xs">
+                  <p className="font-semibold">Only two formats are supported</p>
+                  <p className="mt-1 text-[var(--muted-foreground)]">
+                    A Shopify product export (a <code>Handle</code> or <code>URL handle</code>{' '}
+                    column) or the compact Oryxa template below (a <code>Product Name</code>{' '}
+                    column). Any other CSV is rejected.
+                  </p>
+                </div>
+                <details className="rounded-xl border border-[var(--border)] p-3 text-xs">
+                  <summary className="cursor-pointer font-medium">
+                    Compact template header — one row per variant
+                  </summary>
+                  <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[var(--muted-foreground)]">
+                    {COMPACT_CSV_HEADERS.join(', ')}
+                  </pre>
+                  <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted-foreground)]">
+                    Product fields live on a product&apos;s first row; continuation rows only carry
+                    variant cells. Options hold <code>|</code>-separated values, and Variant Images
+                    holds <code>|</code>-separated image URLs. &ldquo;Download CSV&rdquo; on this
+                    page exports your catalog in exactly this shape.
+                  </p>
+                </details>
                 <input
                   ref={inputRef}
                   type="file"

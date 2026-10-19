@@ -3,7 +3,9 @@ import { Suspense } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { cachedCategories, cachedProducts } from '@/app/_cache/queries';
-import { toCsv, csvColumnsForProducts, type ProductListItem } from '@/lib/api';
+import { type ProductListItem } from '@/lib/api';
+import { exportProducts } from '@repo/db/crud/product';
+import { compactProductsCsv } from '@/lib/compact-export';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -209,25 +211,19 @@ async function ProductCount({
 
 async function ProductCsv({
   params,
-  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ q?: string; categoryId?: string }>;
 }) {
   const { businessId } = await params;
-  const { q = '', categoryId = '' } = await searchParams;
-  const token = await requireAuth();
-  const { products } = await cachedProducts(token, businessId, {
-    categoryId: categoryId || undefined,
-    limit: 100,
-  });
-  const query = q.trim().toLowerCase();
-  const filtered = query
-    ? products.filter(
-        (p) => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query),
-      )
-    : products;
-  const csv = toCsv(filtered as unknown as Record<string, unknown>[], csvColumnsForProducts());
-  return <CsvDownloadButton csv={csv} filename={`products-${businessId}.csv`} />;
+  await requireAuth();
+  const products = await exportProducts(businessId);
+  return (
+    <CsvDownloadButton
+      csv={compactProductsCsv(products)}
+      filename={`products-${businessId}.csv`}
+      label="Download CSV"
+    />
+  );
 }
 

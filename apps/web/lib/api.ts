@@ -677,18 +677,6 @@ export function toCsv(rows: Record<string, unknown>[], columns: { key: string; l
   return `${header}\n${body}`;
 }
 
-export function csvColumnsForProducts() {
-  return [
-    { key: 'name', label: 'Name' },
-    { key: 'sku', label: 'SKU' },
-    { key: 'price', label: 'Price' },
-    { key: 'categoryName', label: 'Category' },
-    { key: 'variantCount', label: 'Variants' },
-    { key: 'description', label: 'Description' },
-    { key: 'createdAt', label: 'Created At' },
-  ];
-}
-
 export function csvColumnsForOrders() {
   return [
     { key: 'id', label: 'Order ID' },
