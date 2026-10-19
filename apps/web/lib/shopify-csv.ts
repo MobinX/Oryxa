@@ -192,6 +192,13 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   let productCount = 0;
   let variantCount = 0;
   let failed = false;
+  // Papa's handle.abort() fires the complete callback itself, so the abort wrapper flags the
+  // stop first — otherwise a cancelled parse resolves the reader as if it had finished.
+  let stopped = false;
+  // Papa hands the parser handle to every chunk callback; the value `Papa.parse` itself returns
+  // for a File input is undefined, so the handle captured from the first chunk is the only
+  // working abort handle.
+  let parserHandle: { abort(): void } | null = null;
 
   const flush = () => {
     if (currentRows.length === 0) return;
@@ -202,35 +209,32 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
     handlers.onProduct(product);
   };
 
-  // Chunk-mode parsing returns the parser handle at runtime, though the typings say `void`.
-  const handle = Papa.parse<ShopifyRow>(file, {
+  Papa.parse<ShopifyRow>(file, {
     header: true,
     skipEmptyLines: 'greedy',
     chunkSize: 1024 * 1024,
-    chunk(results) {
+    chunk(results, chunkHandle) {
+      parserHandle ??= chunkHandle;
       if (failed) return;
       if (!results.data || results.data.length === 0) return;
 
-      const first = results.data[0];
-      if (currentHandle === null && !first) return;
       const sample = results.data.find((r) => r && Object.keys(r).length > 0);
       if (sample && !Object.keys(sample).some((key) => normalizeHeader(key) === 'handle')) {
         failed = true;
+        parserHandle.abort();
         handlers.onError(new Error('This file has no "Handle" column — is it a Shopify products CSV?'));
-        // Papa stops when the chunk callback flags the meta; the flag exists at runtime only.
-        (results.meta as Papa.ParseMeta & { abort?: boolean }).abort = true;
         return;
       }
 
       for (const row of results.data) {
         if (!row) continue;
-        const handle = (row['Handle'] ?? row['handle'] ?? '').trim();
-        if (!handle) continue;
+        const rowHandle = (row['Handle'] ?? row['handle'] ?? '').trim();
+        if (!rowHandle) continue;
         const normalized: ShopifyRow = {};
         for (const [key, value] of Object.entries(row)) normalized[normalizeHeader(key)] = value;
-        if (handle !== currentHandle) {
+        if (rowHandle !== currentHandle) {
           flush();
-          currentHandle = handle;
+          currentHandle = rowHandle;
         }
         currentRows.push(normalized);
       }
@@ -239,7 +243,7 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
       if (file.size > 0) handlers.onProgress?.(Math.min(0.99, cursor / file.size));
     },
     complete() {
-      if (failed) return;
+      if (failed || stopped) return;
       flush();
       handlers.onProgress?.(1);
       handlers.onComplete({ products: productCount, variants: variantCount });
@@ -249,7 +253,10 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
       failed = true;
       handlers.onError(new Error(`Could not read the CSV: ${err.message}`));
     },
-  }) as unknown as { abort(): void };
+  });
 
-  return () => handle.abort();
+  return () => {
+    stopped = true;
+    parserHandle?.abort();
+  };
 }

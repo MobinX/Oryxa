@@ -86,9 +86,16 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
               <div className="mt-4 space-y-3">
                 {state.phase === 'parsing' ? (
                   <>
-                    <p className="text-sm">Reading CSV… {parsePercent}%</p>
+                    <p className="text-sm">
+                      Reading CSV…{parsePercent > 0 ? ` ${parsePercent}%` : ''}
+                      {state.totalProducts > 0 ? ` — ${state.totalProducts} products found so far` : ''}
+                    </p>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]">
-                      <div className="h-full bg-[var(--primary)]" style={{ width: `${parsePercent}%` }} />
+                      {parsePercent > 0 ? (
+                        <div className="h-full bg-[var(--primary)]" style={{ width: `${parsePercent}%` }} />
+                      ) : (
+                        <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--primary)]" />
+                      )}
                     </div>
                   </>
                 ) : (
