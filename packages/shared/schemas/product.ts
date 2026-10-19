@@ -173,6 +173,8 @@ export const bulkImportProductSchema = z.object({
   sku: z.string().max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
   showInStorefront: z.boolean().default(true),
+  /** A shelf to find or create for this business, e.g. the CSV's product type. */
+  categoryName: z.string().min(1).max(255).optional(),
   variants: z.array(variantInputSchema).min(1).max(100).default([]),
 });
 

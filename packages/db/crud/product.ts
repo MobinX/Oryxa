@@ -361,16 +361,38 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
   const created: Array<{ id: string; name: string; slug: string; variantLabels: string[] }> = [];
   const failed: Array<{ name: string; slug: string | null; error: string }> = [];
 
+  // One page of an import usually repeats a handful of shelves, so each is resolved once.
+  const categoryCache = new Map<string, string | null>();
+  const categoryIdFor = async (name: string): Promise<string | null> => {
+    const trimmed = name.trim().slice(0, 255);
+    const categorySlug = slugify(trimmed);
+    if (!trimmed || !categorySlug) return null;
+    if (categoryCache.has(categorySlug)) return categoryCache.get(categorySlug)!;
+
+    let id: string | null = null;
+    try {
+      const existing = await db.query.categories.findFirst({
+        where: and(eq(categories.businessId, businessId), eq(categories.slug, categorySlug)),
+      });
+      id = existing && !existing.deletedAt ? existing.id : (await createCategory(businessId, trimmed)).id;
+    } catch {
+      // A shelf that cannot be written is not worth sinking the product over.
+    }
+    categoryCache.set(categorySlug, id);
+    return id;
+  };
+
   for (const item of items) {
     const slug = slugFor(item);
     try {
       const price = item.price ?? item.variants.find((v) => v.price)?.price ?? 0;
       const sku = (item.sku ?? '').slice(0, 100);
+      const categoryId = item.categoryName ? await categoryIdFor(item.categoryName) : null;
       const [product] = await db
         .insert(products)
         .values({
           businessId,
-          categoryId: null,
+          categoryId,
           customerId: null,
           name: item.name,
           price: price.toFixed(2),

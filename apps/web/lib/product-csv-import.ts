@@ -64,6 +64,7 @@ interface LabeledProduct {
   description: string | null;
   tags: string[];
   showInStorefront: boolean;
+  category: string | null;
   sku: string;
   price: number | null;
   images: Array<{ url: string; position: number }>;
@@ -205,6 +206,7 @@ function payloadFor(product: LabeledProduct) {
     sku: product.sku.slice(0, 100),
     tags: product.tags,
     showInStorefront: product.showInStorefront,
+    ...(product.category ? { categoryName: product.category.slice(0, 255) } : {}),
     variants: product.variants.map((v) => ({
       name: v.name.slice(0, 255),
       variantId: v.label,

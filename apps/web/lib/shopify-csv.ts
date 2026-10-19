@@ -28,6 +28,8 @@ export interface ParsedProduct {
   description: string | null;
   tags: string[];
   showInStorefront: boolean;
+  /** The merchant's Type when present, else the leaf of Shopify's product category taxonomy. */
+  category: string | null;
   sku: string;
   price: number | null;
   images: Array<{ url: string; position: number }>;
@@ -42,6 +44,8 @@ const BODY_ALIASES = ['description', 'bodyhtml', 'body'];
 const TAGS_ALIASES = ['tags'];
 const PUBLISHED_ALIASES = ['publishedononlinestore', 'published'];
 const STATUS_ALIASES = ['status'];
+const TYPE_ALIASES = ['type'];
+const PRODUCT_CATEGORY_ALIASES = ['productcategory'];
 const VARIANT_SKU_ALIASES = ['sku', 'variantsku'];
 const VARIANT_PRICE_ALIASES = ['price', 'variantprice'];
 const VARIANT_QTY_ALIASES = ['inventoryquantity', 'variantinventoryqty'];
@@ -180,6 +184,18 @@ export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
       .filter((t) => t.length > 0)
       .slice(0, 20),
     showInStorefront,
+    // "Type" is the merchant's own word for the shelf ("Graphic shirt"); the taxonomy is the
+    // fallback, boiled down to its last stop ("... > T-Shirts" → "T-Shirts") so the shelf is a
+    // name a human would use.
+    category:
+      cell(meta, TYPE_ALIASES).slice(0, 255) ||
+      cell(meta, PRODUCT_CATEGORY_ALIASES)
+        .split('>')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .pop()
+        ?.slice(0, 255) ||
+      null,
     sku: variants[0]?.sku ?? '',
     price: variants[0]?.price ?? null,
     images,
