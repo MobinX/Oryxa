@@ -774,3 +774,4 @@ The Messenger webhook payload only contains `sender.id` — no name or picture. 
 These were added as columns in migration `0004_add_comment_profile_and_post_context.sql` (`commenter_avatar`, `post_context` on `comment_threads`), applied to Neon. `conversations.customerName`/`customerAvatar` already existed.
 
 
+
