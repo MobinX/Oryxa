@@ -97,6 +97,36 @@ export const COMPACT_CSV_EXAMPLE = [
   ]),
 ].join('\n');
 
+/**
+ * A paste-ready instruction for an assistant holding a merchant's own CSV: convert it into the
+ * compact template and reply with nothing else. Built from the same header, guide and example the
+ * importer reads, so it cannot describe a column the parser does not understand.
+ */
+export const COMPACT_CSV_PROMPT = [
+  'Convert my attached product CSV into a single CSV using the exact format below.',
+  'Reply with only the converted CSV — no explanations and no markdown fences.',
+  '',
+  'Header (exact column names, in this order):',
+  COMPACT_CSV_HEADERS.join(','),
+  '',
+  'Rules:',
+  '- One row per variant. Product fields (Product Name through Option 3 Values) appear only on the first row of each product; continuation rows leave those cells empty.',
+  '- Product Name and Price are required; every other cell may be left empty.',
+  '- Option values in "Option N Values" and image URLs in "Variant Images" are separated by " | " (space-pipe-space).',
+  '- Write each variant\'s choices in "Option N Value"; a product with no options contributes a single row with the option columns empty.',
+  '- Quote any cell containing a comma, double quote, or newline, and escape a double quote by doubling it.',
+  '- Never invent data: leave a cell empty when the source has no value, and keep every product from the source.',
+  '- Empty cells fall back to these defaults: URL Slug is generated from Product Name (made unique); SKU falls back to the first variant SKU; Discount Percent = 0; Category is created if missing; Show In Store = TRUE; Variant Price = product Price; Variant Stock = 0.',
+  '',
+  'Column guide:',
+  ...COMPACT_CSV_GUIDE.map(
+    (column) => `- ${column.name} (${column.requirement})${column.note ? `: ${column.note}` : ''}`,
+  ),
+  '',
+  'Example:',
+  COMPACT_CSV_EXAMPLE,
+].join('\n');
+
 export interface ParsedVariant {
   name: string;
   sku: string;

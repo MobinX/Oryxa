@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { importShopifyCsv, initialImportState, type ImportState } from '@/lib/product-csv-import';
-import { COMPACT_CSV_GUIDE, COMPACT_CSV_EXAMPLE } from '@/lib/shopify-csv';
+import { COMPACT_CSV_GUIDE, COMPACT_CSV_EXAMPLE, COMPACT_CSV_PROMPT } from '@/lib/shopify-csv';
 
 /**
  * Upload a Shopify product export and let the browser do the whole import: the CSV streams in
@@ -18,6 +18,7 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [state, setState] = useState<ImportState | null>(null);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const running = state !== null && (state.phase === 'parsing' || state.phase === 'importing');
 
@@ -46,6 +47,21 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
   };
 
   const cancel = () => abortRef.current?.abort();
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(COMPACT_CSV_PROMPT);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = COMPACT_CSV_PROMPT;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+    }
+    setCopiedPrompt(true);
+    window.setTimeout(() => setCopiedPrompt(false), 2000);
+  };
 
   const parsePercent = state ? Math.round(state.parseFraction * 100) : 0;
   const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
@@ -80,26 +96,51 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                     Compact template — columns, defaults and an example
                   </summary>
                   <div className="mt-2 max-h-72 space-y-3 overflow-y-auto pr-1">
-                    <div className="space-y-1.5">
-                      {COMPACT_CSV_GUIDE.map((column) => (
-                        <div key={column.name} className="flex items-start gap-2">
-                          <span className="w-28 shrink-0 font-mono text-[10px] leading-4">
-                            {column.name}
-                          </span>
-                          <span
-                            className={`shrink-0 rounded border px-1 text-[9px] font-semibold uppercase leading-4 ${
-                              column.requirement === 'required'
-                                ? 'border-red-400/50 text-red-600 dark:text-red-400'
-                                : 'border-emerald-400/50 text-emerald-600 dark:text-emerald-400'
-                            }`}
-                          >
-                            {column.requirement}
-                          </span>
-                          <span className="text-[10px] leading-4 text-[var(--muted-foreground)]">
-                            {column.note}
-                          </span>
-                        </div>
-                      ))}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[10px] leading-relaxed text-[var(--muted-foreground)]">
+                        Don&apos;t have this structure? Copy this prompt, attach your CSV to any AI
+                        assistant, and it will convert the file for you.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-7 shrink-0 px-2 text-[10px]"
+                        onClick={copyPrompt}
+                      >
+                        {copiedPrompt ? 'Copied' : 'Copy prompt'}
+                      </Button>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+                      <table className="w-full border-collapse text-left text-[10px]">
+                        <thead className="bg-[var(--muted)] text-[var(--muted-foreground)]">
+                          <tr>
+                            <th className="px-2 py-1.5 font-semibold">Column</th>
+                            <th className="px-2 py-1.5 font-semibold">Required</th>
+                            <th className="px-2 py-1.5 font-semibold">Default / notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {COMPACT_CSV_GUIDE.map((column) => (
+                            <tr key={column.name} className="border-t border-[var(--border)]">
+                              <td className="whitespace-nowrap px-2 py-1 font-mono">{column.name}</td>
+                              <td className="px-2 py-1">
+                                <span
+                                  className={`rounded border px-1 text-[9px] font-semibold uppercase ${
+                                    column.requirement === 'required'
+                                      ? 'border-red-400/50 text-red-600 dark:text-red-400'
+                                      : 'border-emerald-400/50 text-emerald-600 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  {column.requirement === 'required' ? 'Required' : 'Optional'}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1 text-[var(--muted-foreground)]">
+                                {column.note || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                     <div>
                       <p className="text-[10px] font-semibold">
