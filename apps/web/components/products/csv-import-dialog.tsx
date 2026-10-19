@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { importShopifyCsv, initialImportState, type ImportState } from '@/lib/product-csv-import';
-import { COMPACT_CSV_HEADERS } from '@/lib/shopify-csv';
+import { COMPACT_CSV_GUIDE, COMPACT_CSV_EXAMPLE } from '@/lib/shopify-csv';
 
 /**
  * Upload a Shopify product export and let the browser do the whole import: the CSV streams in
@@ -77,17 +77,39 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                 </div>
                 <details className="rounded-xl border border-[var(--border)] p-3 text-xs">
                   <summary className="cursor-pointer font-medium">
-                    Compact template header — one row per variant
+                    Compact template — columns, defaults and an example
                   </summary>
-                  <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[var(--muted-foreground)]">
-                    {COMPACT_CSV_HEADERS.join(', ')}
-                  </pre>
-                  <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted-foreground)]">
-                    Product fields live on a product&apos;s first row; continuation rows only carry
-                    variant cells. Options hold <code>|</code>-separated values, and Variant Images
-                    holds <code>|</code>-separated image URLs. &ldquo;Download CSV&rdquo; on this
-                    page exports your catalog in exactly this shape.
-                  </p>
+                  <div className="mt-2 max-h-72 space-y-3 overflow-y-auto pr-1">
+                    <div className="space-y-1.5">
+                      {COMPACT_CSV_GUIDE.map((column) => (
+                        <div key={column.name} className="flex items-start gap-2">
+                          <span className="w-28 shrink-0 font-mono text-[10px] leading-4">
+                            {column.name}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded border px-1 text-[9px] font-semibold uppercase leading-4 ${
+                              column.requirement === 'required'
+                                ? 'border-red-400/50 text-red-600 dark:text-red-400'
+                                : 'border-emerald-400/50 text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {column.requirement}
+                          </span>
+                          <span className="text-[10px] leading-4 text-[var(--muted-foreground)]">
+                            {column.note}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold">
+                        Example — one product with two variants, then a minimal product
+                      </p>
+                      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre text-[9px] leading-relaxed text-[var(--muted-foreground)]">
+                        {COMPACT_CSV_EXAMPLE}
+                      </pre>
+                    </div>
+                  </div>
                 </details>
                 <input
                   ref={inputRef}

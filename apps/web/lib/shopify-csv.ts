@@ -43,6 +43,60 @@ export const COMPACT_CSV_HEADERS = [
   'Variant Images',
 ] as const;
 
+/** Which compact columns a merchant must fill, and what happens when they leave one empty. */
+export const COMPACT_CSV_GUIDE: Array<{
+  name: (typeof COMPACT_CSV_HEADERS)[number];
+  requirement: 'required' | 'optional';
+  note: string;
+}> = [
+  { name: 'Product Name', requirement: 'required', note: 'Opens a product; blank on continuation rows.' },
+  { name: 'URL Slug', requirement: 'optional', note: 'From the name when empty; -2, -3… if taken.' },
+  { name: 'SKU', requirement: 'optional', note: "Falls back to the first variant's SKU." },
+  { name: 'Price', requirement: 'required', note: 'Product price; variants may override.' },
+  { name: 'Discount Percent', requirement: 'optional', note: 'Default 0 — no discount.' },
+  { name: 'Description', requirement: 'optional', note: 'Plain text or HTML.' },
+  { name: 'Tags', requirement: 'optional', note: 'Comma-separated.' },
+  { name: 'Category', requirement: 'optional', note: 'Created automatically when missing.' },
+  { name: 'Show In Store', requirement: 'optional', note: 'Default TRUE.' },
+  { name: 'Option 1 Name', requirement: 'optional', note: 'Up to three options per product.' },
+  { name: 'Option 1 Values', requirement: 'optional', note: 'Values separated by |.' },
+  { name: 'Option 2 Name', requirement: 'optional', note: '' },
+  { name: 'Option 2 Values', requirement: 'optional', note: 'Values separated by |.' },
+  { name: 'Option 3 Name', requirement: 'optional', note: '' },
+  { name: 'Option 3 Values', requirement: 'optional', note: 'Values separated by |.' },
+  { name: 'Variant SKU', requirement: 'optional', note: '' },
+  { name: 'Option 1 Value', requirement: 'optional', note: "This variant's value for option 1." },
+  { name: 'Option 2 Value', requirement: 'optional', note: "This variant's value for option 2." },
+  { name: 'Option 3 Value', requirement: 'optional', note: "This variant's value for option 3." },
+  { name: 'Variant Price', requirement: 'optional', note: 'Default: the product Price.' },
+  { name: 'Variant Stock', requirement: 'optional', note: 'Default 0.' },
+  { name: 'Variant Images', requirement: 'optional', note: 'URLs separated by |; each gets the short id.' },
+];
+
+function exampleLine(cells: readonly string[]): string {
+  return cells
+    .map((cell) => (/[",\n\r]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell))
+    .join(',');
+}
+
+/** A paste-ready sample: one two-variant product, then one minimal product showing the defaults. */
+export const COMPACT_CSV_EXAMPLE = [
+  exampleLine(COMPACT_CSV_HEADERS),
+  exampleLine([
+    'Classic Tee', '', 'TEE-1', '25', '10', 'A soft cotton tee', 'clothing, men', 'Apparel', 'TRUE',
+    'Size', 'Small | Large', 'Color', 'Red | Blue', '', '',
+    'TEE-S-R', 'Small', 'Red', '', '24', '10',
+    'https://cdn.example.com/tee-red-front.jpg | https://cdn.example.com/tee-red-back.jpg',
+  ]),
+  exampleLine([
+    '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+    'TEE-L-B', 'Large', 'Blue', '', '', '5', 'https://cdn.example.com/tee-blue.jpg',
+  ]),
+  exampleLine([
+    'Poster', '', 'POS-1', '15', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+  ]),
+].join('\n');
+
 export interface ParsedVariant {
   name: string;
   sku: string;
