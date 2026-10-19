@@ -1,5 +1,3 @@
-import Papa from 'papaparse';
-
 /**
  * Streaming reader for Shopify product export CSVs.
  *
@@ -183,8 +181,15 @@ export interface ShopifyCsvHandlers {
 }
 
 /**
- * Parses a Shopify product CSV in chunks, calling `onProduct` as each handle's run of rows
- * completes. Returns an abort function that stops the underlying parser.
+ * Parses a Shopify product CSV by streaming the file through a quote-aware state machine,
+ * calling `onProduct` as each handle's run of rows completes. Built in-house rather than on
+ * Papa's chunk mode on purpose: Papa defers an unterminated row into an ever-growing partial
+ * buffer and re-scans it on every chunk, so one stray quote in a merchant's copy makes a large
+ * export stall mid-file. This reader degrades instead — an unclosed quoted field just ends at
+ * the file's end — so dirty data costs one odd row, never the whole import. Memory stays
+ * bounded: only the current field, the current row, and the current handle's rows are held.
+ *
+ * Returns an abort function that cancels the underlying stream.
  */
 export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () => void {
   let currentHandle: string | null = null;
@@ -192,13 +197,8 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   let productCount = 0;
   let variantCount = 0;
   let failed = false;
-  // Papa's handle.abort() fires the complete callback itself, so the abort wrapper flags the
-  // stop first — otherwise a cancelled parse resolves the reader as if it had finished.
   let stopped = false;
-  // Papa hands the parser handle to every chunk callback; the value `Papa.parse` itself returns
-  // for a File input is undefined, so the handle captured from the first chunk is the only
-  // working abort handle.
-  let parserHandle: { abort(): void } | null = null;
+  let headers: string[] | null = null;
 
   const flush = () => {
     if (currentRows.length === 0) return;
@@ -209,54 +209,161 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
     handlers.onProduct(product);
   };
 
-  Papa.parse<ShopifyRow>(file, {
-    header: true,
-    skipEmptyLines: 'greedy',
-    chunkSize: 1024 * 1024,
-    chunk(results, chunkHandle) {
-      parserHandle ??= chunkHandle;
-      if (failed) return;
-      if (!results.data || results.data.length === 0) return;
-
-      const sample = results.data.find((r) => r && Object.keys(r).length > 0);
-      if (sample && !Object.keys(sample).some((key) => normalizeHeader(key) === 'handle')) {
+  /** Hands one complete data row to the handle-grouping logic. */
+  const emitRow = (row: string[]) => {
+    if (stopped || failed) return;
+    if (row.every((value) => value === '')) return;
+    if (headers === null) {
+      headers = row.map(normalizeHeader);
+      if (!headers.includes('handle')) {
         failed = true;
-        parserHandle.abort();
         handlers.onError(new Error('This file has no "Handle" column — is it a Shopify products CSV?'));
+      }
+      return;
+    }
+    const normalized: ShopifyRow = {};
+    for (let i = 0; i < headers.length && i < row.length; i++) {
+      if (headers[i] !== '') normalized[headers[i]] = row[i] ?? '';
+    }
+    const rowHandle = (normalized['handle'] ?? '').trim();
+    if (!rowHandle) return;
+    if (rowHandle !== currentHandle) {
+      flush();
+      currentHandle = rowHandle;
+    }
+    currentRows.push(normalized);
+  };
+
+  const enum FieldState {
+    Start,
+    Unquoted,
+    Quoted,
+    QuoteClosed,
+  }
+  let state: FieldState = FieldState.Start;
+  let field = '';
+  let row: string[] = [];
+  let pendingCR = false;
+
+  const endRow = () => {
+    row.push(field);
+    field = '';
+    state = FieldState.Start;
+    emitRow(row);
+    row = [];
+  };
+
+  /** Nearest delimiter or newline at or after `from`, or past-the-end when the chunk ends first. */
+  const nextTerm = (text: string, from: number): number => {
+    const delim = text.indexOf(',', from);
+    const nl = text.indexOf('\n', from);
+    const cr = text.indexOf('\r', from);
+    return Math.min(delim === -1 ? text.length : delim, nl === -1 ? text.length : nl, cr === -1 ? text.length : cr);
+  };
+
+  const feed = (text: string) => {
+    let i = 0;
+    const n = text.length;
+    // A CR that ended the last chunk may be the first half of a CRLF pair.
+    if (pendingCR) {
+      pendingCR = false;
+      if (text[0] === '\n') i = 1;
+    }
+    while (i < n) {
+      if (state === FieldState.Quoted) {
+        const q = text.indexOf('"', i);
+        if (q === -1) {
+          field += text.slice(i);
+          i = n;
+          break;
+        }
+        if (text[q + 1] === '"') {
+          field += text.slice(i, q + 1);
+          i = q + 2;
+          continue;
+        }
+        field += text.slice(i, q);
+        state = FieldState.QuoteClosed;
+        i = q + 1;
+        continue;
+      }
+      // A quote the field starts with opens a quoted field (that quote is not data).
+      if (state === FieldState.Start && text[i] === '"') {
+        state = FieldState.Quoted;
+        i++;
+        continue;
+      }
+      const d = nextTerm(text, i);
+      if (d >= n) {
+        if (state !== FieldState.QuoteClosed) field += text.slice(i);
+        i = n;
+        break;
+      }
+      field += text.slice(i, d);
+      if (text[d] === '\r' || text[d] === '\n') {
+        endRow();
+        if (text[d] === '\r') pendingCR = true;
+      } else {
+        row.push(field);
+        field = '';
+        state = FieldState.Start;
+      }
+      i = d + 1;
+    }
+  };
+
+  const finish = () => {
+    // A file ending inside a quoted field just loses the closing quote; the field still lands.
+    if (state === FieldState.Quoted || state === FieldState.QuoteClosed || field !== '' || row.length > 0) {
+      row.push(field);
+      field = '';
+      state = FieldState.Start;
+      emitRow(row);
+      row = [];
+    }
+    flush();
+    handlers.onProgress?.(1);
+    handlers.onComplete({ products: productCount, variants: variantCount });
+  };
+
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder('utf-8');
+  let bytes = 0;
+  let bomStripped = false;
+
+  const pump = async () => {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (stopped || failed) break;
+        if (done) break;
+        bytes += value.byteLength;
+        let text = decoder.decode(value, { stream: true });
+        if (!bomStripped) {
+          bomStripped = true;
+          if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+        }
+        feed(text);
+        if (stopped || failed) break;
+        if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size));
+      }
+      if (stopped) return;
+      if (failed) {
+        void reader.cancel().catch(() => {});
         return;
       }
-
-      for (const row of results.data) {
-        if (!row) continue;
-        const rowHandle = (row['Handle'] ?? row['handle'] ?? '').trim();
-        if (!rowHandle) continue;
-        const normalized: ShopifyRow = {};
-        for (const [key, value] of Object.entries(row)) normalized[normalizeHeader(key)] = value;
-        if (rowHandle !== currentHandle) {
-          flush();
-          currentHandle = rowHandle;
-        }
-        currentRows.push(normalized);
-      }
-
-      const cursor = results.meta.cursor ?? 0;
-      if (file.size > 0) handlers.onProgress?.(Math.min(0.99, cursor / file.size));
-    },
-    complete() {
-      if (failed || stopped) return;
-      flush();
-      handlers.onProgress?.(1);
-      handlers.onComplete({ products: productCount, variants: variantCount });
-    },
-    error(err) {
-      if (failed) return;
+      feed(decoder.decode());
+      finish();
+    } catch (err) {
+      if (stopped || failed) return;
       failed = true;
-      handlers.onError(new Error(`Could not read the CSV: ${err.message}`));
-    },
-  });
+      handlers.onError(new Error(`Could not read the CSV: ${err instanceof Error ? err.message : 'read failed'}`));
+    }
+  };
+  void pump();
 
   return () => {
     stopped = true;
-    parserHandle?.abort();
+    void reader.cancel().catch(() => {});
   };
 }
