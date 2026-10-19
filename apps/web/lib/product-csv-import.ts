@@ -224,7 +224,11 @@ export async function importShopifyCsv(opts: {
   signal: AbortSignal;
 }): Promise<ImportState> {
   const { file, businessId, onState, signal } = opts;
-  const state: ImportState = { ...initialImportState, totalBytes: file.size };
+  const state: ImportState = {
+    ...initialImportState,
+    totalBytes: file.size,
+    failedProducts: [],
+  };
   const update = () => onState({ ...state });
 
   // Phase 1 — stream the CSV, keeping only product metas in memory.
@@ -255,10 +259,12 @@ export async function importShopifyCsv(opts: {
   }).catch((err) => {
     if (err instanceof DOMException && err.name === 'AbortError') {
       state.phase = 'aborted';
-      return Promise.resolve();
+    } else {
+      state.phase = 'error';
+      state.errorMessage = err instanceof Error ? err.message : 'Could not read the CSV';
     }
-    state.phase = 'error';
-    state.errorMessage = err instanceof Error ? err.message : 'Could not read the CSV';
+    // The dialog only ever sees pulled states, so a terminal state has to be pushed too.
+    update();
     return Promise.resolve();
   });
 
@@ -266,6 +272,7 @@ export async function importShopifyCsv(opts: {
   if (products.length === 0) {
     state.phase = 'error';
     state.errorMessage = 'No products found in this CSV.';
+    update();
     return state;
   }
   state.parseFraction = 1;

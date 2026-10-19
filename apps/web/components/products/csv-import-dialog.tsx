@@ -39,6 +39,8 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
       onState: setState,
       signal: controller.signal,
     });
+    // The returned state is authoritative — whatever path the import ended on, the dialog shows it.
+    setState(finalState);
     if (finalState.phase === 'done') router.refresh();
   };
 
