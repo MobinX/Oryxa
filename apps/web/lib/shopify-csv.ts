@@ -70,7 +70,19 @@ function optionName(row: ShopifyRow, index: number): string {
 }
 
 function parsePrice(raw: string): number | null {
-  const cleaned = raw.replace(/[^0-9.]/g, '');
+  let cleaned = raw.trim();
+  if (cleaned.includes(',')) {
+    if (cleaned.includes('.')) {
+      // Both separators: dotted thousands and comma decimals ("1.234,56"), or a comma group.
+      cleaned = /,\d{1,2}$/.test(cleaned)
+        ? cleaned.replace(/\./g, '').replace(',', '.')
+        : cleaned.replace(/,/g, '');
+    } else {
+      // Comma alone is a decimal comma ("10,50") unless it is a thousands group ("1,234").
+      cleaned = /,\d{2}$/.test(cleaned) ? cleaned.replace(/,/g, '.') : cleaned.replace(/,/g, '');
+    }
+  }
+  cleaned = cleaned.replace(/[^0-9.]/g, '');
   if (!cleaned) return null;
   const n = Number.parseFloat(cleaned);
   return Number.isFinite(n) ? n : null;
@@ -209,15 +221,27 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
     handlers.onProduct(product);
   };
 
-  /** Hands one complete data row to the handle-grouping logic. */
+  /**
+   * Hands one complete data row to the handle-grouping logic. A first row that is not a header
+   * names exactly what was found, because "no Handle" usually means the file was re-saved with
+   * another delimiter or is not a Products export at all.
+   */
   const emitRow = (row: string[]) => {
     if (stopped || failed) return;
     if (row.every((value) => value === '')) return;
     if (headers === null) {
+      // Excel sometimes prefixes CSV with its own separator hint ("sep=," or "sep=;") — the
+      // delimiter itself is consumed by the split, so the cell usually reads "sep=".
+      if (/^sep=[,;\t]?$/i.test(row[0].trim()) && row.slice(1).every((value) => value === '')) return;
       headers = row.map(normalizeHeader);
       if (!headers.includes('handle')) {
         failed = true;
-        handlers.onError(new Error('This file has no "Handle" column — is it a Shopify products CSV?'));
+        const seen = row.slice(0, 6).map((value) => value.trim()).filter(Boolean).join(', ').slice(0, 140);
+        handlers.onError(
+          new Error(
+            `This file has no "Handle" column — its first row reads: "${seen}". Export Products from your Shopify admin: Orders and Customers exports have no Handle, and re-saving in Excel can merge the columns.`,
+          ),
+        );
       }
       return;
     }
@@ -244,6 +268,9 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   let field = '';
   let row: string[] = [];
   let pendingCR = false;
+  // Shopify writes commas, but a file that went through Excel/Sheets often comes back with the
+  // separator of the machine's locale — semicolons in much of Europe, tabs from a "text" save.
+  let delimiter = ',';
 
   const endRow = () => {
     row.push(field);
@@ -255,10 +282,30 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
 
   /** Nearest delimiter or newline at or after `from`, or past-the-end when the chunk ends first. */
   const nextTerm = (text: string, from: number): number => {
-    const delim = text.indexOf(',', from);
+    const delim = text.indexOf(delimiter, from);
     const nl = text.indexOf('\n', from);
     const cr = text.indexOf('\r', from);
     return Math.min(delim === -1 ? text.length : delim, nl === -1 ? text.length : nl, cr === -1 ? text.length : cr);
+  };
+
+  /** Picks the separator from the first line, counting only characters outside quotes. */
+  const sniffDelimiter = (text: string): void => {
+    const end = text.search(/[\r\n]/);
+    const line = end === -1 ? text : text.slice(0, end);
+    let comma = 0;
+    let semicolon = 0;
+    let tab = 0;
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') quoted = !quoted;
+      else if (!quoted && ch === ',') comma++;
+      else if (!quoted && ch === ';') semicolon++;
+      else if (!quoted && ch === '\t') tab++;
+    }
+    if (comma >= semicolon && comma >= tab && comma > 0) delimiter = ',';
+    else if (semicolon >= tab && semicolon > 0) delimiter = ';';
+    else if (tab > 0) delimiter = '\t';
   };
 
   const feed = (text: string) => {
@@ -332,7 +379,9 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
   // read window, so memory stays flat whatever the export's size.
   const SLICE_BYTES = 1024 * 1024;
   const STALL_MS = 20_000;
-  const decoder = new TextDecoder('utf-8');
+  let decoder = new TextDecoder('utf-8');
+  let encodingChosen = false;
+  let sniffed = false;
   let bytes = 0;
   let bomStripped = false;
   let lastActivity = Date.now();
@@ -358,10 +407,21 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
         if (buffer.byteLength === 0) break;
         bytes += buffer.byteLength;
         lastActivity = Date.now();
+        if (!encodingChosen) {
+          encodingChosen = true;
+          const head = new Uint8Array(buffer);
+          // Excel's "Unicode text" save: UTF-16 with a byte-order mark.
+          if (head[0] === 0xff && head[1] === 0xfe) decoder = new TextDecoder('utf-16le');
+          else if (head[0] === 0xfe && head[1] === 0xff) decoder = new TextDecoder('utf-16be');
+        }
         let text = decoder.decode(new Uint8Array(buffer), { stream: true });
         if (!bomStripped) {
           bomStripped = true;
           if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+        }
+        if (!sniffed && text.length > 0) {
+          sniffed = true;
+          sniffDelimiter(text);
         }
         feed(text);
         if (file.size > 0) handlers.onProgress?.(Math.min(0.99, bytes / file.size), bytes);
