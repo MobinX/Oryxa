@@ -301,10 +301,41 @@ export async function createProduct(input: unknown) {
 }
 
 /**
+ * The option set an imported product seems to declare, read off the combinations its variants
+ * carry: knobs in first-seen order, each with the distinct values seen for it. Derived, not
+ * trusted — the caller still measures it against the house rule before writing it.
+ */
+function deriveImportedOptions(
+  variants: Array<{ options?: Record<string, string> }>,
+): Array<{ name: string; values: string[] }> {
+  const names: string[] = [];
+  const valuesByName = new Map<string, Set<string>>();
+  for (const variant of variants) {
+    for (const [name, value] of Object.entries(variant.options ?? {})) {
+      if (!name || !value) continue;
+      if (!valuesByName.has(name)) {
+        valuesByName.set(name, new Set());
+        names.push(name);
+      }
+      valuesByName.get(name)!.add(value);
+    }
+  }
+  return names.slice(0, 3).map((name) => ({
+    name: name.slice(0, 80),
+    values: [...valuesByName.get(name)!].slice(0, 50).map((value) => value.slice(0, 80)),
+  }));
+}
+
+/**
  * A whole page of products from a client-side catalog import, in one call. The browser already
  * pushed the pictures to B2 and stamped each variant's wanted label on them, so labels are kept
  * wherever they are legal — only a label this business already hands out (or a malformed one)
  * gets re-rolled, and the caller learns how many of those happened.
+ *
+ * When an export's combinations happen to be complete and unique — every variant answering every
+ * knob with a seen value, no two rows the same — the derived option set is declared too, so the
+ * edit form shows the matrix the shop actually sells in. A looser export imports fine with the
+ * combinations still riding on each variant.
  *
  * Products are written one at a time, outside a shared transaction, so one bad row (say, a slug
  * the shop already sells under) fails alone and lands in `failed` instead of sinking the page.
@@ -353,6 +384,20 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
         })
         .returning();
 
+      // Declare the knobs only when the export's combinations pass the same rule the merchant's
+      // own form is held to; a partial or duplicated set stays as per-variant data alone.
+      const derived = deriveImportedOptions(item.variants);
+      let declared: Array<{ name: string; values: string[] }> = [];
+      if (derived.length > 0) {
+        try {
+          validateVariantCombinations(derived, item.variants);
+          declared = derived;
+          await writeProductOptions(product.id, derived);
+        } catch {
+          // Not declareable — the import proceeds with the combinations on the variants only.
+        }
+      }
+
       const labels = item.variants.map((v) => {
         const want = v.variantId;
         if (want && LABEL.test(want) && !held.has(want) && !usedLabels.has(want)) {
@@ -374,7 +419,7 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
             return {
               productId: product!.id,
               variantId: labels[i] ?? null,
-              name: v.name,
+              name: declared.length > 0 ? nameFromCombination(declared, v.options ?? {}) : v.name,
               options: v.options ?? {},
               imageUrl: photos.imageUrl,
               imageUrls: photos.imageUrls,
