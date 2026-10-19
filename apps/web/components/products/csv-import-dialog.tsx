@@ -63,6 +63,18 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
     window.setTimeout(() => setCopiedPrompt(false), 2000);
   };
 
+  const downloadSample = () => {
+    const blob = new Blob([COMPACT_CSV_EXAMPLE], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'oryxa-compact-products-sample.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const parsePercent = state ? Math.round(state.parseFraction * 100) : 0;
   const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
 
@@ -96,19 +108,29 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                     Compact template — columns, defaults and an example
                   </summary>
                   <div className="mt-2 max-h-72 space-y-3 overflow-y-auto pr-1">
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-2">
                       <p className="text-[10px] leading-relaxed text-[var(--muted-foreground)]">
                         Don&apos;t have this structure? Copy this prompt, attach your CSV to any AI
-                        assistant, and it will convert the file for you.
+                        assistant, and it will convert the file for you — or start from the sample.
                       </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-7 shrink-0 px-2 text-[10px]"
-                        onClick={copyPrompt}
-                      >
-                        {copiedPrompt ? 'Copied' : 'Copy prompt'}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 px-2 text-[10px]"
+                          onClick={copyPrompt}
+                        >
+                          {copiedPrompt ? 'Copied' : 'Copy prompt'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 px-2 text-[10px]"
+                          onClick={downloadSample}
+                        >
+                          Download sample CSV
+                        </Button>
+                      </div>
                     </div>
                     <div className="overflow-hidden rounded-lg border border-[var(--border)]">
                       <table className="w-full border-collapse text-left text-[10px]">
