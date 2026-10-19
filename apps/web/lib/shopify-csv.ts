@@ -93,16 +93,19 @@ function isVariantRow(row: ShopifyRow): boolean {
   );
 }
 
-function variantFrom(row: ShopifyRow, productName: string): ParsedVariant {
+function variantFrom(row: ShopifyRow, productName: string, optionNames: string[]): ParsedVariant {
   const options: Record<string, string> = {};
   const values: string[] = [];
   for (const i of [1, 2, 3]) {
-    const name = optionName(row, i);
     const value = optionValue(row, i);
     if (!value) continue;
     // Shopify's single-variant products ship as Option1 Name "Title", Value "Default Title".
-    if (name.toLowerCase() === 'title' || value.toLowerCase() === 'default title') continue;
-    if (name) options[name] = value;
+    if (value.toLowerCase() === 'default title') continue;
+    // Option names are only guaranteed on the product's first row; later variant rows can carry
+    // values with blank names, so the name is inherited from there.
+    const name = optionName(row, i) || optionNames[i - 1] || `Option ${i}`;
+    if (name.toLowerCase() === 'title') continue;
+    options[name] = value;
     values.push(value);
   }
   return {
@@ -119,6 +122,7 @@ function variantFrom(row: ShopifyRow, productName: string): ParsedVariant {
 export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
   const meta = rows[0];
   const name = cell(meta, TITLE_ALIASES) || 'Untitled product';
+  const optionNames = [1, 2, 3].map((i) => optionName(meta, i));
   const status = cell(meta, STATUS_ALIASES).toLowerCase();
   const published = cell(meta, PUBLISHED_ALIASES).toLowerCase();
   const showInStorefront = status
@@ -138,7 +142,7 @@ export function groupProduct(rows: ShopifyRow[]): ParsedProduct {
       const position = Number.parseInt(cell(row, IMAGE_POSITION_ALIASES), 10);
       images.push({ url: imageUrl, position: Number.isFinite(position) ? position : images.length + 1 });
     }
-    if (isVariantRow(row)) variants.push(variantFrom(row, name));
+    if (isVariantRow(row)) variants.push(variantFrom(row, name, optionNames));
   }
 
   images.sort((a, b) => a.position - b.position);
