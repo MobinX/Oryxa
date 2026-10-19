@@ -16,7 +16,11 @@ import { uploadVariantImageDirect } from '@/lib/uploads-client';
 const BUCKET_LIMIT_BYTES = 4 * 1024 * 1024;
 const QUALITIES = [0.9, 0.8, 0.68, 0.55];
 const MAX_EDGE = 2048;
-const CANVAS_LANES = 4;
+/** Eight canvases edit in parallel; eight PUTs upload in parallel. */
+const CANVAS_LANES = 8;
+const UPLOAD_LANES = 8;
+/** A batch is stamped whole before any of its bytes leave the tab — two pictures per lane. */
+const IMAGE_WAVE = CANVAS_LANES * 2;
 const PAGE_SIZE = 25;
 
 export interface ImportState {
@@ -133,19 +137,16 @@ async function downloadBitmap(url: string, signal: AbortSignal): Promise<ImageBi
 }
 
 /**
- * One image, one lane: download, stamp the label top-right, re-encode at falling quality until
- * the blob fits the bucket cap, push it straight to B2. Resolves to the stored object key, or
- * null when the picture could not be had — the variant then just has no photo.
+ * One image, one canvas: download, stamp the label top-right, re-encode at falling quality until
+ * the blob fits the bucket cap. Resolves to the finished bytes, or null when the picture could not
+ * be had — the variant then just has one fewer photo.
  */
-async function produceVariantImage(
+async function stampVariantImage(
   canvas: HTMLCanvasElement,
   url: string,
   label: string,
-  slot: number,
-  businessId: string,
   signal: AbortSignal,
-  onUploaded: () => void,
-): Promise<string | null> {
+): Promise<Blob | null> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await downloadBitmap(url, signal);
@@ -159,28 +160,47 @@ async function produceVariantImage(
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     stamp(canvas, bitmap, label);
 
-    let lastError: Error | null = null;
     for (const quality of QUALITIES) {
       const blob = await canvasToBlob(canvas, quality);
-      if (blob.size > BUCKET_LIMIT_BYTES) {
-        lastError = new Error('Image too large');
-        continue;
-      }
-      const file = new File([blob], `${label}-${slot + 1}.jpg`, { type: 'image/jpeg' });
-      try {
-        const { key } = await uploadVariantImageDirect(businessId, file);
-        onUploaded();
-        return key;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error('Upload failed');
-      }
+      if (blob.size <= BUCKET_LIMIT_BYTES) return blob;
     }
-    throw lastError ?? new Error('Image too large');
+    return null;
   } catch {
     return null;
   } finally {
     bitmap.close();
   }
+}
+
+/** Pushes one stamped picture straight to B2 and returns its object key. */
+async function uploadStampedImage(
+  businessId: string,
+  label: string,
+  slot: number,
+  blob: Blob,
+): Promise<string> {
+  const file = new File([blob], `${label}-${slot + 1}.jpg`, { type: 'image/jpeg' });
+  const { key } = await uploadVariantImageDirect(businessId, file);
+  return key;
+}
+
+/** Runs `task` over `items` on at most `lanes` parallel workers. */
+async function runPool<T>(
+  items: T[],
+  lanes: number,
+  task: (item: T, lane: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(lanes, items.length) }, (_, lane) =>
+      (async () => {
+        while (next < items.length) {
+          const item = items[next++];
+          await task(item, lane);
+        }
+      })(),
+    ),
+  );
 }
 
 async function postImportPage(
@@ -311,50 +331,51 @@ export async function importShopifyCsv(opts: {
     for (let pageStart = 0; pageStart < labeled.length; pageStart += PAGE_SIZE) {
       const page = labeled.slice(pageStart, pageStart + PAGE_SIZE);
 
-      for (const product of page) {
-        throwIfAborted();
-        state.currentName = product.name;
-        update();
-
-        // Four lanes: every picture of every variant flows through four canvases in parallel.
-        // A variant's own image list wins; otherwise the product's first image is its picture
-        // (the Shopify layout, where one product photo serves all variants).
-        const jobs = product.variants.flatMap((variant) => {
+      // Every picture of the page, from every product and variant, in one queue. A variant's own
+      // image list wins; otherwise the product's first image is its picture (the Shopify layout,
+      // where one product photo serves all variants).
+      const jobs = page.flatMap((product) =>
+        product.variants.flatMap((variant) => {
           const sources =
             variant.imageUrls.length > 0
               ? variant.imageUrls
               : product.images[0]
                 ? [product.images[0].url]
                 : [];
-          return sources.slice(0, 10).map((url, slot) => ({ variant, url, slot }));
-        });
-        let next = 0;
-        const lanes = Array.from({ length: Math.min(CANVAS_LANES, jobs.length) }, (_, lane) =>
-          (async () => {
-            while (next < jobs.length) {
-              const { variant, url, slot } = jobs[next++];
-              const key = await produceVariantImage(
-                canvases[lane],
-                url,
-                variant.label,
-                slot,
-                businessId,
-                signal,
-                () => {
-                  state.imagesUploaded++;
-                  update();
-                },
-              );
-              variant.imageKeys[slot] = key;
-              if (!key) state.imagesFailed++;
-            }
-          })(),
-        );
-        await Promise.all(lanes);
+          return sources.slice(0, 10).map((url, slot) => ({ product, variant, url, slot }));
+        }),
+      );
 
-        state.processedProducts++;
+      // Edit-then-upload waves: a wave is stamped whole on the eight canvases in parallel, then
+      // pushed to B2 on eight parallel PUTs. Only one wave's blobs are ever held in memory.
+      for (let waveStart = 0; waveStart < jobs.length; waveStart += IMAGE_WAVE) {
+        throwIfAborted();
+        const wave = jobs.slice(waveStart, waveStart + IMAGE_WAVE);
+        const stamped: Array<{ job: (typeof wave)[number]; blob: Blob }> = [];
+
+        await runPool(wave, CANVAS_LANES, async (job, lane) => {
+          state.currentName = job.product.name;
+          const blob = await stampVariantImage(canvases[lane], job.url, job.variant.label, signal);
+          if (blob) stamped.push({ job, blob });
+          else state.imagesFailed++;
+        });
         update();
+
+        await runPool(stamped, UPLOAD_LANES, async ({ job, blob }) => {
+          try {
+            const key = await uploadStampedImage(businessId, job.variant.label, job.slot, blob);
+            job.variant.imageKeys[job.slot] = key;
+            state.imagesUploaded++;
+          } catch {
+            state.imagesFailed++;
+          }
+          update();
+        });
       }
+
+      state.processedProducts += page.length;
+      state.currentName = page[page.length - 1]?.name ?? state.currentName;
+      update();
 
       const result = await postImportPage(
         businessId,
