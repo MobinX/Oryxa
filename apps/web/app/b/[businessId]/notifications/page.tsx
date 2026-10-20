@@ -125,7 +125,11 @@ export default async function NotificationsPage({
                       href={notice.link}
                       className="shrink-0 rounded-element border border-border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
                     >
-                      {notice.kind === 'order_placed' ? 'Open order' : 'Open billing'}
+                      {notice.kind === 'order_placed'
+                        ? 'Open order'
+                        : notice.kind === 'human_help'
+                          ? 'Open Inbox'
+                          : 'Open billing'}
                     </Link>
                   )}
                 </div>
