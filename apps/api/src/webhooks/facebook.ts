@@ -458,16 +458,21 @@ function cardLine(value: string, max = 60): string {
 /**
  * A Details tap is answered here, not by the model: variant cards for a product, or every photo
  * of one variant. Each answer is recorded as a `self` message so the next real turn knows what
- * the customer has already been shown. Returns false when there was nothing to send.
+ * the customer has already been shown. When nothing can be sent, the caller hands the reason to
+ * the agent so it can apologize and suggest something else.
  */
+type DetailsOutcome = { handled: true } | { handled: false; reason: string };
+
 async function handleDetailsPostback(
   channel: { id: string; businessId: string; apiToken: string },
   senderId: string,
   details: DetailsPayload,
-): Promise<boolean> {
+): Promise<DetailsOutcome> {
   try {
     const product = await getProductById(channel.businessId, details.productId);
-    if (!product) return false;
+    if (!product) {
+      return { handled: false, reason: "the product is no longer in this store's catalog" };
+    }
     const conversation = await getOrCreateConversation(channel.businessId, channel.id, senderId);
 
     if (details.kind === 'product') {
@@ -497,7 +502,9 @@ async function handleDetailsPostback(
               : { button: detailsButton }),
           };
         });
-      if (cards.length === 0) return false;
+      if (cards.length === 0) {
+        return { handled: false, reason: `no variant of "${product.name}" has a photo to show` };
+      }
 
       await fbSendMessage(channel.apiToken, senderId, cards);
 
@@ -522,15 +529,19 @@ async function handleDetailsPostback(
         ].join(' — '),
         state: 'done',
       });
-      return true;
+      return { handled: true };
     }
 
     const variant = product.variants.find((candidate) => candidate.id === details.variantId);
-    if (!variant) return false;
+    if (!variant) {
+      return { handled: false, reason: `that variant is no longer part of "${product.name}"` };
+    }
     const images = (
       variant.imageUrls?.length ? variant.imageUrls : variant.imageUrl ? [variant.imageUrl] : []
     ).slice(0, 10);
-    if (images.length === 0) return false;
+    if (images.length === 0) {
+      return { handled: false, reason: `the variant "${variant.name}" has no photos to show` };
+    }
 
     const label = cardLine(`${product.name} — ${variant.name}`);
     const price = variant.price ?? product.price;
@@ -561,10 +572,10 @@ async function handleDetailsPostback(
       content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
       state: 'done',
     });
-    return true;
+    return { handled: true };
   } catch (err) {
     console.error('[fb-webhook] details postback failed', err);
-    return false;
+    return { handled: false, reason: 'the catalog could not be read right now' };
   }
 }
 
@@ -580,18 +591,48 @@ async function processMessagingEvents(
     fbLog('processMessagingEvents event', { index, event: ev });
 
     // Details buttons are answered deterministically: cards go back from here, the model never
-    // runs, and the exchange is recorded as a self message for the next real turn to read.
+    // runs, and the exchange is recorded as a self message for the next real turn to read. If the
+    // details cannot be produced, the tap becomes an ordinary customer turn that carries the
+    // failure — so the agent can apologize and suggest something else instead of staying silent.
     const details = ev.postback ? parseDetailsPayload(ev.postback.payload) : null;
     if (details && ev.sender?.id) {
-      const handled = await handleDetailsPostback(channel, ev.sender.id, details);
-      fbLog('processMessagingEvents details postback', { index, kind: details.kind, handled });
-      if (!handled) {
+      const result = await handleDetailsPostback(channel, ev.sender.id, details);
+      fbLog('processMessagingEvents details postback', {
+        index,
+        kind: details.kind,
+        handled: result.handled,
+        ...(result.handled ? {} : { reason: result.reason }),
+      });
+      if (result.handled) continue;
+
+      if (!channel.agentId) {
         emit('webhook_item', {
           kind: 'message',
           senderId: ev.sender.id,
           outcome: 'details_unhandled',
         });
+        continue;
       }
+
+      const conversation = await getOrCreateConversation(
+        channel.businessId,
+        channel.id,
+        ev.sender.id,
+      );
+      const asked =
+        details.kind === 'product'
+          ? `I tapped "Details" to see all the variants of product ${details.productId}, but they could not be shown: ${result.reason}.`
+          : `I tapped "Details" to see all the photos of one variant (${details.variantId}) of product ${details.productId}, but they could not be shown: ${result.reason}.`;
+      await createMessage({
+        conversationId: conversation.id,
+        from: 'customer',
+        content: `${asked} Tell me briefly what went wrong and suggest another product from the store.`,
+      });
+      const verdict = await triggerAgentRun(conversation.id, await budget());
+      fbLog('processMessagingEvents details fallback run', {
+        index,
+        outcome: outcomeOf(verdict, 'details_fallback'),
+      });
       continue;
     }
 
