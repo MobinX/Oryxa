@@ -771,7 +771,32 @@ export async function fetchMessengerImage(
 }
 
 /**
- * Verifies a Meta webhook signature (HMAC-SHA256 of the raw request body using
+ * Copies a voice message while Meta's link to it still answers. Voice notes are a few hundred
+ * kilobytes; anything the transcription service could not read is a message the agent never
+ * heard, so this never throws. `audio/ogg` is the fallback type since voice notes may arrive
+ * without a usable content type.
+ */
+export async function fetchMessengerAudio(
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const res = await loggedFetch(url);
+    if (!res.ok) return null;
+    const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    const audioLike =
+      contentType.startsWith('audio/') ||
+      contentType.startsWith('video/') ||
+      contentType === 'application/octet-stream';
+    if (!audioLike) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength === 0 || buffer.byteLength > 25 * 1024 * 1024) return null;
+    return { buffer, contentType: contentType || 'audio/ogg' };
+  } catch {
+    return null;
+  }
+}
+
+/** Verifies a Meta webhook signature (HMAC-SHA256 of the raw request body using
  * `META_APP_SECRET`) against the `X-Hub-Signature-256` header. Fails closed if
  * the secret is missing or the signature is absent/invalid.
  */

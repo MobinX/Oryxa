@@ -22,11 +22,13 @@ import {
   verifyWebhookSignature,
   getFacebookUserProfile,
   fetchMessengerImage,
+  fetchMessengerAudio,
   sendMessage as fbSendMessage,
   parseDetailsPayload,
   detailsVariantPayload,
   type DetailsPayload,
 } from '@repo/integrations/facebook';
+import { transcribeAudio } from '@repo/integrations/azure-speech';
 import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
@@ -126,9 +128,15 @@ function postbackMessage(postback: NonNullable<MessagingEvent['postback']>): str
   return payload?.includes(' ') ? payload : (postback.title ?? payload);
 }
 
-function inboundFromMessagingEvent(
+/** Meta labels a voice note `audio`; the URL is pre-signed and short-lived. */
+function audioAttachmentUrl(ev: MessagingEvent): string | null {
+  const attachment = ev.message?.attachments?.find((candidate) => candidate.type === 'audio');
+  return attachment?.payload?.url ?? attachment?.url ?? null;
+}
+
+async function inboundFromMessagingEvent(
   ev: MessagingEvent,
-): { senderId: string; text: string; images: string[]; externalId?: string } | null {
+): Promise<{ senderId: string; text: string; images: string[]; externalId?: string } | null> {
   if (ev.message?.is_echo) return null;
   const senderId = ev.sender?.id;
   if (!senderId) return null;
@@ -139,6 +147,17 @@ function inboundFromMessagingEvent(
     // as one image and no words, and dropping it is dropping a customer.
     if (ev.message.text || images.length > 0) {
       return { senderId, text: ev.message.text ?? '', images, externalId: ev.message.mid };
+    }
+    // A voice note becomes the customer's words before the agent ever sees the turn. A note
+    // that cannot be read is still answered — the model is told what arrived, not shown silence.
+    const audioUrl = audioAttachmentUrl(ev);
+    if (audioUrl) {
+      const audio = await fetchMessengerAudio(audioUrl);
+      const transcript = audio ? await transcribeAudio(audio.buffer, audio.contentType) : null;
+      const text = transcript?.trim()
+        ? transcript.trim()
+        : '[the customer sent a voice message that could not be transcribed]';
+      return { senderId, text, images: [], externalId: ev.message.mid };
     }
   }
 
@@ -709,7 +728,7 @@ async function processMessagingEvents(
       continue;
     }
 
-    const inbound = inboundFromMessagingEvent(ev);
+    const inbound = await inboundFromMessagingEvent(ev);
     if (!inbound) {
       // An echo or a read receipt is not a customer, so it stays silent. A real
       // message with neither text nor a picture (sticker, audio, file) is a customer who
