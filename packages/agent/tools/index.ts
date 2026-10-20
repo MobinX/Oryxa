@@ -1513,38 +1513,40 @@ export function createAgentTools(
   );
 
   /**
-   * A question with tappable answers. The chips are the point: the customer picks a color, size,
-   * quantity, or category without typing, and the tap comes back as an ordinary message so every
-   * later turn reads naturally. The question and its options land in the conversation record,
-   * so the next turn knows exactly what was offered.
+   * One message, optionally with tappable answers. A plain question and its chips travel in a
+   * single tool call, so the model pays for one call instead of a message plus a suggestions
+   * call. The question and its options land in the conversation record; the model then ends its
+   * turn with SILENT so the automatically-delivered final text cannot repeat it.
    */
-  const sendSuggestionsTool = tool(
-    async ({ question, options }) => {
+  const sendMessageTool = tool(
+    async ({ message, suggestions }) => {
       const logResult = (result: string) => {
-        context.emitSse?.('tool_result', { name: 'send_suggestions', result });
+        context.emitSse?.('tool_result', { name: 'send_message', result });
         return result;
       };
 
-      const cleaned = [...new Set(options.map((option) => option.trim()).filter(Boolean))].slice(0, 10);
-      if (cleaned.length < 2) {
-        return logResult(JSON.stringify({
-          sent: false,
-          reason: 'a suggestion row needs at least two distinct options',
-          instruction: 'Ask the question in plain text instead.',
-        }));
+      const text = message.trim();
+      if (!text) {
+        return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
       }
+      const cleaned = [
+        ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
+      ].slice(0, 10);
+      const withChips = cleaned.length >= 2;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
       }
 
-      const said = `${question.trim()} (${cleaned.join(' / ')})`;
+      const said = withChips ? `${text} (${cleaned.join(' / ')})` : text;
       try {
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
+        } else if (withChips) {
+          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, text, cleaned);
         } else {
-          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, question.trim(), cleaned);
+          await fbSendMessage(context.pageToken, context.customerPlatformId, text);
         }
       } catch (err) {
         await returnMessageUnit(budget.period);
@@ -1557,27 +1559,34 @@ export function createAgentTools(
         content: said,
         state: 'done',
       });
-      onSent?.(said, 'card');
+      onSent?.(said, withChips ? 'card' : 'reply');
 
       return logResult(JSON.stringify({
         sent: true,
-        question: question.trim(),
-        options: cleaned,
-        instruction:
-          'The customer now sees tappable answer chips. Do not repeat the options in prose; wait for the tap, which arrives as an ordinary message.',
+        ...(withChips ? { suggestions: cleaned } : {}),
+        ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
+        instruction: withChips
+          ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
+          : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
       }));
     },
     {
-      name: 'send_suggestions',
+      name: 'send_message',
       description:
-        'Display tool: sends a short question with tappable answer chips (Messenger quick replies), so the customer answers with one tap instead of typing. Use EVERY time the next thing you need is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference. Check the real values first (get_product_options, find_variant, Catalog Summary); never invent options. Give 2 to 10 short options (one or two words). Do NOT use for open answers (name, address, phone, order id) and do NOT repeat the options in your reply afterwards.',
+        'Send the customer one Messenger message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.',
       schema: z.object({
-        question: z.string().min(1).max(300).describe(
-          'One short question in the customer’s language, e.g. "Which color would you like?"',
+        message: z.string().min(1).max(1000).describe(
+          'The message text in the customer’s language, e.g. "Which color would you like?"',
         ),
-        options: z.array(z.string().min(1).max(80)).min(2).max(10).describe(
-          '2 to 10 short answers exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers.',
-        ),
+        suggestions: z
+          .array(z.string().min(1).max(80))
+          .min(2)
+          .max(10)
+          .nullable()
+          .optional()
+          .describe(
+            'Optional tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers; null or omitted for a plain message.',
+          ),
       }),
     },
   );
@@ -1599,6 +1608,6 @@ export function createAgentTools(
     showProductInfoTool,
     showVariantPhotosTool,
     suggestAlternativesTool,
-    sendSuggestionsTool,
+    sendMessageTool,
   ];
 }

@@ -5,18 +5,20 @@
  * database is patched with exactly this text — the constant and the live row must not drift.
  */
 export const SUGGESTION_TOOL_INSTRUCTIONS = [
-  '## Suggestions Instead of Typing (Messenger)',
-  'In a Messenger conversation, whenever the next thing you need from the customer is one answer from a short list you can name, call `send_suggestions` so the customer taps a chip instead of typing. This is required, not merely preferred: colors, sizes, quantities, categories, yes/no, delivery area and payment method should arrive as taps. Your goal is that the customer can shop with as little typing as possible.',
+  '## One Message, With Suggestions (Messenger)',
+  'Your normal final text is delivered automatically, but whenever you want to offer the customer choices, send the question through `send_message({ message, suggestions })` instead: the message and its tappable answer chips go out in ONE tool call. `suggestions` may be null when there are no choices, which simply sends the message. This is required whenever the next thing you need is one answer from a short list you can name — colors, sizes, quantities, categories, yes/no, delivery area and payment method — so the customer can shop with as little typing as possible.',
   '1. Verify the choices before offering them: sizes and colors from `get_product_options` or the `find_variant` result, categories from the `Catalog Summary` or `find_categories`, quantities within the real stock. Never suggest an option the store does not sell or is out of stock in.',
-  '2. Ask one choice per call, with 2 to 10 options. Each option is one or two words, written exactly as a customer would say it, in the customer’s current language, and copied verbatim from the catalog when it is a value like a color or size.',
-  '3. After `send_suggestions` returns `sent: true`, do not repeat the options in your text; wait for the tap. A tap arrives as an ordinary customer message with the chosen option, so answer it like any other turn.',
-  '4. Never use it for open answers: full name, address, phone number, order id, or a free-form question. Ask those in plain text.',
-  '5. Put the most likely answer first so the common case is one tap.',
+  '2. Offer 2 to 10 options, one or two words each, copied verbatim from the catalog for values like color or size, in the customer’s current language. Put the most likely answer first.',
+  '3. Ask one choice per message. Do not put the same question in your final reply as well.',
+  '4. After `send_message` returns `sent: true`, end your turn with the single word SILENT. Never repeat the message or its options in another text. A tap arrives later as an ordinary customer message, so answer it like any other turn.',
+  '5. Never use the suggestions array for open answers: full name, address, phone number, order id, or a free-form question. Ask those in plain text.',
+  '6. Try your best to suggest: when the store really offers a small set of likely answers, offer them as chips instead of asking an open question.',
   'Examples:',
-  '- Customer: "I want a t-shirt." -> call `show_products(query="t-shirt")`; when they pick one, call `get_product_options(productId)`, then `send_suggestions({ question: "Which color would you like?", options: ["Red", "Green", "Blue"] })`.',
-  '- Customer: "What do you sell?" -> `send_suggestions({ question: "Which category should I show you?", options: ["T-Shirts", "Hoodies", "Accessories"] })` using the categories from the Catalog Summary.',
-  '- Customer: "What sizes does the hoodie come in?" -> `get_product_options(productId)` first, then `send_suggestions({ question: "Which size would you like?", options: ["S", "M", "L", "XL"] })` with only the sizes that exist.',
-  '- Customer asks how many: -> `send_suggestions({ question: "How many would you like?", options: ["1", "2", "3"] })`, never more than the stock allows.',
+  '- Customer: "I want a t-shirt." -> call `show_products(query="t-shirt")`; when they pick one, call `get_product_options(productId)`, then `send_message({ message: "Which color would you like?", suggestions: ["Red", "Green", "Blue"] })`, then reply SILENT.',
+  '- Customer: "What do you sell?" -> `send_message({ message: "Which category should I show you?", suggestions: ["T-Shirts", "Hoodies", "Accessories"] })` using categories from the Catalog Summary, then SILENT.',
+  '- Customer: "What sizes does the hoodie come in?" -> `get_product_options(productId)` first, then `send_message({ message: "Which size would you like?", suggestions: ["S", "M", "L", "XL"] })`, then SILENT.',
+  '- Customer asks how many: -> `send_message({ message: "How many would you like?", suggestions: ["1", "2", "3"] })`, never more than the stock allows, then SILENT.',
+  '- A plain acknowledgement ("You are welcome!") needs no chips: answer normally, or `send_message({ message: "You are welcome!", suggestions: null })` and then SILENT.',
 ].join('\n');
 
 export const CORE_AGENT_PROMPT = [
