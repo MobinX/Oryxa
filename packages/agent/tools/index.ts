@@ -12,6 +12,7 @@ import {
 } from '@repo/db/crud/product';
 import { createOrder, getOrderById, getOrdersByPlatformId, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
+import { createBusinessNotification } from '@repo/db/crud/notification';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
@@ -1602,6 +1603,64 @@ export function createAgentTools(
     },
   );
 
+  /**
+   * The escape hatch: when the agent genuinely cannot answer — a dispute, a request the store
+   * cannot fulfill, a complaint, or anything outside its tools — it reports to the merchant
+   * instead of improvising. The owner gets a notification with the reason and a link straight
+   * to the conversation; the model then reassures the customer in their own words.
+   */
+  const reportHumanInterveneTool = tool(
+    async ({ reason }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'report_human_intervene', result });
+        return result;
+      };
+
+      const trimmed = reason.trim();
+      if (!trimmed) {
+        return logResult(JSON.stringify({
+          reported: false,
+          reason: 'the reason was empty',
+          instruction: 'Say briefly why a human is needed and pass it again.',
+        }));
+      }
+
+      try {
+        await createBusinessNotification({
+          businessId: context.businessId,
+          kind: 'human_help',
+          title: 'The agent needs a human',
+          body: `${context.customerName ?? 'A customer'} asked something the agent could not answer: ${trimmed.slice(0, 300)}`,
+          link: `/b/${context.businessId}/inbox?c=${context.conversationId}`,
+        });
+      } catch (err) {
+        console.error('[agent-tool] human intervention notice failed:', err);
+        return logResult(JSON.stringify({
+          reported: false,
+          reason: 'the store owner could not be notified',
+          instruction:
+            'Apologize briefly in the customer’s language, say their request needs attention and to try again or message the page directly. Do not guess an answer.',
+        }));
+      }
+
+      return logResult(JSON.stringify({
+        reported: true,
+        instruction:
+          'The owner has been notified with your reason and can see this conversation. Now tell the customer, in their language, that a member of the sales team will contact them shortly about this, and ask whether there is anything else you can help with in the meantime. Do not attempt to answer the question you could not answer.',
+      }));
+    },
+    {
+      name: 'report_human_intervene',
+      description:
+        'Escalation tool: reports to the store owner that you cannot answer the customer, so a human takes over. Use when the request is outside your tools and knowledge (disputes, refunds beyond store policy, legal/medical/custom manufacturing, complaints, threats, or an important tool failure), or when the customer is angry and insists on a person. Pass a clear reason describing what was asked and why you cannot answer. After it succeeds, tell the customer a sales team member will contact them soon and ask if there is anything else — never invent an answer to the question you could not answer.',
+      schema: z.object({
+        reason: z.string().min(1).max(1000).describe(
+          'Why a human is needed: what the customer asked and why you cannot answer it, e.g. "Customer wants a full refund for a damaged parcel, which is beyond store policy."',
+        ),
+      }),
+    },
+  );
+
   return [
     ...createCatalogTools(context, {
       onOrderCreated: async ({ id, totalPrice }) => {
@@ -1620,5 +1679,6 @@ export function createAgentTools(
     showVariantPhotosTool,
     suggestAlternativesTool,
     sendMessageTool,
+    reportHumanInterveneTool,
   ];
 }
