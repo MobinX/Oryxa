@@ -472,19 +472,30 @@ export function createCatalogTools(context: {
       context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
 
-      // 5-minute active Pending duplicate order guard
+      // A retry of the SAME order seconds later is a duplicate; anything the customer actually
+      // wants next is a new sale. The window is short and the match is product+variant, because
+      // the old five-minute, any-product guard turned a second purchase into a refusal and told
+      // the model the previous order was "already active" for whatever it asked next.
       if (context.agentState?.lastOrder?.state === 'Pending') {
         const last = context.agentState.lastOrder;
         const timeSince = Date.now() - new Date(last.createdAt).getTime();
-        if (timeSince < 5 * 60 * 1000 && last.productName) {
+        const sameProduct = Boolean(last.productId) && last.productId === productId;
+        const sameVariant = !variantId || !last.variantId || last.variantId === variantId;
+        if (timeSince < 60 * 1000 && sameProduct && sameVariant && last.productName) {
           const dupResult = JSON.stringify({
-            id: last.id,
-            state: 'Pending',
-            productName: last.productName,
-            variantName: last.variantName,
-            count: last.count,
-            totalPrice: last.totalPrice,
-            note: 'Order already created and active.',
+            created: false,
+            duplicate: true,
+            existingOrder: {
+              id: last.id,
+              productName: last.productName,
+              variantName: last.variantName,
+              count: last.count,
+              totalPrice: last.totalPrice,
+              state: 'Pending',
+            },
+            note: 'This exact order was placed moments ago and is still active, so nothing new was created.',
+            instruction:
+              'Tell the customer the earlier order is already in place with these numbers. Do not claim a new order was created, and do not retry this one. If they want different items, a different variant, or another quantity, call create_order again for that.',
           });
           context.emitSse?.('tool_result', { name: 'create_order', result: dupResult });
           return dupResult;

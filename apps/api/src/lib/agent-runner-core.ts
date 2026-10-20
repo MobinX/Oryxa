@@ -203,7 +203,9 @@ export async function runAgentCore(
     const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
     agentState.lastOrder = {
       id: latest.id,
+      productId: latest.productId,
       productName: latest.productName ?? 'Order',
+      variantId: latest.variantId,
       variantName: latest.variantName,
       count: latest.count,
       totalPrice: latest.totalPrice.toFixed(2),
@@ -253,7 +255,9 @@ export async function runAgentCore(
       agentState.pendingOrder = null;
       agentState.lastOrder = {
         id: order.id,
+        productId: order.productId,
         productName: order.productName ?? 'Order',
+        variantId: order.variantId,
         variantName: order.variantName,
         count: order.count,
         totalPrice: order.totalPrice.toFixed(2),
