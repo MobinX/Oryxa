@@ -22,6 +22,7 @@ import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
+import { audioCheckRouter } from '@api/routes/internal/audio-check';
 import { companiesRouter } from '@api/routes/companies';
 import { customersRouter } from '@api/routes/customers';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
@@ -107,6 +108,7 @@ app.route('/api2', adminRouter);
 app.route('/api2', adminPlansRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
+app.route('/internal', audioCheckRouter);
 
 // app.doc() config accepts no `components` key, so security schemes must be
 // registered on the registry or every `security: [{ bearerAuth: [] }]` route
