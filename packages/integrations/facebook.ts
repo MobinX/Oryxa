@@ -304,7 +304,13 @@ type MessengerAttachment =
 
 type SendPayload = {
   recipient: { id: string } | { comment_id: string };
-  message: { text: string } | { attachment: MessengerAttachment };
+  message:
+    | {
+        text: string;
+        /** Tappable chips under the question; a tap arrives back as ordinary message text. */
+        quick_replies?: Array<{ content_type: 'text'; title: string; payload: string }>;
+      }
+    | { attachment: MessengerAttachment };
   messaging_type: 'RESPONSE' | 'MESSAGE_TAG';
   tag?: 'HUMAN_AGENT';
 };
@@ -509,6 +515,39 @@ export async function senderAction(
       console.log(`[typing :] ${sender_action} failed`, { recipientId, err: String(err) });
     }
   }
+}
+
+/** Meta caps one row of quick replies at 13, and a chip's title at 20 characters. */
+const QUICK_REPLY_LIMIT = 13;
+const QUICK_REPLY_TITLE_LIMIT = 20;
+
+/**
+ * A question with tappable answer chips — the customer answers with one tap, and the tap comes
+ * back to the webhook as an ordinary text message carrying the option. The chip title is clipped
+ * to Meta's limit; the payload keeps the option whole, so long labels still arrive complete.
+ */
+export async function sendQuickReplies(
+  pageToken: string,
+  recipientId: string,
+  question: string,
+  options: string[],
+): Promise<void> {
+  const replies = options
+    .map((option) => option.trim())
+    .filter(Boolean)
+    .slice(0, QUICK_REPLY_LIMIT)
+    .map((option) => ({
+      content_type: 'text' as const,
+      title: Array.from(option).slice(0, QUICK_REPLY_TITLE_LIMIT).join(''),
+      payload: option.slice(0, 1000),
+    }));
+  if (replies.length === 0) return;
+
+  await postMessengerSend(pageToken, {
+    recipient: { id: recipientId },
+    message: { text: question.slice(0, MESSENGER_TEXT_LIMIT), quick_replies: replies },
+    messaging_type: 'RESPONSE',
+  });
 }
 
 export async function sendMessage(

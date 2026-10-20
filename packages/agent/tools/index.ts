@@ -16,6 +16,7 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
+  sendQuickReplies as fbSendQuickReplies,
   detailsProductPayload,
   detailsVariantPayload,
   type MessengerCard,
@@ -1511,6 +1512,76 @@ export function createAgentTools(
     },
   );
 
+  /**
+   * A question with tappable answers. The chips are the point: the customer picks a color, size,
+   * quantity, or category without typing, and the tap comes back as an ordinary message so every
+   * later turn reads naturally. The question and its options land in the conversation record,
+   * so the next turn knows exactly what was offered.
+   */
+  const sendSuggestionsTool = tool(
+    async ({ question, options }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'send_suggestions', result });
+        return result;
+      };
+
+      const cleaned = [...new Set(options.map((option) => option.trim()).filter(Boolean))].slice(0, 10);
+      if (cleaned.length < 2) {
+        return logResult(JSON.stringify({
+          sent: false,
+          reason: 'a suggestion row needs at least two distinct options',
+          instruction: 'Ask the question in plain text instead.',
+        }));
+      }
+
+      const budget = await takeMessageUnit(!context.sendMessageOverride);
+      if (!budget.allowed) {
+        return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
+      }
+
+      const said = `${question.trim()} (${cleaned.join(' / ')})`;
+      try {
+        if (context.sendMessageOverride) {
+          await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
+        } else {
+          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, question.trim(), cleaned);
+        }
+      } catch (err) {
+        await returnMessageUnit(budget.period);
+        throw err;
+      }
+
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content: said,
+        state: 'done',
+      });
+      onSent?.(said, 'card');
+
+      return logResult(JSON.stringify({
+        sent: true,
+        question: question.trim(),
+        options: cleaned,
+        instruction:
+          'The customer now sees tappable answer chips. Do not repeat the options in prose; wait for the tap, which arrives as an ordinary message.',
+      }));
+    },
+    {
+      name: 'send_suggestions',
+      description:
+        'Display tool: sends a short question with tappable answer chips (Messenger quick replies), so the customer answers with one tap instead of typing. Use EVERY time the next thing you need is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference. Check the real values first (get_product_options, find_variant, Catalog Summary); never invent options. Give 2 to 10 short options (one or two words). Do NOT use for open answers (name, address, phone, order id) and do NOT repeat the options in your reply afterwards.',
+      schema: z.object({
+        question: z.string().min(1).max(300).describe(
+          'One short question in the customer’s language, e.g. "Which color would you like?"',
+        ),
+        options: z.array(z.string().min(1).max(80)).min(2).max(10).describe(
+          '2 to 10 short answers exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers.',
+        ),
+      }),
+    },
+  );
+
   return [
     ...createCatalogTools(context, {
       onOrderCreated: async ({ id, totalPrice }) => {
@@ -1528,5 +1599,6 @@ export function createAgentTools(
     showProductInfoTool,
     showVariantPhotosTool,
     suggestAlternativesTool,
+    sendSuggestionsTool,
   ];
 }
