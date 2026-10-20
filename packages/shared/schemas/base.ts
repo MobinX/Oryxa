@@ -26,6 +26,8 @@ export const notificationKindSchema = z.enum([
   'message_quota_100',
   'comment_quota_80',
   'comment_quota_100',
+  // A sale landed through any door: the agent, the merchant's form, or the storefront.
+  'order_placed',
   // Written before the budget was part of the key. Readers still accept them, writers
   // never produce them: dropping these would fail validation on rows that already exist,
   // and a notifications page that cannot parse its own history is worse than a stale label.

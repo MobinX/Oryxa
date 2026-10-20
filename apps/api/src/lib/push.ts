@@ -1,6 +1,6 @@
 import { cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
-import type { NotificationPush } from '@repo/db/crud/billing';
+import type { NotificationPush } from '@repo/db/crud/notification';
 import { deletePushTokens, listPushTokens } from '@repo/db/crud/push';
 
 let adminApp: App | null | undefined;

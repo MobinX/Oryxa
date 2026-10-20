@@ -8,6 +8,7 @@ import {
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
+import { createBusinessNotification } from './notification';
 
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
 const ORDER_HISTORY_PAGE = 10;
@@ -94,6 +95,18 @@ export async function createOrder(input: unknown) {
       throw new Error('Insufficient stock');
     }
   }
+
+  // A sale is the merchant's news, whichever door it came through. The notice stores the whole
+  // sentence so it still reads correctly weeks later, and its link opens this exact order.
+  await createBusinessNotification({
+    businessId: parsed.businessId,
+    kind: 'order_placed',
+    title: 'New order received',
+    body: `${parsed.count} × ${product.name}${variant ? ` (${variant.name})` : ''} — $${totalPrice.toFixed(2)} from ${parsed.customerName?.trim() || 'a customer'}.`,
+    link: `/b/${parsed.businessId}/orders/${order.id}`,
+  }).catch((err) => {
+    console.error('[orders] order stored but its notification could not be written:', err);
+  });
 
   return {
     id: order.id,

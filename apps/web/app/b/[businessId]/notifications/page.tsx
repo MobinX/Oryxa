@@ -6,6 +6,7 @@ import { markNotificationsReadAction } from '@/app/actions/billing';
 import { Card } from '@/components/ui/card';
 
 function noticeTitle(kind: string): string {
+  if (kind === 'order_placed') return 'New order received';
   const unit = kind.startsWith('comment') ? 'comment' : 'messenger';
   return kind.endsWith('_100')
     ? `Your ${unit} replies are used up`
@@ -32,8 +33,8 @@ export default async function NotificationsPage({
             <h1 className="font-geist text-2xl font-bold tracking-tight">Notifications</h1>
             <p className="text-sm text-muted-foreground">
               {unreadCount > 0
-                ? `${unreadCount} unread · about this business's agent allowance`
-                : 'All quiet · about this business\u2019s agent allowance'}
+                ? `${unreadCount} unread · orders and this business's agent allowance`
+                : 'All quiet · orders and this business\u2019s agent allowance'}
             </p>
           </div>
         </div>
@@ -73,9 +74,9 @@ export default async function NotificationsPage({
         <Card className="hover:shadow-card">
           <p className="font-semibold">Nothing to read yet</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            You will get one notice when an allowance passes 80% and another when it runs out — at
-            most once per budget per cycle. Neither one ever stops your own typing: the agent stops,
-            the inbox does not.
+            A notice arrives when an order lands, plus one when an allowance passes 80% and another
+            when it runs out — at most once per budget per cycle. Allowance notices never stop your
+            own typing: the agent stops, the inbox does not.
           </p>
         </Card>
       )}
@@ -117,10 +118,10 @@ export default async function NotificationsPage({
 
                   {notice.link && (
                     <Link
-                      href={`/b/${businessId}/billing`}
+                      href={notice.link}
                       className="shrink-0 rounded-element border border-border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
                     >
-                      Open billing
+                      {notice.kind === 'order_placed' ? 'Open order' : 'Open billing'}
                     </Link>
                   )}
                 </div>

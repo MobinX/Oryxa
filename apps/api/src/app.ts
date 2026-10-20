@@ -26,7 +26,7 @@ import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware'
 import { emit } from '@api/lib/log';
 import { wireDatabaseLogging } from '@api/lib/db-log';
 import { setIntegrationLogSink } from '@repo/integrations/http-log';
-import { setNotificationPushHandler } from '@repo/db/crud/billing';
+import { setNotificationPushHandler } from '@repo/db/crud/notification';
 import { sendPushToBusiness } from '@api/lib/push';
 
 export const app = new OpenAPIHono();
