@@ -46,17 +46,20 @@ function shelfShape(named: Array<{ name: string; count: number }>, unclassified:
 }
 
 /**
- * How a broad "what do you have" is answered. Said here because the block is the only place that knows
- * whether the store has shelves worth naming: a customer asking which kinds the shop carries wants the
- * list of kinds, in words — not a card list of the products they can already see.
+ * How a broad "what do you have" is answered, at every catalog size. Said here because the block is
+ * the only place that knows the shelves: a customer asking which kinds the shop carries wants the
+ * list of kinds — even when the catalog is small enough to name in full, the categories are the
+ * answer, and they are offered as tappable suggestions so the customer picks with one tap.
  */
 function answerWithCategories(cards: boolean): string {
-  const lead = 'When the customer asks what kinds or categories the shop has, answer from the Categories'
-    + ' line above in your own words — that question is about the shelves, so the product count is not'
-    + ' the answer to it and a product card list is not the reply.';
+  const lead = 'When the customer asks what kinds or categories the shop has, or what you sell, answer'
+    + ' from the Categories line above in your own words — that question is about the shelves, never a'
+    + ' product card list, and it stays true however small the catalog is (even with fewer than 10'
+    + ' products). Offer the category names as tappable suggestions with send_message, then end the'
+    + ' turn with SILENT.';
   return cards
-    ? lead + ' Then offer one shelf: show_products with that category and no query shows its products.'
-    : lead + ' Describe a few of the items you have and invite them to name what they are after.';
+    ? lead + ' When the customer taps one, show_products with that category and no query shows its products.'
+    : lead + ' You cannot show cards here, so name the shelves and invite the customer to pick one.';
 }
 
 /**
@@ -127,8 +130,9 @@ export async function buildCatalogSummary(
   const unclassified = total - populated.reduce((sum, c) => sum + c.count, 0);
 
   const howToAnswer = canShowCards
-    ? 'To answer what the shop has: name the categories above and offer one shelf, or call show_products'
-      + ' with no query for the first page and offer the next one. Never say a customer has seen everything.'
+    ? 'To answer what the shop has: name the categories above and offer them as tappable suggestions'
+      + ' (send_message, then SILENT). After a category is chosen, show_products with that category.'
+      + ' Do not dump the sample list for a casual "what do you have", and never say a customer has seen everything.'
     : 'To answer what the shop has: name the categories above and describe a few in your own words.'
       + ' You cannot show a product list here, so never imply the customer has seen everything the store holds.';
 
