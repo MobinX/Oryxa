@@ -16,6 +16,8 @@ import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
+  detailsProductPayload,
+  detailsVariantPayload,
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
@@ -988,6 +990,7 @@ export function createAgentTools(
           subtitle: summary ? `${price} — ${summary}` : price,
           imageUrl,
           button: { title: 'Order', payload: orderPayload(product.id, title) },
+          extraButtons: [{ title: 'Details', payload: detailsProductPayload(product.id) }],
         });
       }
 
@@ -1251,6 +1254,7 @@ export function createAgentTools(
           subtitle: variantPriceLine(money(variant.price ?? product.price), variant.stock),
           imageUrl: variant.imageUrl,
           button: { title: 'Order', payload: orderPayload(product.id, label, variant.id) },
+          extraButtons: [{ title: 'Details', payload: detailsVariantPayload(product.id, variant.id) }],
         });
       }
 

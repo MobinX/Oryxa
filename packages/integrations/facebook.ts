@@ -326,6 +326,11 @@ export type MessengerCard = {
   imageUrl: string;
   /** Meta reads the button's `payload` only — a button sent with `data` posts fine yet every tap arrives empty. */
   button: { title: string; payload: string };
+  /**
+   * Buttons beside the primary one, e.g. Details. Meta accepts at most three postback buttons
+   * per card; these are drawn after `button` and dropped past the ceiling.
+   */
+  extraButtons?: Array<{ title: string; payload: string }>;
 };
 
 /** Ten is the ceiling Meta accepts; the eleventh product would reject the whole post. */
@@ -340,10 +345,52 @@ function genericAttachment(cards: MessengerCard[]): MessengerAttachment {
         title: card.title,
         subtitle: card.subtitle,
         image_url: card.imageUrl,
-        buttons: [{ type: 'postback', title: card.button.title, payload: card.button.payload }],
+        buttons: [card.button, ...(card.extraButtons ?? [])]
+          .slice(0, 3)
+          .map((button) => ({ type: 'postback' as const, title: button.title, payload: button.payload })),
       })),
     },
   };
+}
+
+/**
+ * The deterministic details buttons. Their payloads are answered in the webhook itself — variant
+ * cards or variant photos are sent straight back — so a tap never reaches the language model.
+ * The prefixes are namespaced so an ordinary order payload can never be mistaken for one.
+ */
+const DETAILS_PRODUCT_PREFIX = 'oryxa:details:product:';
+const DETAILS_VARIANT_PREFIX = 'oryxa:details:variant:';
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type DetailsPayload =
+  | { kind: 'product'; productId: string }
+  | { kind: 'variant'; productId: string; variantId: string };
+
+/** The payload on a product card's Details button. */
+export function detailsProductPayload(productId: string): string {
+  return `${DETAILS_PRODUCT_PREFIX}${productId}`;
+}
+
+/** The payload on a variant card's Details button. */
+export function detailsVariantPayload(productId: string, variantId: string): string {
+  return `${DETAILS_VARIANT_PREFIX}${productId}:${variantId}`;
+}
+
+/** Reads a Details postback, or null when the payload is anything else (an order, a greeting). */
+export function parseDetailsPayload(payload: string | undefined | null): DetailsPayload | null {
+  const value = payload?.trim();
+  if (!value) return null;
+  if (value.startsWith(DETAILS_PRODUCT_PREFIX)) {
+    const productId = value.slice(DETAILS_PRODUCT_PREFIX.length);
+    return UUID_SHAPE.test(productId) ? { kind: 'product', productId } : null;
+  }
+  if (value.startsWith(DETAILS_VARIANT_PREFIX)) {
+    const [productId, variantId, ...rest] = value.slice(DETAILS_VARIANT_PREFIX.length).split(':');
+    if (rest.length === 0 && productId && variantId && UUID_SHAPE.test(productId) && UUID_SHAPE.test(variantId)) {
+      return { kind: 'variant', productId, variantId };
+    }
+  }
+  return null;
 }
 
 /** Meta answers 400 (graph code 100) for a `message[text`] longer than this. */

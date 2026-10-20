@@ -1,12 +1,28 @@
 import { Hono } from 'hono';
 import { getChannelByPageId } from '@repo/db/crud/channel';
-import { processInboundMessage, setConversationProfileIfMissing, resetStaleConversation, checkPendingMessages } from '@repo/db/crud/conversation';
+import {
+  processInboundMessage,
+  setConversationProfileIfMissing,
+  resetStaleConversation,
+  checkPendingMessages,
+  getOrCreateConversation,
+  createMessage,
+} from '@repo/db/crud/conversation';
+import { getProductById } from '@repo/db/crud/product';
 import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { readQuota, type QuotaRead, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
 import { runInBackground } from '@api/lib/background';
-import { verifyWebhookSignature, getFacebookUserProfile, fetchMessengerImage } from '@repo/integrations/facebook';
+import {
+  verifyWebhookSignature,
+  getFacebookUserProfile,
+  fetchMessengerImage,
+  sendMessage as fbSendMessage,
+  parseDetailsPayload,
+  detailsVariantPayload,
+  type DetailsPayload,
+} from '@repo/integrations/facebook';
 import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
@@ -431,6 +447,127 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
   fbLog('processEntries done');
 }
 
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+/** Card titles are one line and roughly 30 visible characters — collapse before Meta does it badly. */
+function cardLine(value: string, max = 60): string {
+  const line = value.replace(/\s+/g, ' ').trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/**
+ * A Details tap is answered here, not by the model: variant cards for a product, or every photo
+ * of one variant. Each answer is recorded as a `self` message so the next real turn knows what
+ * the customer has already been shown. Returns false when there was nothing to send.
+ */
+async function handleDetailsPostback(
+  channel: { id: string; businessId: string; apiToken: string },
+  senderId: string,
+  details: DetailsPayload,
+): Promise<boolean> {
+  try {
+    const product = await getProductById(channel.businessId, details.productId);
+    if (!product) return false;
+    const conversation = await getOrCreateConversation(channel.businessId, channel.id, senderId);
+
+    if (details.kind === 'product') {
+      const cards = product.variants
+        .filter((variant) => Boolean(variant.imageUrl))
+        .slice(0, 10)
+        .map((variant) => {
+          const label = cardLine(`${product.name} — ${variant.name}`);
+          const price = variant.price ?? product.price;
+          const buyable = variant.isAvailable && variant.stock > 0;
+          const detailsButton = {
+            title: 'Details',
+            payload: detailsVariantPayload(product.id, variant.id),
+          };
+          return {
+            title: label,
+            subtitle: `${usd.format(price)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+            imageUrl: variant.imageUrl as string,
+            ...(buyable
+              ? {
+                  button: {
+                    title: 'Order',
+                    payload: `place order with ${product.id} and ${label} variant ${variant.id}`,
+                  },
+                  extraButtons: [detailsButton],
+                }
+              : { button: detailsButton }),
+          };
+        });
+      if (cards.length === 0) return false;
+
+      await fbSendMessage(channel.apiToken, senderId, cards);
+
+      const stockTotal = product.variants.reduce((sum, variant) => sum + variant.stock, 0);
+      const optionsText = (product.options ?? [])
+        .map((option) => `${option.name}: ${option.values.map((value) => value.value).join(', ')}`)
+        .join('; ');
+      const variantText = product.variants
+        .map(
+          (variant) =>
+            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${usd.format(variant.price ?? product.price)}, ${variant.stock} in stock`,
+        )
+        .join('; ');
+      await createMessage({
+        conversationId: conversation.id,
+        from: 'self',
+        content: [
+          `Showing product details of ${product.id}, ${product.name}`,
+          `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
+          `variants: ${variantText}`,
+          ...(optionsText ? [`options: ${optionsText}`] : []),
+        ].join(' — '),
+        state: 'done',
+      });
+      return true;
+    }
+
+    const variant = product.variants.find((candidate) => candidate.id === details.variantId);
+    if (!variant) return false;
+    const images = (
+      variant.imageUrls?.length ? variant.imageUrls : variant.imageUrl ? [variant.imageUrl] : []
+    ).slice(0, 10);
+    if (images.length === 0) return false;
+
+    const label = cardLine(`${product.name} — ${variant.name}`);
+    const price = variant.price ?? product.price;
+    const buyable = variant.isAvailable && variant.stock > 0;
+    const cards = images.map((imageUrl, index) => ({
+      title: label,
+      subtitle: `${usd.format(price)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+      imageUrl,
+      ...(buyable
+        ? {
+            button: {
+              title: 'Order',
+              payload: `place order with ${product.id} and ${label} variant ${variant.id}`,
+            },
+          }
+        : {
+            button: {
+              title: 'Details',
+              payload: detailsVariantPayload(product.id, variant.id),
+            },
+          }),
+    }));
+
+    await fbSendMessage(channel.apiToken, senderId, cards);
+    await createMessage({
+      conversationId: conversation.id,
+      from: 'self',
+      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
+      state: 'done',
+    });
+    return true;
+  } catch (err) {
+    console.error('[fb-webhook] details postback failed', err);
+    return false;
+  }
+}
+
 /** Messenger DM events: dedup on mid, skip echoes + non-text/postback, trigger agent, enrich profile. */
 async function processMessagingEvents(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
@@ -441,6 +578,22 @@ async function processMessagingEvents(
 
   for (const [index, ev] of events.entries()) {
     fbLog('processMessagingEvents event', { index, event: ev });
+
+    // Details buttons are answered deterministically: cards go back from here, the model never
+    // runs, and the exchange is recorded as a self message for the next real turn to read.
+    const details = ev.postback ? parseDetailsPayload(ev.postback.payload) : null;
+    if (details && ev.sender?.id) {
+      const handled = await handleDetailsPostback(channel, ev.sender.id, details);
+      fbLog('processMessagingEvents details postback', { index, kind: details.kind, handled });
+      if (!handled) {
+        emit('webhook_item', {
+          kind: 'message',
+          senderId: ev.sender.id,
+          outcome: 'details_unhandled',
+        });
+      }
+      continue;
+    }
 
     const inbound = inboundFromMessagingEvent(ev);
     if (!inbound) {
