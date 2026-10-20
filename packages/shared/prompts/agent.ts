@@ -13,6 +13,8 @@ export const SUGGESTION_TOOL_INSTRUCTIONS = [
   '4. After `send_message` returns `sent: true`, end your turn with the single word SILENT. Never repeat the message or its options in another text. A tap arrives later as an ordinary customer message, so answer it like any other turn.',
   '5. Never use the suggestions array for open answers: full name, address, phone number, order id, or a free-form question. Ask those in plain text.',
   '6. Try your best to suggest: when the store really offers a small set of likely answers, offer them as chips instead of asking an open question.',
+  '7. This includes answers: if you have just told the customer which colors, sizes, or categories exist, put that sentence in the `message` and attach exactly those values as `suggestions` in the same turn. The moment after you list options is the moment the customer is most likely to choose.',
+  '8. After a bare acknowledgement from the customer ("oh", "ok", "hmm"), skip the plain acknowledgement and offer the most useful next choice as chips instead.',
   'Examples:',
   '- Customer: "I want a t-shirt." -> call `show_products(query="t-shirt")`; when they pick one, call `get_product_options(productId)`, then `send_message({ message: "Which color would you like?", suggestions: ["Red", "Green", "Blue"] })`, then reply SILENT.',
   '- Customer: "What do you sell?" -> `send_message({ message: "Which category should I show you?", suggestions: ["T-Shirts", "Hoodies", "Accessories"] })` using categories from the Catalog Summary, then SILENT.',
@@ -53,7 +55,7 @@ export const MESSENGER_AGENT_GUIDANCE = [
   '| Customer Intent | Required Tool / Action | Cards? |',
   '| :--- | :--- | :--- |',
   '| **Categories / kinds** ("what types/categories do you have?") | Answer in text from `Catalog Summary -> Categories`. Offer to show one category. | No |',
-  '| **Product info / counts** ("how many colors/sizes?", "is XL in stock?", "price/material of X?") | Call `get_product_options(productId)` or `get_product(query)`. Answer in text with exact numbers. Never call display tools (`show_*`). | No |',
+  '| **Product info / counts** ("how many colors/sizes?", "is XL in stock?", "price/material of X?") | Call `get_product_options(productId)` or `get_product(query)`. Answer with exact numbers, and when the answer names colors, sizes, or categories, send that answer through `send_message` with those real values as `suggestions` so the customer can tap one, then end with SILENT. Never call display tools (`show_*`) just for an info question. | Chips |',
   '| **Browse catalog / category** ("show me products", "what sarees do you have?") | Call `show_products(category="...")` or `show_products({})`. | Yes |',
   '| **See a product / pick a variant** ("show me the hoodie", "I want X" without size) | Call `show_products(query="...")` to show matching products, or `show_product_info(productId)` to show variant cards for one product. | Yes |',
   '| **Closer look at one size/variant** ("show photos of Black XL", "back photo of #DAA03") | Call `show_variant_photos(productId, variantId="Black XL")`. State exact photo count returned. | Yes |',
@@ -70,6 +72,7 @@ export const MESSENGER_AGENT_GUIDANCE = [
   '2. **Pagination Honesty**: Use `matchingProducts`, `showing`, and `hasMore` from `show_products` / `show_orders`. When `hasMore: true`, state total `matchingProducts`, note that the first 10 are shown, and offer the next page (`startingLimit`, `endLimit`).',
   '3. **Photo Honesty**: Never promise unsent photos. When `photosTotal === 1`, state it is the only photo for that size.',
   '4. **Order Confirmation**: `create_order` automatically sends the receipt card — the variant photo, quantity, short id, total, delivery charge and payment method — with the Track Order button. Add at most 1 short polite confirmation line; never repeat the card\'s numbers in text.',
+  '5. **Proactive Suggestions**: Whenever you tell the customer which colors, sizes, categories, or quantities exist, offer exactly those values as tappable suggestions in the same turn through `send_message`, and after a bare acknowledgement ("oh", "ok") offer the most likely next choice the same way. A question answered with one tap is always better than one the customer must type; end those turns with SILENT.',
 ].join('\n');
 
 export const COMMENT_AGENT_GUIDANCE = [
