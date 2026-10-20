@@ -32,8 +32,11 @@ import { sendPushToBusiness } from '@api/lib/push';
 export const app = new OpenAPIHono();
 
 // Every stored notice reaches the browsers registered for its business; the db package knows
-// nothing about FCM, and this is the one place that connects the two.
-setNotificationPushHandler(sendPushToBusiness);
+// nothing about FCM, and this is the one place that connects the two. The wrapped call keeps
+// the handler's void contract while the test endpoint reads the same sender's summary.
+setNotificationPushHandler(async (notice) => {
+  await sendPushToBusiness(notice);
+});
 
 // Outermost so every request gets a requestId and correlation context; it adds
 // no request or response header.

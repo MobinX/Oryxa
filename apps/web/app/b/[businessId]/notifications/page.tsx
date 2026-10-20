@@ -3,6 +3,7 @@ import { Bell, Check, Info } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { cachedNotifications } from '@/app/_cache/queries';
 import { markNotificationsReadAction } from '@/app/actions/billing';
+import { PushTestButton } from '@/components/push-test-button';
 import { Card } from '@/components/ui/card';
 
 function noticeTitle(kind: string): string {
@@ -39,22 +40,25 @@ export default async function NotificationsPage({
           </div>
         </div>
 
-        {unreadCount > 0 && (
-          <form
-            action={async () => {
-              'use server';
-              await markNotificationsReadAction(businessId, { all: true });
-            }}
-          >
-            <button
-              type="submit"
-              className="flex items-center gap-2 rounded-element border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <PushTestButton businessId={businessId} />
+          {unreadCount > 0 && (
+            <form
+              action={async () => {
+                'use server';
+                await markNotificationsReadAction(businessId, { all: true });
+              }}
             >
-              <Check className="h-4 w-4" />
-              Mark all read
-            </button>
-          </form>
-        )}
+              <button
+                type="submit"
+                className="flex items-center gap-2 rounded-element border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+              >
+                <Check className="h-4 w-4" />
+                Mark all read
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       {unavailable && (
