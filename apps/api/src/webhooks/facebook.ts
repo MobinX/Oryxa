@@ -9,6 +9,10 @@ import {
   createMessage,
 } from '@repo/db/crud/conversation';
 import { getProductById } from '@repo/db/crud/product';
+import {
+  findBusinessByNotificationToken,
+  upsertMessengerNotificationUser,
+} from '@repo/db/crud/messenger-notification';
 import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
@@ -391,6 +395,53 @@ fbWebhookRouter.post('/facebook', async (c) => {
 });
 
 /**
+ * The operator page's DMs are not conversations. A message that is exactly a business's
+ * notification code binds this Messenger account to that business and is answered with a
+ * confirmation; anything else is ignored. No agent ever runs on an admin-only page.
+ */
+const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function processMessengerNotificationCodes(
+  channel: { id: string; apiToken: string },
+  events: MessagingEvent[],
+): Promise<void> {
+  for (const ev of events) {
+    const senderId = ev.sender?.id;
+    const text = ev.message?.text?.trim().toLowerCase();
+    if (!senderId || ev.message?.is_echo || !text) continue;
+    if (!NOTIFICATION_CODE.test(text)) {
+      fbLog('admin channel: message is not a notification code', { senderId });
+      continue;
+    }
+
+    const row = await findBusinessByNotificationToken(text);
+    if (!row) {
+      fbLog('admin channel: unknown notification code', { senderId });
+      continue;
+    }
+
+    const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+    await upsertMessengerNotificationUser({
+      businessId: row.businessId,
+      channelId: channel.id,
+      platformUserId: senderId,
+      name: profile.name ?? null,
+    });
+
+    await fbSendMessage(
+      channel.apiToken,
+      senderId,
+      `You are connected. Notifications for ${row.business?.name ?? 'this store'} will arrive here.`,
+    ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
+
+    fbLog('admin channel: messenger user connected', {
+      businessId: row.businessId,
+      senderId,
+    });
+  }
+}
+
+/**
  * Processes every entry in a batched webhook payload. A single page can deliver
  * either Messenger `messaging` events (DMs) or `changes` events (page feed,
  * including comments) — both are handled here, with the channel looked up once
@@ -432,15 +483,37 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
       agentId: channel.agentId ?? null,
     });
 
+    // The operator's page is a notification door, not a shop: its DMs carry codes and nothing
+    // else. No conversation, no agent, no quota — this intercept is the whole handling.
+    if (channel.isAdminOnly) {
+      fbLog('processEntries admin-only channel — notification codes only', {
+        pageId: entry.id,
+        messagingCount: messaging.length,
+      });
+      if (messaging.length > 0) {
+        await processMessengerNotificationCodes(
+          { id: channel.id, apiToken: channel.apiToken },
+          messaging,
+        );
+      }
+      continue;
+    }
+
+    const businessId = channel.businessId;
+    if (!businessId) {
+      fbLog('processEntries skip entry — channel has no business', { pageId: entry.id });
+      continue;
+    }
+
     // Stamped onto every later event of this invocation instead of repeated on
     // each one; deliveries carry a single page in practice.
-    tagContext({ channelId: channel.id, businessId: channel.businessId });
+    tagContext({ channelId: channel.id, businessId });
 
     if (messaging.length > 0) {
-      await processMessagingEvents(channel, messaging);
+      await processMessagingEvents({ ...channel, businessId }, messaging);
     }
     if (changes.length > 0) {
-      await processCommentChanges(channel, entry.id, changes);
+      await processCommentChanges({ ...channel, businessId }, entry.id, changes);
     }
   }
 

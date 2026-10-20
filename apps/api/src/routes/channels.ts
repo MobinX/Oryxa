@@ -38,6 +38,7 @@ import {
 } from '@repo/db/crud/channel';
 import { ensureDefaultAgent, getPlatformAgent, resolveAnsweringAgent } from '@repo/db/crud/default-agent';
 import {
+  ADMIN_FACEBOOK_FLOW,
   getFacebookOAuthUrl,
   exchangeCodeForToken,
   getUserPages,
@@ -605,20 +606,23 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   if (!verified) return c.text('Invalid or expired state', 400);
 
   const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+  // The same signed flow serves the admin console: only the picker's home changes.
+  const adminFlow = verified.businessId === ADMIN_FACEBOOK_FLOW;
+  const pickerUrl = adminFlow
+    ? `${webUrl}/admin/channels/connect-facebook`
+    : `${webUrl}/b/${verified.businessId}/channels/connect-facebook`;
   const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,
       userId: verified.userId,
       pages,
     });
-    return c.redirect(
-      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?token=${encodeURIComponent(pagesToken)}`,
-    );
+    return c.redirect(`${pickerUrl}?token=${encodeURIComponent(pagesToken)}`);
   };
 
   const toError = (error: string, detail?: string) =>
     c.redirect(
-      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?error=${error}${
+      `${pickerUrl}?error=${error}${
         detail ? `&detail=${encodeURIComponent(detail)}` : ''
       }`,
     );

@@ -29,9 +29,35 @@ export function pushNotice(notice: NotificationPush): void {
   });
 }
 
+let messengerNoticeHandler: ((notice: NotificationPush) => Promise<void>) | null = null;
+
 /**
- * A merchant-facing notice that stands alone (an order landed, for example): stored, then pushed.
- * Quota notices keep their once-per-cycle insert in billing.ts and call `pushNotice` themselves.
+ * The API registers the Messenger sender here when it boots, for the same reason as pushes:
+ * the database package must not know how Facebook messages are sent.
+ */
+export function setMessengerNoticeHandler(
+  handler: ((notice: NotificationPush) => Promise<void>) | null,
+): void {
+  messengerNoticeHandler = handler;
+}
+
+function notifyMessenger(notice: NotificationPush): void {
+  if (!messengerNoticeHandler) return;
+  void messengerNoticeHandler(notice).catch((err) => {
+    console.error('[notifications] messenger delivery failed:', err);
+  });
+}
+
+/** Every stored notice goes out on both channels: the browser's push and the merchant's Messenger. */
+export function announceNotice(notice: NotificationPush): void {
+  pushNotice(notice);
+  notifyMessenger(notice);
+}
+
+/**
+ * A merchant-facing notice that stands alone (an order landed, for example): stored, then
+ * announced. Quota notices keep their once-per-cycle insert in billing.ts and call
+ * `announceNotice` themselves.
  */
 export async function createBusinessNotification(input: {
   businessId: string;
@@ -54,7 +80,7 @@ export async function createBusinessNotification(input: {
     .onConflictDoNothing()
     .returning({ id: notifications.id });
   if (inserted.length === 0) return;
-  pushNotice({
+  announceNotice({
     businessId: input.businessId,
     title: input.title,
     body: input.body,

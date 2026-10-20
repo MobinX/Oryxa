@@ -808,6 +808,12 @@ export async function createOAuthState(
   return `${body}.${sig}`;
 }
 
+/**
+ * The businessId segment used by the operator console's own OAuth flow. The state format stays
+ * exactly the same; the callback only uses it to send the page picker to the admin console.
+ */
+export const ADMIN_FACEBOOK_FLOW = 'admin-platform';
+
 /** Verifies a `state` returned by Meta; returns the bound ids or null. */
 export async function verifyOAuthState(
   state: string | undefined,

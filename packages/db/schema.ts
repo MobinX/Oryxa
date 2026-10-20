@@ -319,12 +319,18 @@ export const defaultAgents = pgTable('default_agent', {
 
 export const channels = pgTable('channels', {
   id: uuid('id').primaryKey().defaultRandom(),
-  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  /** Null on a platform channel: it belongs to the operator, not to any store. */
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }),
   platform: platformEnum('platform').notNull(),
   apiToken: text('api_token').notNull(),
   platformChannelId: varchar('platform_channel_id', { length: 255 }).notNull(),
   extraInfo: text('extra_info'),
   agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  /**
+   * True when the page is connected from the admin console and answers no customers: its DMs
+   * only carry business notification codes. Null/false on a store's own channel.
+   */
+  isAdminOnly: boolean('is_admin_only'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -334,6 +340,38 @@ export const channels = pgTable('channels', {
   liveUniq: uniqueIndex('channels_platform_channel_live_idx')
     .on(t.platform, t.platformChannelId)
     .where(sql`${t.deletedAt} is null`),
+}));
+
+/**
+ * One notification code per business. The merchant sends it as a DM to the operator's page;
+ * the webhook binds that Messenger account to this business, and every later notice is also
+ * delivered there as a message. `token` is a uuid so it cannot be guessed and never repeats.
+ */
+export const messengerNotifications = pgTable('messenger_notification', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  token: uuid('token').defaultRandom().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  businessUniq: uniqueIndex('messenger_notification_business_uniq_idx').on(t.businessId),
+  tokenUniq: uniqueIndex('messenger_notification_token_uniq_idx').on(t.token),
+}));
+
+/**
+ * A Messenger account that redeemed a business's notification code. Many accounts may follow
+ * one business, and one account may follow several businesses; the page it messaged is kept so
+ * future notices are sent through the channel that answer is allowed to use.
+ */
+export const messengerNotificationUsers = pgTable('messenger_notification_user_info', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
+  platformUserId: varchar('platform_user_id', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex('messenger_notification_user_business_platform_uniq_idx').on(t.businessId, t.platformUserId),
+  businessIdx: index('messenger_notification_user_business_idx').on(t.businessId),
 }));
 
 export const conversations = pgTable('conversations', {
@@ -443,6 +481,11 @@ export const channelRelations = relations(channels, ({ one, many }) => ({
   conversations: many(conversations),
   commentThreads: many(commentThreads),
   posts: many(posts),
+}));
+
+export const messengerNotificationRelations = relations(messengerNotifications, ({ one, many }) => ({
+  business: one(businesses, { fields: [messengerNotifications.businessId], references: [businesses.id] }),
+  users: many(messengerNotificationUsers),
 }));
 
 export const conversationRelations = relations(conversations, ({ one, many }) => ({

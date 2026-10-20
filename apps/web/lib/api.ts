@@ -477,6 +477,46 @@ export const connectFacebookPages = (
     { method: 'POST', token, body: JSON.stringify(data) },
   );
 
+// The operator's own Pages: same handshake, channels with no tenant and isAdminOnly set.
+export type AdminChannel = {
+  id: string;
+  pageId: string;
+  pageName: string;
+  createdAt: string;
+};
+
+export const listAdminChannels = (token: string) =>
+  apiFetch<{ channels: AdminChannel[] }>('/api2/admin/channels', { token });
+
+export const getAdminFacebookAuthUrl = (token: string) =>
+  apiFetch<{ url: string }>('/api2/admin/channels/facebook/auth', { token });
+
+export type AdminPendingPage = {
+  id: string;
+  name: string;
+  connected: boolean;
+  heldByStore: boolean;
+};
+
+export const listAdminFacebookPendingPages = (token: string, selectionToken: string) =>
+  apiFetch<{ pages: AdminPendingPage[] }>(
+    `/api2/admin/channels/facebook/pending?token=${encodeURIComponent(selectionToken)}`,
+    { token },
+  );
+
+export const connectAdminFacebookPages = (
+  token: string,
+  data: { token: string; pageIds: string[] },
+) =>
+  apiFetch<{
+    connected: Array<{ id: string; pageId: string; pageName: string }>;
+    failed: Array<{ pageId: string; error: string }>;
+  }>('/api2/admin/channels/facebook/connect', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
 /** The agent that answers this store's pages. Nobody picks it, so this is the only agent read. */
 export const getDefaultAgent = (token: string, businessId: string) =>
   apiFetch<Agent>(`/api/v1/${businessId}/agents/default`, { token });

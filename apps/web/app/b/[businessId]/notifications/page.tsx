@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth';
 import { cachedNotifications } from '@/app/_cache/queries';
 import { markNotificationsReadAction } from '@/app/actions/billing';
 import { PushTestButton } from '@/components/push-test-button';
+import { MessengerNotificationPortal } from '@/components/messenger-notification-portal';
 import { Card } from '@/components/ui/card';
 
 function noticeTitle(kind: string): string {
@@ -60,6 +61,8 @@ export default async function NotificationsPage({
           )}
         </div>
       </div>
+
+      <MessengerNotificationPortal businessId={businessId} />
 
       {unavailable && (
         <Card className="border-destructive/40 hover:shadow-card">

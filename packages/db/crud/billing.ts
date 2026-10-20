@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, commentThreads, conversations, notifications, plans, quotaUsage } from '@db/schema';
 import type { NotificationItem, NotificationKind, QuotaCycle, QuotaKind, QuotaStatus, QuotaThreshold } from '@repo/shared';
-import { pushNotice } from './notification';
+import { announceNotice } from './notification';
 
 /**
  * Allowances, the gate's read, and the atomic counter.
@@ -284,7 +284,7 @@ export async function ensureQuotaNotice(
     .returning({ id: notifications.id });
 
   // Only a row that actually landed becomes a push; the unique index keeps repeats silent.
-  if (inserted.length > 0) pushNotice({ businessId, ...copy, link });
+  if (inserted.length > 0) announceNotice({ businessId, ...copy, link });
 }
 
 /**
@@ -332,7 +332,7 @@ export async function ensurePlanNotices(
     });
 
   for (const row of inserted) {
-    pushNotice({ businessId: row.businessId, title: row.title, body: row.body, link: row.link });
+    announceNotice({ businessId: row.businessId, title: row.title, body: row.body, link: row.link });
   }
   return inserted.length;
 }
