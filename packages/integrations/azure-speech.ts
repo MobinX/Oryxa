@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,8 +22,26 @@ const DEFAULT_ENDPOINT = 'https://oryxa.cognitiveservices.azure.com';
 const API_VERSION = '2025-10-15';
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
+/**
+ * Where the binary actually is. The packaged path is wrong once a bundler rewrites `__dirname`
+ * (Vercel's build did exactly that), so the traced locations are checked directly; in local
+ * development the package's own path answers first.
+ */
+export function ffmpegCandidates(): string[] {
+  const cwd = process.cwd();
+  const candidates = new Set<string>();
+  if (ffmpegStatic) candidates.add(ffmpegStatic);
+  for (const base of [cwd, join(cwd, 'apps/api'), join(cwd, 'apps/api2'), join(cwd, '../api'), join(cwd, '../../')]) {
+    candidates.add(join(base, 'node_modules/ffmpeg-static/ffmpeg'));
+  }
+  return [...candidates];
+}
+
 function ffmpegBinary(): string | null {
-  return ffmpegStatic ?? null;
+  for (const candidate of ffmpegCandidates()) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 /** Formats the enhanced model accepts as-is; anything else is transcoded to OGG/Opus first. */

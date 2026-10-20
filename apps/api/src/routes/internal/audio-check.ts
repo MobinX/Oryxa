@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { existsSync } from 'node:fs';
-import ffmpegStatic from 'ffmpeg-static';
+import { ffmpegCandidates } from '@repo/integrations/azure-speech';
 
 /**
  * Operator probe for the voice pipeline: is the transcoder binary actually present in this
@@ -14,9 +14,14 @@ audioCheckRouter.get('/audio-check', (c) => {
     return c.text('Unauthorized', 401);
   }
 
+  const candidates = ffmpegCandidates().map((candidate) => ({
+    candidate,
+    exists: existsSync(candidate),
+  }));
+
   return c.json({
-    ffmpegPath: ffmpegStatic,
-    resolved: Boolean(ffmpegStatic),
-    exists: ffmpegStatic ? existsSync(ffmpegStatic) : false,
+    cwd: process.cwd(),
+    found: candidates.find((entry) => entry.exists)?.candidate ?? null,
+    candidates,
   });
 });
