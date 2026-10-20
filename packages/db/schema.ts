@@ -699,6 +699,21 @@ export const quotaUsageRelations = relations(quotaUsage, ({ one }) => ({
   business: one(businesses, { fields: [quotaUsage.businessId], references: [businesses.id] }),
 }));
 
+/**
+ * One browser's FCM registration for one business. A device that manages two stores holds a row
+ * per store (token unique inside the business), so each store's notices reach the same browser.
+ * Dead tokens are removed by the sender when FCM reports them unregistered.
+ */
+export const pushTokens = pgTable('push_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  token: text('token').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex('push_tokens_business_token_uniq_idx').on(t.businessId, t.token),
+  businessIdx: index('push_tokens_business_idx').on(t.businessId),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   business: one(businesses, { fields: [notifications.businessId], references: [businesses.id] }),
 }));

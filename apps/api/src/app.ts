@@ -14,6 +14,7 @@ import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { plansRouter } from '@api/routes/plans';
 import { billingRouter } from '@api/routes/billing';
+import { pushRouter } from '@api/routes/push';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
@@ -25,8 +26,14 @@ import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware'
 import { emit } from '@api/lib/log';
 import { wireDatabaseLogging } from '@api/lib/db-log';
 import { setIntegrationLogSink } from '@repo/integrations/http-log';
+import { setNotificationPushHandler } from '@repo/db/crud/billing';
+import { sendPushToBusiness } from '@api/lib/push';
 
 export const app = new OpenAPIHono();
+
+// Every stored notice reaches the browsers registered for its business; the db package knows
+// nothing about FCM, and this is the one place that connects the two.
+setNotificationPushHandler(sendPushToBusiness);
 
 // Outermost so every request gets a requestId and correlation context; it adds
 // no request or response header.
@@ -76,6 +83,8 @@ app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
 app.route('/api/v1', uploadsRouter);
 app.route('/api/v1', tokenAnalyticsRouter);
+// Push registrations ride the same business auth as billing, but live in their own router.
+app.route('/api/v1', pushRouter);
 // Registered last of the `/api/v1` routers so its own `/:businessId/*` auth
 // middleware can never run on a route that shipped before it.
 app.route('/api/v1', billingRouter);

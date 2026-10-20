@@ -251,6 +251,33 @@ function noticeCopy(
       };
 }
 
+export type NotificationPush = {
+  businessId: string;
+  title: string;
+  body: string;
+  link: string | null;
+};
+
+let notificationPushHandler: ((notice: NotificationPush) => Promise<void>) | null = null;
+
+/**
+ * The API registers the push sender here when it boots: the database package must not depend on
+ * firebase-admin, and the provider credentials belong to the app that sends.
+ */
+export function setNotificationPushHandler(
+  handler: ((notice: NotificationPush) => Promise<void>) | null,
+): void {
+  notificationPushHandler = handler;
+}
+
+/** Best effort by design: a push that cannot go out must never stop the notice from being stored. */
+function sendPush(notice: NotificationPush): void {
+  if (!notificationPushHandler) return;
+  void notificationPushHandler(notice).catch((err) => {
+    console.error('[notifications] push delivery failed:', err);
+  });
+}
+
 /**
  * One notice per (business, kind, cycle), enforced by the unique index rather than by a
  * read-then-write. Called after a spend reports its new total, and again from the gate on
@@ -268,16 +295,22 @@ export async function ensureQuotaNotice(
   const crossed = crossedThreshold(used, limit);
   if (!crossed) return;
 
-  await db
+  const copy = noticeCopy(kind, crossed, used, limit, resetsAt);
+  const link = `/b/${businessId}/billing`;
+  const inserted = await db
     .insert(notifications)
     .values({
       businessId,
       kind: noticeKind(kind, crossed),
       period,
-      ...noticeCopy(kind, crossed, used, limit, resetsAt),
-      link: `/b/${businessId}/billing`,
+      ...copy,
+      link,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: notifications.id });
+
+  // Only a row that actually landed becomes a push; the unique index keeps repeats silent.
+  if (inserted.length > 0) sendPush({ businessId, ...copy, link });
 }
 
 /**
@@ -316,7 +349,17 @@ export async function ensurePlanNotices(
     .insert(notifications)
     .values(values)
     .onConflictDoNothing()
-    .returning({ id: notifications.id });
+    .returning({
+      id: notifications.id,
+      businessId: notifications.businessId,
+      title: notifications.title,
+      body: notifications.body,
+      link: notifications.link,
+    });
+
+  for (const row of inserted) {
+    sendPush({ businessId: row.businessId, title: row.title, body: row.body, link: row.link });
+  }
   return inserted.length;
 }
 
