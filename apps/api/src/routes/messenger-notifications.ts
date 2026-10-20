@@ -4,6 +4,7 @@ import { businessAccessMiddleware } from '@api/middleware/business';
 import {
   ensureMessengerNotification,
   getMessengerNotificationOverview,
+  removeMessengerNotificationUser,
 } from '@repo/db/crud/messenger-notification';
 
 export const messengerNotificationsRouter = new OpenAPIHono();
@@ -32,3 +33,14 @@ messengerNotificationsRouter.post('/:businessId/messenger-notifications', async 
   const code = await ensureMessengerNotification(businessId);
   return c.json({ code });
 });
+
+/** Unlinks one Messenger account from this business's notifications. */
+messengerNotificationsRouter.delete(
+  '/:businessId/messenger-notifications/users/:userId',
+  async (c) => {
+    const businessId = c.req.param('businessId');
+    const removed = await removeMessengerNotificationUser(businessId, c.req.param('userId'));
+    if (!removed) return c.json({ error: 'Connected account not found' }, 404);
+    return c.json({ removed: true });
+  },
+);

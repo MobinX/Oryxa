@@ -50,3 +50,20 @@ export async function POST(req: Request) {
   const data = await upstream.json().catch(() => ({ error: upstream.statusText }));
   return NextResponse.json(data, { status: upstream.status });
 }
+
+/** Unlinks one connected account; the id travels as a query parameter. */
+export async function DELETE(req: Request) {
+  const token = bearerFrom(req);
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const url = upstreamUrl(req);
+  if (!url) return NextResponse.json({ error: 'businessId query parameter is required' }, { status: 400 });
+  const userId = new URL(req.url).searchParams.get('userId');
+  if (!userId) return NextResponse.json({ error: 'userId query parameter is required' }, { status: 400 });
+
+  const upstream = await fetch(`${url}/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await upstream.json().catch(() => ({ error: upstream.statusText }));
+  return NextResponse.json(data, { status: upstream.status });
+}

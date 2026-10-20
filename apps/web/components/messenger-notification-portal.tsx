@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, MessageCircle, RefreshCw } from 'lucide-react';
+import { Check, Copy, MessageCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -17,6 +17,7 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
   const [overview, setOverview] = useState<Overview | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -67,6 +68,33 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
     window.setTimeout(() => setCopied(false), 2000);
   };
 
+  const removeFollower = async (user: Follower) => {
+    if (
+      !window.confirm(
+        `Remove ${user.name ?? 'this Messenger account'} from notifications? It can be connected again with the code.`,
+      )
+    ) {
+      return;
+    }
+    setRemovingId(user.id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/messenger-notifications?businessId=${encodeURIComponent(businessId)}&userId=${encodeURIComponent(user.id)}`,
+        { method: 'DELETE' },
+      );
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? `Could not remove it (${res.status})`);
+      setOverview((prev) =>
+        prev ? { ...prev, users: prev.users.filter((follower) => follower.id !== user.id) } : prev,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove that account.');
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   return (
     <Card className="space-y-4">
       <div className="flex items-start gap-3">
@@ -112,15 +140,34 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
                 None yet — send the code to connect one.
               </p>
             ) : (
-              <ul className="mt-1 space-y-1 text-sm">
+              <ul className="mt-2 divide-y divide-border/60 rounded-lg border border-border">
                 {overview.users.map((user) => (
-                  <li key={user.id} className="text-muted-foreground">
-                    {user.name ?? 'Messenger account'} · connected{' '}
-                    {new Date(user.connectedAt).toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                  <li key={user.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {user.name ?? 'Messenger account'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Connected{' '}
+                        {new Date(user.connectedAt).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-red-600 hover:text-red-700"
+                      disabled={removingId === user.id}
+                      onClick={() => void removeFollower(user)}
+                      title="Remove this account"
+                    >
+                      <Trash2 className="mr-1 h-4 w-4" />
+                      {removingId === user.id ? 'Removing…' : 'Remove'}
+                    </Button>
                   </li>
                 ))}
               </ul>

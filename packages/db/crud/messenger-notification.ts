@@ -84,3 +84,20 @@ export async function listMessengerNotificationRecipients(businessId: string) {
       and(eq(messengerNotificationUsers.businessId, businessId), isNull(channels.deletedAt)),
     );
 }
+
+/** Unlinks one account; scoped to the business, so an id from another store matches nothing. */
+export async function removeMessengerNotificationUser(
+  businessId: string,
+  userId: string,
+): Promise<boolean> {
+  const removed = await db
+    .delete(messengerNotificationUsers)
+    .where(
+      and(
+        eq(messengerNotificationUsers.id, userId),
+        eq(messengerNotificationUsers.businessId, businessId),
+      ),
+    )
+    .returning({ id: messengerNotificationUsers.id });
+  return removed.length > 0;
+}
