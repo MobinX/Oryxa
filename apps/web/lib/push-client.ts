@@ -5,7 +5,7 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { firebaseConfig } from '@/lib/firebase';
 
 const SW_PATH = '/firebase-messaging-sw.js';
-let foregroundBound = false;
+export type PushEnableResult = 'granted' | 'denied' | 'unsupported';
 
 /** The SW needs the web config; query params keep it out of a build-time interpolation. */
 function serviceWorkerUrl(): string {
