@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import ffmpegStatic from 'ffmpeg-static';
 
 /**
@@ -34,14 +35,54 @@ export function ffmpegCandidates(): string[] {
   for (const base of [cwd, join(cwd, 'apps/api'), join(cwd, 'apps/api2'), join(cwd, '../api'), join(cwd, '../../')]) {
     candidates.add(join(base, 'node_modules/ffmpeg-static/ffmpeg'));
   }
+  candidates.add(join(tmpdir(), 'oryxa-ffmpeg'));
   return [...candidates];
 }
 
-function ffmpegBinary(): string | null {
+const FFMPEG_DOWNLOAD_URL =
+  'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz';
+
+let downloadPromise: Promise<string | null> | null = null;
+
+/**
+ * A deployment whose tracer dropped the binary still gets enhanced mode: the official static
+ * build is fetched once into /tmp and reused by every invocation on that warm instance. The
+ * standard model stays the fallback if even this fails.
+ */
+async function downloadFfmpeg(): Promise<string | null> {
+  if (process.platform !== 'linux' || process.arch !== 'x64') return null;
+  const target = join(tmpdir(), 'oryxa-ffmpeg');
+  if (existsSync(target)) {
+    await chmod(target, 0o755).catch(() => {});
+    return target;
+  }
+  if (!downloadPromise) {
+    downloadPromise = (async () => {
+      console.warn('[speech] ffmpeg is missing from the deployment; fetching the static build');
+      const res = await fetch(FFMPEG_DOWNLOAD_URL, { signal: AbortSignal.timeout(60_000) });
+      if (!res.ok) {
+        console.error(`[speech] ffmpeg download failed (${res.status})`);
+        return null;
+      }
+      const binary = gunzipSync(Buffer.from(await res.arrayBuffer()));
+      await writeFile(target, binary, { mode: 0o755 });
+      await chmod(target, 0o755);
+      console.log(`[speech] ffmpeg staged at ${target} (${binary.byteLength} bytes)`);
+      return target;
+    })().catch((err) => {
+      console.error('[speech] ffmpeg download failed:', err);
+      return null;
+    });
+  }
+  return downloadPromise;
+}
+
+/** Finds the transcoder, optionally staging it first; null means enhanced mode is off today. */
+export async function resolveFfmpegPath(download = false): Promise<string | null> {
   for (const candidate of ffmpegCandidates()) {
     if (existsSync(candidate)) return candidate;
   }
-  return null;
+  return download ? downloadFfmpeg() : null;
 }
 
 /** Formats the enhanced model accepts as-is; anything else is transcoded to OGG/Opus first. */
@@ -75,7 +116,7 @@ async function transcodeForEnhanced(
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (ENHANCED_TYPES.has(contentType)) return { buffer, contentType };
 
-  const binary = ffmpegBinary();
+  const binary = await resolveFfmpegPath(true);
   if (!binary) return null;
 
   const dir = await mkdtemp(join(tmpdir(), 'oryxa-audio-'));
