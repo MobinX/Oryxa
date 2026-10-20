@@ -36,6 +36,7 @@
         "@repo/shared": "workspace:*",
         "@repo/utils": "workspace:*",
         "@vercel/functions": "^3.7.5",
+        "ffmpeg-static": "^5.3.0",
         "firebase-admin": "^13.0.2",
         "hono": "^4.7.2",
         "zod": "^3.24.1",
