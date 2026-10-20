@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import ffmpegStatic from 'ffmpeg-static';
 
 /**
  * Operator probe for the voice pipeline: is the transcoder binary actually present in this
@@ -9,25 +9,14 @@ import { createRequire } from 'node:module';
  */
 export const audioCheckRouter = new Hono();
 
-const require = createRequire(import.meta.url);
-
 audioCheckRouter.get('/audio-check', (c) => {
   if (c.req.header('x-internal-key') !== process.env.INTERNAL_KEY) {
     return c.text('Unauthorized', 401);
   }
 
-  let ffmpegPath: string | null = null;
-  let resolutionError: string | null = null;
-  try {
-    ffmpegPath = (require('ffmpeg-static') as string | null) ?? null;
-  } catch (err) {
-    resolutionError = err instanceof Error ? err.message : String(err);
-  }
-
   return c.json({
-    ffmpegPath,
-    resolved: Boolean(ffmpegPath),
-    exists: ffmpegPath ? existsSync(ffmpegPath) : false,
-    resolutionError,
+    ffmpegPath: ffmpegStatic,
+    resolved: Boolean(ffmpegStatic),
+    exists: ffmpegStatic ? existsSync(ffmpegStatic) : false,
   });
 });

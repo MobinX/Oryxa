@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
+import ffmpegStatic from 'ffmpeg-static';
 
 /**
  * Voice messages become text through Azure's fast transcription API.
@@ -21,7 +21,9 @@ const DEFAULT_ENDPOINT = 'https://oryxa.cognitiveservices.azure.com';
 const API_VERSION = '2025-10-15';
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
-const require = createRequire(import.meta.url);
+function ffmpegBinary(): string | null {
+  return ffmpegStatic ?? null;
+}
 
 /** Formats the enhanced model accepts as-is; anything else is transcoded to OGG/Opus first. */
 const ENHANCED_TYPES = new Set([
@@ -46,16 +48,6 @@ function extensionFor(contentType: string): string {
   if (type.includes('amr')) return 'amr';
   if (type.includes('flac')) return 'flac';
   return 'audio';
-}
-
-function ffmpegBinary(): string | null {
-  try {
-    // Externalized on Vercel; the binary is traced next to the package by next.config.
-    return (require('ffmpeg-static') as string | null) || null;
-  } catch (err) {
-    console.warn('[speech] ffmpeg is not available:', err instanceof Error ? err.message : err);
-    return null;
-  }
 }
 
 async function transcodeForEnhanced(
