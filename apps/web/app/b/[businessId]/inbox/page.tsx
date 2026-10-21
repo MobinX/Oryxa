@@ -62,13 +62,16 @@ async function InboxContent({
         />
       </div>
 
+      {/* min-h-0 is what keeps this section a scroll box instead of a grows-to-fit box: without it
+          a flex child's min-height:auto sizes it to the whole thread, and on mobile everything past
+          the container's clip — the rest of the thread and the reply box — becomes unreachable. */}
       <section
-        className={cn('min-w-0 flex-1 flex-col bg-slate-50/50 dark:bg-[#0B0D1B]', selectedId ? 'flex' : 'hidden lg:flex')}
+        className={cn('min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50 dark:bg-[#0B0D1B]', selectedId ? 'flex' : 'hidden lg:flex')}
         aria-label="Message thread"
       >
         {selected && messages ? (
           <>
-            <header className="flex min-h-[72px] items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#111427] sm:px-6">
+            <header className="flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#111427] sm:px-6">
               <div className="flex min-w-0 items-center gap-3">
                 <Link
                   href={`/b/${businessId}/inbox`}

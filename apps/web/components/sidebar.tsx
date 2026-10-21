@@ -27,6 +27,7 @@ import {
   ArrowRight,
   Search,
   Plus,
+  Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';

@@ -218,6 +218,20 @@
       "when": 1792713600000,
       "tag": "0030_conversations_agent_state",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792799900000,
+      "tag": "0031_order_shipping_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792902400000,
+      "tag": "0032_product_options",
+      "breakpoints": true
     }
   ]
 }

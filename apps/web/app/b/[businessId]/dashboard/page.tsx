@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
+import { PushNotificationPrompt } from '@/components/push-notification-prompt';
 import { cachedBilling, cachedNotifications } from '@/app/_cache/queries';
 import type { NotificationItem, QuotaStatus } from '@/lib/api';
 
@@ -157,6 +158,7 @@ async function DashboardContent({
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      <PushNotificationPrompt businessId={businessId} />
       {/* Top Navigation / Search Header */}
       <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-4 sm:gap-4 sm:pb-5">
         <SearchBar businessId={businessId} />

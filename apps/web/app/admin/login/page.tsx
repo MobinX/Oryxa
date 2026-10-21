@@ -45,7 +45,7 @@ async function AdminLoginContent({
   const message = typeof error === 'string' ? MESSAGES[error] : undefined;
 
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center py-10">
+    <div className="flex min-h-[70dvh] flex-col items-center justify-center py-10">
       <div className="w-full max-w-sm rounded-2xl border border-border/60 bg-card p-7 shadow-xl">
         <div className="mb-6 text-center">
           <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary font-geist text-xl font-bold text-primary-foreground shadow-md shadow-primary/20">
@@ -87,7 +87,7 @@ async function AdminLoginContent({
 
 function AdminLoginSkeleton() {
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center py-10">
+    <div className="flex min-h-[70dvh] flex-col items-center justify-center py-10">
       <div
         role="status"
         aria-busy="true"

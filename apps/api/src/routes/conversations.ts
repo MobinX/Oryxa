@@ -131,6 +131,7 @@ conversationsRouter.openapi(createMessageRoute, async (c) => {
     // Inbox UI path — always HUMAN_AGENT. Agent tools call sendMessage without this flag.
     await sendMessage(conv.channel.apiToken, conv.customerPlatformId, data.content, {
       humanAgent: true,
+      platform: conv.channel.platform === 'instagram' ? 'instagram' : 'facebook',
     });
   } catch (err) {
     if (isFacebookSendError(err)) {

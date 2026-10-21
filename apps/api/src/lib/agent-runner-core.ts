@@ -5,16 +5,18 @@ import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
+import { INSTAGRAM_AGENT_GUIDANCE } from '@repo/agent';
 
 /**
- * How many of a thread's pictures are still handed to the model as pixels.
+ * How many of the customer's turns a picture stays pixels for. Counted in turns rather than raw
+ * rows, because the agent's own answers are rows too — a single reply that went out as three
+ * messages used to push a one-turn-old photo out of a rows-based window on its own.
  *
  * Each one costs roughly a thousand tokens and is re-sent on every reply, so the window is a
- * trade: wide enough that a photo and the question about it survive arriving as two deliveries,
- * narrow enough that a long thread does not pay for its whole photo album.
+ * trade: wide enough that a photo and the question about it survive arriving as two deliveries
+ * and a few exchanges, narrow enough that a long thread does not pay for its whole photo album.
  */
-const PHOTO_MEMORY = 3;
-const PHOTO_TURN_WINDOW = 5;
+const PHOTO_MEMORY_TURNS = 6;
 
 export interface AgentRunOptions {
   /**
@@ -77,6 +79,7 @@ export async function runAgentCore(
   }
 
   const answering = await resolveAnsweringAgent(conv.channel.agent);
+  const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   // Atomic claim: only one concurrent caller transitions idle→working and gets
   // to run the agent. This is the single race-free gate that prevents duplicate
@@ -126,20 +129,23 @@ export async function runAgentCore(
   const orderedHistory = [...historyById.values()]
     .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-  // A picture stays pixels for the last few the customer sent, not only for the ones being
-  // answered this second. "Do you have this?" and the photo it belongs to routinely land as two
-  // deliveries a second apart: the first run looks at the picture, the second one is left holding
-  // the sentence and replies that it cannot see anything. Anything older than that window is the
-  // note in `Agent.ts` — the model still knows a picture was sent, and stops asking for it.
-  const seenRecently = new Set(
-    orderedHistory
-      .slice(-PHOTO_TURN_WINDOW)
-      .filter((m) => m.imageKeys.length > 0)
-      .slice(-PHOTO_MEMORY)
-      .map((m) => m.id),
-  );
+  // A picture stays pixels until six of the customer's turns have passed after it, not only for
+  // the ones being answered this second. "Do you have this?" and the photo it belongs to routinely
+  // land as two deliveries a second apart, and the question that matters rarely arrives in the
+  // same turn as the picture. Anything older than that window is the note in `Agent.ts` — the
+  // model still knows a picture was sent, and stops asking for it. Counted from the newest message
+  // backwards: an image's age is how many customer turns came after it, whatever the agent's own
+  // replies did to the row count in between.
+  const pixelsWanted = new Set<string>();
+  let customerTurnsSeen = 0;
+  for (let i = orderedHistory.length - 1; i >= 0; i--) {
+    const m = orderedHistory[i]!;
+    if (m.from !== 'customer') continue;
+    if (m.imageKeys.length > 0 && customerTurnsSeen < PHOTO_MEMORY_TURNS) pixelsWanted.add(m.id);
+    customerTurnsSeen += 1;
+  }
   const history = orderedHistory.map((m) => {
-    const asPixels = pendingIds.has(m.id) || seenRecently.has(m.id);
+    const asPixels = pendingIds.has(m.id) || pixelsWanted.has(m.id);
     return {
       from: m.from,
       content: m.content,
@@ -199,7 +205,9 @@ export async function runAgentCore(
     const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
     agentState.lastOrder = {
       id: latest.id,
+      productId: latest.productId,
       productName: latest.productName ?? 'Order',
+      variantId: latest.variantId,
       variantName: latest.variantName,
       count: latest.count,
       totalPrice: latest.totalPrice.toFixed(2),
@@ -232,9 +240,12 @@ export async function runAgentCore(
     catalogSummary,
     emitSse,
     sendMessageOverride,
-    // Already resolved: the store's own block, else the platform default's, else undefined and Agent
-    // falls back to the reviewed text in @agent/guidance.
-    replyGuidance: answering.replyGuidance ?? undefined,
+    platform,
+    // Already resolved: the store's own block, else the platform default's, else the channel's
+    // reviewed text in @agent/guidance.
+    replyGuidance:
+      answering.replyGuidance ??
+      (platform === 'instagram' ? INSTAGRAM_AGENT_GUIDANCE : undefined),
     agentState,
     persistAgentState: (state) => updateConversationAgentState(conv.id, state),
     onOrderCreated: async (orderId) => {
@@ -249,7 +260,9 @@ export async function runAgentCore(
       agentState.pendingOrder = null;
       agentState.lastOrder = {
         id: order.id,
+        productId: order.productId,
         productName: order.productName ?? 'Order',
+        variantId: order.variantId,
         variantName: order.variantName,
         count: order.count,
         totalPrice: order.totalPrice.toFixed(2),
@@ -282,7 +295,7 @@ export async function runAgentCore(
         businessId: conv.businessId,
         channelId: conv.channelId,
         conversationId: conv.id,
-        integrationType: 'facebook_messenger',
+        integrationType: platform === 'instagram' ? 'instagram_messenger' : 'facebook_messenger',
         provider: metrics.provider,
         model: metrics.model,
         inputTokens: metrics.inputTokens,
@@ -341,7 +354,11 @@ export async function runAgentCore(
       } else {
         emitSse('message_sent', { text: replyText, fallback: true });
         try {
-          await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
+          // The test override still receives exactly the three arguments it always did; a real
+          // send learns the platform so Instagram gets its 1,000-character chunks.
+          await (sendMessageOverride
+            ? resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText)
+            : sendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText, { platform }));
         } catch (err) {
           if (chargedPeriod) {
             try {

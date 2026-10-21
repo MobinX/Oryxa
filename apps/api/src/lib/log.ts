@@ -25,6 +25,17 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
   // says only what a Meta subscription failure looks like from the inside.
   webhook: ['event', 'object', 'pageId', 'entryCount', 'messagingCount', 'changesCount', 'signatureValid', 'mode', 'verified', 'hasChallenge'],
   webhook_item: ['kind', 'externalId', 'commentId', 'parentId', 'verb', 'inserted', 'priorStatus', 'outcome', 'ageMs', 'senderId', 'fromId', 'fromName', 'text'],
+  // The Instagram pipeline's own lane: one row per stage, so a delivery can be followed from
+  // envelope to agent trigger without reading the Messenger rows. Signed URLs, tokens and raw
+  // payloads are deliberately absent; `text` follows the same LOG_CONTENT policy as elsewhere.
+  instagram: [
+    'stage', 'accountId', 'entryCount', 'messagingCount', 'changesCount', 'signatureValid', 'sourcePath',
+    'eventType', 'senderId', 'externalId', 'commentId', 'mediaId', 'parentId', 'field', 'fromId', 'fromName', 'text',
+    'imageCount', 'hasAudio', 'quickReply', 'postbackTitle', 'detailsKind', 'productId', 'variantId',
+    'inserted', 'priorStatus', 'needsProfile', 'outcome', 'ageMs', 'handled', 'reason', 'bytes', 'contentType',
+    'transcriptChars', 'profileResolved', 'hasName', 'hasAvatar', 'ok', 'fetched', 'durationMs', 'count', 'stored', 'failed',
+    'instagramId', 'pageId', 'resolved',
+  ],
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
   db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
   db_summary: ['table', 'count', 'totalMs'],
@@ -78,6 +89,7 @@ const LANE: Record<Evt, string> = {
   auth: '[auth]',
   webhook: '[webhook]',
   webhook_item: '[webhook]',
+  instagram: '[ig]',
   http_out: '[net]',
   db: '[db]',
   db_summary: '[db]',
@@ -104,6 +116,18 @@ const OUTCOME: Record<string, string> = {
   not_triggered: 'no run started',
   unsupported_content: 'nothing to answer (attachment, sticker or audio)',
   incomplete_payload: 'payload has no id or text — cannot be routed',
+  unknown_account: 'no live Instagram channel for this account',
+  no_business: 'the channel has no business',
+  details_handled: 'details answered without the model',
+  details_unhandled: 'details could not be produced',
+  profile_unresolved: 'Instagram did not release a profile',
+  transcription_failed: 'the voice note could not be transcribed',
+  image_copy_failed: 'a photo could not be copied to the store bucket',
+  malformed_json: 'the body was not valid JSON',
+  unhandled_shape: 'the envelope was not a Page or Instagram delivery',
+  echo: 'the account’s own message or comment',
+  live_comment_skipped: 'live comments are not answered',
+  ignored_field: 'a webhook field this app does not consume',
 };
 
 /** How much of the transcript fits in the line before the structured field is the better read. */
@@ -185,6 +209,154 @@ function describeEvent(evt: Evt, f: Fields): string {
         f.ageMs !== undefined ? `lock held for ${span(f.ageMs)}` : '',
         code ? `→ ${OUTCOME[code] ?? code}` : '',
       );
+      break;
+    }
+    case 'instagram': {
+      const stage = text(f.stage) || 'event';
+      const code = text(f.outcome);
+      if (stage === 'delivery') {
+        add(
+          'IG delivery',
+          f.signatureValid === false ? 'SIGNATURE INVALID — accepted anyway' : 'signature valid',
+          plural(f.entryCount, 'entry', 'entries'),
+          plural(f.messagingCount, 'DM event', 'DM events'),
+          plural(f.changesCount, 'comment change', 'comment changes'),
+          f.sourcePath ? `via ${text(f.sourcePath)}` : '',
+        );
+      } else if (stage === 'entry' || stage === 'entry_dropped') {
+        add(
+          stage === 'entry_dropped' ? 'IG entry DROPPED' : 'IG entry',
+          f.accountId ? `account ${text(f.accountId)}` : '',
+          plural(f.messagingCount, 'DM event', 'DM events'),
+          plural(f.changesCount, 'comment change', 'comment changes'),
+          f.resolved === false ? 'no live channel' : f.resolved === true ? 'channel resolved' : '',
+          code ? `→ ${OUTCOME[code] ?? code}` : '',
+        );
+      } else if (stage === 'dm_event') {
+        add(
+          'IG DM',
+          text(f.eventType) || 'event',
+          text(f.text, 160) ? `"${text(f.text, 160)}"` : '(no text)',
+          f.senderId ? `from ${text(f.senderId)}` : '',
+          text(f.externalId) ? `mid ${text(f.externalId, 24)}` : '',
+          f.imageCount ? plural(f.imageCount, 'photo', 'photos') : '',
+          f.hasAudio ? 'voice note' : '',
+          text(f.quickReply) ? `quick reply ${text(f.quickReply, 40)}` : '',
+          text(f.postbackTitle) ? `postback "${text(f.postbackTitle, 60)}"` : '',
+        );
+      } else if (stage === 'details') {
+        add(
+          'IG Details tap',
+          text(f.detailsKind) || '?',
+          f.handled === true ? 'answered deterministically' : 'could not be answered',
+          f.reason ? `— ${text(f.reason, 140)}` : '',
+          text(f.productId) ? `product ${text(f.productId, 36)}` : '',
+          text(f.variantId) ? `variant ${text(f.variantId, 36)}` : '',
+        );
+      } else if (stage === 'audio') {
+        add(
+          'IG voice note',
+          f.ok === true ? 'transcribed' : 'NOT transcribed',
+          f.bytes !== undefined ? `${f.bytes} bytes` : '',
+          text(f.contentType) ? `(${text(f.contentType)})` : '',
+          f.transcriptChars !== undefined ? `${f.transcriptChars} transcript chars` : '',
+          span(f.durationMs, 'in'),
+          f.reason ? `— ${text(f.reason, 140)}` : '',
+        );
+      } else if (stage === 'profile') {
+        add(
+          'IG profile',
+          f.profileResolved === true ? 'resolved' : 'not available',
+          f.hasName ? 'name' : 'no name',
+          f.hasAvatar ? 'avatar' : 'no avatar',
+          f.senderId ? `for ${text(f.senderId)}` : '',
+        );
+      } else if (stage === 'images') {
+        add(
+          'IG photos',
+          plural(f.count, 'attempted', 'attempted'),
+          f.stored !== undefined ? `${f.stored} stored` : '',
+          num(f.failed) > 0 ? `${f.failed} FAILED` : '',
+        );
+      } else if (stage === 'dm_result') {
+        add(
+          'IG DM',
+          text(f.eventType) || 'event',
+          code ? `→ ${OUTCOME[code] ?? code}` : 'skipped',
+          f.senderId ? `from ${text(f.senderId)}` : 'no sender',
+          text(f.externalId) ? `mid ${text(f.externalId, 24)}` : '',
+        );
+      } else if (stage === 'persisted') {
+        add(
+          'IG message',
+          f.inserted === true ? 'written' : 'already stored',
+          f.priorStatus ? `conversation was ${text(f.priorStatus)}` : '',
+          f.needsProfile ? 'profile missing' : '',
+        );
+      } else if (stage === 'trigger') {
+        add(
+          'IG run',
+          code ? `→ ${OUTCOME[code] ?? code}` : 'trigger checked',
+          f.ageMs !== undefined ? `lock held for ${span(f.ageMs)}` : '',
+        );
+      } else if (stage === 'comment_event') {
+        add(
+          'IG comment',
+          text(f.text, 160) ? `"${text(f.text, 160)}"` : '(no text)',
+          f.fromName ? `from @${text(f.fromName, 60)}` : f.fromId ? `from ${text(f.fromId)}` : '',
+          text(f.commentId) ? `#${text(f.commentId, 24)}` : '',
+          text(f.mediaId) ? `on media ${text(f.mediaId, 24)}` : '',
+          f.parentId ? `replying to #${text(f.parentId, 24)}` : '',
+          f.field ? `field ${text(f.field)}` : '',
+        );
+      } else if (stage === 'comment_persisted') {
+        add(
+          'IG comment',
+          f.inserted === true ? 'written' : 'already stored',
+          f.priorStatus ? `thread was ${text(f.priorStatus)}` : '',
+          f.fromName ? `from @${text(f.fromName, 60)}` : '',
+          f.needsProfile ? 'profile missing' : '',
+        );
+      } else if (stage === 'comment_result') {
+        add(
+          'IG comment stored',
+          f.inserted === true ? 'written' : 'already stored',
+          f.priorStatus ? `thread was ${text(f.priorStatus)}` : '',
+          code ? `→ ${OUTCOME[code] ?? code}` : '',
+          f.ageMs !== undefined ? `lock held for ${span(f.ageMs)}` : '',
+        );
+      } else if (stage === 'account_lookup') {
+        add(
+          'IG OAuth lookup',
+          plural(f.entryCount, 'Page', 'Pages'),
+          f.count !== undefined ? `${f.count} linked account${f.count === 1 ? '' : 's'}` : '',
+          f.resolved === false ? 'NOTHING CONNECTABLE' : '',
+          f.reason ? `— ${text(f.reason, 140)}` : '',
+        );
+      } else if (stage === 'connect_account') {
+        add(
+          'IG connect',
+          f.instagramId ? `account ${text(f.instagramId)}` : '',
+          f.pageId ? `page ${text(f.pageId)}` : '',
+          f.ok === true ? 'accepted' : 'FAILED',
+          f.reason ? `— ${text(f.reason, 140)}` : '',
+        );
+      } else if (stage === 'subscribe') {
+        add(
+          'IG webhook subscription',
+          f.ok === true ? 'subscribed' : 'FAILED',
+          f.pageId ? `page ${text(f.pageId)}` : '',
+          f.instagramId ? `account ${text(f.instagramId)}` : '',
+          f.reason ? `— ${text(f.reason, 140)}` : '',
+        );
+      } else {
+        add(
+          'IG',
+          stage,
+          text(f.reason, 140) || text(f.text, 160),
+          code ? `→ ${OUTCOME[code] ?? code}` : '',
+        );
+      }
       break;
     }
     case 'http_out':
@@ -375,7 +547,17 @@ const ALLOWED = new Map<Evt, ReadonlySet<string>>(
 );
 
 /** Text that leaves the system because the owner asked to see it, gated by LOG_CONTENT. */
-const CUSTOMER_TEXT = new Set(['content', 'text', 'replyText', 'turns', 'args', 'result', 'fromName']);
+const CUSTOMER_TEXT = new Set([
+  'content',
+  'text',
+  'replyText',
+  'turns',
+  'args',
+  'result',
+  'fromName',
+  'quickReply',
+  'postbackTitle',
+]);
 /** Read as blobs rather than queried, so they get a wider cap than a chat line. */
 const WIDE_TEXT = new Set(['args', 'result', 'stack']);
 /**

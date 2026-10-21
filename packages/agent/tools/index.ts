@@ -12,10 +12,15 @@ import {
 } from '@repo/db/crud/product';
 import { createOrder, getOrderById, getOrdersByPlatformId, updateOrder, deleteOrder } from '@repo/db/crud/order';
 import { createMessage } from '@repo/db/crud/conversation';
+import { createBusinessNotification } from '@repo/db/crud/notification';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
+  sendQuickReplies as fbSendQuickReplies,
+  detailsProductPayload,
+  detailsVariantPayload,
+  type MessagingPlatform,
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
@@ -327,6 +332,9 @@ export function createCatalogTools(context: {
         id: product.id,
         name: product.name,
         price: product.price,
+        // The declared options and every value they take — the answer to "which colors/sizes does
+        // it come in?", carried here so the model never has to ask the customer or guess one.
+        options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
         colors,
         sizes,
         totalStock,
@@ -337,29 +345,159 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product_options',
-      description: 'Read-only lookup of colors, sizes, prices, stock, and photo counts for one productId. Use for \'how many colors/sizes?\' or stock questions; do NOT use when customer wants cards.',
+      description: 'Read-only lookup of one productId\u2019s declared options with every value they take, plus parsed colors/sizes, prices, stock and photo counts. Use for \u2018how many colors/sizes?\u2019 or stock questions; do NOT use when customer wants cards.',
       schema: z.object({ productId: z.string().uuid() }),
     },
   );
 
+  /**
+   * Pins the one variant a customer means, from the option values they gave. The product's
+   * declared options ride in the product details and in get_product_options, so this tool is
+   * called once the values are already known — never as a way to discover them.
+   */
+  const findVariantTool = tool(
+    async ({ productId, options }) => {
+      context.emitSse?.('tool_call', { name: 'find_variant', args: { productId, options } });
+      console.log(`[agent-tool] find_variant called — productId=${productId} options=${JSON.stringify(options)}`);
+      const logResult = (result: string) => {
+        console.log(`[agent-tool] find_variant result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
+        context.emitSse?.('tool_result', { name: 'find_variant', result });
+        return result;
+      };
+
+      const product = await getProductById(context.businessId, productId).catch(() => null);
+      if (!product) {
+        return logResult(JSON.stringify({
+          found: false,
+          reason: 'no product with that id in this store',
+          instruction: 'Search the catalog with show_products first. Do not invent a product.',
+        }));
+      }
+
+      const declared = (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) }));
+      if (declared.length === 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          product: { id: product.id, name: product.name },
+          reason: 'this product declares no options — its variants are free-named rows',
+          variants: product.variants.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, price: v.price ?? product.price, stock: v.stock })),
+          instruction: 'Pick the variant by name with show_variant_photos(productId, variantId="<name>"), or put them all on cards with show_product_info.',
+        }));
+      }
+
+      // Fold what the model sent onto the declared names and values, so "red" pins "Red" and a
+      // misspelled option name still lands on the option it belongs to. What comes back is the
+      // store's own spelling, which is what the variant row carries.
+      const chosen: Record<string, string> = {};
+      const unknown: string[] = [];
+      for (const [key, value] of Object.entries(options)) {
+        const option = declared.find((o) => foldName(o.name) === foldName(key));
+        if (!option) {
+          unknown.push(key);
+          continue;
+        }
+        const match = option.values.find((v) => foldName(v) === foldName(String(value)));
+        if (!match) {
+          return logResult(JSON.stringify({
+            found: false,
+            product: { id: product.id, name: product.name },
+            reason: `"${value}" is not a ${option.name} this product offers`,
+            option: { name: option.name, values: option.values },
+            instruction: `Offer the ${option.name}s that exist: ${option.values.join(', ')}. Do not invent one, and do not apologize for the store.`,
+          }));
+        }
+        chosen[option.name] = match;
+      }
+      if (unknown.length > 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          reason: `this product declares no option named ${unknown.map((u) => `"${u}"`).join(' or ')}`,
+          options: declared,
+          instruction: `The options are: ${declared.map((o) => o.name).join(', ')}. Choose values from those, and tell the customer what exists.`,
+        }));
+      }
+
+      const matches = product.variants.filter((v) => {
+        const row = v.options ?? {};
+        return Object.entries(chosen).every(([name, value]) => (row[name] ?? '').toLowerCase() === value.toLowerCase());
+      });
+
+      if (matches.length === 0) {
+        return logResult(JSON.stringify({
+          found: false,
+          chosen,
+          combinations: product.variants.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, options: v.options ?? {}, stock: v.stock })),
+          instruction: 'Nothing matches that combination. Offer the combinations above that are in stock, or say this one is not available.',
+        }));
+      }
+
+      if (matches.length > 1) {
+        return logResult(JSON.stringify({
+          found: true,
+          multiple: true,
+          matches: matches.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, options: v.options ?? {}, price: v.price ?? product.price, stock: v.stock })),
+          instruction: 'More than one variant answers that — an option is still undecided. Ask the customer for it, or put the matches on cards with show_product_info.',
+        }));
+      }
+
+      const variant = matches[0]!;
+      return logResult(JSON.stringify({
+        found: true,
+        variant: {
+          id: variant.id,
+          name: variant.name,
+          label: variant.variantId ?? null,
+          options: variant.options ?? {},
+          price: variant.price ?? product.price,
+          stock: variant.stock,
+          available: variant.isAvailable && variant.stock > 0,
+        },
+        instruction: context.conversationId
+          ? `Variant pinned: ${variant.name}. Call show_variant_photos(productId="${product.id}", variantId="${variant.id}") to show its pictures, then offer to order it. Never mention ids in customer text.`
+          : `Variant pinned: ${variant.name}. Answer with it without mentioning ids.`,
+      }));
+    },
+    {
+      name: 'find_variant',
+      description: 'Pins the exact variant of ONE product from option values the customer gave, e.g. {"Color":"Red","Size":"XL"}. Call after the product is known, then show_variant_photos with the returned variant id. The product\u2019s declared options ride in the product details and get_product_options — read them there instead of asking the customer.',
+      schema: z.object({
+        productId: z.string().uuid().describe('Product UUID'),
+        options: z.record(z.string().min(1), z.string().min(1)).describe(
+          'Option name to the value the customer chose, e.g. {"Color":"Red","Size":"XL"}',
+        ),
+      }),
+    },
+  );
+
   const createOrderTool = tool(
-    async ({ productId, variantId, count, customerAddress, customerPhone }) => {
-      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone } });
+    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod }) => {
+      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
 
-      // 5-minute active Pending duplicate order guard
+      // A retry of the SAME order seconds later is a duplicate; anything the customer actually
+      // wants next is a new sale. The window is short and the match is product+variant, because
+      // the old five-minute, any-product guard turned a second purchase into a refusal and told
+      // the model the previous order was "already active" for whatever it asked next.
       if (context.agentState?.lastOrder?.state === 'Pending') {
         const last = context.agentState.lastOrder;
         const timeSince = Date.now() - new Date(last.createdAt).getTime();
-        if (timeSince < 5 * 60 * 1000 && last.productName) {
+        const sameProduct = Boolean(last.productId) && last.productId === productId;
+        const sameVariant = !variantId || !last.variantId || last.variantId === variantId;
+        if (timeSince < 60 * 1000 && sameProduct && sameVariant && last.productName) {
           const dupResult = JSON.stringify({
-            id: last.id,
-            state: 'Pending',
-            productName: last.productName,
-            variantName: last.variantName,
-            count: last.count,
-            totalPrice: last.totalPrice,
-            note: 'Order already created and active.',
+            created: false,
+            duplicate: true,
+            existingOrder: {
+              id: last.id,
+              productName: last.productName,
+              variantName: last.variantName,
+              count: last.count,
+              totalPrice: last.totalPrice,
+              state: 'Pending',
+            },
+            note: 'This exact order was placed moments ago and is still active, so nothing new was created.',
+            instruction:
+              'Tell the customer the earlier order is already in place with these numbers. Do not claim a new order was created, and do not retry this one. If they want different items, a different variant, or another quantity, call create_order again for that.',
           });
           context.emitSse?.('tool_result', { name: 'create_order', result: dupResult });
           return dupResult;
@@ -412,6 +550,10 @@ export function createCatalogTools(context: {
           customerName: context.customerName ?? 'Customer',
           customerPhone,
           customerAddress,
+          // Only what the buyer actually agreed to: a shipping charge nobody quoted and a payment
+          // method nobody named are absences, and the confirmation card says nothing about them.
+          shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
+          paymentMethod: paymentMethod?.trim() ? paymentMethod.trim() : undefined,
           conversationId: context.conversationId,
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
@@ -438,6 +580,12 @@ export function createCatalogTools(context: {
         count: z.number().int().min(1),
         customerAddress: z.string().nullable(),
         customerPhone: z.string().nullable(),
+        shippingCost: z.number().min(0).nullable().optional().describe(
+          'The delivery charge quoted to the customer and agreed by them, in Taka. Omit when nobody quoted one — the confirmation card then says nothing about shipping.',
+        ),
+        paymentMethod: z.string().max(40).nullable().optional().describe(
+          'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
+        ),
       }),
     },
   );
@@ -556,7 +704,7 @@ export function createCatalogTools(context: {
     },
   );
 
-  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool];
+  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool, findVariantTool];
   if (options.includeOrderTools === false) return readOnlyTools;
   return [
     ...readOnlyTools,
@@ -575,6 +723,8 @@ export function createAgentTools(
     customerPlatformId: string;
     customerName?: string | null;
     emitSse?: SseEmitter;
+    /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
+    platform?: MessagingPlatform;
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
     onOrderCreated?: (orderId: string) => Promise<void>;
@@ -623,6 +773,7 @@ export function createAgentTools(
 
   const BUDGET_REFUSED =
     "This cycle's replies are used up and the owner has been notified. Do not try again, and do not send anything else. End the turn.";
+  const inbox = context.platform === 'instagram' ? 'Instagram Direct' : 'Messenger';
 
   /**
    * Cards go out on the same post as text; a dry-run renders them as the text a human
@@ -638,7 +789,9 @@ export function createAgentTools(
       );
       return;
     }
-    await fbSendMessage(context.pageToken, context.customerPlatformId, cards);
+    await fbSendMessage(context.pageToken, context.customerPlatformId, cards, {
+      platform: context.platform,
+    });
   }
 
   async function sendButtonRow(
@@ -688,20 +841,49 @@ export function createAgentTools(
     return true;
   }
 
+  /**
+   * The receipt the buyer scans right after they confirmed: the variant they chose in its own
+   * photo, how many they took, which one by its shelf label, what it costs, what delivery adds
+   * and how they are paying. Meta reads about 80 characters of the subtitle, so the parts are
+   * ordered by what a buyer asks first and the least important falls off first.
+   *
+   * A variant without a photo cannot be a card — the generic template requires an image — so that
+   * order falls back to the button row, carrying the same numbers in text.
+   */
   const trackCreatedOrder = async (order: { id: string; totalPrice: string | number }) => {
     if (!context.conversationId) return;
     const orderDetails = await getOrderById(context.businessId, order.id);
-    const text = oneLine(`${stateWord(orderDetails?.state ?? 'pending')} — ${orderDetails?.count ?? 1} × ${orderDetails?.productName ?? 'your order'}, ${money(order.totalPrice)}`, 160);
-    const buttons = [{ title: 'Track order', payload: `please track order with id ${order.id}` }];
+    if (!orderDetails) return;
+
+    const subtitle = oneLine(
+      [
+        `${orderDetails.count} pcs`,
+        orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
+        orderDetails.variantName,
+        `Total ${money(orderDetails.totalPrice)}`,
+        orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
+        orderDetails.paymentMethod,
+      ].filter(Boolean).join(' · '),
+      80,
+    );
+    const buttons = [{ title: 'Track order', payload: `please track order with id ${orderDetails.id}` }];
+    const title = oneLine(orderDetails.productName ?? 'Your order', 60);
+    const content = `${title} — ${subtitle} (Track order)`;
+
     const budget = await takeMessageUnit(!context.sendMessageOverride);
     if (!budget.allowed) return;
     try {
-      await sendButtonRow(text, buttons);
+      if (orderDetails.variantImageUrl) {
+        await sendCards([
+          { title, subtitle, imageUrl: orderDetails.variantImageUrl, button: buttons[0]! },
+        ]);
+      } else {
+        await sendButtonRow(`${title} — ${subtitle}`, buttons);
+      }
     } catch (err) {
       await returnMessageUnit(budget.period);
       throw err;
     }
-    const content = `${text} (Track order)`;
     await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
     onSent?.(content, 'card');
   };
@@ -827,6 +1009,7 @@ export function createAgentTools(
           subtitle: summary ? `${price} — ${summary}` : price,
           imageUrl,
           button: { title: 'Order', payload: orderPayload(product.id, title) },
+          extraButtons: [{ title: 'Details', payload: detailsProductPayload(product.id) }],
         });
       }
 
@@ -1090,6 +1273,7 @@ export function createAgentTools(
           subtitle: variantPriceLine(money(variant.price ?? product.price), variant.stock),
           imageUrl: variant.imageUrl,
           button: { title: 'Order', payload: orderPayload(product.id, label, variant.id) },
+          extraButtons: [{ title: 'Details', payload: detailsVariantPayload(product.id, variant.id) }],
         });
       }
 
@@ -1120,6 +1304,9 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         product: line,
+        // The declared options ride along: the next "do you have it in blue?" is answerable from
+        // this result alone, without another lookup or a question to the customer.
+        options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
         variants: listed,
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(soldOut.length ? { hiddenOutOfStock: soldOut } : {}),
@@ -1127,7 +1314,7 @@ export function createAgentTools(
     },
     {
       name: 'show_product_info',
-      description: 'Display tool: sends one Messenger card per in-stock variant/size of a product so the customer can pick and tap Order. Use when customer wants to see or choose sizes; do NOT use for text count questions (use get_product_options).',
+      description: 'Display tool: sends one Messenger card per in-stock variant/size of a product so the customer can pick and tap Order. Use when customer wants to see or choose sizes; do NOT use for text count questions (use get_product_options). The result carries the product\u2019s declared options.',
       schema: z.object({
         productId: z.string().uuid().describe('Product UUID whose variant cards should be displayed'),
       }),
@@ -1343,6 +1530,147 @@ export function createAgentTools(
     },
   );
 
+  /**
+   * One message, optionally with tappable answers. A plain question and its chips travel in a
+   * single tool call, so the model pays for one call instead of a message plus a suggestions
+   * call. The question and its options land in the conversation record; the model then ends its
+   * turn with SILENT so the automatically-delivered final text cannot repeat it.
+   */
+  const sendMessageTool = tool(
+    async ({ message, suggestions }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'send_message', result });
+        return result;
+      };
+
+      const text = message.trim();
+      if (!text) {
+        return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
+      }
+      const cleaned = [
+        ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
+      ].slice(0, 10);
+      const withChips = cleaned.length >= 2;
+
+      const budget = await takeMessageUnit(!context.sendMessageOverride);
+      if (!budget.allowed) {
+        return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
+      }
+
+      const said = withChips ? `${text} (${cleaned.join(' / ')})` : text;
+      try {
+        if (context.sendMessageOverride) {
+          await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
+        } else if (withChips) {
+          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, text, cleaned, {
+            platform: context.platform,
+          });
+        } else {
+          await fbSendMessage(context.pageToken, context.customerPlatformId, text, {
+            platform: context.platform,
+          });
+        }
+      } catch (err) {
+        await returnMessageUnit(budget.period);
+        throw err;
+      }
+
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content: said,
+        state: 'done',
+      });
+      onSent?.(said, withChips ? 'card' : 'reply');
+
+      return logResult(JSON.stringify({
+        sent: true,
+        ...(withChips ? { suggestions: cleaned } : {}),
+        ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
+        instruction: withChips
+          ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
+          : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
+      }));
+    },
+    {
+      name: 'send_message',
+      description:
+        `Send the customer one ${inbox} message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.`,
+      schema: z.object({
+        message: z.string().min(1).max(1000).describe(
+          'The message text in the customer’s language, e.g. "Which color would you like?"',
+        ),
+        suggestions: z
+          .array(z.string().min(1).max(80))
+          .min(2)
+          .max(10)
+          .nullable()
+          .optional()
+          .describe(
+            'Optional tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers; null or omitted for a plain message.',
+          ),
+      }),
+    },
+  );
+
+  /**
+   * The escape hatch: when the agent genuinely cannot answer — a dispute, a request the store
+   * cannot fulfill, a complaint, or anything outside its tools — it reports to the merchant
+   * instead of improvising. The owner gets a notification with the reason and a link straight
+   * to the conversation; the model then reassures the customer in their own words.
+   */
+  const reportHumanInterveneTool = tool(
+    async ({ reason }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'report_human_intervene', result });
+        return result;
+      };
+
+      const trimmed = reason.trim();
+      if (!trimmed) {
+        return logResult(JSON.stringify({
+          reported: false,
+          reason: 'the reason was empty',
+          instruction: 'Say briefly why a human is needed and pass it again.',
+        }));
+      }
+
+      try {
+        await createBusinessNotification({
+          businessId: context.businessId,
+          kind: 'human_help',
+          title: 'The agent needs a human',
+          body: `${context.customerName ?? 'A customer'} asked something the agent could not answer: ${trimmed.slice(0, 300)}`,
+          link: `/b/${context.businessId}/inbox?c=${context.conversationId}`,
+        });
+      } catch (err) {
+        console.error('[agent-tool] human intervention notice failed:', err);
+        return logResult(JSON.stringify({
+          reported: false,
+          reason: 'the store owner could not be notified',
+          instruction:
+            'Apologize briefly in the customer’s language, say their request needs attention and to try again or message the page directly. Do not guess an answer.',
+        }));
+      }
+
+      return logResult(JSON.stringify({
+        reported: true,
+        instruction:
+          'The owner has been notified with your reason and can see this conversation. Now tell the customer, in their language, that a member of the sales team will contact them shortly about this, and ask whether there is anything else you can help with in the meantime. Do not attempt to answer the question you could not answer.',
+      }));
+    },
+    {
+      name: 'report_human_intervene',
+      description:
+        'Escalation tool: reports to the store owner that you cannot answer the customer, so a human takes over. Use when the request is outside your tools and knowledge (disputes, refunds beyond store policy, legal/medical/custom manufacturing, complaints, threats, or an important tool failure), or when the customer is angry and insists on a person. Pass a clear reason describing what was asked and why you cannot answer. After it succeeds, tell the customer a sales team member will contact them soon and ask if there is anything else — never invent an answer to the question you could not answer.',
+      schema: z.object({
+        reason: z.string().min(1).max(1000).describe(
+          'Why a human is needed: what the customer asked and why you cannot answer it, e.g. "Customer wants a full refund for a damaged parcel, which is beyond store policy."',
+        ),
+      }),
+    },
+  );
+
   return [
     ...createCatalogTools(context, {
       onOrderCreated: async ({ id, totalPrice }) => {
@@ -1360,5 +1688,7 @@ export function createAgentTools(
     showProductInfoTool,
     showVariantPhotosTool,
     suggestAlternativesTool,
+    sendMessageTool,
+    reportHumanInterveneTool,
   ];
 }

@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, commentThreads, conversations, notifications, plans, quotaUsage } from '@db/schema';
 import type { NotificationItem, NotificationKind, QuotaCycle, QuotaKind, QuotaStatus, QuotaThreshold } from '@repo/shared';
+import { announceNotice } from './notification';
 
 /**
  * Allowances, the gate's read, and the atomic counter.
@@ -268,16 +269,22 @@ export async function ensureQuotaNotice(
   const crossed = crossedThreshold(used, limit);
   if (!crossed) return;
 
-  await db
+  const copy = noticeCopy(kind, crossed, used, limit, resetsAt);
+  const link = `/b/${businessId}/billing`;
+  const inserted = await db
     .insert(notifications)
     .values({
       businessId,
       kind: noticeKind(kind, crossed),
       period,
-      ...noticeCopy(kind, crossed, used, limit, resetsAt),
-      link: `/b/${businessId}/billing`,
+      ...copy,
+      link,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: notifications.id });
+
+  // Only a row that actually landed becomes a push; the unique index keeps repeats silent.
+  if (inserted.length > 0) announceNotice({ businessId, ...copy, link });
 }
 
 /**
@@ -316,7 +323,17 @@ export async function ensurePlanNotices(
     .insert(notifications)
     .values(values)
     .onConflictDoNothing()
-    .returning({ id: notifications.id });
+    .returning({
+      id: notifications.id,
+      businessId: notifications.businessId,
+      title: notifications.title,
+      body: notifications.body,
+      link: notifications.link,
+    });
+
+  for (const row of inserted) {
+    announceNotice({ businessId: row.businessId, title: row.title, body: row.body, link: row.link });
+  }
   return inserted.length;
 }
 

@@ -17,6 +17,9 @@ import {
   facebookPendingPageSchema,
   facebookConnectPagesInputSchema,
   facebookConnectPagesOutputSchema,
+  instagramPendingAccountSchema,
+  instagramConnectAccountsInputSchema,
+  instagramConnectAccountsOutputSchema,
 } from '@repo/shared';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
 import {
@@ -38,6 +41,7 @@ import {
 } from '@repo/db/crud/channel';
 import { ensureDefaultAgent, getPlatformAgent, resolveAnsweringAgent } from '@repo/db/crud/default-agent';
 import {
+  ADMIN_FACEBOOK_FLOW,
   getFacebookOAuthUrl,
   exchangeCodeForToken,
   getUserPages,
@@ -47,13 +51,20 @@ import {
   verifyFacebookPagesSelectionToken,
   subscribeFacebookPageToWebhooks,
   unsubscribeFacebookPageFromWebhooks,
+  getPageIdForToken,
   getGrantedPermissions,
   getPortfolioPages,
   type FacebookPageOption,
   type PortfolioPage,
 } from '@repo/integrations/facebook';
+import {
+  getInstagramOAuthUrl,
+  getInstagramAccountForPage,
+  subscribeInstagramPageToWebhooks,
+} from '@repo/integrations/instagram';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
+import { emit } from '@api/lib/log';
 
 export const channelsRouter = new OpenAPIHono();
 
@@ -365,11 +376,66 @@ channelsRouter.openapi(deleteChannelRoute, async (c) => {
 
   if (channelRow?.platform === 'facebook' && channelRow.apiToken) {
     try {
-      await unsubscribeFacebookPageFromWebhooks(channelRow.platformChannelId, channelRow.apiToken);
-      console.log('[delete-channel] unsubscribed page from webhooks', { channelId, pageId: channelRow.platformChannelId });
+      // Meta resolves subscribed_apps by the token's own page, not by the id in the path — an
+      // unsubscribe with a stale or mismatched token would silently disconnect whichever page
+      // that token answers as. So the token names this channel's page before it may unsubscribe.
+      const tokenPageId = await getPageIdForToken(channelRow.apiToken);
+      if (tokenPageId !== channelRow.platformChannelId) {
+        console.warn('[delete-channel] webhook unsubscribe skipped — the stored token answers as a different page', {
+          channelId,
+          pageId: channelRow.platformChannelId,
+          tokenPageId: tokenPageId ?? 'invalid token',
+        });
+      } else {
+        await unsubscribeFacebookPageFromWebhooks(channelRow.platformChannelId, channelRow.apiToken);
+        console.log('[delete-channel] unsubscribed page from webhooks', { channelId, pageId: channelRow.platformChannelId });
+      }
     } catch (err) {
       // Log but don't block deletion — page token may have expired
       console.warn('[delete-channel] webhook unsubscription failed (continuing with delete)', {
+        channelId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else if (channelRow?.platform === 'instagram' && channelRow.apiToken) {
+    // Instagram rides the linked Page's subscription. Unsubscribing that Page stops the
+    // Page's own Messenger delivery too, so it only happens when no other live channel
+    // of this store still answers through the same Page.
+    try {
+      const info = channelRow.extraInfo
+        ? (JSON.parse(channelRow.extraInfo) as { pageId?: string })
+        : {};
+      if (info.pageId) {
+        const siblings = await listChannels(businessId);
+        const pageStillInUse = siblings.some((other) => {
+          if (other.id === channelId) return false;
+          if (other.platform === 'facebook') return other.platformChannelId === info.pageId;
+          if (other.platform === 'instagram') {
+            try {
+              return (
+                (JSON.parse(other.extraInfo ?? '{}') as { pageId?: string }).pageId === info.pageId
+              );
+            } catch {
+              return false;
+            }
+          }
+          return false;
+        });
+        if (pageStillInUse) {
+          console.log('[delete-channel] Instagram page subscription kept — another channel uses it', {
+            channelId,
+            pageId: info.pageId,
+          });
+        } else {
+          await unsubscribeFacebookPageFromWebhooks(info.pageId, channelRow.apiToken);
+          console.log('[delete-channel] unsubscribed Instagram page from webhooks', {
+            channelId,
+            pageId: info.pageId,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[delete-channel] Instagram webhook unsubscription failed (continuing)', {
         channelId,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -499,6 +565,19 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
       continue;
     }
 
+    // The stored token is what sends and unsubscribes act with for this page, so it has to
+    // answer as the page it is stored under. Meta resolves subscribed_apps by the token, not
+    // by the path — a mismatched token would mean a channel that cannot reply and whose
+    // deletion unsubscribes a different page. Refuse the page instead of storing that.
+    const tokenPageId = await getPageIdForToken(page.access_token);
+    if (tokenPageId !== page.id) {
+      failed.push({
+        pageId: page.id,
+        error: 'The page token Facebook handed over does not match this page — reconnect and try again',
+      });
+      continue;
+    }
+
     const channelPayload = {
       apiToken: page.access_token,
       agentId: defaultAgent.id,
@@ -566,6 +645,257 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
   return c.json({ connected, skipped, failed });
 });
 
+// Instagram OAuth — the same Facebook Login, with the Instagram permissions and picker.
+const igAuthRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/channels/instagram/auth',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ businessId: z.string().uuid() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: z.object({ url: z.string() }) } }, description: 'OAuth URL' },
+  },
+});
+
+channelsRouter.openapi(igAuthRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const user = c.get('user');
+  const portfolio = process.env.META_BUSINESS_MANAGEMENT === 'true';
+  const state = await createOAuthState({
+    businessId,
+    userId: user.id,
+    platform: 'instagram',
+    // Same deployment switch as the Page flow: portfolio Pages are merged only when the app has
+    // been granted `business_management`, because asking for an unapproved scope fails the login.
+    portfolio,
+  });
+  return c.json({ url: getInstagramOAuthUrl(state, portfolio) });
+});
+
+const igPendingAccountsRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/channels/instagram/pending',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: facebookPendingPagesQuerySchema,
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.array(instagramPendingAccountSchema) } },
+      description: 'Instagram accounts available to connect after OAuth',
+    },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid token' },
+  },
+});
+
+channelsRouter.openapi(igPendingAccountsRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const user = c.get('user');
+  const { token } = c.req.valid('query');
+  const verified = await verifyFacebookPagesSelectionToken(token);
+  if (
+    !verified ||
+    verified.businessId !== businessId ||
+    verified.userId !== user.id ||
+    verified.platform !== 'instagram'
+  ) {
+    return c.json({ error: 'Invalid or expired page selection token' }, 400);
+  }
+
+  const accounts = verified.pages.flatMap((page) =>
+    page.instagram ? [{ page, account: page.instagram }] : [],
+  );
+  const rows = await Promise.all(
+    accounts.map(async ({ page, account }) => {
+      const ownerId = await getLiveChannelOwnerBusinessId('instagram', account.id);
+      return {
+        id: account.id,
+        username: account.username,
+        name: account.name ?? null,
+        profilePic: account.profilePic ?? null,
+        pageId: page.id,
+        pageName: page.name,
+        connected: ownerId === businessId,
+        heldByOtherStore: !!ownerId && ownerId !== businessId,
+      };
+    }),
+  );
+  return c.json(rows);
+});
+
+const igConnectAccountsRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/channels/instagram/connect',
+  tags: ['Channels'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: instagramConnectAccountsInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: instagramConnectAccountsOutputSchema } },
+      description: 'Selected Instagram accounts linked',
+    },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid request' },
+  },
+});
+
+channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const user = c.get('user');
+  const { token, accountIds } = c.req.valid('json');
+  const verified = await verifyFacebookPagesSelectionToken(token);
+  if (
+    !verified ||
+    verified.businessId !== businessId ||
+    verified.userId !== user.id ||
+    verified.platform !== 'instagram'
+  ) {
+    return c.json({ error: 'Invalid or expired page selection token' }, 400);
+  }
+
+  const byAccountId = new Map(
+    verified.pages.flatMap((page) =>
+      page.instagram ? [[page.instagram.id, { page, account: page.instagram }] as const] : [],
+    ),
+  );
+  const connected: Array<{ id: string; instagramId: string; username: string }> = [];
+  const skipped: string[] = [];
+  const failed: Array<{ instagramId: string; error: string }> = [];
+  const defaultAgent = await ensureDefaultAgent(businessId);
+
+  for (const accountId of accountIds) {
+    const entry = byAccountId.get(accountId);
+    if (!entry) {
+      skipped.push(accountId);
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: accountId,
+        ok: false,
+        reason: 'the account was not part of this signed selection',
+      });
+      continue;
+    }
+    const { page, account } = entry;
+
+    // The token has to still answer for this Page, and the Page has to still name the
+    // same professional account: the signed selection is minutes old, but a token can
+    // be revoked and an account can be unlinked in between.
+    const liveAccount = await getInstagramAccountForPage(page.id, page.access_token);
+    if (liveAccount?.id !== account.id) {
+      const reason =
+        'This Instagram account is no longer linked to the Page, or the Instagram permissions were not granted. Reconnect and try again.';
+      failed.push({ instagramId: account.id, error: reason });
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: account.id,
+        pageId: page.id,
+        ok: false,
+        reason,
+      });
+      continue;
+    }
+
+    const handle = `@${account.username}`;
+    const channelPayload = {
+      apiToken: page.access_token,
+      agentId: defaultAgent.id,
+      extraInfo: JSON.stringify({
+        pageName: handle,
+        username: account.username,
+        instagramName: account.name ?? null,
+        profilePic: account.profilePic ?? null,
+        pageId: page.id,
+        facebookPageName: page.name,
+      }),
+    };
+
+    try {
+      const existing = await findChannelByBusinessPlatformChannelId(
+        businessId,
+        'instagram',
+        account.id,
+      );
+      let channelId: string;
+
+      if (existing) {
+        if (existing.deletedAt) {
+          const restored = await reactivateChannel(businessId, existing.id, channelPayload);
+          if (!restored) throw new Error('Failed to restore channel');
+          channelId = restored.id;
+        } else {
+          const updated = await updateChannel(businessId, existing.id, channelPayload);
+          if (!updated) throw new Error('Failed to update channel');
+          channelId = updated.id;
+        }
+      } else {
+        const created = await createChannel(businessId, {
+          platform: 'instagram',
+          ...channelPayload,
+          platformChannelId: account.id,
+        });
+        channelId = created.id;
+      }
+
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: account.id,
+        pageId: page.id,
+        ok: true,
+      });
+
+      try {
+        await subscribeInstagramPageToWebhooks(page.id, page.access_token);
+        emit('instagram', {
+          stage: 'subscribe',
+          instagramId: account.id,
+          pageId: page.id,
+          ok: true,
+        });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error('[ig-connect] webhook subscription failed', {
+          businessId,
+          instagramId: account.id,
+          pageId: page.id,
+          error: reason,
+        });
+        failed.push({
+          instagramId: account.id,
+          error: err instanceof Error ? err.message : 'Webhook subscription failed',
+        });
+        emit('instagram', {
+          stage: 'subscribe',
+          instagramId: account.id,
+          pageId: page.id,
+          ok: false,
+          reason,
+        });
+      }
+
+      connected.push({ id: channelId, instagramId: account.id, username: account.username });
+    } catch (err) {
+      console.error(`Instagram connect failed for account ${account.id}:`, err);
+      failed.push({
+        instagramId: account.id,
+        error: err instanceof Error ? err.message : 'Connect failed',
+      });
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: account.id,
+        pageId: page.id,
+        ok: false,
+        reason: err instanceof Error ? err.message : 'Connect failed',
+      });
+    }
+  }
+
+  return c.json({ connected, skipped, failed });
+});
+
 export const facebookCallbackRouter = new OpenAPIHono();
 
 facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
@@ -579,29 +909,39 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   if (!verified) return c.text('Invalid or expired state', 400);
 
   const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+  const platform = verified.platform;
+  // The same signed flow serves the admin console: only the picker's home changes. Instagram
+  // has its own picker because it shows accounts rather than Pages.
+  const adminFlow = platform === 'facebook' && verified.businessId === ADMIN_FACEBOOK_FLOW;
+  const pickerUrl =
+    platform === 'instagram'
+      ? `${webUrl}/b/${verified.businessId}/channels/connect-instagram`
+      : adminFlow
+        ? `${webUrl}/admin/channels/connect-facebook`
+        : `${webUrl}/b/${verified.businessId}/channels/connect-facebook`;
   const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,
       userId: verified.userId,
       pages,
+      platform,
     });
-    return c.redirect(
-      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?token=${encodeURIComponent(pagesToken)}`,
-    );
+    return c.redirect(`${pickerUrl}?token=${encodeURIComponent(pagesToken)}`);
   };
 
   const toError = (error: string, detail?: string) =>
     c.redirect(
-      `${webUrl}/b/${verified.businessId}/channels/connect-facebook?error=${error}${
+      `${pickerUrl}?error=${error}${
         detail ? `&detail=${encodeURIComponent(detail)}` : ''
       }`,
     );
 
   try {
     const userToken = await exchangeCodeForToken(code);
-    const pages = await getUserPages(userToken);
+    let pages = await getUserPages(userToken);
     console.log('[fb-callback] /me/accounts returned pages', {
       businessId: verified.businessId,
+      platform,
       count: pages.length,
     });
 
@@ -611,8 +951,34 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
         businessId: verified.businessId,
         added: combined.length - pages.length,
       });
-      if (combined.length > 0) return await toPicker(combined);
-    } else if (pages.length > 0) {
+      pages = combined;
+    }
+
+    if (platform === 'instagram') {
+      const accounts = await withInstagramAccounts(pages);
+      console.log('[fb-callback] pages linked to Instagram accounts', {
+        businessId: verified.businessId,
+        pages: pages.length,
+        accounts: accounts.length,
+      });
+      emit('instagram', {
+        stage: 'account_lookup',
+        entryCount: pages.length,
+        count: accounts.length,
+        resolved: accounts.length > 0,
+        reason:
+          accounts.length > 0
+            ? undefined
+            : 'no Page on this account names a linked Instagram professional account',
+      });
+      if (accounts.length > 0) return await toPicker(accounts);
+      return toError(
+        'no-instagram-account',
+        'None of the Pages on this account is linked to an Instagram professional account',
+      );
+    }
+
+    if (pages.length > 0) {
       return await toPicker(pages);
     }
 
@@ -624,6 +990,27 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
     return c.text('OAuth failed', 500);
   }
 });
+
+/**
+ * Keeps only the Pages that name a linked Instagram professional account, keeping each
+ * Page's token so the picker can connect without asking Meta again. Bounded on purpose:
+ * the lookup runs inline in the OAuth redirect, and an account with hundreds of Pages
+ * still has to come back quickly.
+ */
+const INSTAGRAM_PAGE_LOOKUP_LIMIT = 25;
+
+async function withInstagramAccounts(
+  pages: FacebookPageOption[],
+): Promise<FacebookPageOption[]> {
+  const candidates = pages.filter((page) => page.access_token).slice(0, INSTAGRAM_PAGE_LOOKUP_LIMIT);
+  const linked = await Promise.all(
+    candidates.map(async (page) => {
+      const instagram = await getInstagramAccountForPage(page.id, page.access_token);
+      return instagram ? { ...page, instagram } : null;
+    }),
+  );
+  return linked.flatMap((page) => (page === null ? [] : [page]));
+}
 
 /**
  * Someone who said "my Pages are in a business portfolio" expects both lists in one picker:

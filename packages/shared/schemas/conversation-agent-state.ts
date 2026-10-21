@@ -33,7 +33,9 @@ export const conversationAgentStateSchema = z.object({
   }).nullable().default(null),
   lastOrder: z.object({
     id: z.string(),
+    productId: z.string().nullable().optional(),
     productName: z.string(),
+    variantId: z.string().nullable().optional(),
     variantName: z.string().nullable(),
     count: z.number().int(),
     totalPrice: z.string(),

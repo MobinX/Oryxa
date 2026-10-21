@@ -22,6 +22,7 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'facebook_messenger',
   'facebook_comment',
   'instagram_messenger',
+  'instagram_comment',
   'whatsapp',
   'ai_post_generation',
   'ai_post_tuning',
@@ -146,6 +147,16 @@ export const products = pgTable('products', {
   slug: varchar('slug', { length: 255 }).notNull(),
   sku: varchar('sku', { length: 100 }).notNull(),
   description: text('description'),
+  /**
+   * The default price is what a variant without its own price override answers with; a discount
+   * is the merchant marking the default down, and the percent is what comes off it.
+   */
+  hasDiscount: boolean('has_discount').default(false).notNull(),
+  discountPercent: numeric('discount_percent', { precision: 5, scale: 2 }).default('0').notNull(),
+  /** Free-form labels the storefront and the merchant's own filtering can read. */
+  tags: text('tags').array().default(sql`'{}'::text[]`).notNull(),
+  /** False hides the product from the public store without deleting it from the catalog. */
+  showInStorefront: boolean('show_in_storefront').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -178,11 +189,52 @@ export const variants = pgTable(
     stock: integer('stock').default(0).notNull(),
     isAvailable: boolean('is_available').default(true).notNull(),
     rating: numeric('rating', { precision: 3, scale: 2 }),
+    /**
+     * The combination this variant is, read off the product's declared options: `{"Color":"Red",
+     * "Size":"XL"}`. Empty on a variant of a product that declared no options — a product may
+     * skip options entirely, but a product that declares them has no variant without a full set.
+     */
+    options: jsonb('options').$type<Record<string, string>>().default(sql`'{}'::jsonb`).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
   },
   (t) => ({
     labelIdx: index('variants_variant_id_idx').on(t.variantId),
+  }),
+);
+
+/**
+ * The knobs a product is sold in — Color, Size — at most three per product, each with its own
+ * list of allowed values. Declaring them is optional; declaring them obliges every variant of
+ * the product to carry one value of each, which is what turns a row into a combination.
+ */
+export const productOptions = pgTable(
+  'product_options',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id')
+      .references(() => products.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: varchar('name', { length: 80 }).notNull(),
+    position: integer('position').default(0).notNull(),
+  },
+  (t) => ({
+    productIdx: index('product_options_product_idx').on(t.productId),
+  }),
+);
+
+export const productOptionValues = pgTable(
+  'product_option_values',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    optionId: uuid('option_id')
+      .references(() => productOptions.id, { onDelete: 'cascade' })
+      .notNull(),
+    value: varchar('value', { length: 80 }).notNull(),
+    position: integer('position').default(0).notNull(),
+  },
+  (t) => ({
+    optionIdx: index('product_option_values_option_idx').on(t.optionId),
   }),
 );
 
@@ -210,6 +262,14 @@ export const orders = pgTable('orders', {
   customerPlatformId: varchar('customer_platform_id', { length: 120 }),
   state: orderStateEnum('state').default('pending').notNull(),
   totalPrice: numeric('total_price', { precision: 10, scale: 2 }).notNull(),
+  /**
+   * What delivery adds on top of the items, as the buyer was told when they confirmed — shown on
+   * the confirmation card beside the total rather than folded into it, so the two numbers the
+   * customer agreed to stay the two numbers the merchant can reconcile. Zero when none was quoted.
+   */
+  shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
+  /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
+  paymentMethod: varchar('payment_method', { length: 40 }),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
@@ -260,12 +320,18 @@ export const defaultAgents = pgTable('default_agent', {
 
 export const channels = pgTable('channels', {
   id: uuid('id').primaryKey().defaultRandom(),
-  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  /** Null on a platform channel: it belongs to the operator, not to any store. */
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }),
   platform: platformEnum('platform').notNull(),
   apiToken: text('api_token').notNull(),
   platformChannelId: varchar('platform_channel_id', { length: 255 }).notNull(),
   extraInfo: text('extra_info'),
   agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  /**
+   * True when the page is connected from the admin console and answers no customers: its DMs
+   * only carry business notification codes. Null/false on a store's own channel.
+   */
+  isAdminOnly: boolean('is_admin_only'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -275,6 +341,38 @@ export const channels = pgTable('channels', {
   liveUniq: uniqueIndex('channels_platform_channel_live_idx')
     .on(t.platform, t.platformChannelId)
     .where(sql`${t.deletedAt} is null`),
+}));
+
+/**
+ * One notification code per business. The merchant sends it as a DM to the operator's page;
+ * the webhook binds that Messenger account to this business, and every later notice is also
+ * delivered there as a message. `token` is a uuid so it cannot be guessed and never repeats.
+ */
+export const messengerNotifications = pgTable('messenger_notification', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  token: uuid('token').defaultRandom().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  businessUniq: uniqueIndex('messenger_notification_business_uniq_idx').on(t.businessId),
+  tokenUniq: uniqueIndex('messenger_notification_token_uniq_idx').on(t.token),
+}));
+
+/**
+ * A Messenger account that redeemed a business's notification code. Many accounts may follow
+ * one business, and one account may follow several businesses; the page it messaged is kept so
+ * future notices are sent through the channel that answer is allowed to use.
+ */
+export const messengerNotificationUsers = pgTable('messenger_notification_user_info', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
+  platformUserId: varchar('platform_user_id', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex('messenger_notification_user_business_platform_uniq_idx').on(t.businessId, t.platformUserId),
+  businessIdx: index('messenger_notification_user_business_idx').on(t.businessId),
 }));
 
 export const conversations = pgTable('conversations', {
@@ -384,6 +482,11 @@ export const channelRelations = relations(channels, ({ one, many }) => ({
   conversations: many(conversations),
   commentThreads: many(commentThreads),
   posts: many(posts),
+}));
+
+export const messengerNotificationRelations = relations(messengerNotifications, ({ one, many }) => ({
+  business: one(businesses, { fields: [messengerNotifications.businessId], references: [businesses.id] }),
+  users: many(messengerNotificationUsers),
 }));
 
 export const conversationRelations = relations(conversations, ({ one, many }) => ({
@@ -638,6 +741,21 @@ export const plansRelations = relations(plans, ({ many }) => ({
 
 export const quotaUsageRelations = relations(quotaUsage, ({ one }) => ({
   business: one(businesses, { fields: [quotaUsage.businessId], references: [businesses.id] }),
+}));
+
+/**
+ * One browser's FCM registration for one business. A device that manages two stores holds a row
+ * per store (token unique inside the business), so each store's notices reach the same browser.
+ * Dead tokens are removed by the sender when FCM reports them unregistered.
+ */
+export const pushTokens = pgTable('push_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  token: text('token').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex('push_tokens_business_token_uniq_idx').on(t.businessId, t.token),
+  businessIdx: index('push_tokens_business_idx').on(t.businessId),
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({

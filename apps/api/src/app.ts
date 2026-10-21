@@ -14,19 +14,36 @@ import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { plansRouter } from '@api/routes/plans';
 import { billingRouter } from '@api/routes/billing';
+import { pushRouter } from '@api/routes/push';
+import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
+import { adminChannelsRouter } from '@api/routes/admin-channels';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { internalRouter } from '@api/routes/internal/run';
+import { audioCheckRouter } from '@api/routes/internal/audio-check';
 import { companiesRouter } from '@api/routes/companies';
 import { customersRouter } from '@api/routes/customers';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
 import { emit } from '@api/lib/log';
 import { wireDatabaseLogging } from '@api/lib/db-log';
 import { setIntegrationLogSink } from '@repo/integrations/http-log';
+import { setNotificationPushHandler, setMessengerNoticeHandler } from '@repo/db/crud/notification';
+import { sendPushToBusiness } from '@api/lib/push';
+import { sendNoticeToMessenger } from '@api/lib/messenger-notify';
 
 export const app = new OpenAPIHono();
+
+// Every stored notice reaches the browsers registered for its business; the db package knows
+// nothing about FCM, and this is the one place that connects the two. The wrapped call keeps
+// the handler's void contract while the test endpoint reads the same sender's summary.
+setNotificationPushHandler(async (notice) => {
+  await sendPushToBusiness(notice);
+});
+// The same notice also goes out as a Messenger message to every account that redeemed the
+// business's code on the operator's page.
+setMessengerNoticeHandler(sendNoticeToMessenger);
 
 // Outermost so every request gets a requestId and correlation context; it adds
 // no request or response header.
@@ -76,16 +93,22 @@ app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
 app.route('/api/v1', uploadsRouter);
 app.route('/api/v1', tokenAnalyticsRouter);
+// Push registrations ride the same business auth as billing, but live in their own router.
+app.route('/api/v1', pushRouter);
+// The merchant's Messenger notification portal (code + followers).
+app.route('/api/v1', messengerNotificationsRouter);
 // Registered last of the `/api/v1` routers so its own `/:businessId/*` auth
 // middleware can never run on a route that shipped before it.
 app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
+app.route('/api2', adminChannelsRouter);
 app.route('/api2', logsRouter);
 app.route('/api2', adminRouter);
 app.route('/api2', adminPlansRouter);
 app.route('/webhooks', fbWebhookRouter);
 app.route('/internal', internalRouter);
+app.route('/internal', audioCheckRouter);
 
 // app.doc() config accepts no `components` key, so security schemes must be
 // registered on the registry or every `security: [{ bearerAuth: [] }]` route

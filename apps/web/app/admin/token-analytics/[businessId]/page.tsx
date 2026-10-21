@@ -33,6 +33,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INTEGRATION_LABELS: Record<string, string> = {
   facebook_messenger: 'Messenger reply',
   facebook_comment: 'Comment reply',
+  instagram_messenger: 'Instagram DM',
+  instagram_comment: 'Instagram comment',
   ai_post_generation: 'AI post generation',
   ai_post_tuning: 'AI post tuning',
 };

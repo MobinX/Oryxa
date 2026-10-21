@@ -287,14 +287,15 @@ describe('Agent Tools', () => {
     expect(order.id).toMatch(/[0-9a-f-]{36}/i);
     // The payload is what the webhook turns back into a message, so the order id
     // has to be in it — a button that only says "Track order" tells the agent nothing.
+    // The row carries the receipt: quantity, the variant's shelf label and its name, the total.
     expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.stringMatching(/^Pending — 2 × Test T-Shirt, \$59\.98$/),
+      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98$/),
       [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toContain(`Pending — 2 × Test T-Shirt, $59.98`);
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98 \(Track order\)/);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
@@ -518,6 +519,53 @@ describe('Agent Tools', () => {
     expect(result.sent).toBe(false);
     expect(result.instruction).toContain('show_product_info');
     expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('find_variant pins a variant from folded option values and offers what exists when nothing matches', async () => {
+    const seed = await seedTestWorld();
+    const created = await createProduct({
+        businessId: seed.business.id,
+        name: 'Optioned Saree',
+        price: 4600,
+        sku: `OPT-${Date.now()}`,
+        options: [
+          { name: 'Color', values: ['Red', 'Blue'] },
+          { name: 'Size', values: ['M', 'XL'] },
+        ],
+        variants: [
+          { name: 'Red / M', stock: 3, options: { Color: 'Red', Size: 'M' } },
+          { name: 'Blue / XL', stock: 1, options: { Color: 'Blue', Size: 'XL' } },
+        ],
+      });
+    const tools = createAgentTools(agentContext(seed));
+    const findVariantTool = tools.find((t) => t.name === 'find_variant')!;
+
+    // Lower-case, partial: the tool folds what the model sent onto the declared names and values,
+    // and one variant answers — pinned, with the show-photos instruction carrying its id.
+    const pinned = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { color: 'red' } }),
+    );
+    expect(pinned.found).toBe(true);
+    expect(pinned.variant).toMatchObject({
+      name: 'Red / M',
+      options: { Color: 'Red', Size: 'M' },
+      available: true,
+    });
+    expect(pinned.instruction).toContain('show_variant_photos');
+
+    // A value the option does not offer is refused with the values that exist, never invented.
+    const refused = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { Color: 'Green' } }),
+    );
+    expect(refused.found).toBe(false);
+    expect(refused.option).toEqual({ name: 'Color', values: ['Red', 'Blue'] });
+
+    // A real value with no matching row hands the model every combination that does exist.
+    const empty = JSON.parse(
+      await findVariantTool.invoke({ productId: created.id, options: { Color: 'Red', Size: 'XL' } }),
+    );
+    expect(empty.found).toBe(false);
+    expect(empty.combinations).toHaveLength(2);
   });
 
   it('create_order refuses to guess a size when the product has several', async () => {

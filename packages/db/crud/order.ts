@@ -8,6 +8,7 @@ import {
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
+import { createBusinessNotification } from './notification';
 
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
 const ORDER_HISTORY_PAGE = 10;
@@ -75,6 +76,8 @@ export async function createOrder(input: unknown) {
       // string here would make it look like a customer with an unknown id rather than no id.
       customerPlatformId: parsed.customerPlatformId?.trim() ? parsed.customerPlatformId.trim() : null,
       totalPrice: totalPrice.toFixed(2),
+      shippingCost: (parsed.shippingCost ?? 0).toFixed(2),
+      paymentMethod: parsed.paymentMethod?.trim() ? parsed.paymentMethod.trim() : null,
       state: 'pending',
     })
     .returning();
@@ -93,9 +96,23 @@ export async function createOrder(input: unknown) {
     }
   }
 
+  // A sale is the merchant's news, whichever door it came through. The notice stores the whole
+  // sentence so it still reads correctly weeks later, and its link opens this exact order.
+  await createBusinessNotification({
+    businessId: parsed.businessId,
+    kind: 'order_placed',
+    title: 'New order received',
+    body: `${parsed.count} × ${product.name}${variant ? ` (${variant.name})` : ''} — $${totalPrice.toFixed(2)} from ${parsed.customerName?.trim() || 'a customer'}.`,
+    link: `/b/${parsed.businessId}/orders/${order.id}`,
+  }).catch((err) => {
+    console.error('[orders] order stored but its notification could not be written:', err);
+  });
+
   return {
     id: order.id,
     totalPrice,
+    shippingCost: parsed.shippingCost ?? 0,
+    paymentMethod: parsed.paymentMethod ?? null,
     state: order.state,
     customerId: order.customerId,
   };
@@ -124,6 +141,8 @@ export async function getOrderById(businessId: string, orderId: string) {
     variantId: order.variantId,
     productName: productActive?.name ?? null,
     variantName: variantActive?.name ?? null,
+    /** The five-character shelf label the buyer can find on the photo or the parcel. */
+    variantShortId: variantActive?.variantId ?? null,
     variantImageUrl,
     count: order.count,
     variantPrice: parseFloat(order.variantPrice),
@@ -132,6 +151,8 @@ export async function getOrderById(businessId: string, orderId: string) {
     customerAddress: order.customerAddress,
     state: order.state,
     totalPrice: parseFloat(order.totalPrice),
+    shippingCost: parseFloat(order.shippingCost),
+    paymentMethod: order.paymentMethod,
     conversationId: order.conversationId,
     createdAt: order.createdAt,
   };

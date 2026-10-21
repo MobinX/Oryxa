@@ -1,12 +1,35 @@
 import { Hono } from 'hono';
-import { getChannelByPageId } from '@repo/db/crud/channel';
-import { processInboundMessage, setConversationProfileIfMissing, resetStaleConversation, checkPendingMessages } from '@repo/db/crud/conversation';
+import { getChannelByPageId, getChannelByPlatformAccountId } from '@repo/db/crud/channel';
+import {
+  processInboundMessage,
+  setConversationProfileIfMissing,
+  resetStaleConversation,
+  checkPendingMessages,
+  getOrCreateConversation,
+  createMessage,
+} from '@repo/db/crud/conversation';
+import { getProductById } from '@repo/db/crud/product';
+import {
+  findBusinessByNotificationToken,
+  upsertMessengerNotificationUser,
+} from '@repo/db/crud/messenger-notification';
 import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { triggerCommentRun } from '@api/lib/comment-runner';
 import { readQuota, type QuotaRead, type TriggerOptions, type TriggerVerdict } from '@api/lib/quota';
 import { runInBackground } from '@api/lib/background';
-import { verifyWebhookSignature, getFacebookUserProfile, fetchMessengerImage } from '@repo/integrations/facebook';
+import {
+  verifyWebhookSignature,
+  getFacebookUserProfile,
+  fetchMessengerImage,
+  fetchMessengerAudio,
+  sendMessage as fbSendMessage,
+  parseDetailsPayload,
+  detailsVariantPayload,
+  type DetailsPayload,
+} from '@repo/integrations/facebook';
+import { getInstagramUserProfile } from '@repo/integrations/instagram';
+import { transcribeAudio } from '@repo/integrations/azure-speech';
 import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
@@ -35,9 +58,17 @@ type MessagingEvent = {
     mid?: string;
     is_echo?: boolean;
     attachments?: MessagingAttachment[];
+    quick_reply?: { payload?: string };
   };
   postback?: { title?: string; payload?: string; mid?: string };
 };
+
+/**
+ * Instagram sends both envelopes on the same signed callback URL. The Page object is the
+ * Messenger channel; the Instagram object is the professional account linked to that Page.
+ */
+type MetaWebhookObject = 'page' | 'instagram';
+type ChannelPlatform = 'facebook' | 'instagram';
 
 /**
  * The pictures in a message, in the order the customer sent them. Meta gives the same link twice
@@ -57,12 +88,16 @@ function imageAttachmentUrls(ev: MessagingEvent): string[] {
  * take, or is bigger than the bucket allows is reported and left out, and the caption still
  * reaches the inbox and the agent.
  */
-async function storeInboundPhotos(businessId: string, urls: string[]): Promise<string[]> {
+async function storeInboundPhotos(
+  businessId: string,
+  urls: string[],
+  service: ChannelPlatform = 'facebook',
+): Promise<string[]> {
   const keys: string[] = [];
 
   for (const [index, url] of urls.entries()) {
     try {
-      const image = await fetchMessengerImage(url);
+      const image = await fetchMessengerImage(url, service);
       if (!image) {
         fbLog('inbound photo could not be fetched', { index });
         emitAnomaly('inbound_photo_lost', { detail: 'fetch' });
@@ -106,9 +141,53 @@ function postbackMessage(postback: NonNullable<MessagingEvent['postback']>): str
   return payload?.includes(' ') ? payload : (postback.title ?? payload);
 }
 
-function inboundFromMessagingEvent(
+/** Meta labels a voice note `audio`; the URL is pre-signed and short-lived. */
+function audioAttachmentUrl(ev: MessagingEvent): string | null {
+  const attachment = ev.message?.attachments?.find((candidate) => candidate.type === 'audio');
+  return attachment?.payload?.url ?? attachment?.url ?? null;
+}
+
+/** What the Instagram log lane needs to explain a voice note without keeping its audio. */
+type AudioTrace = {
+  fetched: boolean;
+  contentType?: string;
+  bytes?: number;
+  transcriptChars: number;
+  ok: boolean;
+  durationMs: number;
+  reason?: string;
+};
+
+/** The event shape in one word, for the `dm_event` log line. */
+function messagingEventType(ev: MessagingEvent): string {
+  if (ev.message?.is_echo) return 'echo';
+  if (ev.postback) return 'postback';
+  if (ev.message?.quick_reply) return 'quick_reply';
+  if (audioAttachmentUrl(ev)) return 'audio';
+  const images = imageAttachmentUrls(ev);
+  if (images.length > 0) return ev.message?.text ? 'image+text' : 'image';
+  if (ev.message?.text) return 'text';
+  const attachments = ev.message?.attachments ?? [];
+  if (attachments.length > 0) {
+    const kinds = [...new Set(attachments.map((attachment) => attachment.type ?? 'unknown'))]
+      .slice(0, 3)
+      .join(',');
+    return `attachment:${kinds}`;
+  }
+  if (ev.message) return 'empty';
+  return 'other';
+}
+
+async function inboundFromMessagingEvent(
   ev: MessagingEvent,
-): { senderId: string; text: string; images: string[]; externalId?: string } | null {
+  platform: ChannelPlatform,
+): Promise<{
+  senderId: string;
+  text: string;
+  images: string[];
+  externalId?: string;
+  audio?: AudioTrace;
+} | null> {
   if (ev.message?.is_echo) return null;
   const senderId = ev.sender?.id;
   if (!senderId) return null;
@@ -119,6 +198,42 @@ function inboundFromMessagingEvent(
     // as one image and no words, and dropping it is dropping a customer.
     if (ev.message.text || images.length > 0) {
       return { senderId, text: ev.message.text ?? '', images, externalId: ev.message.mid };
+    }
+    // A voice note becomes the customer's words before the agent ever sees the turn. A note
+    // that cannot be read is still answered — the model is told what arrived, not shown silence.
+    const audioUrl = audioAttachmentUrl(ev);
+    if (audioUrl) {
+      const started = performance.now();
+      const audio = await fetchMessengerAudio(audioUrl, platform);
+      let transcript: string | null = null;
+      let reason: string | undefined = audio ? undefined : 'audio could not be fetched';
+      if (audio) {
+        try {
+          transcript = await transcribeAudio(audio.buffer, audio.contentType);
+        } catch (err) {
+          reason = err instanceof Error ? err.message : 'transcription failed';
+        }
+        if (!transcript?.trim() && !reason) reason = 'transcription returned no text';
+      }
+      const trimmed = transcript?.trim() ?? '';
+      const text = trimmed
+        ? trimmed
+        : '[the customer sent a voice message that could not be transcribed]';
+      return {
+        senderId,
+        text,
+        images: [],
+        externalId: ev.message.mid,
+        audio: {
+          fetched: Boolean(audio),
+          contentType: audio?.contentType,
+          bytes: audio?.buffer.byteLength,
+          transcriptChars: trimmed.length,
+          ok: Boolean(trimmed),
+          durationMs: Math.round((performance.now() - started) * 10) / 10,
+          reason,
+        },
+      };
     }
   }
 
@@ -170,6 +285,15 @@ type WebhookEntry = {
 type WebhookBody = {
   object: string;
   entry?: WebhookEntry[];
+};
+
+/** Instagram comments arrive as `changes` with the comment itself inside `value`. */
+type InstagramCommentValue = {
+  comment_id?: string;
+  parent_id?: string;
+  text?: string;
+  from?: { id?: string; username?: string };
+  media?: { id?: string; media_product_type?: string };
 };
 
 /**
@@ -254,7 +378,12 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
 }
 
 export const fbWebhookRouter = new Hono();
-fbWebhookRouter.get('/facebook', async (c) => {
+
+/**
+ * The verification handshake is identical for both Meta objects: the same verify token,
+ * the same challenge. Each app-level webhook entry (Page, Instagram) has to complete it.
+ */
+async function verifyMetaWebhook(c: any): Promise<Response> {
   const forwardRes = await handleTestingForward(c, 'GET');
   if (forwardRes) return forwardRes;
 
@@ -263,12 +392,13 @@ fbWebhookRouter.get('/facebook', async (c) => {
   const token = c.req.query('hub.verify_token') ?? url.searchParams.get('hub.verify_token');
   const challenge = c.req.query('hub.challenge') ?? url.searchParams.get('hub.challenge');
   const verified = mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN;
+  const path = c.req.path;
 
   // One fact: whether this subscription handshake succeeded. The rejected case is
   // how a page silently stops delivering events — no error, no customer replies.
   emit('webhook', { event: 'verify', mode, verified, hasChallenge: Boolean(challenge) });
 
-  fbLog('GET /facebook', {
+  fbLog(`GET ${path}`, {
     url: c.req.url.split('?')[0],
     mode,
     verifyTokenMatch: verified,
@@ -277,13 +407,16 @@ fbWebhookRouter.get('/facebook', async (c) => {
   });
 
   if (verified) {
-    fbLog('GET /facebook verify OK — returning challenge');
+    fbLog(`GET ${path} verify OK — returning challenge`);
     return c.text(challenge ?? '');
   }
 
-  fbLog('GET /facebook verify rejected', { mode, verifyTokenMatch: false });
+  fbLog(`GET ${path} verify rejected`, { mode, verifyTokenMatch: false });
   return c.text('Forbidden', 403);
-});
+}
+
+fbWebhookRouter.get('/facebook', verifyMetaWebhook);
+fbWebhookRouter.get('/instagram', verifyMetaWebhook);
 
 /**
  * The one event a delivery produces. Customer text, raw bodies and signature
@@ -303,14 +436,16 @@ function deliveryEventFields(body: WebhookBody, signatureValid: boolean) {
   };
 }
 
-fbWebhookRouter.post('/facebook', async (c) => {
+async function receiveMetaWebhook(c: any): Promise<Response> {
   const forwardRes = await handleTestingForward(c, 'POST');
   if (forwardRes) return forwardRes;
 
+  const path = c.req.path;
+  const instagramPath = path.includes('/instagram');
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
 
-  fbLog('POST /facebook received', {
+  fbLog(`POST ${path} received`, {
     'x-hub-signature-256': signature256 ?? null,
     'x-hub-signature': signature ?? null,
     contentType: c.req.header('content-type') ?? null,
@@ -318,32 +453,51 @@ fbWebhookRouter.post('/facebook', async (c) => {
   });
 
   const raw = await c.req.text();
-  fbLog('POST /facebook raw body', raw);
+  fbLog(`POST ${path} raw body`, raw);
 
   const signatureValid = await verifyWebhookSignature(raw, signature256 ?? signature);
-  fbLog('POST /facebook signature verification', { valid: signatureValid });
+  fbLog(`POST ${path} signature verification`, { valid: signatureValid });
 
   if (!signatureValid) {
-    fbLog('POST /facebook rejected — invalid signature but will go through still');
+    fbLog(`POST ${path} rejected — invalid signature but will go through still`);
   }
 
   let body: WebhookBody;
   try {
     body = JSON.parse(raw) as WebhookBody;
   } catch (err) {
-    fbLog('POST /facebook rejected — malformed JSON', err);
+    fbLog(`POST ${path} rejected — malformed JSON`, err);
     emit('webhook', { event: 'delivery', signatureValid });
+    if (instagramPath) {
+      emit('instagram', {
+        stage: 'delivery',
+        sourcePath: path,
+        signatureValid,
+        outcome: 'malformed_json',
+      });
+    }
     return c.text('Malformed JSON', 400);
   }
 
-  fbLog('POST /facebook parsed body', body);
+  fbLog(`POST ${path} parsed body`, body);
 
-  if (body.object !== 'page' || !Array.isArray(body.entry)) {
-    fbLog('POST /facebook rejected — unhandled shape', {
+  // The same callback URL serves the Page object (Messenger) and the Instagram object
+  // (DMs and comments). An app can be configured with one webhook entry per object, and
+  // both point here; rejecting either would silently mute one channel.
+  if ((body.object !== 'page' && body.object !== 'instagram') || !Array.isArray(body.entry)) {
+    fbLog(`POST ${path} rejected — unhandled shape`, {
       object: body.object,
       entryIsArray: Array.isArray(body.entry),
     });
     emit('webhook', deliveryEventFields(body, signatureValid));
+    if (body.object === 'instagram' || instagramPath) {
+      emit('instagram', {
+        stage: 'delivery',
+        sourcePath: path,
+        signatureValid,
+        outcome: 'unhandled_shape',
+      });
+    }
     return c.text('Unhandled or malformed webhook', 400);
   }
 
@@ -351,14 +505,25 @@ fbWebhookRouter.post('/facebook', async (c) => {
   // can POST a forged page event. Enforcement waits until the failure rate on
   // real Meta traffic has been measured, so a config mistake cannot drop events.
   emit('webhook', deliveryEventFields(body, signatureValid));
+  if (body.object === 'instagram') {
+    emit('instagram', {
+      stage: 'delivery',
+      sourcePath: path,
+      signatureValid,
+      entryCount: body.entry.length,
+      messagingCount: body.entry.reduce((n, e) => n + (e.messaging?.length ?? 0), 0),
+      changesCount: body.entry.reduce((n, e) => n + (e.changes?.length ?? 0), 0),
+    });
+  }
 
-  fbLog('POST /facebook ack — processing entries', {
+  fbLog(`POST ${path} ack — processing entries`, {
+    object: body.object,
     entryCount: body.entry.length,
     pageIds: body.entry.map((e) => e.id),
     vercelInline: Boolean(process.env.VERCEL),
   });
 
-  const work = processEntries(body.entry).catch((err) => {
+  const work = processEntries(body.entry, body.object as MetaWebhookObject).catch((err) => {
     console.error('[fb-webhook] background processing failed', err);
   });
 
@@ -372,7 +537,57 @@ fbWebhookRouter.post('/facebook', async (c) => {
   }
 
   return c.text('EVENT_RECEIVED', 200);
-});
+}
+
+fbWebhookRouter.post('/facebook', receiveMetaWebhook);
+fbWebhookRouter.post('/instagram', receiveMetaWebhook);
+
+/**
+ * The operator page's DMs are not conversations. A message that is exactly a business's
+ * notification code binds this Messenger account to that business and is answered with a
+ * confirmation; anything else is ignored. No agent ever runs on an admin-only page.
+ */
+const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function processMessengerNotificationCodes(
+  channel: { id: string; apiToken: string },
+  events: MessagingEvent[],
+): Promise<void> {
+  for (const ev of events) {
+    const senderId = ev.sender?.id;
+    const text = ev.message?.text?.trim().toLowerCase();
+    if (!senderId || ev.message?.is_echo || !text) continue;
+    if (!NOTIFICATION_CODE.test(text)) {
+      fbLog('admin channel: message is not a notification code', { senderId });
+      continue;
+    }
+
+    const row = await findBusinessByNotificationToken(text);
+    if (!row) {
+      fbLog('admin channel: unknown notification code', { senderId });
+      continue;
+    }
+
+    const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+    await upsertMessengerNotificationUser({
+      businessId: row.businessId,
+      channelId: channel.id,
+      platformUserId: senderId,
+      name: profile.name ?? null,
+    });
+
+    await fbSendMessage(
+      channel.apiToken,
+      senderId,
+      `You are connected. Notifications for ${row.business?.name ?? 'this store'} will arrive here.`,
+    ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
+
+    fbLog('admin channel: messenger user connected', {
+      businessId: row.businessId,
+      senderId,
+    });
+  }
+}
 
 /**
  * Processes every entry in a batched webhook payload. A single page can deliver
@@ -380,15 +595,20 @@ fbWebhookRouter.post('/facebook', async (c) => {
  * including comments) — both are handled here, with the channel looked up once
  * per page.
  */
-async function processEntries(entries: WebhookEntry[]): Promise<void> {
-  fbLog('processEntries start', { entryCount: entries.length });
+async function processEntries(
+  entries: WebhookEntry[],
+  object: MetaWebhookObject,
+): Promise<void> {
+  fbLog('processEntries start', { object, entryCount: entries.length });
+  const platform: ChannelPlatform = object === 'instagram' ? 'instagram' : 'facebook';
 
   for (const entry of entries) {
     const messaging = entry.messaging ?? [];
     const changes = entry.changes ?? [];
 
     fbLog('processEntries entry', {
-      pageId: entry.id,
+      object,
+      accountId: entry.id,
       messagingCount: messaging.length,
       changesCount: changes.length,
       messaging: entry.messaging,
@@ -396,53 +616,343 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
     });
 
     if (messaging.length === 0 && changes.length === 0) {
-      fbLog('processEntries skip entry — no messaging or changes', { pageId: entry.id });
+      fbLog('processEntries skip entry — no messaging or changes', { accountId: entry.id });
       continue;
     }
 
-    const channel = await getChannelByPageId(entry.id);
+    const channel =
+      platform === 'instagram'
+        ? await getChannelByPlatformAccountId('instagram', entry.id)
+        : await getChannelByPageId(entry.id);
     if (!channel) {
-      // Every event for this page is dropped behind a 200 ack: a disconnected
+      // Every event for this account is dropped behind a 200 ack: a disconnected
       // channel is indistinguishable from a quiet one until this says so.
-      fbLog('processEntries skip entry — unknown page (no channel)', { pageId: entry.id });
+      fbLog('processEntries skip entry — unknown account (no channel)', {
+        platform,
+        accountId: entry.id,
+      });
       emitAnomaly('webhook_unknown_page', { detail: entry.id });
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'entry_dropped',
+          accountId: entry.id,
+          messagingCount: messaging.length,
+          changesCount: changes.length,
+          resolved: false,
+          outcome: 'unknown_account',
+        });
+      }
       continue;
+    }
+
+    // Stamped early enough that the entry row itself names the store and channel.
+    tagContext({
+      channelId: channel.id,
+      ...(channel.businessId ? { businessId: channel.businessId } : {}),
+    });
+
+    if (platform === 'instagram') {
+      emit('instagram', {
+        stage: 'entry',
+        accountId: entry.id,
+        messagingCount: messaging.length,
+        changesCount: changes.length,
+        resolved: true,
+      });
     }
 
     fbLog('processEntries channel resolved', {
-      pageId: entry.id,
+      platform,
+      accountId: entry.id,
       channelId: channel.id,
       businessId: channel.businessId,
       agentId: channel.agentId ?? null,
     });
 
+    // The operator's page is a notification door, not a shop: its DMs carry codes and nothing
+    // else. No conversation, no agent, no quota — this intercept is the whole handling.
+    if (channel.isAdminOnly) {
+      fbLog('processEntries admin-only channel — notification codes only', {
+        pageId: entry.id,
+        messagingCount: messaging.length,
+      });
+      if (messaging.length > 0) {
+        await processMessengerNotificationCodes(
+          { id: channel.id, apiToken: channel.apiToken },
+          messaging,
+        );
+      }
+      continue;
+    }
+
+    const businessId = channel.businessId;
+    if (!businessId) {
+      fbLog('processEntries skip entry — channel has no business', { pageId: entry.id });
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'entry_dropped',
+          accountId: entry.id,
+          messagingCount: messaging.length,
+          changesCount: changes.length,
+          resolved: true,
+          outcome: 'no_business',
+        });
+      }
+      continue;
+    }
+
     // Stamped onto every later event of this invocation instead of repeated on
     // each one; deliveries carry a single page in practice.
-    tagContext({ channelId: channel.id, businessId: channel.businessId });
+    tagContext({ channelId: channel.id, businessId });
 
     if (messaging.length > 0) {
-      await processMessagingEvents(channel, messaging);
+      await processMessagingEvents({ ...channel, businessId }, messaging, platform);
     }
     if (changes.length > 0) {
-      await processCommentChanges(channel, entry.id, changes);
+      if (platform === 'instagram') {
+        await processInstagramChanges({ ...channel, businessId }, entry.id, changes);
+      } else {
+        await processCommentChanges({ ...channel, businessId }, entry.id, changes);
+      }
     }
   }
 
   fbLog('processEntries done');
 }
 
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+/** Card titles are one line and roughly 30 visible characters — collapse before Meta does it badly. */
+function cardLine(value: string, max = 60): string {
+  const line = value.replace(/\s+/g, ' ').trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/**
+ * A Details tap is answered here, not by the model: variant cards for a product, or every photo
+ * of one variant. Each answer is recorded as a `self` message so the next real turn knows what
+ * the customer has already been shown. When nothing can be sent, the caller hands the reason to
+ * the agent so it can apologize and suggest something else.
+ */
+type DetailsOutcome = { handled: true } | { handled: false; reason: string };
+
+async function handleDetailsPostback(
+  channel: { id: string; businessId: string; apiToken: string },
+  senderId: string,
+  details: DetailsPayload,
+  platform: ChannelPlatform,
+): Promise<DetailsOutcome> {
+  try {
+    const product = await getProductById(channel.businessId, details.productId);
+    if (!product) {
+      return { handled: false, reason: "the product is no longer in this store's catalog" };
+    }
+    const conversation = await getOrCreateConversation(channel.businessId, channel.id, senderId);
+
+    if (details.kind === 'product') {
+      const cards = product.variants
+        .filter((variant) => Boolean(variant.imageUrl))
+        .slice(0, 10)
+        .map((variant) => {
+          const label = cardLine(`${product.name} — ${variant.name}`);
+          const price = variant.price ?? product.price;
+          const buyable = variant.isAvailable && variant.stock > 0;
+          const detailsButton = {
+            title: 'Details',
+            payload: detailsVariantPayload(product.id, variant.id),
+          };
+          return {
+            title: label,
+            subtitle: `${usd.format(price)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+            imageUrl: variant.imageUrl as string,
+            ...(buyable
+              ? {
+                  button: {
+                    title: 'Order',
+                    payload: `place order with ${product.id} and ${label} variant ${variant.id}`,
+                  },
+                  extraButtons: [detailsButton],
+                }
+              : { button: detailsButton }),
+          };
+        });
+      if (cards.length === 0) {
+        return { handled: false, reason: `no variant of "${product.name}" has a photo to show` };
+      }
+
+      await fbSendMessage(channel.apiToken, senderId, cards, { platform });
+
+      const stockTotal = product.variants.reduce((sum, variant) => sum + variant.stock, 0);
+      const optionsText = (product.options ?? [])
+        .map((option) => `${option.name}: ${option.values.map((value) => value.value).join(', ')}`)
+        .join('; ');
+      const variantText = product.variants
+        .map(
+          (variant) =>
+            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${usd.format(variant.price ?? product.price)}, ${variant.stock} in stock`,
+        )
+        .join('; ');
+      await createMessage({
+        conversationId: conversation.id,
+        from: 'self',
+        content: [
+          `Showing product details of ${product.id}, ${product.name}`,
+          `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
+          `variants: ${variantText}`,
+          ...(optionsText ? [`options: ${optionsText}`] : []),
+        ].join(' — '),
+        state: 'done',
+      });
+      return { handled: true };
+    }
+
+    const variant = product.variants.find((candidate) => candidate.id === details.variantId);
+    if (!variant) {
+      return { handled: false, reason: `that variant is no longer part of "${product.name}"` };
+    }
+    const images = (
+      variant.imageUrls?.length ? variant.imageUrls : variant.imageUrl ? [variant.imageUrl] : []
+    ).slice(0, 10);
+    if (images.length === 0) {
+      return { handled: false, reason: `the variant "${variant.name}" has no photos to show` };
+    }
+
+    const label = cardLine(`${product.name} — ${variant.name}`);
+    const price = variant.price ?? product.price;
+    const buyable = variant.isAvailable && variant.stock > 0;
+    const cards = images.map((imageUrl, index) => ({
+      title: label,
+      subtitle: `${usd.format(price)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+      imageUrl,
+      ...(buyable
+        ? {
+            button: {
+              title: 'Order',
+              payload: `place order with ${product.id} and ${label} variant ${variant.id}`,
+            },
+          }
+        : {
+            button: {
+              title: 'Details',
+              payload: detailsVariantPayload(product.id, variant.id),
+            },
+          }),
+    }));
+
+    await fbSendMessage(channel.apiToken, senderId, cards, { platform });
+    await createMessage({
+      conversationId: conversation.id,
+      from: 'self',
+      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
+      state: 'done',
+    });
+    return { handled: true };
+  } catch (err) {
+    console.error('[fb-webhook] details postback failed', err);
+    return { handled: false, reason: 'the catalog could not be read right now' };
+  }
+}
+
 /** Messenger DM events: dedup on mid, skip echoes + non-text/postback, trigger agent, enrich profile. */
 async function processMessagingEvents(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   events: MessagingEvent[],
+  platform: ChannelPlatform,
 ): Promise<void> {
-  fbLog('processMessagingEvents start', { channelId: channel.id, eventCount: events.length });
+  fbLog('processMessagingEvents start', {
+    channelId: channel.id,
+    platform,
+    eventCount: events.length,
+  });
   const budget = forTrigger(channel.businessId);
 
   for (const [index, ev] of events.entries()) {
     fbLog('processMessagingEvents event', { index, event: ev });
 
-    const inbound = inboundFromMessagingEvent(ev);
+    if (platform === 'instagram') {
+      emit('instagram', {
+        stage: 'dm_event',
+        eventType: messagingEventType(ev),
+        senderId: ev.sender?.id,
+        externalId: ev.message?.mid ?? ev.postback?.mid,
+        text: ev.message?.text,
+        imageCount: imageAttachmentUrls(ev).length,
+        hasAudio: Boolean(audioAttachmentUrl(ev)),
+        quickReply: ev.message?.quick_reply?.payload,
+        postbackTitle: ev.postback?.title,
+      });
+    }
+
+    // Details buttons are answered deterministically: cards go back from here, the model never
+    // runs, and the exchange is recorded as a self message for the next real turn to read. If the
+    // details cannot be produced, the tap becomes an ordinary customer turn that carries the
+    // failure — so the agent can apologize and suggest something else instead of staying silent.
+    const details = ev.postback ? parseDetailsPayload(ev.postback.payload) : null;
+    if (details && ev.sender?.id) {
+      const result = await handleDetailsPostback(channel, ev.sender.id, details, platform);
+      fbLog('processMessagingEvents details postback', {
+        index,
+        kind: details.kind,
+        handled: result.handled,
+        ...(result.handled ? {} : { reason: result.reason }),
+      });
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'details',
+          detailsKind: details.kind,
+          productId: details.productId,
+          variantId: details.kind === 'variant' ? details.variantId : undefined,
+          senderId: ev.sender.id,
+          externalId: ev.postback?.mid,
+          handled: result.handled,
+          reason: result.handled ? undefined : result.reason,
+          outcome: result.handled ? 'details_handled' : 'details_unhandled',
+        });
+      }
+      if (result.handled) continue;
+
+      if (!channel.agentId) {
+        emit('webhook_item', {
+          kind: 'message',
+          senderId: ev.sender.id,
+          outcome: 'details_unhandled',
+        });
+        continue;
+      }
+
+      const conversation = await getOrCreateConversation(
+        channel.businessId,
+        channel.id,
+        ev.sender.id,
+      );
+      const asked =
+        details.kind === 'product'
+          ? `I tapped "Details" to see all the variants of product ${details.productId}, but they could not be shown: ${result.reason}.`
+          : `I tapped "Details" to see all the photos of one variant (${details.variantId}) of product ${details.productId}, but they could not be shown: ${result.reason}.`;
+      await createMessage({
+        conversationId: conversation.id,
+        from: 'customer',
+        content: `${asked} Tell me briefly what went wrong and suggest another product from the store.`,
+      });
+      const verdict = await triggerAgentRun(conversation.id, await budget());
+      const fallbackOutcome = outcomeOf(verdict, 'details_fallback');
+      fbLog('processMessagingEvents details fallback run', {
+        index,
+        outcome: fallbackOutcome,
+      });
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'trigger',
+          senderId: ev.sender.id,
+          externalId: ev.postback?.mid,
+          inserted: true,
+          outcome: fallbackOutcome,
+        });
+      }
+      continue;
+    }
+
+    const inbound = await inboundFromMessagingEvent(ev, platform);
     if (!inbound) {
       // An echo or a read receipt is not a customer, so it stays silent. A real
       // message with neither text nor a picture (sticker, audio, file) is a customer who
@@ -464,10 +974,23 @@ async function processMessagingEvents(
           outcome: 'unsupported_content',
         });
       }
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'dm_result',
+          eventType: messagingEventType(ev),
+          senderId: ev.sender?.id,
+          externalId: ev.message?.mid ?? ev.postback?.mid,
+          outcome: ev.message?.is_echo
+            ? 'echo'
+            : ev.sender?.id
+              ? 'unsupported_content'
+              : 'incomplete_payload',
+        });
+      }
       continue;
     }
 
-    const { senderId, text, images, externalId } = inbound;
+    const { senderId, text, images, externalId, audio } = inbound;
     fbLog('processMessagingEvents inbound', {
       index,
       senderId,
@@ -476,9 +999,38 @@ async function processMessagingEvents(
       photoCount: images.length,
     });
 
+    if (platform === 'instagram' && audio) {
+      emit('instagram', {
+        stage: 'audio',
+        senderId,
+        externalId,
+        fetched: audio.fetched,
+        contentType: audio.contentType,
+        bytes: audio.bytes,
+        transcriptChars: audio.transcriptChars,
+        durationMs: audio.durationMs,
+        ok: audio.ok,
+        reason: audio.reason,
+        outcome: audio.ok ? undefined : 'transcription_failed',
+      });
+    }
+
     // Copied before the row is written, so the message never exists without the pictures it
     // was sent with — and never gets a second copy of them when Meta delivers it twice.
-    const imageKeys = images.length > 0 ? await storeInboundPhotos(channel.businessId, images) : [];
+    const imageKeys =
+      images.length > 0 ? await storeInboundPhotos(channel.businessId, images, platform) : [];
+
+    if (platform === 'instagram' && images.length > 0) {
+      emit('instagram', {
+        stage: 'images',
+        senderId,
+        externalId,
+        count: images.length,
+        stored: imageKeys.length,
+        failed: images.length - imageKeys.length,
+        outcome: imageKeys.length === images.length ? undefined : 'image_copy_failed',
+      });
+    }
 
     // A photo that arrived with no caption and did not survive the copy would otherwise be an
     // empty row: nothing for the merchant to read and nothing for the agent to answer. Saying
@@ -505,11 +1057,46 @@ async function processMessagingEvents(
       needsProfile,
     });
 
+    tagContext({ conversationId });
+    if (platform === 'instagram') {
+      emit('instagram', {
+        stage: 'persisted',
+        senderId,
+        externalId,
+        inserted,
+        priorStatus,
+        needsProfile,
+      });
+    }
+
     if (inserted && needsProfile) {
-      fbLog('processMessagingEvents enriching profile', { index, conversationId, senderId });
-      const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      fbLog('processMessagingEvents enriching profile', {
+        index,
+        platform,
+        conversationId,
+        senderId,
+      });
+      const profile =
+        platform === 'instagram'
+          ? await getInstagramUserProfile(channel.apiToken, senderId).then((p) => ({
+              name: p.name ?? p.username,
+              avatar: p.avatar,
+            }))
+          : await getFacebookUserProfile(channel.apiToken, senderId);
       fbLog('processMessagingEvents profile result', { index, conversationId, profile });
       await setConversationProfileIfMissing(conversationId, profile);
+      if (platform === 'instagram') {
+        emit('instagram', {
+          stage: 'profile',
+          senderId,
+          externalId,
+          profileResolved: Boolean(profile.name || profile.avatar),
+          hasName: Boolean(profile.name),
+          hasAvatar: Boolean(profile.avatar),
+          outcome:
+            profile.name || profile.avatar ? undefined : 'profile_unresolved',
+        });
+      }
     }
 
     // An in-flight conversation is one whose runner may still be alive — or may
@@ -609,6 +1196,18 @@ async function processMessagingEvents(
       });
     }
 
+    if (platform === 'instagram') {
+      emit('instagram', {
+        stage: 'trigger',
+        senderId,
+        externalId,
+        inserted,
+        priorStatus,
+        outcome,
+        ageMs,
+      });
+    }
+
     emit('webhook_item', {
       kind: 'message',
       externalId,
@@ -623,6 +1222,238 @@ async function processMessagingEvents(
   }
 
   fbLog('processMessagingEvents done', { channelId: channel.id });
+}
+
+type InboundPlatformComment = {
+  commentId: string;
+  parentId?: string;
+  postId: string;
+  text: string;
+  fromId: string;
+  fromName?: string;
+  verb?: string;
+};
+
+/**
+ * The delivery-to-run decisions are identical on both platforms: persist the comment
+ * idempotently, enrich what the profile API would give, then either start a run, recover a
+ * stale lock, or leave a live one alone. Only the envelope differs, so the shared body
+ * lives here and each object's parser feeds it a normalized comment.
+ */
+async function handleInboundComment(
+  channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
+  platform: ChannelPlatform,
+  budget: () => Promise<TriggerOptions>,
+  comment: InboundPlatformComment,
+): Promise<void> {
+  const { commentId, parentId, postId, text, fromId, fromName, verb } = comment;
+
+  fbLog('handleInboundComment inbound', {
+    platform,
+    commentId,
+    fromId,
+    fromName: fromName ?? null,
+    postId,
+    text,
+  });
+
+  const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
+    await processInboundComment(
+      { id: channel.id, businessId: channel.businessId },
+      fromId,
+      fromName,
+      postId,
+      text,
+      commentId,
+      parentId,
+    );
+
+  fbLog('handleInboundComment persisted', {
+    platform,
+    threadId,
+    priorStatus,
+    inserted,
+    needsProfile,
+  });
+  tagContext({ commentThreadId: threadId });
+  if (platform === 'instagram') {
+    emit('instagram', {
+      stage: 'comment_persisted',
+      commentId,
+      mediaId: postId,
+      parentId,
+      fromId,
+      fromName,
+      text,
+      inserted,
+      priorStatus,
+      needsProfile,
+    });
+  }
+
+  // Instagram releases a commenter's profile only after that person has messaged the
+  // business, so a comment thread already has everything it can get: the username from
+  // the webhook. Asking anyway would be one refused Graph call per comment.
+  if (inserted && needsProfile && platform === 'facebook') {
+    fbLog('handleInboundComment enriching avatar', { platform, threadId, fromId });
+    const profile = await getFacebookUserProfile(channel.apiToken, fromId);
+    fbLog('handleInboundComment profile result', { platform, threadId, profile });
+    await setCommentThreadProfileIfMissing(threadId, profile);
+  }
+
+  const inFlight = priorStatus === 'working' || priorStatus === 'pending';
+  let outcome: string;
+  let ageMs: number | undefined;
+
+  if (!inserted) {
+    // A re-delivered comment id: Meta is still waiting for an answer, so the
+    // runner it waited on is a candidate for recovery just as above.
+    outcome = 'redelivered';
+    fbLog('handleInboundComment redelivered comment — already stored', {
+      platform,
+      threadId,
+      priorStatus,
+    });
+    if (channel.agentId && inFlight) {
+      ageMs = stateAgeMs(priorStateAt);
+      const stale = ageMs > STALE_RUNNER_MS;
+      fbLog('handleInboundComment redelivery stale check', {
+        platform,
+        threadId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: stale,
+      });
+      if (stale) {
+        fbLog('handleInboundComment recovering stale runner', { platform, threadId, ageMs });
+        if (await resetStaleCommentThread(threadId, staleBefore())) {
+          fbLog('handleInboundComment stale reset succeeded — re-triggering comment agent', {
+            platform,
+            threadId,
+          });
+          outcome = outcomeOf(
+            await triggerCommentRun(threadId, await budget()),
+            'redelivered_stale_recovered',
+          );
+        } else {
+          fbLog('handleInboundComment stale reset lost race — another caller recovered', {
+            platform,
+            threadId,
+          });
+        }
+      } else {
+        fbLog('handleInboundComment runner still fresh — no extra trigger needed', {
+          platform,
+          threadId,
+          ageMs,
+        });
+      }
+    } else if (channel.agentId && (await checkPendingComments(threadId))) {
+      // Same safety net as the messenger path: the delivery that stored this
+      // comment died after committing it, so this redelivery runs the reply.
+      fbLog('handleInboundComment redelivery found an unanswered backlog — triggering comment agent', {
+        platform,
+        threadId,
+        priorStatus,
+      });
+      outcome = outcomeOf(
+        await triggerCommentRun(threadId, await budget()),
+        'redelivered_pending_drained',
+      );
+    }
+  } else if (priorStatus === 'done' && channel.agentId) {
+    fbLog('handleInboundComment triggering comment agent', {
+      platform,
+      threadId,
+      agentId: channel.agentId,
+    });
+    outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'comment_run_triggered');
+  } else if (inFlight && channel.agentId) {
+    ageMs = stateAgeMs(priorStateAt);
+    const stale = ageMs > STALE_RUNNER_MS;
+    fbLog('handleInboundComment stale check', {
+      platform,
+      threadId,
+      priorStatus,
+      ageMs,
+      staleThresholdMs: STALE_RUNNER_MS,
+      isStale: stale,
+    });
+    if (stale) {
+      // Prior execution is presumed dead. Reset the lock and fire a fresh run.
+      fbLog('handleInboundComment recovering stale runner', { platform, threadId, ageMs });
+      if (await resetStaleCommentThread(threadId, staleBefore())) {
+        fbLog('handleInboundComment stale reset succeeded — re-triggering comment agent', {
+          platform,
+          threadId,
+        });
+        outcome = outcomeOf(
+          await triggerCommentRun(threadId, await budget()),
+          'stale_runner_recovered',
+        );
+      } else {
+        fbLog('handleInboundComment stale reset lost race — another caller recovered', {
+          platform,
+          threadId,
+        });
+        outcome = 'waited_for_live_runner';
+      }
+    } else {
+      fbLog('handleInboundComment runner still fresh — no extra trigger needed', {
+        platform,
+        threadId,
+        ageMs,
+      });
+      outcome = 'waited_for_live_runner';
+    }
+  } else if (!channel.agentId) {
+    outcome = 'no_agent';
+    fbLog('handleInboundComment no agent trigger', {
+      platform,
+      inserted,
+      priorStatus,
+      hasAgent: Boolean(channel.agentId),
+    });
+  } else {
+    outcome = 'not_triggered';
+    fbLog('handleInboundComment no agent trigger', {
+      platform,
+      inserted,
+      priorStatus,
+      hasAgent: Boolean(channel.agentId),
+    });
+  }
+
+  if (platform === 'instagram') {
+    emit('instagram', {
+      stage: 'comment_result',
+      commentId,
+      mediaId: postId,
+      parentId,
+      fromId,
+      fromName,
+      inserted,
+      priorStatus,
+      outcome,
+      ageMs,
+    });
+  }
+
+  emit('webhook_item', {
+    kind: 'comment',
+    platform,
+    commentId,
+    parentId,
+    verb,
+    fromId,
+    fromName,
+    text,
+    inserted,
+    priorStatus,
+    outcome,
+    ageMs,
+  });
 }
 
 /**
@@ -673,6 +1504,7 @@ async function processCommentChanges(
       });
       emit('webhook_item', {
         kind: 'comment',
+        platform: 'facebook',
         commentId,
         parentId,
         verb: value.verb,
@@ -689,142 +1521,140 @@ async function processCommentChanges(
       continue; // the page's own comment — an echo, not a customer
     }
 
-    fbLog('processCommentChanges inbound comment', {
-      index,
-      commentId,
-      fromId,
-      fromName: value.from?.name ?? null,
-      postId: value.post_id ?? null,
-      text,
-    });
-
-    const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
-      await processInboundComment(
-        { id: channel.id, businessId: channel.businessId },
-        fromId,
-        value.from?.name,
-        value.post_id ?? '',
-        text,
-        commentId,
-        parentId,
-      );
-
-    fbLog('processCommentChanges persisted', {
-      index,
-      threadId,
-      priorStatus,
-      inserted,
-      needsProfile,
-    });
-
-    if (inserted && needsProfile) {
-      fbLog('processCommentChanges enriching avatar', { index, threadId, fromId });
-      const profile = await getFacebookUserProfile(channel.apiToken, fromId);
-      fbLog('processCommentChanges profile result', { index, threadId, profile });
-      await setCommentThreadProfileIfMissing(threadId, profile);
-    }
-
-    const inFlight = priorStatus === 'working' || priorStatus === 'pending';
-    let outcome: string;
-    let ageMs: number | undefined;
-
-    if (!inserted) {
-      // A re-delivered comment id: Meta is still waiting for an answer, so the
-      // runner it waited on is a candidate for recovery just as above.
-      outcome = 'redelivered';
-      fbLog('processCommentChanges redelivered comment — already stored', { index, threadId, priorStatus });
-      if (channel.agentId && inFlight) {
-        ageMs = stateAgeMs(priorStateAt);
-        const stale = ageMs > STALE_RUNNER_MS;
-        fbLog('processCommentChanges redelivery stale check', {
-          index,
-          threadId,
-          priorStatus,
-          ageMs,
-          staleThresholdMs: STALE_RUNNER_MS,
-          isStale: stale,
-        });
-        if (stale) {
-          fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
-          if (await resetStaleCommentThread(threadId, staleBefore())) {
-            fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-            outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_stale_recovered');
-          } else {
-            fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
-          }
-        } else {
-          fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
-        }
-      } else if (channel.agentId && (await checkPendingComments(threadId))) {
-        // Same safety net as the messenger path: the delivery that stored this
-        // comment died after committing it, so this redelivery runs the reply.
-        fbLog('processCommentChanges redelivery found an unanswered backlog — triggering comment agent', {
-          index,
-          threadId,
-          priorStatus,
-        });
-        outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_pending_drained');
-      }
-    } else if (priorStatus === 'done' && channel.agentId) {
-      fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
-      outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'comment_run_triggered');
-    } else if (inFlight && channel.agentId) {
-      ageMs = stateAgeMs(priorStateAt);
-      const stale = ageMs > STALE_RUNNER_MS;
-      fbLog('processCommentChanges stale check', {
-        index,
-        threadId,
-        priorStatus,
-        ageMs,
-        staleThresholdMs: STALE_RUNNER_MS,
-        isStale: stale,
-      });
-      if (stale) {
-        // Prior execution is presumed dead. Reset the lock and fire a fresh run.
-        fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
-        if (await resetStaleCommentThread(threadId, staleBefore())) {
-          fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-          outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'stale_runner_recovered');
-        } else {
-          fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
-          outcome = 'waited_for_live_runner';
-        }
-      } else {
-        fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
-        outcome = 'waited_for_live_runner';
-      }
-    } else if (!channel.agentId) {
-      outcome = 'no_agent';
-      fbLog('processCommentChanges no agent trigger', {
-        index,
-        inserted,
-        priorStatus,
-        hasAgent: Boolean(channel.agentId),
-      });
-    } else {
-      outcome = 'not_triggered';
-      fbLog('processCommentChanges no agent trigger', {
-        index,
-        inserted,
-        priorStatus,
-        hasAgent: Boolean(channel.agentId),
-      });
-    }
-
-    emit('webhook_item', {
-      kind: 'comment',
+    await handleInboundComment(channel, 'facebook', budget, {
       commentId,
       parentId,
-      verb: value.verb,
+      postId: value.post_id ?? '',
+      text,
       fromId,
       fromName: value.from?.name,
-      text,
-      inserted,
-      priorStatus,
-      outcome,
-      ageMs,
+      verb: value.verb,
     });
   }
 
   fbLog('processCommentChanges done', { channelId: channel.id });
+}
+
+/**
+ * Instagram comments arrive as `changes` on the `instagram` object. There is no `feed`
+ * or `verb`: a `comments` field carrying a comment id is a new comment. Live-video
+ * comments are deliberately left out — Meta only allows a private reply during the
+ * broadcast, so a public answer the agent would otherwise post cannot be delivered.
+ */
+async function processInstagramChanges(
+  channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
+  instagramAccountId: string,
+  changes: WebhookChange[],
+): Promise<void> {
+  fbLog('processInstagramChanges start', {
+    channelId: channel.id,
+    instagramAccountId,
+    changeCount: changes.length,
+  });
+  const budget = forTrigger(channel.businessId);
+
+  for (const [index, change] of changes.entries()) {
+    fbLog('processInstagramChanges change', { index, change });
+
+    if (change.field !== 'comments') {
+      fbLog('processInstagramChanges skip — not a post comment', {
+        index,
+        field: change.field ?? null,
+      });
+      emit('instagram', {
+        stage: 'comment_event',
+        field: change.field,
+        outcome: change.field === 'live_comments' ? 'live_comment_skipped' : 'ignored_field',
+      });
+      continue;
+    }
+
+    const value = change.value as unknown as InstagramCommentValue | undefined;
+    // Meta's documented shape puts the comment under `comment_id` and the media under
+    // `media.id`; a few deliveries still use the older flat ids, so both are read.
+    const legacy = (value ?? {}) as {
+      id?: string;
+      media_id?: string;
+      post_id?: string;
+      from?: { name?: string };
+    };
+    const commentId = value?.comment_id ?? legacy.id;
+    const text = value?.text;
+    const fromId = value?.from?.id;
+    const fromName = value?.from?.username ?? legacy.from?.name;
+    const postId = value?.media?.id ?? legacy.media_id ?? legacy.post_id;
+
+    if (!commentId || !text || !fromId || !postId) {
+      fbLog('processInstagramChanges skip — missing comment fields', {
+        index,
+        commentId: commentId ?? null,
+        hasText: Boolean(text),
+        fromId: fromId ?? null,
+        postId: postId ?? null,
+      });
+      emit('instagram', {
+        stage: 'comment_event',
+        field: change.field,
+        commentId,
+        mediaId: postId,
+        parentId: value?.parent_id,
+        fromId,
+        fromName,
+        text,
+        outcome: 'incomplete_payload',
+      });
+      emit('webhook_item', {
+        kind: 'comment',
+        platform: 'instagram',
+        commentId,
+        fromId,
+        fromName,
+        text,
+        outcome: 'incomplete_payload',
+      });
+      continue;
+    }
+
+    if (fromId === instagramAccountId) {
+      fbLog('processInstagramChanges skip — account own comment (echo)', {
+        index,
+        commentId,
+        fromId,
+      });
+      emit('instagram', {
+        stage: 'comment_event',
+        field: change.field,
+        commentId,
+        mediaId: postId,
+        parentId: value?.parent_id,
+        fromId,
+        fromName,
+        text,
+        outcome: 'echo',
+      });
+      continue;
+    }
+
+    emit('instagram', {
+      stage: 'comment_event',
+      field: change.field,
+      commentId,
+      mediaId: postId,
+      parentId: value?.parent_id,
+      fromId,
+      fromName,
+      text,
+    });
+
+    await handleInboundComment(channel, 'instagram', budget, {
+      commentId,
+      parentId: value?.parent_id || undefined,
+      postId,
+      text,
+      fromId,
+      fromName,
+    });
+  }
+
+  fbLog('processInstagramChanges done', { channelId: channel.id });
 }

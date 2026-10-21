@@ -7,7 +7,9 @@ import { requireAuth } from '@/lib/auth';
 import {
   deleteChannel,
   getFacebookAuthUrl,
+  getInstagramAuthUrl,
   connectFacebookPages,
+  connectInstagramAccounts,
   ApiError,
 } from '@/lib/api';
 
@@ -79,4 +81,60 @@ export async function connectSelectedFacebookPagesAction(
   }
 
   redirect(`/b/${businessId}/channels?connected=facebook`);
+}
+
+export async function connectInstagramAction(businessId: string) {
+  const token = await requireAuth();
+  const { url } = await getInstagramAuthUrl(token, businessId);
+  redirect(url);
+}
+
+export async function connectSelectedInstagramAccountsAction(
+  businessId: string,
+  selectionToken: string,
+  formData: FormData,
+) {
+  const token = await requireAuth();
+  const accountIds = formData.getAll('accountIds').map(String).filter(Boolean);
+  if (accountIds.length === 0) {
+    redirect(
+      `/b/${businessId}/channels/connect-instagram?token=${encodeURIComponent(selectionToken)}&error=no-selection`,
+    );
+  }
+
+  let result;
+  try {
+    result = await connectInstagramAccounts(token, businessId, {
+      token: selectionToken,
+      accountIds,
+    });
+  } catch (err) {
+    const message =
+      err instanceof ApiError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : 'Connect failed';
+    redirect(
+      `/b/${businessId}/channels?error=instagram-connect&detail=${encodeURIComponent(message)}`,
+    );
+  }
+
+  revalidatePath(`/b/${businessId}/channels`);
+  expireChannelPage(businessId);
+  const failed = result.failed ?? [];
+
+  if (result.connected.length === 0 && failed.length > 0) {
+    redirect(
+      `/b/${businessId}/channels?error=instagram-connect&detail=${encodeURIComponent(failed[0]?.error ?? 'Connect failed')}`,
+    );
+  }
+
+  if (failed.length > 0) {
+    redirect(
+      `/b/${businessId}/channels?connected=instagram&subscribeFailed=${failed.length}&subscribeDetail=${encodeURIComponent(failed[0]?.error ?? '')}`,
+    );
+  }
+
+  redirect(`/b/${businessId}/channels?connected=instagram`);
 }

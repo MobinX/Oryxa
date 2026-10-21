@@ -12,8 +12,13 @@ import {
 const exchangeCodeForTokenMock = vi.fn();
 const getUserPagesMock = vi.fn();
 const subscribeFacebookPageToWebhooksMock = vi.fn();
+const unsubscribeFacebookPageFromWebhooksMock = vi.fn();
 const getGrantedPermissionsMock = vi.fn();
 const getPortfolioPagesMock = vi.fn();
+
+/** Which page each fake page token answers as — the connect/delete guards read this. */
+let tokenPages: Record<string, string> = {};
+const getPageIdForTokenMock = vi.fn();
 
 vi.mock('@repo/integrations/facebook', async () => {
   const actual = await import('../../packages/integrations/facebook');
@@ -23,6 +28,9 @@ vi.mock('@repo/integrations/facebook', async () => {
     getUserPages: (...args: unknown[]) => getUserPagesMock(...args),
     subscribeFacebookPageToWebhooks: (...args: unknown[]) =>
       subscribeFacebookPageToWebhooksMock(...args),
+    unsubscribeFacebookPageFromWebhooks: (...args: unknown[]) =>
+      unsubscribeFacebookPageFromWebhooksMock(...args),
+    getPageIdForToken: (...args: unknown[]) => getPageIdForTokenMock(...args),
     getGrantedPermissions: (...args: unknown[]) => getGrantedPermissionsMock(...args),
     getPortfolioPages: (...args: unknown[]) => getPortfolioPagesMock(...args),
   };
@@ -248,8 +256,13 @@ describe('Facebook OAuth callback', () => {
 
 describe('Facebook page selection API', () => {
   beforeEach(() => {
+    tokenPages = {};
+    getPageIdForTokenMock.mockReset();
+    getPageIdForTokenMock.mockImplementation(async (token: string) => tokenPages[token] ?? null);
     subscribeFacebookPageToWebhooksMock.mockReset();
     subscribeFacebookPageToWebhooksMock.mockResolvedValue(undefined);
+    unsubscribeFacebookPageFromWebhooksMock.mockReset();
+    unsubscribeFacebookPageFromWebhooksMock.mockResolvedValue(undefined);
   });
 
   it('lists pending pages from a selection token', async () => {
@@ -317,6 +330,7 @@ describe('Facebook page selection API', () => {
         { id: 'SEL_PAGE_2', name: 'Selected Two', access_token: 'sel-tok-2' },
       ],
     });
+    tokenPages = { 'sel-tok-1': 'SEL_PAGE_1', 'sel-tok-2': 'SEL_PAGE_2' };
 
     const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
       method: 'POST',
@@ -342,6 +356,7 @@ describe('Facebook page selection API', () => {
       userId: user.id,
       pages: [{ id: 'FAIL_PAGE', name: 'Fail Page', access_token: 'fail-tok' }],
     });
+    tokenPages = { 'fail-tok': 'FAIL_PAGE' };
 
     const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
       method: 'POST',
@@ -372,6 +387,7 @@ describe('Facebook page selection API', () => {
       userId: other.user.id,
       pages: [{ id: taken.pageChannelId, name: 'ABCD Store', access_token: 'taken-tok' }],
     });
+    tokenPages = { 'taken-tok': taken.pageChannelId };
 
     const res = await app.request(`/api/v1/${other.business.id}/channels/facebook/connect`, {
       method: 'POST',
@@ -408,6 +424,7 @@ describe('Facebook page selection API', () => {
         },
       ],
     });
+    tokenPages = { 'restored-tok': existing!.platformChannelId };
 
     const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
       method: 'POST',
@@ -421,5 +438,89 @@ describe('Facebook page selection API', () => {
 
     const channels = await listChannels(business.id);
     expect(channels.some((c) => c.id === existing!.id)).toBe(true);
+  });
+
+  it('refuses a page whose token answers as a different page', async () => {
+    const { user, business } = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [{ id: 'MISMATCH_PAGE', name: 'Mismatched', access_token: 'mis-tok' }],
+    });
+    // Meta resolves subscribed_apps by the token's own page: a token that answers as another
+    // page would mean a channel that cannot reply and a delete that unsubscribes a stranger.
+    tokenPages = { 'mis-tok': 'SOME_OTHER_PAGE' };
+
+    const res = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: ['MISMATCH_PAGE'] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      connected: unknown[];
+      failed: Array<{ pageId: string; error: string }>;
+    };
+    expect(body.connected).toHaveLength(0);
+    expect(body.failed[0]).toMatchObject({
+      pageId: 'MISMATCH_PAGE',
+      error: expect.stringContaining('does not match this page'),
+    });
+    expect(subscribeFacebookPageToWebhooksMock).not.toHaveBeenCalled();
+    expect((await listChannels(business.id)).some((c) => c.platformChannelId === 'MISMATCH_PAGE')).toBe(false);
+  });
+
+  it('deleting a channel skips the webhook unsubscribe when its token answers as another page', async () => {
+    const { user, business } = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [{ id: 'STALE_PAGE', name: 'Stale Token Page', access_token: 'stale-tok' }],
+    });
+    tokenPages = { 'stale-tok': 'STALE_PAGE' };
+
+    const connectRes = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: ['STALE_PAGE'] }),
+    });
+    const connected = (await connectRes.json()) as { connected: Array<{ id: string }> };
+    const channelId = connected.connected[0]!.id;
+
+    // The token went stale since the connect — it now answers as someone else's page. Deleting
+    // the channel must still work, but must not unsubscribe the page the token drifted to.
+    tokenPages = { 'stale-tok': 'SOMEONE_ELSES_PAGE' };
+
+    const del = await app.request(`/api/v1/${business.id}/channels/${channelId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    expect(del.status).toBe(200);
+    expect(unsubscribeFacebookPageFromWebhooksMock).not.toHaveBeenCalled();
+    expect((await listChannels(business.id)).some((c) => c.id === channelId)).toBe(false);
+  });
+
+  it('deleting a channel unsubscribes when the token still answers as its own page', async () => {
+    const { user, business } = await seedTestWorld();
+    const token = await createFacebookPagesSelectionToken({
+      businessId: business.id,
+      userId: user.id,
+      pages: [{ id: 'HEALTHY_PAGE', name: 'Healthy Page', access_token: 'healthy-tok' }],
+    });
+    tokenPages = { 'healthy-tok': 'HEALTHY_PAGE' };
+
+    const connectRes = await app.request(`/api/v1/${business.id}/channels/facebook/connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ token, pageIds: ['HEALTHY_PAGE'] }),
+    });
+    const connected = (await connectRes.json()) as { connected: Array<{ id: string }> };
+
+    const del = await app.request(`/api/v1/${business.id}/channels/${connected.connected[0]!.id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    expect(del.status).toBe(200);
+    expect(unsubscribeFacebookPageFromWebhooksMock).toHaveBeenCalledWith('HEALTHY_PAGE', 'healthy-tok');
   });
 });

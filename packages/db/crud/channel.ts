@@ -1,4 +1,4 @@
-import { eq, and, isNull, ne } from 'drizzle-orm';
+import { eq, and, isNull, ne, or, isNotNull, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, channels } from '@db/schema';
 import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
@@ -37,7 +37,8 @@ async function assertSoleLiveOwner(
       eq(channels.platform, platform),
       eq(channels.platformChannelId, platformChannelId),
       isNull(channels.deletedAt),
-      ne(channels.businessId, businessId),
+      // An operator-owned channel (businessId null) also blocks a store from taking the page.
+      or(isNull(channels.businessId), ne(channels.businessId, businessId)),
     ),
     columns: { id: true },
   });
@@ -171,6 +172,24 @@ export async function getChannelByPageId(pageId: string) {
   });
 }
 
+/**
+ * Resolves a live channel from the account id the platform puts on the webhook envelope.
+ * Messenger's envelope carries the Page id; Instagram's carries the professional account id.
+ */
+export async function getChannelByPlatformAccountId(
+  platform: 'instagram',
+  accountId: string,
+) {
+  return db.query.channels.findFirst({
+    where: and(
+      eq(channels.platform, platform),
+      eq(channels.platformChannelId, accountId),
+      isNull(channels.deletedAt),
+    ),
+    with: { agent: true, business: true },
+  });
+}
+
 export async function getChannelByBusinessPlatformChannelId(
   businessId: string,
   platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
@@ -299,4 +318,92 @@ export async function deleteChannel(businessId: string, channelId: string) {
     .set({ deletedAt: new Date() })
     .where(eq(channels.id, channelId));
   return { deleted: true };
+}
+
+/**
+ * A platform channel connected from the admin console: owned by the operator, answering no
+ * customers. Reconnecting refreshes its token; a page held by a store is refused.
+ */
+export async function upsertAdminChannel(input: {
+  platformChannelId: string;
+  apiToken: string;
+  pageName: string;
+}): Promise<{ id: string; created: boolean }> {
+  const live = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.platform, 'facebook'),
+      eq(channels.platformChannelId, input.platformChannelId),
+      isNull(channels.deletedAt),
+    ),
+  });
+  if (live) {
+    if (!live.isAdminOnly) throw new ChannelTakenError();
+    await db
+      .update(channels)
+      .set({
+        apiToken: input.apiToken,
+        extraInfo: JSON.stringify({ pageName: input.pageName }),
+      })
+      .where(eq(channels.id, live.id));
+    return { id: live.id, created: false };
+  }
+
+  const removed = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.platform, 'facebook'),
+      eq(channels.platformChannelId, input.platformChannelId),
+      isNotNull(channels.deletedAt),
+    ),
+  });
+  if (removed) {
+    const [restored] = await db
+      .update(channels)
+      .set({
+        deletedAt: null,
+        businessId: null,
+        agentId: null,
+        isAdminOnly: true,
+        apiToken: input.apiToken,
+        extraInfo: JSON.stringify({ pageName: input.pageName }),
+      })
+      .where(eq(channels.id, removed.id))
+      .returning({ id: channels.id });
+    return { id: restored.id, created: true };
+  }
+
+  const [created] = await db
+    .insert(channels)
+    .values({
+      platform: 'facebook',
+      apiToken: input.apiToken,
+      platformChannelId: input.platformChannelId,
+      extraInfo: JSON.stringify({ pageName: input.pageName }),
+      isAdminOnly: true,
+    })
+    .returning({ id: channels.id });
+  return { id: created.id, created: true };
+}
+
+export async function listAdminChannels() {
+  return db.query.channels.findMany({
+    where: and(eq(channels.isAdminOnly, true), isNull(channels.deletedAt)),
+    orderBy: [asc(channels.createdAt)],
+  });
+}
+
+/** Who holds a live channel for this page, and whether that holder is the operator. */
+export async function getLiveChannelOwner(
+  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platformChannelId: string,
+) {
+  return (
+    (await db.query.channels.findFirst({
+      where: and(
+        eq(channels.platform, platform),
+        eq(channels.platformChannelId, platformChannelId),
+        isNull(channels.deletedAt),
+      ),
+      columns: { businessId: true, isAdminOnly: true },
+    })) ?? null
+  );
 }

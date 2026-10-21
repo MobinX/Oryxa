@@ -7,6 +7,7 @@ import { COMPANY_NAME } from '@/lib/brand';
 import { Card } from '@/components/ui/card';
 import { DataTable, type DataTableHeader } from '@/components/data-table';
 import { FacebookConnectButton } from '@/components/facebook-connect-button';
+import { InstagramConnectButton } from '@/components/instagram-connect-button';
 import {
   deleteChannelAction,
   deleteChannelsBulkAction,
@@ -16,8 +17,8 @@ import ChannelsSkeleton from './skeleton';
 
 const channelHeaders: DataTableHeader[] = [
   { key: 'platform', header: 'Platform', className: 'min-w-[100px]' },
-  { key: 'pageName', header: 'Page name', className: 'w-full min-w-[140px]' },
-  { key: 'platformChannelId', header: 'Page ID', className: 'hidden sm:table-cell' },
+  { key: 'pageName', header: 'Account', className: 'w-full min-w-[140px]' },
+  { key: 'platformChannelId', header: 'Account ID', className: 'hidden sm:table-cell' },
 ];
 
 export default function ChannelsPage({
@@ -38,7 +39,7 @@ export default function ChannelsPage({
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Channels</h1>
         <p className="text-sm text-[var(--muted-foreground)] sm:text-base">
-          Connect the pages your customers already write to.
+          Connect the Pages and Instagram accounts your customers already write to.
         </p>
       </div>
       <Suspense fallback={<ChannelsSkeleton />}>
@@ -111,9 +112,31 @@ async function ChannelsContent({
         </Card>
       )}
 
+      {connected === 'instagram' && (
+        <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+          ✓ Instagram account(s) connected successfully.
+          {subscribeFailed && (
+            <span className="mt-1 block text-amber-800 dark:text-amber-200">
+              {subscribeFailed} account(s) could not be subscribed for webhooks — check the Meta app webhook
+              settings and the Instagram permissions.
+              {subscribeDetail && (
+                <span className="mt-1 block text-xs opacity-90">{decodeURIComponent(subscribeDetail)}</span>
+              )}
+            </span>
+          )}
+        </Card>
+      )}
+
       {error === 'facebook-subscribe' && (
         <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           Facebook connect failed.
+          {detail && <span className="mt-1 block text-xs opacity-90">{decodeURIComponent(detail)}</span>}
+        </Card>
+      )}
+
+      {error === 'instagram-connect' && (
+        <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+          Instagram connect failed.
           {detail && <span className="mt-1 block text-xs opacity-90">{decodeURIComponent(detail)}</span>}
         </Card>
       )}
@@ -132,15 +155,19 @@ async function ChannelsContent({
           </div>
         </Card>
 
-        <Card className="opacity-80 relative overflow-hidden border-dashed bg-[var(--muted)]/20">
-          <h2 className="text-lg font-semibold">WhatsApp &amp; Instagram</h2>
+        <Card>
+          <h2 className="text-lg font-semibold">Connect Instagram</h2>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Connect your WhatsApp Business and Instagram Direct channels for multi-channel AI auto-replies.
+            Link the Instagram professional account attached to your Facebook Page. The same agent
+            answers Direct messages and comments with your products and orders.
           </p>
-          <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--primary)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
-            Coming Soon
+          <div className="mt-4">
+            <InstagramConnectButton businessId={businessId} />
           </div>
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+            Requires an Instagram professional account linked to a Facebook Page. A personal
+            Instagram account cannot be connected through the Meta API.
+          </p>
         </Card>
       </div>
 

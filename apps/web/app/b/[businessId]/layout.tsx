@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { BusinessSidebar, BusinessTopBar } from '@/components/business-sidebar';
 import { SidebarSkeleton } from '@/components/sidebar-skeleton';
+import { PushMessageListener } from '@/components/push-message-listener';
 
 export default function BusinessLayout({
   children,
@@ -11,6 +12,7 @@ export default function BusinessLayout({
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-[#F8F9FC] dark:bg-[#0B0D1B] lg:flex-row">
+      <PushMessageListener />
       <Suspense fallback={<SidebarSkeleton />}>
         <BusinessSidebar params={params} />
       </Suspense>

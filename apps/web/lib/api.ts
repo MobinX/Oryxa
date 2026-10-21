@@ -218,6 +218,18 @@ export type ProductDetail = {
   category: { id: string; name: string } | null;
   customerId?: string | null;
   customer: { id: string; name: string } | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** The product's declared options with their values, in the order the merchant hung them. */
+  options?: Array<{
+    id: string;
+    name: string;
+    position: number;
+    values: Array<{ id: string; value: string; position: number }>;
+  }>;
   variants: Array<{
     id: string;
     /** The short label this variant is read by, unique inside the business. */
@@ -231,6 +243,8 @@ export type ProductDetail = {
     price?: number;
     stock: number;
     isAvailable: boolean;
+    /** The combination this row is, when the product declares options. */
+    options?: Record<string, string>;
   }>;
   createdAt: string;
 };
@@ -243,6 +257,13 @@ export type CreateProductInput = {
   categoryName?: string;
   categoryId?: string;
   customerId?: string | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** Declared options — at most three; every variant must then answer each one. */
+  options?: Array<{ name: string; values: string[] }>;
   variants?: Array<{
     name: string;
     /** The short label the row's pictures carry. */
@@ -252,6 +273,8 @@ export type CreateProductInput = {
     price?: number;
     stock: number;
     isAvailable?: boolean;
+    /** The combination this row is, when the product declares options. */
+    options?: Record<string, string>;
   }>;
 };
 
@@ -263,6 +286,13 @@ export type UpdateProductInput = {
   categoryId?: string;
   categoryName?: string;
   customerId?: string | null;
+  slug?: string;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  tags?: string[];
+  showInStorefront?: boolean;
+  /** Present replaces the product's options wholesale; absent leaves them alone. */
+  options?: Array<{ name: string; values: string[] }>;
   variants?: Array<{
     id?: string;
     name: string;
@@ -274,6 +304,7 @@ export type UpdateProductInput = {
     price?: number;
     stock: number;
     isAvailable?: boolean;
+    options?: Record<string, string>;
   }>;
 };
 
@@ -445,6 +476,85 @@ export const connectFacebookPages = (
     `/api/v1/${businessId}/channels/facebook/connect`,
     { method: 'POST', token, body: JSON.stringify(data) },
   );
+
+export const getInstagramAuthUrl = (token: string, businessId: string) =>
+  apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth`, { token });
+
+export type InstagramPendingAccount = {
+  id: string;
+  username: string;
+  name?: string | null;
+  profilePic?: string | null;
+  pageId: string;
+  pageName: string;
+  connected: boolean;
+  heldByOtherStore?: boolean;
+};
+
+export const listInstagramPendingAccounts = (
+  token: string,
+  businessId: string,
+  selectionToken: string,
+) =>
+  apiFetch<InstagramPendingAccount[]>(
+    `/api/v1/${businessId}/channels/instagram/pending?token=${encodeURIComponent(selectionToken)}`,
+    { token },
+  );
+
+export const connectInstagramAccounts = (
+  token: string,
+  businessId: string,
+  data: { token: string; accountIds: string[] },
+) =>
+  apiFetch<{
+    connected: Array<{ id: string; instagramId: string; username: string }>;
+    skipped: string[];
+    failed?: Array<{ instagramId: string; error: string }>;
+  }>(`/api/v1/${businessId}/channels/instagram/connect`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
+// The operator's own Pages: same handshake, channels with no tenant and isAdminOnly set.
+export type AdminChannel = {
+  id: string;
+  pageId: string;
+  pageName: string;
+  createdAt: string;
+};
+
+export const listAdminChannels = (token: string) =>
+  apiFetch<{ channels: AdminChannel[] }>('/api2/admin/channels', { token });
+
+export const getAdminFacebookAuthUrl = (token: string) =>
+  apiFetch<{ url: string }>('/api2/admin/channels/facebook/auth', { token });
+
+export type AdminPendingPage = {
+  id: string;
+  name: string;
+  connected: boolean;
+  heldByStore: boolean;
+};
+
+export const listAdminFacebookPendingPages = (token: string, selectionToken: string) =>
+  apiFetch<{ pages: AdminPendingPage[] }>(
+    `/api2/admin/channels/facebook/pending?token=${encodeURIComponent(selectionToken)}`,
+    { token },
+  );
+
+export const connectAdminFacebookPages = (
+  token: string,
+  data: { token: string; pageIds: string[] },
+) =>
+  apiFetch<{
+    connected: Array<{ id: string; pageId: string; pageName: string }>;
+    failed: Array<{ pageId: string; error: string }>;
+  }>('/api2/admin/channels/facebook/connect', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
 
 /** The agent that answers this store's pages. Nobody picks it, so this is the only agent read. */
 export const getDefaultAgent = (token: string, businessId: string) =>
@@ -644,18 +754,6 @@ export function toCsv(rows: Record<string, unknown>[], columns: { key: string; l
     .map((row) => columns.map((c) => escape(row[c.key])).join(','))
     .join('\n');
   return `${header}\n${body}`;
-}
-
-export function csvColumnsForProducts() {
-  return [
-    { key: 'name', label: 'Name' },
-    { key: 'sku', label: 'SKU' },
-    { key: 'price', label: 'Price' },
-    { key: 'categoryName', label: 'Category' },
-    { key: 'variantCount', label: 'Variants' },
-    { key: 'description', label: 'Description' },
-    { key: 'createdAt', label: 'Created At' },
-  ];
 }
 
 export function csvColumnsForOrders() {
