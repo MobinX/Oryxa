@@ -18,6 +18,7 @@ import {
   updateOrderState,
   updateOrder,
   deleteOrder,
+  OrderStateTransitionError,
 } from '@repo/db/crud/order';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
@@ -97,6 +98,7 @@ const updateOrderStateRoute = createRoute({
   responses: {
     200: { content: { 'application/json': { schema: updateOrderStateOutputSchema } }, description: 'Updated' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+    409: { content: { 'application/json': { schema: z.object({ error: z.string(), allowed: z.array(z.string()).optional() }) } }, description: 'Invalid state transition' },
   },
 });
 
@@ -104,9 +106,16 @@ ordersRouter.openapi(updateOrderStateRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const orderId = c.req.param('orderId');
   const data = c.req.valid('json');
-  const result = await updateOrderState(businessId, orderId, data);
-  if (!result) return c.json({ error: 'Order not found' }, 404);
-  return c.json(result);
+  try {
+    const result = await updateOrderState(businessId, orderId, data);
+    if (!result) return c.json({ error: 'Order not found' }, 404);
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof OrderStateTransitionError) {
+      return c.json({ error: err.message, allowed: err.allowedStates }, 409);
+    }
+    throw err;
+  }
 });
 
 const getOrderRoute = createRoute({
