@@ -836,9 +836,10 @@ export async function getFacebookPostContext(
  */
 export async function fetchMessengerImage(
   url: string,
+  service = 'facebook',
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   try {
-    const res = await loggedFetch(url);
+    const res = await loggedFetch(url, undefined, service);
     if (!res.ok) return null;
     const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim();
     // Meta answers a bad signature with an HTML error page served as 200 on some paths.
@@ -858,9 +859,10 @@ export async function fetchMessengerImage(
  */
 export async function fetchMessengerAudio(
   url: string,
+  service = 'facebook',
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   try {
-    const res = await loggedFetch(url);
+    const res = await loggedFetch(url, undefined, service);
     if (!res.ok) return null;
     const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     const audioLike =

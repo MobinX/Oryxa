@@ -64,6 +64,7 @@ import {
 } from '@repo/integrations/instagram';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
+import { emit } from '@api/lib/log';
 
 export const channelsRouter = new OpenAPIHono();
 
@@ -770,6 +771,12 @@ channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
     const entry = byAccountId.get(accountId);
     if (!entry) {
       skipped.push(accountId);
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: accountId,
+        ok: false,
+        reason: 'the account was not part of this signed selection',
+      });
       continue;
     }
     const { page, account } = entry;
@@ -779,10 +786,15 @@ channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
     // be revoked and an account can be unlinked in between.
     const liveAccount = await getInstagramAccountForPage(page.id, page.access_token);
     if (liveAccount?.id !== account.id) {
-      failed.push({
+      const reason =
+        'This Instagram account is no longer linked to the Page, or the Instagram permissions were not granted. Reconnect and try again.';
+      failed.push({ instagramId: account.id, error: reason });
+      emit('instagram', {
+        stage: 'connect_account',
         instagramId: account.id,
-        error:
-          'This Instagram account is no longer linked to the Page, or the Instagram permissions were not granted. Reconnect and try again.',
+        pageId: page.id,
+        ok: false,
+        reason,
       });
       continue;
     }
@@ -828,18 +840,39 @@ channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
         channelId = created.id;
       }
 
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: account.id,
+        pageId: page.id,
+        ok: true,
+      });
+
       try {
         await subscribeInstagramPageToWebhooks(page.id, page.access_token);
+        emit('instagram', {
+          stage: 'subscribe',
+          instagramId: account.id,
+          pageId: page.id,
+          ok: true,
+        });
       } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
         console.error('[ig-connect] webhook subscription failed', {
           businessId,
           instagramId: account.id,
           pageId: page.id,
-          error: err instanceof Error ? err.message : String(err),
+          error: reason,
         });
         failed.push({
           instagramId: account.id,
           error: err instanceof Error ? err.message : 'Webhook subscription failed',
+        });
+        emit('instagram', {
+          stage: 'subscribe',
+          instagramId: account.id,
+          pageId: page.id,
+          ok: false,
+          reason,
         });
       }
 
@@ -849,6 +882,13 @@ channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
       failed.push({
         instagramId: account.id,
         error: err instanceof Error ? err.message : 'Connect failed',
+      });
+      emit('instagram', {
+        stage: 'connect_account',
+        instagramId: account.id,
+        pageId: page.id,
+        ok: false,
+        reason: err instanceof Error ? err.message : 'Connect failed',
       });
     }
   }
@@ -920,6 +960,16 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
         businessId: verified.businessId,
         pages: pages.length,
         accounts: accounts.length,
+      });
+      emit('instagram', {
+        stage: 'account_lookup',
+        entryCount: pages.length,
+        count: accounts.length,
+        resolved: accounts.length > 0,
+        reason:
+          accounts.length > 0
+            ? undefined
+            : 'no Page on this account names a linked Instagram professional account',
       });
       if (accounts.length > 0) return await toPicker(accounts);
       return toError(

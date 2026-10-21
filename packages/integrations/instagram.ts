@@ -56,7 +56,11 @@ export async function getInstagramAccountForPage(
     fields: 'instagram_business_account{id,username,name,profile_pic}',
     access_token: pageToken,
   });
-  const res = await loggedFetch(`${GRAPH_API}/${encodeURIComponent(pageId)}?${params}`);
+  const res = await loggedFetch(
+    `${GRAPH_API}/${encodeURIComponent(pageId)}?${params}`,
+    undefined,
+    'instagram',
+  );
   if (!res.ok) return null;
   const body = (await res.json().catch(() => null)) as {
     instagram_business_account?: LinkedInstagramAccount;
@@ -90,7 +94,7 @@ export async function subscribeInstagramPageToWebhooks(
 ): Promise<void> {
   const fields = INSTAGRAM_PAGE_WEBHOOK_FIELDS.join(',');
   const url = `${GRAPH_API}/${encodeURIComponent(pageId)}/subscribed_apps?subscribed_fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(pageToken)}`;
-  const res = await loggedFetch(url, { method: 'POST' });
+  const res = await loggedFetch(url, { method: 'POST' }, 'instagram');
   const raw = await res.text();
   if (!res.ok) {
     throw new Error(`Instagram webhook subscription failed: ${raw}`);
@@ -120,7 +124,11 @@ export async function getInstagramUserProfile(
       fields: 'name,username,profile_pic',
       access_token: pageToken,
     });
-    const res = await loggedFetch(`${GRAPH_API}/${encodeURIComponent(igsid)}?${params}`);
+    const res = await loggedFetch(
+      `${GRAPH_API}/${encodeURIComponent(igsid)}?${params}`,
+      undefined,
+      'instagram',
+    );
     if (!res.ok) return {};
     const body = (await res.json()) as {
       name?: string;
@@ -150,7 +158,11 @@ export async function getInstagramMediaContext(
       fields: 'caption,media_type,media_url,thumbnail_url,permalink,username,timestamp',
       access_token: pageToken,
     });
-    const res = await loggedFetch(`${GRAPH_API}/${encodeURIComponent(mediaId)}?${params}`);
+    const res = await loggedFetch(
+      `${GRAPH_API}/${encodeURIComponent(mediaId)}?${params}`,
+      undefined,
+      'instagram',
+    );
     if (!res.ok) return null;
     const media = (await res.json()) as {
       caption?: string;
@@ -195,6 +207,7 @@ export async function replyToInstagramComment(
       method: 'POST',
       signal: AbortSignal.timeout(20_000),
     },
+    'instagram',
   );
 
   if (!res.ok) {
