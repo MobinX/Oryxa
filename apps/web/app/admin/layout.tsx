@@ -14,32 +14,49 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const signedIn = Boolean(await logsBearer());
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
+    <div className="min-h-dvh overflow-x-clip bg-background text-foreground transition-colors duration-200">
       <header className="sticky top-0 z-50 border-b border-border/40 bg-card/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3.5 sm:px-6">
-          <Link href={signedIn ? '/admin' : '/admin/login'} className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground font-geist font-bold text-base shadow-md shadow-primary/20">
-              O
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <Link
+              href={signedIn ? '/admin' : '/admin/login'}
+              className="flex min-w-0 shrink items-center gap-2"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-geist font-bold text-base shadow-md shadow-primary/20">
+                O
+              </div>
+              <span className="truncate font-geist text-base font-bold tracking-tight text-foreground sm:text-lg">
+                {COMPANY_NAME}
+              </span>
+              <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">/ admin</span>
+            </Link>
+            <div className="flex min-w-0 shrink items-center justify-end gap-2 sm:gap-3">
+              {signedIn ? (
+                <div className="hidden min-w-0 max-w-full lg:block">
+                  <AdminTabs />
+                </div>
+              ) : null}
+              <ThemeToggle />
+              {signedIn ? (
+                <SignOutForm
+                  action={logsSignOutAction}
+                  title="End this console session"
+                  className="flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card px-2.5 text-sm font-medium text-muted-foreground shadow-sm transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95 disabled:opacity-60 sm:px-3"
+                >
+                  <LogOut className="h-4 w-4 stroke-[1.75]" />
+                  <span className="hidden sm:inline">Sign out</span>
+                </SignOutForm>
+              ) : null}
             </div>
-            <span className="font-geist text-lg font-bold tracking-tight text-foreground">
-              {COMPANY_NAME}
-            </span>
-            <span className="text-sm text-muted-foreground">/ admin</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            {signedIn ? <AdminTabs /> : null}
-            <ThemeToggle />
-            {signedIn ? (
-              <SignOutForm
-                action={logsSignOutAction}
-                title="End this console session"
-                className="flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card px-3 text-sm font-medium text-muted-foreground shadow-sm transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95 disabled:opacity-60"
-              >
-                <LogOut className="h-4 w-4 stroke-[1.75]" />
-                <span className="hidden sm:inline">Sign out</span>
-              </SignOutForm>
-            ) : null}
           </div>
+          {/* On a phone the tabs get their own row and scroll sideways instead of widening the
+              header; stacked inside the title row they used to force the console past the
+              viewport, which is what made the dashboard scroll further than its content. */}
+          {signedIn ? (
+            <div className="mt-2 min-w-0 lg:hidden">
+              <AdminTabs />
+            </div>
+          ) : null}
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>

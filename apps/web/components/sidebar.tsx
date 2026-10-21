@@ -22,6 +22,7 @@ import {
   LayoutList,
   CreditCard,
   Users,
+  Bell,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ const nav = [
   { href: 'channels', label: 'Channels', icon: Radio },
   { href: 'posts', label: 'Posts', icon: LayoutList },
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
+  { href: 'notifications', label: 'Notifications', icon: Bell },
   { href: 'playground', label: 'Playground', icon: Terminal },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
   { href: 'billing', label: 'Billing', icon: CreditCard },

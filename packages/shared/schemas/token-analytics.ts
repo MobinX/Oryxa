@@ -4,6 +4,7 @@ export const integrationTypeSchema = z.enum([
   'facebook_messenger',
   'facebook_comment',
   'instagram_messenger',
+  'instagram_comment',
   'whatsapp',
   'ai_post_generation',
   'ai_post_tuning',

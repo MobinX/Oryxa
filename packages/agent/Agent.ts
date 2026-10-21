@@ -92,6 +92,8 @@ export interface AgentConfig {
   pageToken: string;
   customerPlatformId: string;
   customerName?: string | null;
+  /** Which inbox this token answers as; tools use it for the platform's text limit and wording. */
+  platform?: 'facebook' | 'instagram';
   catalogSummary?: string;
   /** Per-thread facts, kept after the stable prompt prefix for cache reuse. */
   agentState?: ConversationAgentState;
@@ -325,6 +327,7 @@ export class Agent {
           pageToken: this.config.pageToken,
           customerPlatformId: this.config.customerPlatformId,
           customerName: this.config.customerName,
+          platform: this.config.platform,
           emitSse,
           sendMessageOverride,
           onOrderCreated: this.config.onOrderCreated,

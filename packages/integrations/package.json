@@ -6,6 +6,7 @@
   "exports": {
     ".": "./index.ts",
     "./facebook": "./facebook.ts",
+    "./instagram": "./instagram.ts",
     "./b2": "./b2.ts",
     "./azure-speech": "./azure-speech.ts",
     "./http-log": "./http-log.ts"

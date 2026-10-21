@@ -5,6 +5,7 @@ import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
+import { INSTAGRAM_AGENT_GUIDANCE } from '@repo/agent';
 
 /**
  * How many of the customer's turns a picture stays pixels for. Counted in turns rather than raw
@@ -78,6 +79,7 @@ export async function runAgentCore(
   }
 
   const answering = await resolveAnsweringAgent(conv.channel.agent);
+  const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   // Atomic claim: only one concurrent caller transitions idle→working and gets
   // to run the agent. This is the single race-free gate that prevents duplicate
@@ -238,9 +240,12 @@ export async function runAgentCore(
     catalogSummary,
     emitSse,
     sendMessageOverride,
-    // Already resolved: the store's own block, else the platform default's, else undefined and Agent
-    // falls back to the reviewed text in @agent/guidance.
-    replyGuidance: answering.replyGuidance ?? undefined,
+    platform,
+    // Already resolved: the store's own block, else the platform default's, else the channel's
+    // reviewed text in @agent/guidance.
+    replyGuidance:
+      answering.replyGuidance ??
+      (platform === 'instagram' ? INSTAGRAM_AGENT_GUIDANCE : undefined),
     agentState,
     persistAgentState: (state) => updateConversationAgentState(conv.id, state),
     onOrderCreated: async (orderId) => {
@@ -290,7 +295,7 @@ export async function runAgentCore(
         businessId: conv.businessId,
         channelId: conv.channelId,
         conversationId: conv.id,
-        integrationType: 'facebook_messenger',
+        integrationType: platform === 'instagram' ? 'instagram_messenger' : 'facebook_messenger',
         provider: metrics.provider,
         model: metrics.model,
         inputTokens: metrics.inputTokens,
@@ -349,7 +354,11 @@ export async function runAgentCore(
       } else {
         emitSse('message_sent', { text: replyText, fallback: true });
         try {
-          await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
+          // The test override still receives exactly the three arguments it always did; a real
+          // send learns the platform so Instagram gets its 1,000-character chunks.
+          await (sendMessageOverride
+            ? resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText)
+            : sendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText, { platform }));
         } catch (err) {
           if (chargedPeriod) {
             try {

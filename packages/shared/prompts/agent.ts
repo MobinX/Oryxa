@@ -95,6 +95,15 @@ export const MESSENGER_AGENT_GUIDANCE = [
   '5. **Proactive Suggestions**: Whenever you tell the customer which colors, sizes, categories, or quantities exist, offer exactly those values as tappable suggestions in the same turn through `send_message`, and after a bare acknowledgement ("oh", "ok") offer the most likely next choice the same way. A question answered with one tap is always better than one the customer must type; end those turns with SILENT.',
 ].join('\n');
 
+/**
+ * The same rules, said on Instagram. Written as a derivation of the Messenger block rather than a
+ * copy: the decision table is the reviewed one, and a change here can never leave the two
+ * channels answering from different instructions.
+ */
+export const INSTAGRAM_AGENT_GUIDANCE = MESSENGER_AGENT_GUIDANCE
+  .replace('# Channel: Facebook Messenger', '# Channel: Instagram Direct')
+  .replaceAll('Messenger', 'Instagram Direct');
+
 export const COMMENT_AGENT_GUIDANCE = [
   '# Channel: Public Post Comments',
   'You are replying to a public comment on the business’s Facebook post. History shows this commenter’s prior comments and page replies on this post. Never repeat already-sent page replies.',
@@ -111,3 +120,8 @@ export const COMMENT_AGENT_GUIDANCE = [
   '1. Never write prices, exact stock counts, customer personal details, or em dashes (—) in `reply_comment`.',
   '2. Never post a "check your inbox" line via `reply_comment` unless `send_private_message` succeeded in this turn. If `send_private_message` fails/refuses, answer non-sensitive details in `reply_comment` and invite the user to message the Page directly.',
 ].join('\n');
+
+/** The public-comment rules in Instagram's words; same reviewed table, different platform name. */
+export const INSTAGRAM_COMMENT_AGENT_GUIDANCE = COMMENT_AGENT_GUIDANCE
+  .replace('public comment on the business’s Facebook post', 'public comment on the business’s Instagram post')
+  .replaceAll('Messenger', 'Instagram Direct');

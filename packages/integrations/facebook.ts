@@ -401,7 +401,56 @@ export function parseDetailsPayload(payload: string | undefined | null): Details
 
 /** Meta answers 400 (graph code 100) for a `message[text`] longer than this. */
 const MESSENGER_TEXT_LIMIT = 2000;
+/**
+ * Instagram Messaging accepts 1,000 **bytes** of UTF-8 per text message, not 1,000 characters.
+ * Bangla is three bytes a letter, so a reply that looks short in characters can still be over.
+ */
+const INSTAGRAM_TEXT_LIMIT = 1000;
 const SENTENCE_BOUNDARY = /(?<=[.!?。！？])\s/;
+
+function utf8Length(value: string): number {
+  return encoder.encode(value).length;
+}
+
+/** Cut a string at a byte ceiling without splitting a code point. */
+function truncateUtf8(value: string, maxBytes: number): string {
+  let out = '';
+  let bytes = 0;
+  for (const character of Array.from(value)) {
+    const size = encoder.encode(character).length;
+    if (bytes + size > maxBytes) break;
+    out += character;
+    bytes += size;
+  }
+  return out;
+}
+
+/** A coarse character split first, then any chunk that is still too many bytes is cut again. */
+function splitUtf8(value: string, maxBytes: number): string[] {
+  if (utf8Length(value) <= maxBytes) return [value];
+  const out: string[] = [];
+  let current = '';
+  let bytes = 0;
+  for (const character of Array.from(value)) {
+    const size = encoder.encode(character).length;
+    if (current !== '' && bytes + size > maxBytes) {
+      out.push(current);
+      current = '';
+      bytes = 0;
+    }
+    current += character;
+    bytes += size;
+  }
+  if (current !== '') out.push(current);
+  return out;
+}
+
+/** The Instagram wire's chunks: sentence-aware at 1,000 characters, then byte-safe. */
+function instagramChunks(text: string, maxBytes = INSTAGRAM_TEXT_LIMIT): string[] {
+  return messengerChunks(text, maxBytes).flatMap((chunk) => splitUtf8(chunk, maxBytes));
+}
+
+export type MessagingPlatform = 'facebook' | 'instagram';
 
 /** Code points, because the limit is in characters and an emoji is one. */
 function chars(value: string): string[] {
@@ -484,6 +533,11 @@ export type SendMessageOptions = {
    * Automated agent replies must omit this — Meta forbids the tag for bots.
    */
   humanAgent?: boolean;
+  /**
+   * Which inbox the same Page token is sending into. Instagram goes through the same
+   * `/me/messages` node and the same templates, but caps a text message at 1,000 UTF-8 bytes.
+   */
+  platform?: MessagingPlatform;
 };
 
 export async function senderAction(
@@ -531,6 +585,7 @@ export async function sendQuickReplies(
   recipientId: string,
   question: string,
   options: string[],
+  sendOptions?: SendMessageOptions,
 ): Promise<void> {
   const replies = options
     .map((option) => option.trim())
@@ -545,7 +600,13 @@ export async function sendQuickReplies(
 
   await postMessengerSend(pageToken, {
     recipient: { id: recipientId },
-    message: { text: question.slice(0, MESSENGER_TEXT_LIMIT), quick_replies: replies },
+    message: {
+      text:
+        sendOptions?.platform === 'instagram'
+          ? truncateUtf8(question, INSTAGRAM_TEXT_LIMIT)
+          : Array.from(question).slice(0, MESSENGER_TEXT_LIMIT).join(''),
+      quick_replies: replies,
+    },
     messaging_type: 'RESPONSE',
   });
 }
@@ -578,7 +639,9 @@ export async function sendMessage(
   // One post per chunk, in order: a single oversized block would be rejected
   // outright and the customer would receive none of the answer, and posts sent
   // in parallel can arrive shuffled — Messenger orders by arrival, not intent.
-  for (const chunk of messengerChunks(content)) {
+  for (const chunk of options?.platform === 'instagram'
+    ? instagramChunks(content)
+    : messengerChunks(content, MESSENGER_TEXT_LIMIT)) {
     await postMessengerSend(pageToken, {
       recipient,
       message: { text: chunk },
@@ -597,8 +660,25 @@ export async function sendCommenterMessage(
   pageToken: string,
   commentId: string,
   text: string,
+  options?: SendMessageOptions,
 ): Promise<void> {
-  for (const chunk of messengerChunks(text)) {
+  const chunks =
+    options?.platform === 'instagram' ? instagramChunks(text) : messengerChunks(text, MESSENGER_TEXT_LIMIT);
+  // Instagram allows exactly one private reply per comment. Sending the second chunk of a
+  // long answer would be refused and the first would already be on the wire, so Instagram
+  // gets the first chunk as its single message.
+  if (options?.platform === 'instagram') {
+    const only = chunks[0];
+    if (!only) return;
+    await postMessengerSend(pageToken, {
+      recipient: { comment_id: commentId },
+      message: { text: only },
+      messaging_type: 'RESPONSE',
+    });
+    return;
+  }
+
+  for (const chunk of chunks) {
     await postMessengerSend(pageToken, {
       recipient: { comment_id: commentId },
       message: { text: chunk },
@@ -820,13 +900,21 @@ export async function verifyWebhookSignature(
  * portfolio choice, and stays absent when the caller had no choice to make.
  */
 export async function createOAuthState(
-  payload: { businessId: string; userId: string; portfolio?: boolean },
+  payload: {
+    businessId: string;
+    userId: string;
+    portfolio?: boolean;
+    /** Instagram rides the same Facebook Login; the flag only changes the scopes and the picker. */
+    platform?: MessagingPlatform;
+  },
   ttlSeconds = 600,
 ): Promise<string> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret) throw new Error('INTERNAL_KEY is required to start Facebook OAuth');
   const exp = Date.now() + ttlSeconds * 1000;
-  const body = [payload.businessId, payload.userId, exp, payload.portfolio ? 'p' : null]
+  const flags =
+    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}` || null;
+  const body = [payload.businessId, payload.userId, exp, flags]
     .filter((part) => part !== null)
     .join('.');
   const sig = await hmacHex(secret, body);
@@ -839,27 +927,46 @@ export async function createOAuthState(
  */
 export const ADMIN_FACEBOOK_FLOW = 'admin-platform';
 
-/** Verifies a `state` returned by Meta; returns the bound ids or null. */
+/** Verifies a `state` returned by Meta; returns the bound ids, choices and platform, or null. */
 export async function verifyOAuthState(
   state: string | undefined,
-): Promise<{ businessId: string; userId: string; portfolio: boolean } | null> {
+): Promise<{
+  businessId: string;
+  userId: string;
+  portfolio: boolean;
+  platform: MessagingPlatform;
+} | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !state) return null;
   const parts = state.split('.');
   if (parts.length !== 4 && parts.length !== 5) return null;
-  const [businessId, userId, expStr, flagOrSig] = parts;
-  const portfolio = parts.length === 5;
-  const sig = portfolio ? parts[4] : flagOrSig;
+  const [businessId, userId, expStr] = parts;
+  // Old tokens carry no flags at all; new ones carry `p`, `i`, or both, in that order.
+  const flags = parts.length === 5 ? parts[3] : '';
+  if (flags !== '' && !/^(?:p|i|pi)$/.test(flags)) return null;
+  const sig = parts.length === 5 ? parts[4] : (parts[3] ?? '');
   const exp = Number(expStr);
   if (!businessId || !userId || !Number.isFinite(exp) || exp < Date.now()) return null;
-  if (portfolio && parts[3] !== 'p') return null;
   const expected = await hmacHex(
     secret,
-    portfolio ? `${businessId}.${userId}.${expStr}.p` : `${businessId}.${userId}.${expStr}`,
+    flags ? `${businessId}.${userId}.${expStr}.${flags}` : `${businessId}.${userId}.${expStr}`,
   );
   if (!timingSafeEqual(sig, expected)) return null;
-  return { businessId, userId, portfolio };
+  return {
+    businessId,
+    userId,
+    portfolio: flags.includes('p'),
+    platform: flags.includes('i') ? 'instagram' : 'facebook',
+  };
 }
+
+/** The Instagram professional account linked to a Page, as the picker needs to name it. */
+export type InstagramAccountOption = {
+  id: string;
+  username: string;
+  name?: string;
+  profilePic?: string;
+};
 
 export type FacebookPageOption = {
   id: string;
@@ -867,6 +974,8 @@ export type FacebookPageOption = {
   access_token: string;
   /** Set when the Page came from a Business Portfolio instead of the personal Page list. */
   business?: string;
+  /** Set when this Page is linked to an Instagram professional account. */
+  instagram?: InstagramAccountOption;
 };
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -890,7 +999,12 @@ function fromBase64Url(encoded: string): Uint8Array {
  * storing tokens in the session DB. Format: `<base64url(payload)>.<sig>`.
  */
 export async function createFacebookPagesSelectionToken(
-  payload: { businessId: string; userId: string; pages: FacebookPageOption[] },
+  payload: {
+    businessId: string;
+    userId: string;
+    pages: FacebookPageOption[];
+    platform?: MessagingPlatform;
+  },
   ttlSeconds = 600,
 ): Promise<string> {
   const secret = process.env.INTERNAL_KEY;
@@ -902,6 +1016,7 @@ export async function createFacebookPagesSelectionToken(
         businessId: payload.businessId,
         userId: payload.userId,
         exp,
+        platform: payload.platform ?? 'facebook',
         pages: payload.pages,
       }),
     ),
@@ -913,7 +1028,12 @@ export async function createFacebookPagesSelectionToken(
 /** Verifies a page-selection token from the OAuth callback redirect. */
 export async function verifyFacebookPagesSelectionToken(
   token: string | undefined,
-): Promise<{ businessId: string; userId: string; pages: FacebookPageOption[] } | null> {
+): Promise<{
+  businessId: string;
+  userId: string;
+  pages: FacebookPageOption[];
+  platform: MessagingPlatform;
+} | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !token) return null;
   const dot = token.lastIndexOf('.');
@@ -927,6 +1047,7 @@ export async function verifyFacebookPagesSelectionToken(
       businessId?: string;
       userId?: string;
       exp?: number;
+      platform?: MessagingPlatform;
       pages?: FacebookPageOption[];
     };
     if (
@@ -943,6 +1064,7 @@ export async function verifyFacebookPagesSelectionToken(
       businessId: parsed.businessId,
       userId: parsed.userId,
       pages: parsed.pages,
+      platform: parsed.platform === 'instagram' ? 'instagram' : 'facebook',
     };
   } catch {
     return null;

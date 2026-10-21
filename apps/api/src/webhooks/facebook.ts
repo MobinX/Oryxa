@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getChannelByPageId } from '@repo/db/crud/channel';
+import { getChannelByPageId, getChannelByPlatformAccountId } from '@repo/db/crud/channel';
 import {
   processInboundMessage,
   setConversationProfileIfMissing,
@@ -28,6 +28,7 @@ import {
   detailsVariantPayload,
   type DetailsPayload,
 } from '@repo/integrations/facebook';
+import { getInstagramUserProfile } from '@repo/integrations/instagram';
 import { transcribeAudio } from '@repo/integrations/azure-speech';
 import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
@@ -57,9 +58,17 @@ type MessagingEvent = {
     mid?: string;
     is_echo?: boolean;
     attachments?: MessagingAttachment[];
+    quick_reply?: { payload?: string };
   };
   postback?: { title?: string; payload?: string; mid?: string };
 };
+
+/**
+ * Instagram sends both envelopes on the same signed callback URL. The Page object is the
+ * Messenger channel; the Instagram object is the professional account linked to that Page.
+ */
+type MetaWebhookObject = 'page' | 'instagram';
+type ChannelPlatform = 'facebook' | 'instagram';
 
 /**
  * The pictures in a message, in the order the customer sent them. Meta gives the same link twice
@@ -211,6 +220,15 @@ type WebhookBody = {
   entry?: WebhookEntry[];
 };
 
+/** Instagram comments arrive as `changes` with the comment itself inside `value`. */
+type InstagramCommentValue = {
+  comment_id?: string;
+  parent_id?: string;
+  text?: string;
+  from?: { id?: string; username?: string };
+  media?: { id?: string; media_product_type?: string };
+};
+
 /**
  * A lock untouched since this instant is orphaned rather than slow: the process
  * that took it is gone, and nothing will ever release it. Passing the instant to
@@ -293,7 +311,12 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
 }
 
 export const fbWebhookRouter = new Hono();
-fbWebhookRouter.get('/facebook', async (c) => {
+
+/**
+ * The verification handshake is identical for both Meta objects: the same verify token,
+ * the same challenge. Each app-level webhook entry (Page, Instagram) has to complete it.
+ */
+async function verifyMetaWebhook(c: any): Promise<Response> {
   const forwardRes = await handleTestingForward(c, 'GET');
   if (forwardRes) return forwardRes;
 
@@ -302,12 +325,13 @@ fbWebhookRouter.get('/facebook', async (c) => {
   const token = c.req.query('hub.verify_token') ?? url.searchParams.get('hub.verify_token');
   const challenge = c.req.query('hub.challenge') ?? url.searchParams.get('hub.challenge');
   const verified = mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN;
+  const path = c.req.path;
 
   // One fact: whether this subscription handshake succeeded. The rejected case is
   // how a page silently stops delivering events — no error, no customer replies.
   emit('webhook', { event: 'verify', mode, verified, hasChallenge: Boolean(challenge) });
 
-  fbLog('GET /facebook', {
+  fbLog(`GET ${path}`, {
     url: c.req.url.split('?')[0],
     mode,
     verifyTokenMatch: verified,
@@ -316,13 +340,16 @@ fbWebhookRouter.get('/facebook', async (c) => {
   });
 
   if (verified) {
-    fbLog('GET /facebook verify OK — returning challenge');
+    fbLog(`GET ${path} verify OK — returning challenge`);
     return c.text(challenge ?? '');
   }
 
-  fbLog('GET /facebook verify rejected', { mode, verifyTokenMatch: false });
+  fbLog(`GET ${path} verify rejected`, { mode, verifyTokenMatch: false });
   return c.text('Forbidden', 403);
-});
+}
+
+fbWebhookRouter.get('/facebook', verifyMetaWebhook);
+fbWebhookRouter.get('/instagram', verifyMetaWebhook);
 
 /**
  * The one event a delivery produces. Customer text, raw bodies and signature
@@ -342,14 +369,15 @@ function deliveryEventFields(body: WebhookBody, signatureValid: boolean) {
   };
 }
 
-fbWebhookRouter.post('/facebook', async (c) => {
+async function receiveMetaWebhook(c: any): Promise<Response> {
   const forwardRes = await handleTestingForward(c, 'POST');
   if (forwardRes) return forwardRes;
 
+  const path = c.req.path;
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
 
-  fbLog('POST /facebook received', {
+  fbLog(`POST ${path} received`, {
     'x-hub-signature-256': signature256 ?? null,
     'x-hub-signature': signature ?? null,
     contentType: c.req.header('content-type') ?? null,
@@ -357,28 +385,31 @@ fbWebhookRouter.post('/facebook', async (c) => {
   });
 
   const raw = await c.req.text();
-  fbLog('POST /facebook raw body', raw);
+  fbLog(`POST ${path} raw body`, raw);
 
   const signatureValid = await verifyWebhookSignature(raw, signature256 ?? signature);
-  fbLog('POST /facebook signature verification', { valid: signatureValid });
+  fbLog(`POST ${path} signature verification`, { valid: signatureValid });
 
   if (!signatureValid) {
-    fbLog('POST /facebook rejected — invalid signature but will go through still');
+    fbLog(`POST ${path} rejected — invalid signature but will go through still`);
   }
 
   let body: WebhookBody;
   try {
     body = JSON.parse(raw) as WebhookBody;
   } catch (err) {
-    fbLog('POST /facebook rejected — malformed JSON', err);
+    fbLog(`POST ${path} rejected — malformed JSON`, err);
     emit('webhook', { event: 'delivery', signatureValid });
     return c.text('Malformed JSON', 400);
   }
 
-  fbLog('POST /facebook parsed body', body);
+  fbLog(`POST ${path} parsed body`, body);
 
-  if (body.object !== 'page' || !Array.isArray(body.entry)) {
-    fbLog('POST /facebook rejected — unhandled shape', {
+  // The same callback URL serves the Page object (Messenger) and the Instagram object
+  // (DMs and comments). An app can be configured with one webhook entry per object, and
+  // both point here; rejecting either would silently mute one channel.
+  if ((body.object !== 'page' && body.object !== 'instagram') || !Array.isArray(body.entry)) {
+    fbLog(`POST ${path} rejected — unhandled shape`, {
       object: body.object,
       entryIsArray: Array.isArray(body.entry),
     });
@@ -391,13 +422,14 @@ fbWebhookRouter.post('/facebook', async (c) => {
   // real Meta traffic has been measured, so a config mistake cannot drop events.
   emit('webhook', deliveryEventFields(body, signatureValid));
 
-  fbLog('POST /facebook ack — processing entries', {
+  fbLog(`POST ${path} ack — processing entries`, {
+    object: body.object,
     entryCount: body.entry.length,
     pageIds: body.entry.map((e) => e.id),
     vercelInline: Boolean(process.env.VERCEL),
   });
 
-  const work = processEntries(body.entry).catch((err) => {
+  const work = processEntries(body.entry, body.object as MetaWebhookObject).catch((err) => {
     console.error('[fb-webhook] background processing failed', err);
   });
 
@@ -411,7 +443,10 @@ fbWebhookRouter.post('/facebook', async (c) => {
   }
 
   return c.text('EVENT_RECEIVED', 200);
-});
+}
+
+fbWebhookRouter.post('/facebook', receiveMetaWebhook);
+fbWebhookRouter.post('/instagram', receiveMetaWebhook);
 
 /**
  * The operator page's DMs are not conversations. A message that is exactly a business's
@@ -466,15 +501,20 @@ async function processMessengerNotificationCodes(
  * including comments) — both are handled here, with the channel looked up once
  * per page.
  */
-async function processEntries(entries: WebhookEntry[]): Promise<void> {
-  fbLog('processEntries start', { entryCount: entries.length });
+async function processEntries(
+  entries: WebhookEntry[],
+  object: MetaWebhookObject,
+): Promise<void> {
+  fbLog('processEntries start', { object, entryCount: entries.length });
+  const platform: ChannelPlatform = object === 'instagram' ? 'instagram' : 'facebook';
 
   for (const entry of entries) {
     const messaging = entry.messaging ?? [];
     const changes = entry.changes ?? [];
 
     fbLog('processEntries entry', {
-      pageId: entry.id,
+      object,
+      accountId: entry.id,
       messagingCount: messaging.length,
       changesCount: changes.length,
       messaging: entry.messaging,
@@ -482,21 +522,28 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
     });
 
     if (messaging.length === 0 && changes.length === 0) {
-      fbLog('processEntries skip entry — no messaging or changes', { pageId: entry.id });
+      fbLog('processEntries skip entry — no messaging or changes', { accountId: entry.id });
       continue;
     }
 
-    const channel = await getChannelByPageId(entry.id);
+    const channel =
+      platform === 'instagram'
+        ? await getChannelByPlatformAccountId('instagram', entry.id)
+        : await getChannelByPageId(entry.id);
     if (!channel) {
-      // Every event for this page is dropped behind a 200 ack: a disconnected
+      // Every event for this account is dropped behind a 200 ack: a disconnected
       // channel is indistinguishable from a quiet one until this says so.
-      fbLog('processEntries skip entry — unknown page (no channel)', { pageId: entry.id });
+      fbLog('processEntries skip entry — unknown account (no channel)', {
+        platform,
+        accountId: entry.id,
+      });
       emitAnomaly('webhook_unknown_page', { detail: entry.id });
       continue;
     }
 
     fbLog('processEntries channel resolved', {
-      pageId: entry.id,
+      platform,
+      accountId: entry.id,
       channelId: channel.id,
       businessId: channel.businessId,
       agentId: channel.agentId ?? null,
@@ -529,10 +576,14 @@ async function processEntries(entries: WebhookEntry[]): Promise<void> {
     tagContext({ channelId: channel.id, businessId });
 
     if (messaging.length > 0) {
-      await processMessagingEvents({ ...channel, businessId }, messaging);
+      await processMessagingEvents({ ...channel, businessId }, messaging, platform);
     }
     if (changes.length > 0) {
-      await processCommentChanges({ ...channel, businessId }, entry.id, changes);
+      if (platform === 'instagram') {
+        await processInstagramChanges({ ...channel, businessId }, entry.id, changes);
+      } else {
+        await processCommentChanges({ ...channel, businessId }, entry.id, changes);
+      }
     }
   }
 
@@ -559,6 +610,7 @@ async function handleDetailsPostback(
   channel: { id: string; businessId: string; apiToken: string },
   senderId: string,
   details: DetailsPayload,
+  platform: ChannelPlatform,
 ): Promise<DetailsOutcome> {
   try {
     const product = await getProductById(channel.businessId, details.productId);
@@ -598,7 +650,7 @@ async function handleDetailsPostback(
         return { handled: false, reason: `no variant of "${product.name}" has a photo to show` };
       }
 
-      await fbSendMessage(channel.apiToken, senderId, cards);
+      await fbSendMessage(channel.apiToken, senderId, cards, { platform });
 
       const stockTotal = product.variants.reduce((sum, variant) => sum + variant.stock, 0);
       const optionsText = (product.options ?? [])
@@ -657,7 +709,7 @@ async function handleDetailsPostback(
           }),
     }));
 
-    await fbSendMessage(channel.apiToken, senderId, cards);
+    await fbSendMessage(channel.apiToken, senderId, cards, { platform });
     await createMessage({
       conversationId: conversation.id,
       from: 'self',
@@ -675,8 +727,13 @@ async function handleDetailsPostback(
 async function processMessagingEvents(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   events: MessagingEvent[],
+  platform: ChannelPlatform,
 ): Promise<void> {
-  fbLog('processMessagingEvents start', { channelId: channel.id, eventCount: events.length });
+  fbLog('processMessagingEvents start', {
+    channelId: channel.id,
+    platform,
+    eventCount: events.length,
+  });
   const budget = forTrigger(channel.businessId);
 
   for (const [index, ev] of events.entries()) {
@@ -688,7 +745,7 @@ async function processMessagingEvents(
     // failure — so the agent can apologize and suggest something else instead of staying silent.
     const details = ev.postback ? parseDetailsPayload(ev.postback.payload) : null;
     if (details && ev.sender?.id) {
-      const result = await handleDetailsPostback(channel, ev.sender.id, details);
+      const result = await handleDetailsPostback(channel, ev.sender.id, details, platform);
       fbLog('processMessagingEvents details postback', {
         index,
         kind: details.kind,
@@ -792,8 +849,19 @@ async function processMessagingEvents(
     });
 
     if (inserted && needsProfile) {
-      fbLog('processMessagingEvents enriching profile', { index, conversationId, senderId });
-      const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      fbLog('processMessagingEvents enriching profile', {
+        index,
+        platform,
+        conversationId,
+        senderId,
+      });
+      const profile =
+        platform === 'instagram'
+          ? await getInstagramUserProfile(channel.apiToken, senderId).then((p) => ({
+              name: p.name ?? p.username,
+              avatar: p.avatar,
+            }))
+          : await getFacebookUserProfile(channel.apiToken, senderId);
       fbLog('processMessagingEvents profile result', { index, conversationId, profile });
       await setConversationProfileIfMissing(conversationId, profile);
     }
@@ -911,6 +979,208 @@ async function processMessagingEvents(
   fbLog('processMessagingEvents done', { channelId: channel.id });
 }
 
+type InboundPlatformComment = {
+  commentId: string;
+  parentId?: string;
+  postId: string;
+  text: string;
+  fromId: string;
+  fromName?: string;
+  verb?: string;
+};
+
+/**
+ * The delivery-to-run decisions are identical on both platforms: persist the comment
+ * idempotently, enrich what the profile API would give, then either start a run, recover a
+ * stale lock, or leave a live one alone. Only the envelope differs, so the shared body
+ * lives here and each object's parser feeds it a normalized comment.
+ */
+async function handleInboundComment(
+  channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
+  platform: ChannelPlatform,
+  budget: () => Promise<TriggerOptions>,
+  comment: InboundPlatformComment,
+): Promise<void> {
+  const { commentId, parentId, postId, text, fromId, fromName, verb } = comment;
+
+  fbLog('handleInboundComment inbound', {
+    platform,
+    commentId,
+    fromId,
+    fromName: fromName ?? null,
+    postId,
+    text,
+  });
+
+  const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
+    await processInboundComment(
+      { id: channel.id, businessId: channel.businessId },
+      fromId,
+      fromName,
+      postId,
+      text,
+      commentId,
+      parentId,
+    );
+
+  fbLog('handleInboundComment persisted', {
+    platform,
+    threadId,
+    priorStatus,
+    inserted,
+    needsProfile,
+  });
+
+  // Instagram releases a commenter's profile only after that person has messaged the
+  // business, so a comment thread already has everything it can get: the username from
+  // the webhook. Asking anyway would be one refused Graph call per comment.
+  if (inserted && needsProfile && platform === 'facebook') {
+    fbLog('handleInboundComment enriching avatar', { platform, threadId, fromId });
+    const profile = await getFacebookUserProfile(channel.apiToken, fromId);
+    fbLog('handleInboundComment profile result', { platform, threadId, profile });
+    await setCommentThreadProfileIfMissing(threadId, profile);
+  }
+
+  const inFlight = priorStatus === 'working' || priorStatus === 'pending';
+  let outcome: string;
+  let ageMs: number | undefined;
+
+  if (!inserted) {
+    // A re-delivered comment id: Meta is still waiting for an answer, so the
+    // runner it waited on is a candidate for recovery just as above.
+    outcome = 'redelivered';
+    fbLog('handleInboundComment redelivered comment — already stored', {
+      platform,
+      threadId,
+      priorStatus,
+    });
+    if (channel.agentId && inFlight) {
+      ageMs = stateAgeMs(priorStateAt);
+      const stale = ageMs > STALE_RUNNER_MS;
+      fbLog('handleInboundComment redelivery stale check', {
+        platform,
+        threadId,
+        priorStatus,
+        ageMs,
+        staleThresholdMs: STALE_RUNNER_MS,
+        isStale: stale,
+      });
+      if (stale) {
+        fbLog('handleInboundComment recovering stale runner', { platform, threadId, ageMs });
+        if (await resetStaleCommentThread(threadId, staleBefore())) {
+          fbLog('handleInboundComment stale reset succeeded — re-triggering comment agent', {
+            platform,
+            threadId,
+          });
+          outcome = outcomeOf(
+            await triggerCommentRun(threadId, await budget()),
+            'redelivered_stale_recovered',
+          );
+        } else {
+          fbLog('handleInboundComment stale reset lost race — another caller recovered', {
+            platform,
+            threadId,
+          });
+        }
+      } else {
+        fbLog('handleInboundComment runner still fresh — no extra trigger needed', {
+          platform,
+          threadId,
+          ageMs,
+        });
+      }
+    } else if (channel.agentId && (await checkPendingComments(threadId))) {
+      // Same safety net as the messenger path: the delivery that stored this
+      // comment died after committing it, so this redelivery runs the reply.
+      fbLog('handleInboundComment redelivery found an unanswered backlog — triggering comment agent', {
+        platform,
+        threadId,
+        priorStatus,
+      });
+      outcome = outcomeOf(
+        await triggerCommentRun(threadId, await budget()),
+        'redelivered_pending_drained',
+      );
+    }
+  } else if (priorStatus === 'done' && channel.agentId) {
+    fbLog('handleInboundComment triggering comment agent', {
+      platform,
+      threadId,
+      agentId: channel.agentId,
+    });
+    outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'comment_run_triggered');
+  } else if (inFlight && channel.agentId) {
+    ageMs = stateAgeMs(priorStateAt);
+    const stale = ageMs > STALE_RUNNER_MS;
+    fbLog('handleInboundComment stale check', {
+      platform,
+      threadId,
+      priorStatus,
+      ageMs,
+      staleThresholdMs: STALE_RUNNER_MS,
+      isStale: stale,
+    });
+    if (stale) {
+      // Prior execution is presumed dead. Reset the lock and fire a fresh run.
+      fbLog('handleInboundComment recovering stale runner', { platform, threadId, ageMs });
+      if (await resetStaleCommentThread(threadId, staleBefore())) {
+        fbLog('handleInboundComment stale reset succeeded — re-triggering comment agent', {
+          platform,
+          threadId,
+        });
+        outcome = outcomeOf(
+          await triggerCommentRun(threadId, await budget()),
+          'stale_runner_recovered',
+        );
+      } else {
+        fbLog('handleInboundComment stale reset lost race — another caller recovered', {
+          platform,
+          threadId,
+        });
+        outcome = 'waited_for_live_runner';
+      }
+    } else {
+      fbLog('handleInboundComment runner still fresh — no extra trigger needed', {
+        platform,
+        threadId,
+        ageMs,
+      });
+      outcome = 'waited_for_live_runner';
+    }
+  } else if (!channel.agentId) {
+    outcome = 'no_agent';
+    fbLog('handleInboundComment no agent trigger', {
+      platform,
+      inserted,
+      priorStatus,
+      hasAgent: Boolean(channel.agentId),
+    });
+  } else {
+    outcome = 'not_triggered';
+    fbLog('handleInboundComment no agent trigger', {
+      platform,
+      inserted,
+      priorStatus,
+      hasAgent: Boolean(channel.agentId),
+    });
+  }
+
+  emit('webhook_item', {
+    kind: 'comment',
+    platform,
+    commentId,
+    parentId,
+    verb,
+    fromId,
+    fromName,
+    text,
+    inserted,
+    priorStatus,
+    outcome,
+    ageMs,
+  });
+}
+
 /**
  * Facebook Page feed changes: filter to newly-added comments, skip the page's
  * own comments (echo equivalent), and route each to its (post, commenter)
@@ -959,6 +1229,7 @@ async function processCommentChanges(
       });
       emit('webhook_item', {
         kind: 'comment',
+        platform: 'facebook',
         commentId,
         parentId,
         verb: value.verb,
@@ -975,142 +1246,102 @@ async function processCommentChanges(
       continue; // the page's own comment — an echo, not a customer
     }
 
-    fbLog('processCommentChanges inbound comment', {
-      index,
-      commentId,
-      fromId,
-      fromName: value.from?.name ?? null,
-      postId: value.post_id ?? null,
-      text,
-    });
-
-    const { threadId, priorStatus, inserted, needsProfile, priorStateAt } =
-      await processInboundComment(
-        { id: channel.id, businessId: channel.businessId },
-        fromId,
-        value.from?.name,
-        value.post_id ?? '',
-        text,
-        commentId,
-        parentId,
-      );
-
-    fbLog('processCommentChanges persisted', {
-      index,
-      threadId,
-      priorStatus,
-      inserted,
-      needsProfile,
-    });
-
-    if (inserted && needsProfile) {
-      fbLog('processCommentChanges enriching avatar', { index, threadId, fromId });
-      const profile = await getFacebookUserProfile(channel.apiToken, fromId);
-      fbLog('processCommentChanges profile result', { index, threadId, profile });
-      await setCommentThreadProfileIfMissing(threadId, profile);
-    }
-
-    const inFlight = priorStatus === 'working' || priorStatus === 'pending';
-    let outcome: string;
-    let ageMs: number | undefined;
-
-    if (!inserted) {
-      // A re-delivered comment id: Meta is still waiting for an answer, so the
-      // runner it waited on is a candidate for recovery just as above.
-      outcome = 'redelivered';
-      fbLog('processCommentChanges redelivered comment — already stored', { index, threadId, priorStatus });
-      if (channel.agentId && inFlight) {
-        ageMs = stateAgeMs(priorStateAt);
-        const stale = ageMs > STALE_RUNNER_MS;
-        fbLog('processCommentChanges redelivery stale check', {
-          index,
-          threadId,
-          priorStatus,
-          ageMs,
-          staleThresholdMs: STALE_RUNNER_MS,
-          isStale: stale,
-        });
-        if (stale) {
-          fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
-          if (await resetStaleCommentThread(threadId, staleBefore())) {
-            fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-            outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_stale_recovered');
-          } else {
-            fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
-          }
-        } else {
-          fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
-        }
-      } else if (channel.agentId && (await checkPendingComments(threadId))) {
-        // Same safety net as the messenger path: the delivery that stored this
-        // comment died after committing it, so this redelivery runs the reply.
-        fbLog('processCommentChanges redelivery found an unanswered backlog — triggering comment agent', {
-          index,
-          threadId,
-          priorStatus,
-        });
-        outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'redelivered_pending_drained');
-      }
-    } else if (priorStatus === 'done' && channel.agentId) {
-      fbLog('processCommentChanges triggering comment agent', { index, threadId, agentId: channel.agentId });
-      outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'comment_run_triggered');
-    } else if (inFlight && channel.agentId) {
-      ageMs = stateAgeMs(priorStateAt);
-      const stale = ageMs > STALE_RUNNER_MS;
-      fbLog('processCommentChanges stale check', {
-        index,
-        threadId,
-        priorStatus,
-        ageMs,
-        staleThresholdMs: STALE_RUNNER_MS,
-        isStale: stale,
-      });
-      if (stale) {
-        // Prior execution is presumed dead. Reset the lock and fire a fresh run.
-        fbLog('processCommentChanges recovering stale runner', { index, threadId, ageMs });
-        if (await resetStaleCommentThread(threadId, staleBefore())) {
-          fbLog('processCommentChanges stale reset succeeded — re-triggering comment agent', { index, threadId });
-          outcome = outcomeOf(await triggerCommentRun(threadId, await budget()), 'stale_runner_recovered');
-        } else {
-          fbLog('processCommentChanges stale reset lost race — another caller recovered', { index, threadId });
-          outcome = 'waited_for_live_runner';
-        }
-      } else {
-        fbLog('processCommentChanges runner still fresh — no extra trigger needed', { index, threadId, ageMs });
-        outcome = 'waited_for_live_runner';
-      }
-    } else if (!channel.agentId) {
-      outcome = 'no_agent';
-      fbLog('processCommentChanges no agent trigger', {
-        index,
-        inserted,
-        priorStatus,
-        hasAgent: Boolean(channel.agentId),
-      });
-    } else {
-      outcome = 'not_triggered';
-      fbLog('processCommentChanges no agent trigger', {
-        index,
-        inserted,
-        priorStatus,
-        hasAgent: Boolean(channel.agentId),
-      });
-    }
-
-    emit('webhook_item', {
-      kind: 'comment',
+    await handleInboundComment(channel, 'facebook', budget, {
       commentId,
       parentId,
-      verb: value.verb,
+      postId: value.post_id ?? '',
+      text,
       fromId,
       fromName: value.from?.name,
-      text,
-      inserted,
-      priorStatus,
-      outcome,
-      ageMs,
+      verb: value.verb,
     });
   }
 
   fbLog('processCommentChanges done', { channelId: channel.id });
+}
+
+/**
+ * Instagram comments arrive as `changes` on the `instagram` object. There is no `feed`
+ * or `verb`: a `comments` field carrying a comment id is a new comment. Live-video
+ * comments are deliberately left out — Meta only allows a private reply during the
+ * broadcast, so a public answer the agent would otherwise post cannot be delivered.
+ */
+async function processInstagramChanges(
+  channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
+  instagramAccountId: string,
+  changes: WebhookChange[],
+): Promise<void> {
+  fbLog('processInstagramChanges start', {
+    channelId: channel.id,
+    instagramAccountId,
+    changeCount: changes.length,
+  });
+  const budget = forTrigger(channel.businessId);
+
+  for (const [index, change] of changes.entries()) {
+    fbLog('processInstagramChanges change', { index, change });
+
+    if (change.field !== 'comments') {
+      fbLog('processInstagramChanges skip — not a post comment', {
+        index,
+        field: change.field ?? null,
+      });
+      continue;
+    }
+
+    const value = change.value as unknown as InstagramCommentValue | undefined;
+    // Meta's documented shape puts the comment under `comment_id` and the media under
+    // `media.id`; a few deliveries still use the older flat ids, so both are read.
+    const legacy = (value ?? {}) as {
+      id?: string;
+      media_id?: string;
+      post_id?: string;
+      from?: { name?: string };
+    };
+    const commentId = value?.comment_id ?? legacy.id;
+    const text = value?.text;
+    const fromId = value?.from?.id;
+    const fromName = value?.from?.username ?? legacy.from?.name;
+    const postId = value?.media?.id ?? legacy.media_id ?? legacy.post_id;
+
+    if (!commentId || !text || !fromId || !postId) {
+      fbLog('processInstagramChanges skip — missing comment fields', {
+        index,
+        commentId: commentId ?? null,
+        hasText: Boolean(text),
+        fromId: fromId ?? null,
+        postId: postId ?? null,
+      });
+      emit('webhook_item', {
+        kind: 'comment',
+        platform: 'instagram',
+        commentId,
+        fromId,
+        fromName,
+        text,
+        outcome: 'incomplete_payload',
+      });
+      continue;
+    }
+
+    if (fromId === instagramAccountId) {
+      fbLog('processInstagramChanges skip — account own comment (echo)', {
+        index,
+        commentId,
+        fromId,
+      });
+      continue;
+    }
+
+    await handleInboundComment(channel, 'instagram', budget, {
+      commentId,
+      parentId: value?.parent_id || undefined,
+      postId,
+      text,
+      fromId,
+      fromName,
+    });
+  }
+
+  fbLog('processInstagramChanges done', { channelId: channel.id });
 }

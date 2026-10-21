@@ -22,6 +22,7 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'facebook_messenger',
   'facebook_comment',
   'instagram_messenger',
+  'instagram_comment',
   'whatsapp',
   'ai_post_generation',
   'ai_post_tuning',

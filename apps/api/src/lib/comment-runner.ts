@@ -1,4 +1,8 @@
-import { COMMENT_REPLY_GUIDANCE, type TokenUsageMetrics } from '@repo/agent';
+import {
+  COMMENT_REPLY_GUIDANCE,
+  INSTAGRAM_COMMENT_AGENT_GUIDANCE,
+  type TokenUsageMetrics,
+} from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { currentContext, outboundRunHeaders, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
@@ -99,6 +103,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   const { createCommentAgentTools } = await import('@agent/tools/comment');
   const { buildCatalogSummary } = await import('./catalog-summary');
   const { getFacebookPostContext, replyToFacebookComment } = await import('@repo/integrations/facebook');
+  const { getInstagramMediaContext, replyToInstagramComment } = await import(
+    '@repo/integrations/instagram'
+  );
   const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
 
   const trace = createAgentTrace();
@@ -118,6 +125,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     emitAnomaly('channel_without_agent', { detail: commentThreadId });
     return;
   }
+  const platform = thread.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   const claimed = await claimCommentThreadForRun(
     thread.id,
@@ -187,7 +195,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     let postContext = thread.postContext;
     const [fetchedPostContext, doneHistory, catalog, answering] = await Promise.all([
       !postContext
-        ? getFacebookPostContext(thread.channel.apiToken, thread.platformItemId)
+        ? platform === 'instagram'
+          ? getInstagramMediaContext(thread.channel.apiToken, thread.platformItemId)
+          : getFacebookPostContext(thread.channel.apiToken, thread.platformItemId)
         : Promise.resolve(null),
       listDoneCommentHistory(thread.id),
       buildCatalogSummary(thread.businessId, { canShowCards: false }),
@@ -218,6 +228,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         customerName: thread.commenterName,
         channelId: thread.channelId,
         commenterPlatformId: thread.commenterPlatformId,
+        platform,
         emitSse: trace.emitSse,
       },
       (text, kind) => {
@@ -235,9 +246,12 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       pageToken: thread.channel.apiToken,
       customerPlatformId: thread.commenterPlatformId,
       customerName: thread.commenterName,
+      platform,
       catalogSummary,
       tools,
-      replyGuidance: answering.commentReplyGuidance || COMMENT_REPLY_GUIDANCE,
+      replyGuidance:
+        answering.commentReplyGuidance ||
+        (platform === 'instagram' ? INSTAGRAM_COMMENT_AGENT_GUIDANCE : COMMENT_REPLY_GUIDANCE),
       promptCacheKey: 'oryxa:comment:v1',
     });
 
@@ -253,7 +267,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           businessId: thread.businessId,
           channelId: thread.channelId,
           commentThreadId: thread.id,
-          integrationType: 'facebook_comment',
+          integrationType: platform === 'instagram' ? 'instagram_comment' : 'facebook_comment',
           provider: metrics.provider,
           model: metrics.model,
           inputTokens: metrics.inputTokens,
@@ -316,11 +330,10 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           } else {
             let newCommentId: string;
             try {
-              newCommentId = await replyToFacebookComment(
-                thread.channel.apiToken,
-                graphReplyToId,
-                replyText,
-              );
+              newCommentId =
+                platform === 'instagram'
+                  ? await replyToInstagramComment(thread.channel.apiToken, graphReplyToId, replyText)
+                  : await replyToFacebookComment(thread.channel.apiToken, graphReplyToId, replyText);
             } catch (err) {
               if (chargedPeriod) {
                 try {

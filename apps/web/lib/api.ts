@@ -477,6 +477,45 @@ export const connectFacebookPages = (
     { method: 'POST', token, body: JSON.stringify(data) },
   );
 
+export const getInstagramAuthUrl = (token: string, businessId: string) =>
+  apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth`, { token });
+
+export type InstagramPendingAccount = {
+  id: string;
+  username: string;
+  name?: string | null;
+  profilePic?: string | null;
+  pageId: string;
+  pageName: string;
+  connected: boolean;
+  heldByOtherStore?: boolean;
+};
+
+export const listInstagramPendingAccounts = (
+  token: string,
+  businessId: string,
+  selectionToken: string,
+) =>
+  apiFetch<InstagramPendingAccount[]>(
+    `/api/v1/${businessId}/channels/instagram/pending?token=${encodeURIComponent(selectionToken)}`,
+    { token },
+  );
+
+export const connectInstagramAccounts = (
+  token: string,
+  businessId: string,
+  data: { token: string; accountIds: string[] },
+) =>
+  apiFetch<{
+    connected: Array<{ id: string; instagramId: string; username: string }>;
+    skipped: string[];
+    failed?: Array<{ instagramId: string; error: string }>;
+  }>(`/api/v1/${businessId}/channels/instagram/connect`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+
 // The operator's own Pages: same handshake, channels with no tenant and isAdminOnly set.
 export type AdminChannel = {
   id: string;

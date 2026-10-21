@@ -172,6 +172,24 @@ export async function getChannelByPageId(pageId: string) {
   });
 }
 
+/**
+ * Resolves a live channel from the account id the platform puts on the webhook envelope.
+ * Messenger's envelope carries the Page id; Instagram's carries the professional account id.
+ */
+export async function getChannelByPlatformAccountId(
+  platform: 'instagram',
+  accountId: string,
+) {
+  return db.query.channels.findFirst({
+    where: and(
+      eq(channels.platform, platform),
+      eq(channels.platformChannelId, accountId),
+      isNull(channels.deletedAt),
+    ),
+    with: { agent: true, business: true },
+  });
+}
+
 export async function getChannelByBusinessPlatformChannelId(
   businessId: string,
   platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',

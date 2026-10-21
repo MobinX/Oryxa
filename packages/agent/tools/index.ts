@@ -20,6 +20,7 @@ import {
   sendQuickReplies as fbSendQuickReplies,
   detailsProductPayload,
   detailsVariantPayload,
+  type MessagingPlatform,
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
@@ -722,6 +723,8 @@ export function createAgentTools(
     customerPlatformId: string;
     customerName?: string | null;
     emitSse?: SseEmitter;
+    /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
+    platform?: MessagingPlatform;
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
     onOrderCreated?: (orderId: string) => Promise<void>;
@@ -770,6 +773,7 @@ export function createAgentTools(
 
   const BUDGET_REFUSED =
     "This cycle's replies are used up and the owner has been notified. Do not try again, and do not send anything else. End the turn.";
+  const inbox = context.platform === 'instagram' ? 'Instagram Direct' : 'Messenger';
 
   /**
    * Cards go out on the same post as text; a dry-run renders them as the text a human
@@ -785,7 +789,9 @@ export function createAgentTools(
       );
       return;
     }
-    await fbSendMessage(context.pageToken, context.customerPlatformId, cards);
+    await fbSendMessage(context.pageToken, context.customerPlatformId, cards, {
+      platform: context.platform,
+    });
   }
 
   async function sendButtonRow(
@@ -1556,9 +1562,13 @@ export function createAgentTools(
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
         } else if (withChips) {
-          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, text, cleaned);
+          await fbSendQuickReplies(context.pageToken, context.customerPlatformId, text, cleaned, {
+            platform: context.platform,
+          });
         } else {
-          await fbSendMessage(context.pageToken, context.customerPlatformId, text);
+          await fbSendMessage(context.pageToken, context.customerPlatformId, text, {
+            platform: context.platform,
+          });
         }
       } catch (err) {
         await returnMessageUnit(budget.period);
@@ -1585,7 +1595,7 @@ export function createAgentTools(
     {
       name: 'send_message',
       description:
-        'Send the customer one Messenger message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.',
+        `Send the customer one ${inbox} message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.`,
       schema: z.object({
         message: z.string().min(1).max(1000).describe(
           'The message text in the customer’s language, e.g. "Which color would you like?"',

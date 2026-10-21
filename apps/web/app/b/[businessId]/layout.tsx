@@ -11,7 +11,7 @@ export default function BusinessLayout({
   params: Promise<{ businessId: string }>;
 }) {
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-dvh flex-col lg:flex-row">
       <PushMessageListener />
       <Suspense fallback={<SidebarSkeleton />}>
         <BusinessSidebar params={params} />

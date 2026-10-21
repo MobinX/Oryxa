@@ -5,6 +5,7 @@ import { createComment } from '@repo/db/crud/comment';
 import { createMessage, getOrCreateConversation } from '@repo/db/crud/conversation';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
 import { replyToFacebookComment, sendCommenterMessage } from '@repo/integrations/facebook';
+import { replyToInstagramComment } from '@repo/integrations/instagram';
 import type { SseEmitter } from '@agent/Agent';
 
 /** Reject public drafts that could expose private purchase or contact details. */
@@ -14,7 +15,7 @@ export function publicCommentReplyViolation(
   customerName?: string | null,
 ): string | null {
   if (text.trim() === 'SILENT') return 'SILENT is a no-reply signal and must never be posted publicly.';
-  if (!privateMessageSent && /\b(?:inbox|messenger|dm|check your messages|sent you a message)\b|ইনবক্স|মেসেঞ্জার|মেসেজ পাঠিয়েছি|মেসেজ পাঠিয়েছি/i.test(text)) {
+  if (!privateMessageSent && /\b(?:inbox|messenger|dm|direct message|check your messages|sent you a message)\b|ইনবক্স|মেসেঞ্জার|মেসেজ পাঠিয়েছি|মেসেজ পাঠিয়েছি/i.test(text)) {
     return 'Do not direct the commenter to Messenger unless a private message succeeded in this turn.';
   }
   const normalized = text.normalize('NFKC').toLocaleLowerCase();
@@ -47,6 +48,8 @@ export function createCommentAgentTools(
     /** Channel + commenter of this thread: without both there is no inbox to write into. */
     channelId?: string;
     commenterPlatformId?: string | null;
+    /** The comment's platform; the private reply and its wording follow it. */
+    platform?: 'facebook' | 'instagram';
     emitSse?: SseEmitter;
     /**
      * Override the Graph reply function (e.g. no-op in test mode). The mirror of
@@ -71,6 +74,9 @@ export function createCommentAgentTools(
    */
   let replyClaimed = false;
   let privateMessageSent = false;
+  const platform = context.platform ?? 'facebook';
+  const inbox = platform === 'instagram' ? 'Instagram Direct' : 'Messenger';
+  const post = platform === 'instagram' ? 'Instagram post' : 'Facebook post';
 
   const replyCommentTool = tool(
     async ({ text }) => {
@@ -109,7 +115,9 @@ export function createCommentAgentTools(
       }
 
       const targetId = context.graphReplyToId ?? context.parentCommentExternalId;
-      const postFn = context.replyCommentOverride ?? replyToFacebookComment;
+      const postFn =
+        context.replyCommentOverride ??
+        (platform === 'instagram' ? replyToInstagramComment : replyToFacebookComment);
 
       // The same rule as the Messenger tool: one reply actually posted is one unit of the
       // comment budget. Charged only now, after the duplicate check above refused nothing,
@@ -163,7 +171,7 @@ export function createCommentAgentTools(
     },
     {
       name: 'reply_comment',
-      description: "Post a public reply under this customer's Facebook comment. Use for general product questions; do NOT use for prices, stock counts, order details, or em dashes (—).",
+      description: `Post a public reply under this customer's ${post} comment. Use for general product questions; do NOT use for prices, stock counts, order details, or em dashes (—).`,
       schema: z.object({
         text: z.string().describe('The exact words to show publicly under the comment'),
       }),
@@ -181,6 +189,12 @@ export function createCommentAgentTools(
       context.emitSse?.('tool_call', { name: 'send_private_message', args: { text } });
       console.log(`[agent-tool] send_private_message called — text="${text}"`);
 
+      if (privateMessageSent) {
+        const already = `A private message has already been delivered to this commenter from this comment. Do not send another.`;
+        context.emitSse?.('tool_result', { name: 'send_private_message', result: already });
+        return `${already} Answer in the comment with reply_comment instead. End the turn.`;
+      }
+
       if (!context.channelId || !context.commenterPlatformId) {
         // No inbox to write into on this thread, so the only honest answer is a public one.
         const refused = 'This commenter cannot be messaged privately. Answer in the comment with reply_comment instead.';
@@ -196,7 +210,7 @@ export function createCommentAgentTools(
         try {
           const budget = await spendQuotaUnit(context.businessId, 'message');
           if (!budget.spent) {
-            const exhausted = "This cycle's Messenger messages are used up and the owner has been notified.";
+            const exhausted = `This cycle's ${inbox} messages are used up and the owner has been notified.`;
             context.emitSse?.('tool_result', { name: 'send_private_message', result: exhausted });
             return `${exhausted} Do not try again. End the turn.`;
           }
@@ -208,9 +222,18 @@ export function createCommentAgentTools(
       }
 
       const cleanText = text.replace(/\s*[—–]\s*/g, ', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
-      const sendFn = context.sendPrivateMessageOverride ?? sendCommenterMessage;
       try {
-        await sendFn(context.pageToken, context.parentCommentExternalId, cleanText);
+        if (context.sendPrivateMessageOverride) {
+          await context.sendPrivateMessageOverride(
+            context.pageToken,
+            context.parentCommentExternalId,
+            cleanText,
+          );
+        } else {
+          await sendCommenterMessage(context.pageToken, context.parentCommentExternalId, cleanText, {
+            platform,
+          });
+        }
         privateMessageSent = true;
       } catch (err) {
         console.error('[agent-tool] send_private_message failed:', err);
@@ -223,7 +246,7 @@ export function createCommentAgentTools(
         }
         // Told to the model as a fact, not retried: Meta shuts this door for people who
         // have messaging off, and a second attempt costs the cycle without reaching anyone.
-        const unreachable = 'Messenger could not be reached for this commenter.';
+        const unreachable = `${inbox} could not be reached for this commenter.`;
         context.emitSse?.('tool_result', { name: 'send_private_message', result: unreachable });
         return `${unreachable} Answer in the comment with reply_comment instead. End the turn.`;
       }
@@ -248,14 +271,14 @@ export function createCommentAgentTools(
         console.error('[agent-tool] send_private_message could not record the inbox message:', err);
       }
 
-      const sent = 'Private message sent to the customer in Messenger.';
+      const sent = `Private message sent to the customer in ${inbox}.`;
       context.emitSse?.('tool_result', { name: 'send_private_message', result: sent });
       console.log(`[agent-tool] send_private_message done`);
-      return 'Private message sent to this customer’s Messenger inbox. Now call reply_comment once with a single courteous line telling them the details are waiting in Messenger, without repeating those details publicly. End the turn after that.';
+      return `Private message sent to this customer’s ${inbox} inbox. Now call reply_comment once with a single courteous line telling them the details are waiting in ${inbox}, without repeating those details publicly. End the turn after that.`;
     },
     {
       name: 'send_private_message',
-      description: "Send a private message to this commenter's Messenger inbox. Use FIRST for prices, stock counts, shipping or order questions; do NOT use for general public chat.",
+      description: `Send a private message to this commenter's ${inbox} inbox. Use FIRST for prices, stock counts, shipping or order questions; do NOT use for general public chat.${platform === 'instagram' ? ' Keep it under 1,000 characters: Instagram allows only one private reply per comment.' : ''}`,
       schema: z.object({
         text: z.string().describe('The private answer to deliver in Messenger — the details themselves, in full'),
       }),

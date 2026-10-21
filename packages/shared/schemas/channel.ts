@@ -142,3 +142,28 @@ export const facebookConnectPagesOutputSchema = z.object({
   skipped: z.array(z.string()),
   failed: z.array(z.object({ pageId: z.string(), error: z.string() })),
 });
+
+/** One Instagram professional account reached through the Page it is linked to. */
+export const instagramPendingAccountSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  name: z.string().nullable().optional(),
+  profilePic: z.string().nullable().optional(),
+  pageId: z.string(),
+  pageName: z.string(),
+  connected: z.boolean(),
+  heldByOtherStore: z.boolean().default(false),
+});
+
+export const instagramConnectAccountsInputSchema = z.object({
+  token: z.string().min(1),
+  accountIds: z.array(z.string().min(1)).min(1),
+});
+
+export const instagramConnectAccountsOutputSchema = z.object({
+  connected: z.array(
+    z.object({ id: uuidSchema, instagramId: z.string(), username: z.string() }),
+  ),
+  skipped: z.array(z.string()),
+  failed: z.array(z.object({ instagramId: z.string(), error: z.string() })),
+});
