@@ -5,7 +5,7 @@ export const createOrderInputSchema = z.object({
   businessId: uuidSchema,
   productId: uuidSchema,
   variantId: uuidSchema.optional(),
-  count: z.number().int().positive().default(1),
+  count: z.number().int().positive().max(999).default(1),
   customerName: z.string().min(1).max(255),
   customerPhone: z.string().max(20).optional(),
   customerAddress: z.string().optional(),

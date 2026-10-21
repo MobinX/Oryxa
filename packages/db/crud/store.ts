@@ -2,7 +2,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, products, variants } from '@db/schema';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
-import { createOrder } from './order';
+import { createOrder, deleteOrder } from './order';
 
 export async function getBusinessBySlug(slug: string) {
   return db.query.businesses.findFirst({
@@ -154,12 +154,38 @@ export async function createPublicCheckout(
   const business = await getBusinessBySlug(slug);
   if (!business || !business.storePublished) return null;
 
+  // Validate the whole cart before writing anything, so the common failures (unknown product,
+  // missing size, not enough stock — including the same variant twice in one cart) leave nothing
+  // behind. A product with several variants must name one: without it there is no stock to check.
+  const wanted = new Map<string, number>();
+  for (const item of input.items) {
+    const product = await db.query.products.findFirst({
+      where: and(eq(products.id, item.productId), eq(products.businessId, business.id), isNull(products.deletedAt)),
+      with: { variants: { where: isNull(variants.deletedAt) } },
+    });
+    if (!product) throw new CheckoutError('Product not found');
+    const variant = item.variantId
+      ? product.variants.find((v) => v.id === item.variantId)
+      : product.variants.length === 1
+        ? product.variants[0]
+        : undefined;
+    if (item.variantId && !variant) throw new CheckoutError('Variant not found');
+    if (!variant && product.variants.length > 1) throw new CheckoutError('Choose a size/variant for ' + product.name);
+    if (variant) {
+      const need = (wanted.get(variant.id) ?? 0) + item.quantity;
+      if (need > variant.stock) throw new CheckoutError(`Insufficient stock: only ${variant.stock} available`);
+      wanted.set(variant.id, need);
+    }
+  }
+
+  // neon-http has no interactive transactions, so a failure after some orders were written
+  // (a race on the last unit) is compensated: the orders already placed are deleted, which
+  // returns their stock exactly once.
   const orderIds: string[] = [];
   let total = 0;
   for (const item of input.items) {
     try {
-      // createOrder validates the product belongs to this business, checks stock,
-      // and computes the price server-side (client cannot tamper with price).
+      // createOrder re-checks ownership and stock and computes the price server-side.
       const order = await createOrder({
         businessId: business.id,
         productId: item.productId,
@@ -172,6 +198,7 @@ export async function createPublicCheckout(
       orderIds.push(order.id);
       total += parseFloat(order.totalPrice);
     } catch (e) {
+      for (const id of orderIds) await deleteOrder(business.id, id).catch(() => undefined);
       throw new CheckoutError((e as Error).message);
     }
   }
