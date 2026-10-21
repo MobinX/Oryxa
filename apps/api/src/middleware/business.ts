@@ -1,3 +1,4 @@
+import { isOperatorEmail } from '@api/lib/operators';
 import type { Context, Next } from 'hono';
 import { getBusinessById, verifyBusinessOwnership } from '@repo/db/crud/business';
 
@@ -12,7 +13,7 @@ export async function businessAccessMiddleware(c: Context, next: Next) {
   const hasAccess = await verifyBusinessOwnership(businessId, user.id);
   if (!hasAccess) {
     const userEmail = user.email?.toLowerCase().trim();
-    const isOperator = userEmail === 'admin123@oryxa.app' || userEmail === 'mobin.devx@gmail.com' || Boolean(process.env.ADMIN_EMAILS?.includes(userEmail ?? ''));
+    const isOperator = isOperatorEmail(userEmail);
     if (isOperator) {
       const b = await getBusinessById(businessId);
       if (b && b.slug === 'oryxa-sandbox') {
