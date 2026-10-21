@@ -9,8 +9,7 @@ const GRAPH_API = 'https://graph.facebook.com/v21.0';
  * `scope` — mixing the two is how the Instagram flow would silently inherit the Page login's
  * permissions. The Facebook channel keeps its own scope-based URL in `facebook.ts` untouched.
  */
-const INSTAGRAM_LOGIN_CONFIG_ID =
-  process.env.META_INSTAGRAM_CONFIG_ID ?? '1850988986083553';
+const INSTAGRAM_LOGIN_CONFIG_ID = '1850988986083553';
 
 /**
  * Instagram Login rides the same Facebook Login dialog as a Page: the professional account is
