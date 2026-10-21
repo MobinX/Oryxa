@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { BusinessSidebar } from '@/components/business-sidebar';
+import { BusinessSidebar, BusinessTopBar } from '@/components/business-sidebar';
 import { SidebarSkeleton } from '@/components/sidebar-skeleton';
 
 export default function BusinessLayout({
@@ -10,11 +10,16 @@ export default function BusinessLayout({
   params: Promise<{ businessId: string }>;
 }) {
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-[#F8F9FC] dark:bg-[#0B0D1B] lg:flex-row">
       <Suspense fallback={<SidebarSkeleton />}>
         <BusinessSidebar params={params} />
       </Suspense>
-      <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Suspense fallback={<div className="hidden h-16 border-b border-slate-200/80 bg-white lg:block" />}>
+          <BusinessTopBar params={params} />
+        </Suspense>
+        <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-7">{children}</main>
+      </div>
     </div>
   );
 }

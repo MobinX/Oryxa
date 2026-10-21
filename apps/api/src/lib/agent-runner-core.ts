@@ -14,6 +14,7 @@ import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
  * narrow enough that a long thread does not pay for its whole photo album.
  */
 const PHOTO_MEMORY = 3;
+const PHOTO_TURN_WINDOW = 5;
 
 export interface AgentRunOptions {
   /**
@@ -132,8 +133,9 @@ export async function runAgentCore(
   // note in `Agent.ts` — the model still knows a picture was sent, and stops asking for it.
   const seenRecently = new Set(
     orderedHistory
-      .slice(-PHOTO_MEMORY)
+      .slice(-PHOTO_TURN_WINDOW)
       .filter((m) => m.imageKeys.length > 0)
+      .slice(-PHOTO_MEMORY)
       .map((m) => m.id),
   );
   const history = orderedHistory.map((m) => {
