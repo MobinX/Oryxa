@@ -21,6 +21,8 @@ export const metadata = {
  * session and lives in env on two apps. Rotating that is a deploy, not a form — mixing the two on
  * one page would make an env change look like it had happened because a box was filled in.
  */
+export const instant = false;
+
 export default async function SettingsPage() {
   if (!(await logsBearer())) redirect('/admin/login');
   const operatorEmail = operatorAccountEmail();

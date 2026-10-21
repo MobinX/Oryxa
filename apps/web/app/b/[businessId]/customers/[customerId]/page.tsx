@@ -62,26 +62,42 @@ function day(iso: string): string {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-export default async function CustomerDetailPage({
+export const instant = false;
+
+export default function CustomerDetailPage({
+  params,
+}: {
+  params: Promise<{ businessId: string; customerId: string }>;
+}) {
+  return (
+    <div className="space-y-6">
+      <Suspense
+        fallback={
+          <span className="text-sm text-[var(--muted-foreground)]">← Back to customers</span>
+        }
+      >
+        <CustomerBackLink params={params} />
+      </Suspense>
+      <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--muted)]" />}>
+        <History params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function CustomerBackLink({
   params,
 }: {
   params: Promise<{ businessId: string; customerId: string }>;
 }) {
   const { businessId } = await params;
   return (
-    <div className="space-y-6">
-      {/* An absolute href: a relative ".." from /customers/<id> lands on /b/<businessId>, which
-          is a layout with no page of its own. */}
-      <Link
-        href={`/b/${businessId}/customers`}
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
-      >
-        ← Back to customers
-      </Link>
-      <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--muted)]" />}>
-        <History params={params} />
-      </Suspense>
-    </div>
+    <Link
+      href={`/b/${businessId}/customers`}
+      className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    >
+      ← Back to customers
+    </Link>
   );
 }
 

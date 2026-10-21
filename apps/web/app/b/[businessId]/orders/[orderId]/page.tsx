@@ -28,28 +28,44 @@ const nextState: Record<string, string> = {
   onDelivery: 'done',
 };
 
-export default async function OrderDetailPage({
+export const instant = false;
+
+export default function OrderDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string; orderId: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const { businessId } = await params;
   return (
     <div className="mx-auto max-w-2xl">
-      {/* An absolute href: a relative ".." from /orders/<id> lands on /b/<businessId>, which is a
-          layout with no page of its own. */}
-      <Link
-        href={`/b/${businessId}/orders`}
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+      <Suspense
+        fallback={
+          <span className="text-sm text-[var(--muted-foreground)]">← Back to orders</span>
+        }
       >
-        ← Back to orders
-      </Link>
+        <OrdersBackLink params={params} />
+      </Suspense>
       <Suspense fallback={<OrderDetailSkeleton />}>
         <OrderDetail params={params} searchParams={searchParams} />
       </Suspense>
     </div>
+  );
+}
+
+async function OrdersBackLink({
+  params,
+}: {
+  params: Promise<{ businessId: string; orderId: string }>;
+}) {
+  const { businessId } = await params;
+  return (
+    <Link
+      href={`/b/${businessId}/orders`}
+      className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    >
+      ← Back to orders
+    </Link>
   );
 }
 

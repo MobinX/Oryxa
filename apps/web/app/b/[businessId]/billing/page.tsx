@@ -94,6 +94,8 @@ function UnassignedNotice({ quota }: { quota: QuotaStatus }) {
   );
 }
 
+export const instant = false;
+
 export default async function BillingPage({
   params,
 }: {
