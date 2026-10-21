@@ -10,28 +10,44 @@ import { Card } from '@/components/ui/card';
 import { createOrderAction } from '@/app/actions/orders';
 import NewOrderSkeleton from './skeleton';
 
-export default async function NewOrderPage({
+export const instant = false;
+
+export default function NewOrderPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ productId?: string }>;
 }) {
-  const { businessId } = await params;
   return (
     <div className="mx-auto max-w-2xl">
-      {/* An absolute href: a relative ".." from /orders/new lands on /b/<businessId>, which is a
-          layout with no page of its own. */}
-      <Link
-        href={`/b/${businessId}/orders`}
-        className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+      <Suspense
+        fallback={
+          <span className="text-sm text-[var(--muted-foreground)]">← Back to orders</span>
+        }
       >
-        ← Back to orders
-      </Link>
+        <OrdersBackLink params={params} />
+      </Suspense>
       <Suspense fallback={<NewOrderSkeleton />}>
         <NewOrderForm params={params} searchParams={searchParams} />
       </Suspense>
     </div>
+  );
+}
+
+async function OrdersBackLink({
+  params,
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  const { businessId } = await params;
+  return (
+    <Link
+      href={`/b/${businessId}/orders`}
+      className="text-sm text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+    >
+      ← Back to orders
+    </Link>
   );
 }
 

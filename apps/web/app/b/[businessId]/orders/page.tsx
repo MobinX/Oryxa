@@ -4,7 +4,9 @@ import { cachedOrders, cachedProducts } from '@/app/_cache/queries';
 import { OrdersProductsWorkspace } from '@/components/orders-products-workspace';
 import OrdersSkeleton from './skeleton';
 
-export default async function OrdersPage({
+export const instant = false;
+
+export default function OrdersPage({
   params,
 }: {
   params: Promise<{ businessId: string }>;
