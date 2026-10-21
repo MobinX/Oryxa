@@ -59,6 +59,9 @@ const PHOTO_OUTDATED_NOTE = '[a picture was attached to this message; it is olde
 /** The same fact for a run whose model has no eyes at all — nothing about the storage failed. */
 const PHOTO_UNSEEN_NOTE = '[a picture was attached to this message; this model cannot read pictures]';
 
+/** Number of recent chronological messages where customer photos remain active in context for follow-up questions. */
+export const PHOTO_TURN_RETENTION_WINDOW = 5;
+
 /**
  * One picture as the model's provider asks for it.
  *
@@ -278,9 +281,9 @@ export class Agent {
       : 'oryxa:messenger:v1');
 
     // `photos` is not a field a history row carries — `imageKeys` is what arrived, `hadImages` is
-    // what an older turn was summarised from.
+    // what an older turn was summarised from. Customer photos are retained in context over a 5-turn window.
     const hasPhotosInTurn = this.config.history
-      .slice(-3)
+      .slice(-PHOTO_TURN_RETENTION_WINDOW)
       .some((m) => (m.imageKeys?.length ?? 0) > 0 || Boolean(m.hadImages));
     const reasoningEffort = this.config.reasoningEffort
       ?? (process.env.OPENAI_REASONING_EFFORT as 'low' | 'medium' | 'high' | undefined)

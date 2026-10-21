@@ -115,6 +115,7 @@ describe('comment agent tools: reply_comment', () => {
       'page-token-test',
       'PARENT_COMMENT_ID',
       answer,
+      { platform: 'facebook' },
     );
     // Choosing the private route posts nothing publicly — that is reply_comment's job, and
     // the tool result is what tells the model to make the one public line.

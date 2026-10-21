@@ -35,6 +35,7 @@ export const LOG_CORPUS: Array<{ evt: LogEventType; fields: Fields }> = [
   { evt: 'tool_call', fields: { tool: 'show_products', toolCallId: 'tc_1', args: { query: 'red' } } },
   { evt: 'tool_result', fields: { tool: 'show_products', toolCallId: 'tc_1', ok: true, durationMs: 40.2, result: 'sent' } },
   { evt: 'bg', fields: { task: 'fb-webhook', ok: false, name: 'Error', message: 'boom', durationMs: 3.1 } },
+  { evt: 'instagram', fields: { stage: 'delivery', object: 'instagram', entryCount: 1, durationMs: 4.2 } },
   { evt: 'anomaly', fields: { kind: 'backlog_claimed_but_unanswered', detail: 'mid_1', count: 2 } },
   { evt: 'log_dropped', fields: { droppedEvents: 3 } },
 ];

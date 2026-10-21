@@ -2,7 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "paths": {
       "@repo/db": ["packages/db"],
       "@repo/db/*": ["packages/db/*"],

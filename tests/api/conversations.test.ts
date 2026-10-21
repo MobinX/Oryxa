@@ -87,7 +87,7 @@ describe('Conversations API', () => {
       'page-token-test',
       'CUSTOMER_FB_ID',
       'Human reply here',
-      { humanAgent: true },
+      { humanAgent: true, platform: 'facebook' },
     );
   });
 

@@ -4,6 +4,17 @@ Welcome! This document outlines the project structure, development workflows, ru
 
 ---
 
+## 0. MANDATORY WORKFLOW & GIT PUSH POLICY (CRITICAL)
+- **NEVER PUSH TO GITHUB WITHOUT EXPLICIT PERMISSION**: Under NO circumstances should any code be pushed to remote GitHub repositories (`git push`) without explicit confirmation from the user in that conversation.
+- **Standard Protocol**:
+  1. Build and test the product locally (`bun run build:web`, `bun run build:api`, local test suites).
+  2. Check and verify that there are zero errors, zero bugs, and zero test failures.
+  3. Confirm the status, summary of work, and verification results to the user.
+  4. Wait for the user's explicit confirmation and permission.
+  5. ONLY push the code to GitHub once the user explicitly confirms and approves the push.
+
+---
+
 ## 1. Project Overview & Tech Stack
 Oryxa is a multi-tenant, multi-channel AI auto-reply e-commerce SaaS. Merchants connect social channels (Facebook Messenger, etc.) from a web dashboard, enabling a LangGraph + Gemini-powered agent to answer product queries, manage carts, and create orders directly from chat.
 

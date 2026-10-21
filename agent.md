@@ -1,6 +1,14 @@
 # Oryxa — AI Agent
 
-The sales agent replies to Facebook Messenger customers using **Google Gemini 2.5 Flash-Lite**, **LangGraph ReAct**, and tools that search products, create orders, and send messages.
+> [!IMPORTANT]
+> **MANDATORY DEVELOPER WORKFLOW & GITHUB PUSH POLICY**:
+> Never push code to the GitHub repository without explicit permission from the user.
+> 1. Build and test the product locally (`bun run build:web`, `bun run build:api`, local vitest suites).
+> 2. Ensure zero errors, zero bugs, and zero test failures.
+> 3. Confirm the product state and verification results to the user.
+> 4. ONLY push the code to GitHub once the user gives explicit confirmation and approval.
+
+---
 
 Implementation lives in `packages/agent/`. Orchestration (when to run, DB updates, re-queue) lives in `apps/api/src/lib/agent-runner.ts`.
 

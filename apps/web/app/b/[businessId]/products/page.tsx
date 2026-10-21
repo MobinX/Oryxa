@@ -16,6 +16,8 @@ import { ProductCsvImport } from '@/components/products/csv-import-dialog';
 import { deleteProductAction, deleteProductsBulkAction } from '@/app/actions/products';
 import ProductsSkeleton from './skeleton';
 
+export const instant = false;
+
 function formatPrice(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 }

@@ -44,7 +44,7 @@ describe('the catalog block names the shelves', () => {
     expect(summary).toMatch(/whole catalog/);
     // A question about kinds is answered in words, not by re-sending the products.
     expect(summary).toMatch(/answer from the Categories/i);
-    expect(summary).toMatch(/the product count is not\s+the answer/i);
+    expect(summary).toMatch(/never a\s+product card list/i);
   });
 
   it('still says the shelves to a thread that cannot send cards, and sends it to no tool it lacks', async () => {

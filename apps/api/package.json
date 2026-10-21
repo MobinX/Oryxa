@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "bun --env-file=../../.env run --hot src/bunServe.ts",
     "build": "rm -f api/index.js api/index.js.map src/index.js src/index.js.map && bun run build:bundle",
-    "build:bundle": "mkdir -p public/server && bun build ./api/index.ts --outfile ./public/index.js --target node --minify --sourcemap=linked && bun build ./src/bunServe.ts --outfile ./public/server/index.js --target bun --minify --sourcemap=linked",
+    "build:bundle": "mkdir -p public/server && bun build --target=node --outdir=./public --entry-naming=index.js --minify --sourcemap=linked ./api/index.ts && bun build --target=bun --outdir=./public/server --entry-naming=index.js --minify --sourcemap=linked ./src/bunServe.ts",
     "start": "bun --env-file=../../.env public/server/index.js"
   },
   "dependencies": {
