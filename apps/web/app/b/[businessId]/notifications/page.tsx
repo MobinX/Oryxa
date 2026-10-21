@@ -15,6 +15,8 @@ function noticeTitle(kind: string): string {
     : `You have used 80% of your ${unit} replies`;
 }
 
+export const instant = false;
+
 export default async function NotificationsPage({
   params,
 }: {
