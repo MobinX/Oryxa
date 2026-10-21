@@ -725,6 +725,8 @@ export function createAgentTools(
     emitSse?: SseEmitter;
     /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
     platform?: MessagingPlatform;
+    /** Set for the one turn after a typed reply ignored the previous chips. */
+    suppressSuggestions?: boolean;
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
     onOrderCreated?: (orderId: string) => Promise<void>;
@@ -1550,14 +1552,19 @@ export function createAgentTools(
       const cleaned = [
         ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
       ].slice(0, 10);
-      const withChips = cleaned.length >= 2;
+      const askedForChips = cleaned.length >= 2;
+      // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
+      // the old one on screen (most visibly in the Android Messenger client), so this turn
+      // answers in one plain message with the choices written out instead.
+      const withChips = askedForChips && !context.suppressSuggestions;
+      const suppressedChips = askedForChips && !withChips;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
       }
 
-      const said = withChips ? `${text} (${cleaned.join(' / ')})` : text;
+      const said = askedForChips ? `${text} (${cleaned.join(' / ')})` : text;
       try {
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
@@ -1575,6 +1582,10 @@ export function createAgentTools(
         throw err;
       }
 
+      if (withChips && context.agentState) {
+        context.agentState.lastSuggestions = cleaned;
+      }
+
       await createMessage({
         conversationId: context.conversationId,
         from: 'self',
@@ -1586,10 +1597,13 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         ...(withChips ? { suggestions: cleaned } : {}),
+        ...(suppressedChips ? { suggestionsSuppressed: true, suggestions: cleaned } : {}),
         ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
         instruction: withChips
           ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
-          : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
+          : suppressedChips
+            ? 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.'
+            : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
       }));
     },
     {

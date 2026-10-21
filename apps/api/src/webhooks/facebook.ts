@@ -195,9 +195,11 @@ async function inboundFromMessagingEvent(
   if (ev.message) {
     const images = imageAttachmentUrls(ev);
     // A photo with no caption is still the whole question — "is this one in your size?" arrives
-    // as one image and no words, and dropping it is dropping a customer.
+    // as one image and no words, and dropping it is dropping a customer. A quick-reply tap
+    // carries the untruncated option in `payload`; prefer it over the 20-character title.
     if (ev.message.text || images.length > 0) {
-      return { senderId, text: ev.message.text ?? '', images, externalId: ev.message.mid };
+      const text = ev.message.quick_reply?.payload?.trim() || ev.message.text || '';
+      return { senderId, text, images, externalId: ev.message.mid };
     }
     // A voice note becomes the customer's words before the agent ever sees the turn. A note
     // that cannot be read is still answered — the model is told what arrived, not shown silence.
@@ -1039,6 +1041,11 @@ async function processMessagingEvents(
       text || (images.length > 0 && imageKeys.length === 0
         ? '[a photo the customer sent could not be received]'
         : '');
+    const messageKind = ev.message?.quick_reply
+      ? 'quick_reply'
+      : ev.postback
+        ? 'postback'
+        : undefined;
 
     const { conversationId, priorStatus, inserted, needsProfile, priorStateAt } =
       await processInboundMessage(
@@ -1047,6 +1054,7 @@ async function processMessagingEvents(
         content,
         externalId,
         imageKeys,
+        messageKind,
       );
 
     fbLog('processMessagingEvents persisted', {

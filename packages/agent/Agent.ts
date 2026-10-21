@@ -97,6 +97,8 @@ export interface AgentConfig {
   customerName?: string | null;
   /** Which inbox this token answers as; tools use it for the platform's text limit and wording. */
   platform?: 'facebook' | 'instagram';
+  /** True on the turn right after a customer typed instead of tapping the offered chips. */
+  suppressSuggestions?: boolean;
   catalogSummary?: string;
   /** Per-thread facts, kept after the stable prompt prefix for cache reuse. */
   agentState?: ConversationAgentState;
@@ -331,6 +333,7 @@ export class Agent {
           customerPlatformId: this.config.customerPlatformId,
           customerName: this.config.customerName,
           platform: this.config.platform,
+          suppressSuggestions: this.config.suppressSuggestions,
           emitSse,
           sendMessageOverride,
           onOrderCreated: this.config.onOrderCreated,

@@ -324,6 +324,8 @@ export async function processInboundMessage(
   text: string,
   externalId?: string,
   imageKeys?: string[],
+  /** `quick_reply` / `postback` when the turn was a tap rather than typed text. */
+  messageKind?: string,
 ): Promise<{
   conversationId: string;
   messageId: string | null;
@@ -370,8 +372,9 @@ export async function processInboundMessage(
   const priorStatus = conv.lastMessageState;
   const photos = imageKeys ?? [];
   // The pictures are what the customer sent, so they name the turn: a photo with a caption is
-  // an image message, and the caption rides in `content` beside it.
-  const contentType = photos.length > 0 ? 'image' : 'text';
+  // an image message, and the caption rides in `content` beside it. A chip or button tap is
+  // named too, so the runner can tell it apart from a typed answer on the next turn.
+  const contentType = photos.length > 0 ? 'image' : (messageKind ?? 'text');
   let messageId: string | null = null;
 
   if (externalId) {

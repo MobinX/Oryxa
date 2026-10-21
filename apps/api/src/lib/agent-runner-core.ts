@@ -156,6 +156,31 @@ export async function runAgentCore(
 
   const agentState = parseConversationAgentState(conv.agentState);
   const latestCustomerText = [...pendingMsgs].reverse().find((m) => m.content.trim())?.content ?? '';
+
+  // A chip row is dismissed by a tap, but not by a typed answer. If the customer ignored the
+  // last row by typing, this turn writes the choices into the message instead of attaching a
+  // second row under the first one.
+  const normalizeSuggestion = (value: string): string =>
+    value.trim().toLowerCase().replace(/\s+/g, ' ');
+  let suppressSuggestions = false;
+  if (pendingMsgs.length > 0 && (agentState.lastSuggestions ?? []).length > 0) {
+    const offered = agentState.lastSuggestions ?? [];
+    const tapped = pendingMsgs.some(
+      (message) =>
+        message.contentType === 'quick_reply' ||
+        message.contentType === 'postback' ||
+        offered.some(
+          (option) => normalizeSuggestion(option) === normalizeSuggestion(message.content),
+        ),
+    );
+    agentState.lastSuggestions = [];
+    if (!tapped) {
+      suppressSuggestions = true;
+      console.log(
+        '[agent-runner-core] customer typed instead of tapping the suggestions — no new chip row this turn',
+      );
+    }
+  }
   const orderTap = latestCustomerText.match(/^place order with ([\da-f-]{36}) and (.*?)(?: variant ([\da-f-]{36}))?$/i);
 
   const [productFromTap, latestOrderRes, catalog] = await Promise.all([
@@ -241,6 +266,7 @@ export async function runAgentCore(
     emitSse,
     sendMessageOverride,
     platform,
+    suppressSuggestions,
     // Already resolved: the store's own block, else the platform default's, else the channel's
     // reviewed text in @agent/guidance.
     replyGuidance:

@@ -50,6 +50,11 @@ export const conversationAgentStateSchema = z.object({
   }).nullable().default(null),
   languageOverride: z.enum(['bn', 'en']).nullable().optional().default(null),
   lastReplyLanguage: z.enum(['bn', 'en']).nullable().optional().default(null),
+  /**
+   * The chips on the most recent question. Kept so the next turn can tell a tap (which dismisses
+   * them) from a typed answer that ignored them, and avoid putting a second chip row on screen.
+   */
+  lastSuggestions: z.array(z.string()).default([]),
 });
 
 export type ConversationAgentState = z.infer<typeof conversationAgentStateSchema>;
