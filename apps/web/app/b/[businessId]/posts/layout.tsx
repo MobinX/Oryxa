@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
 import { cachedChannels, cachedPosts } from '@/app/_cache/queries';
-import { SocialContentStudio } from '@/components/social-content-studio';
+import { PostsClient } from '@/components/posts-client';
 import PostsSkeleton from './skeleton';
 
 export default function PostsLayout({
@@ -36,12 +36,16 @@ async function PostsBody({
   ]);
 
   return (
-    <SocialContentStudio
-      businessId={businessId}
-      initialPosts={posts}
-      channels={channels}
-    >
-      {children}
-    </SocialContentStudio>
+    <>
+      <div className="mt-4 flex min-h-[min(70vh,600px)] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111427] lg:mt-6 lg:min-h-[calc(100vh-12rem)] lg:flex-row">
+        <PostsClient
+          token={token}
+          businessId={businessId}
+          initialPosts={posts}
+          channels={channels}
+        />
+      </div>
+      <div className="hidden">{children}</div>
+    </>
   );
 }

@@ -33,19 +33,16 @@ import { cn } from '@/lib/utils';
 import { SignOutForm } from '@/components/sign-out-button';
 import { COMPANY_NAME } from '@/lib/brand';
 
-type NavItem = {
+const primaryNav: Array<{
   href: string;
   label: string;
   icon: LucideIcon;
-  badge?: string | number;
-  badgeColor?: 'purple' | 'red';
+  badgeKey?: 'notifications';
   children?: Array<{ href: string; label: string }>;
-};
-
-const primaryNav: NavItem[] = [
+}> = [
   { href: 'dashboard', label: 'Dashboard', icon: Home },
-  { href: 'inbox', label: 'Inbox', icon: MessageSquare, badge: 12, badgeColor: 'purple' },
-  { href: 'orders', label: 'Orders', icon: ClipboardList, badge: 8, badgeColor: 'purple' },
+  { href: 'inbox', label: 'Inbox', icon: MessageSquare },
+  { href: 'orders', label: 'Orders', icon: ClipboardList },
   { href: 'products', label: 'Products', icon: Package },
   { href: 'customers', label: 'Customers', icon: Users },
   {
@@ -60,20 +57,12 @@ const primaryNav: NavItem[] = [
   },
   { href: 'playground', label: 'Automations', icon: Sparkles },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { href: 'notifications', label: 'Notifications', icon: Bell, badge: 5, badgeColor: 'red' },
+  { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
   { href: 'channels', label: 'Integrations', icon: Blocks },
   { href: 'categories', label: 'Categories', icon: FolderTree },
   { href: 'storefront', label: 'Storefront', icon: Store },
   { href: 'billing', label: 'Billing', icon: CreditCard },
   { href: 'settings', label: 'Settings', icon: Settings },
-];
-
-const connectedChannels = [
-  { name: 'Facebook', color: 'bg-[#1877F2]', iconText: 'f', status: 'Connected' },
-  { name: 'Instagram', color: 'bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600', iconText: 'IG', status: 'Connected' },
-  { name: 'WhatsApp', color: 'bg-[#25D366]', iconText: 'WA', status: 'Connected' },
-  { name: 'Messenger', color: 'bg-gradient-to-tr from-[#00B2FF] to-[#006AFF]', iconText: 'M', status: 'Connected' },
-  { name: 'Comments', color: 'bg-pink-500', iconText: '💬', status: 'Connected' },
 ];
 
 export function OnlyOrdesLogo({ className, lightText = false }: { className?: string; lightText?: boolean }) {
@@ -102,10 +91,12 @@ export function DashboardTopHeader({
   businessId,
   businessName,
   userName = 'Mohammad Shihab',
+  unreadNotificationsCount = 0,
 }: {
   businessId: string;
   businessName: string;
   userName?: string;
+  unreadNotificationsCount?: number;
 }) {
   return (
     <header className="sticky top-0 z-30 hidden h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-md dark:border-slate-800 dark:bg-[#111427]/90 lg:flex">
@@ -154,9 +145,11 @@ export function DashboardTopHeader({
           aria-label="Notifications"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-            5
-          </span>
+          {unreadNotificationsCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+              {unreadNotificationsCount}
+            </span>
+          )}
         </Link>
 
         <Link
@@ -194,16 +187,70 @@ export function Sidebar({
   businessId,
   businessName,
   userName = 'Mohammad Shihab',
+  channels = [],
+  unreadNotificationsCount = 0,
+  billing,
 }: {
   businessId: string;
   businessName: string;
   userName?: string;
+  channels?: Array<{ id: string; platform: string; platformChannelId?: string; pageName?: string | null }>;
+  unreadNotificationsCount?: number;
+  billing?: any;
 }) {
   const pathname = usePathname() ?? '';
   const [isOpen, setIsOpen] = useState(false);
   const [socialExpanded, setSocialExpanded] = useState(true);
   const displayUser = userName === 'User' ? 'Mohammad Shihab' : userName;
   const userInitial = displayUser.trim().charAt(0).toUpperCase() || 'M';
+
+  const hasFacebook = channels.some((c) => c.platform === 'facebook');
+  const facebookChannel = channels.find((c) => c.platform === 'facebook');
+  const dynamicChannels = [
+    {
+      name: 'Facebook Page',
+      sublabel: hasFacebook ? (facebookChannel?.pageName || 'Connected') : 'Connect page',
+      status: hasFacebook ? 'Connected' : 'Not Connected',
+      connected: hasFacebook,
+      comingSoon: false,
+      color: 'bg-[#1877F2]',
+      iconText: 'f',
+    },
+    {
+      name: 'Messenger',
+      sublabel: hasFacebook ? 'Active Auto-Reply' : 'Requires Facebook',
+      status: hasFacebook ? 'Active' : 'Inactive',
+      connected: hasFacebook,
+      comingSoon: false,
+      color: 'bg-gradient-to-tr from-[#00B2FF] to-[#006AFF]',
+      iconText: 'M',
+    },
+    {
+      name: 'Instagram',
+      sublabel: 'DM & Comments',
+      status: 'Coming Soon',
+      connected: false,
+      comingSoon: true,
+      color: 'bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600',
+      iconText: 'IG',
+    },
+    {
+      name: 'WhatsApp',
+      sublabel: 'Cloud API',
+      status: 'Coming Soon',
+      connected: false,
+      comingSoon: true,
+      color: 'bg-[#25D366]',
+      iconText: 'WA',
+    },
+  ];
+
+  const quota = billing?.quota;
+  const planName = quota?.planName || billing?.plan?.name || 'Standard Plan';
+  const hasLimit = typeof quota?.messageLimit === 'number' && quota.messageLimit > 0;
+  const messagesUsed = quota?.messagesUsed ?? 0;
+  const messageLimit = quota?.messageLimit ?? 0;
+  const usedPercent = hasLimit ? Math.min(100, Math.round((messagesUsed / messageLimit) * 100)) : 0;
 
   const isActive = (href: string) => {
     const cleanHref = href.split('?')[0] ?? href;
@@ -217,6 +264,7 @@ export function Sidebar({
         const active = isActive(item.href);
         const Icon = item.icon;
         const hasChildren = Boolean(item.children && item.children.length > 0);
+        const badgeCount = item.badgeKey === 'notifications' && unreadNotificationsCount > 0 ? unreadNotificationsCount : null;
 
         return (
           <div key={item.href}>
@@ -242,18 +290,13 @@ export function Sidebar({
                 </span>
 
                 <span className="flex items-center gap-1.5">
-                  {item.badge !== undefined && (
+                  {badgeCount !== null && (
                     <span
                       className={cn(
-                        'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold',
-                        active
-                          ? 'bg-white text-[#5B3DF5]'
-                          : item.badgeColor === 'red'
-                            ? 'bg-rose-500 text-white'
-                            : 'bg-[#5B3DF5]/90 text-white',
+                        'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold bg-rose-500 text-white',
                       )}
                     >
-                      {item.badge}
+                      {badgeCount}
                     </span>
                   )}
                   {hasChildren && (
@@ -395,34 +438,56 @@ export function Sidebar({
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
           {renderNavItems()}
 
-          {/* Connected Channels List (Matches Screenshot 3) */}
+          {/* Real Connected Channels List */}
           <div className="border-t border-white/10 pt-4">
-            <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Connected Channels
-            </p>
-            <div className="mt-2.5 space-y-1.5 px-1.5">
-              {connectedChannels.map((ch) => (
+            <div className="flex items-center justify-between px-2 pb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Connected Channels
+              </p>
+              <Link
+                href={`/b/${businessId}/channels`}
+                className="text-[10px] text-[#A78BFA] hover:underline"
+              >
+                Manage
+              </Link>
+            </div>
+            <div className="mt-2 space-y-1.5 px-1.5">
+              {dynamicChannels.map((ch) => (
                 <Link
                   key={ch.name}
                   href={`/b/${businessId}/channels`}
                   className="flex items-center justify-between rounded-lg px-2 py-1.5 transition hover:bg-white/5"
                 >
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
                       className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-2xs',
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-2xs',
                         ch.color,
                       )}
                     >
                       {ch.iconText}
                     </span>
-                    <div className="leading-tight">
-                      <p className="text-xs font-medium text-slate-200">{ch.name}</p>
-                      <p className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <div className="min-w-0 leading-tight">
+                      <p className="truncate text-xs font-medium text-slate-200">{ch.name}</p>
+                      <p className="truncate text-[10px] text-slate-400">{ch.sublabel}</p>
+                    </div>
+                  </div>
+                  <div>
+                    {ch.comingSoon ? (
+                      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400">
+                        Soon
+                      </span>
+                    ) : ch.connected ? (
+                      <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         {ch.status}
-                      </p>
-                    </div>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                        Connect
+                      </span>
+                    )}
                   </div>
                 </Link>
               ))}
@@ -430,24 +495,39 @@ export function Sidebar({
           </div>
         </nav>
 
-        {/* AI Replies Usage Meter Card (Matches Screenshots 6 & 7) */}
+        {/* AI Replies Usage Meter Card */}
         <div className="px-3.5 pt-2 pb-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-slate-300">AI Replies</span>
-              <span className="font-semibold text-slate-400">47%</span>
+              <span className="font-medium text-slate-300">AI Sales Agent</span>
+              <span className="font-semibold text-emerald-400">Active</span>
             </div>
             <p className="mt-0.5 text-xs font-bold text-white">
-              2,340 <span className="font-normal text-slate-400">/ 5,000</span>
+              {planName}
             </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-[47%] rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#8B5CF6]" />
-            </div>
+            {hasLimit ? (
+              <div className="mt-2">
+                <div className="flex justify-between text-[10px] text-slate-400">
+                  <span>{messagesUsed} replies used</span>
+                  <span>{messageLimit} limit</span>
+                </div>
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#8B5CF6]"
+                    style={{ width: `${usedPercent}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 text-[10px] text-slate-400">
+                {messagesUsed > 0 ? `${messagesUsed} AI replies this cycle` : 'Ready to handle customer messages'}
+              </p>
+            )}
             <Link
               href={`/b/${businessId}/billing`}
               className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-[#5B3DF5]/20 py-1.5 text-[11px] font-semibold text-[#C4B5FD] transition hover:bg-[#5B3DF5]/35 hover:text-white"
             >
-              <span>Upgrade Plan</span>
+              <span>Manage Plan</span>
               <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
