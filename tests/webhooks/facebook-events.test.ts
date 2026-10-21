@@ -190,7 +190,18 @@ describe('one webhook delivery states each fact once', () => {
     expect(of('webhook')).toMatchObject([{ event: 'verify', verified: false }]);
   });
 
-  it('marks a forged delivery as accepted-but-invalid instead of hiding it', async () => {
+  it('rejects a forged delivery with 403 by default', async () => {
+    const seed = await seedTestWorld();
+    const res = await app.request('http://localhost/webhooks/facebook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
+      body: JSON.stringify({ object: 'page', entry: [entry(seed.pageChannelId, [text('FORGED_SENDER', 'hi', 'mid-forge')])] }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('in log-only mode marks a forged delivery as accepted-but-invalid instead of hiding it', async () => {
+    process.env.META_WEBHOOK_SIGNATURE_MODE = 'log-only';
     const seed = await seedTestWorld();
     const body = JSON.stringify({
       object: 'page',
@@ -204,7 +215,7 @@ describe('one webhook delivery states each fact once', () => {
     await flushBackground();
     await flush();
 
-    // Behaviour unchanged: still acknowledged. Visibility is the change.
+    delete process.env.META_WEBHOOK_SIGNATURE_MODE;
     expect(res.status).toBe(200);
     expect(of('webhook')[0]).toMatchObject({ signatureValid: false });
   });

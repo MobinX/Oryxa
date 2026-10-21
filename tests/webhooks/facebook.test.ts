@@ -99,24 +99,45 @@ describe('Facebook Webhook', () => {
     expect(res.status).toBe(403);
   });
 
-  it('allows POST with a missing signature (signature check is currently bypassed)', async () => {
+  it('rejects POST with a missing signature (403)', async () => {
     const res = await fbWebhookRouter.request('http://localhost/facebook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ object: 'page', entry: [] }),
     });
-    // Signature enforcement is intentionally disabled upstream — webhook passes through.
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
-  it('allows POST with an invalid signature (signature check is currently bypassed)', async () => {
+  it('rejects POST with an invalid signature (403)', async () => {
     const res = await fbWebhookRouter.request('http://localhost/facebook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
       body: JSON.stringify({ object: 'page', entry: [] }),
     });
-    // Signature enforcement is intentionally disabled upstream — webhook passes through.
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
+  });
+
+  it('accepts an invalid signature only in explicit log-only mode', async () => {
+    process.env.META_WEBHOOK_SIGNATURE_MODE = 'log-only';
+    try {
+      const res = await fbWebhookRouter.request('http://localhost/facebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
+        body: JSON.stringify({ object: 'page', entry: [] }),
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.META_WEBHOOK_SIGNATURE_MODE;
+    }
+  });
+
+  it('rejects an Instagram event with a forged signature (403)', async () => {
+    const res = await fbWebhookRouter.request('http://localhost/instagram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
+      body: JSON.stringify({ object: 'instagram', entry: [] }),
+    });
+    expect(res.status).toBe(403);
   });
 
   it('rejects non-page payloads', async () => {

@@ -446,29 +446,31 @@ async function receiveMetaWebhook(c: any): Promise<Response> {
   const instagramPath = path.includes('/instagram');
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
+  const mode = process.env.META_WEBHOOK_SIGNATURE_MODE ?? 'enforce';
+  const isLogOnly = mode === 'log-only';
 
+  // Log request metadata without exposing secrets
   fbLog(`POST ${path} received`, {
-    'x-hub-signature-256': signature256 ?? null,
-    'x-hub-signature': signature ?? null,
+    signatureLen: (signature256 ?? signature)?.length ?? 0,
     contentType: c.req.header('content-type') ?? null,
     userAgent: c.req.header('user-agent') ?? null,
   });
 
   const raw = await c.req.text();
-  fbLog(`POST ${path} raw body`, raw);
 
   const signatureValid = await verifyWebhookSignature(raw, signature256 ?? signature);
-  fbLog(`POST ${path} signature verification`, { valid: signatureValid });
 
-  if (!signatureValid) {
-    fbLog(`POST ${path} rejected — invalid signature but will go through still`);
+  // Enforce signature validation unless in log-only mode
+  if (!signatureValid && !isLogOnly) {
+    fbLog(`POST ${path} rejected — invalid signature`, { mode, hasSignature: Boolean(signature256 || signature) });
+    return c.text('Forbidden', 403);
   }
 
   let body: WebhookBody;
   try {
     body = JSON.parse(raw) as WebhookBody;
   } catch (err) {
-    fbLog(`POST ${path} rejected — malformed JSON`, err);
+    fbLog(`POST ${path} rejected — malformed JSON`);
     emit('webhook', { event: 'delivery', signatureValid });
     if (instagramPath) {
       emit('instagram', {
@@ -480,8 +482,6 @@ async function receiveMetaWebhook(c: any): Promise<Response> {
     }
     return c.text('Malformed JSON', 400);
   }
-
-  fbLog(`POST ${path} parsed body`, body);
 
   // The same callback URL serves the Page object (Messenger) and the Instagram object
   // (DMs and comments). An app can be configured with one webhook entry per object, and
@@ -613,8 +613,6 @@ async function processEntries(
       accountId: entry.id,
       messagingCount: messaging.length,
       changesCount: changes.length,
-      messaging: entry.messaging,
-      changes: entry.changes,
     });
 
     if (messaging.length === 0 && changes.length === 0) {
@@ -869,7 +867,7 @@ async function processMessagingEvents(
   const budget = forTrigger(channel.businessId);
 
   for (const [index, ev] of events.entries()) {
-    fbLog('processMessagingEvents event', { index, event: ev });
+    fbLog('processMessagingEvents event', { index, hasPayload: Boolean(ev.message) || Boolean(ev.postback) });
 
     if (platform === 'instagram') {
       emit('instagram', {
@@ -996,7 +994,7 @@ async function processMessagingEvents(
     fbLog('processMessagingEvents inbound', {
       index,
       senderId,
-      text,
+      textLen: text.length,
       externalId: externalId ?? null,
       photoCount: images.length,
     });
