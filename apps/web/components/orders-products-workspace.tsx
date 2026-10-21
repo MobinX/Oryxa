@@ -14,7 +14,10 @@ import {
   Trash2,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   AlertCircle,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { advanceOrderStateAction, deleteOrderAction } from '@/app/actions/orders';
 
@@ -24,12 +27,25 @@ const NEXT_STATE: Record<string, string> = {
   onDelivery: 'done',
 };
 
+const PREV_STATE: Record<string, string> = {
+  done: 'onDelivery',
+  onDelivery: 'acknowledged',
+  acknowledged: 'pending',
+};
+
 const STATE_LABEL: Record<string, string> = {
   pending: 'Pending',
   acknowledged: 'Confirmed',
   onDelivery: 'On Delivery',
   done: 'Delivered',
 };
+
+const ORDER_STAGES: Array<{ id: 'pending' | 'acknowledged' | 'onDelivery' | 'done'; title: string; desc: string }> = [
+  { id: 'pending', title: 'Order Placed', desc: 'Awaiting merchant review' },
+  { id: 'acknowledged', title: 'Order Confirmed', desc: 'Confirmed & packaging' },
+  { id: 'onDelivery', title: 'Handed to Courier', desc: 'Dispatched for delivery' },
+  { id: 'done', title: 'Delivered & Completed', desc: 'Customer received parcel' },
+];
 
 export interface OrdersProductsWorkspaceProps {
   businessId: string;
@@ -89,19 +105,30 @@ export function OrdersProductsWorkspace({
     (p.sku || '').toLowerCase().includes(productSearch.toLowerCase()),
   );
 
-  const handleAdvanceState = (orderId: string, currentState: string) => {
-    const next = NEXT_STATE[currentState];
-    if (!next) return;
+  const handleSetState = (orderId: string, targetState: string) => {
+    if (!targetState) return;
     startTransition(async () => {
       try {
-        await advanceOrderStateAction(businessId, orderId, next);
-        setActionMessage(`Order marked as ${STATE_LABEL[next] || next}`);
+        await advanceOrderStateAction(businessId, orderId, targetState);
+        setActionMessage(`Order updated to ${STATE_LABEL[targetState] || targetState}`);
         setTimeout(() => setActionMessage(null), 3000);
       } catch (err: any) {
         setActionMessage(`Error updating order: ${err?.message || 'Failed'}`);
         setTimeout(() => setActionMessage(null), 4000);
       }
     });
+  };
+
+  const handleAdvanceState = (orderId: string, currentState: string) => {
+    const next = NEXT_STATE[currentState];
+    if (!next) return;
+    handleSetState(orderId, next);
+  };
+
+  const handleRevertState = (orderId: string, currentState: string) => {
+    const prev = PREV_STATE[currentState];
+    if (!prev) return;
+    handleSetState(orderId, prev);
   };
 
   const handleDelete = (orderId: string) => {
@@ -435,41 +462,136 @@ export function OrdersProductsWorkspace({
                 )}
               </div>
 
-              {/* Order Status Stepper */}
-              <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-                <p className="font-bold text-slate-900 dark:text-white">Order Pipeline</p>
-                <div className="relative pl-5 space-y-3 border-l-2 border-slate-100 dark:border-slate-800 ml-1.5">
-                  {timelineSteps.map((step, idx) => (
-                    <div key={idx} className="relative">
-                      <div
-                        className={`absolute -left-[27px] top-0.5 h-3 w-3 rounded-full border-2 bg-white dark:bg-[#13172B] ${
-                          step.done
-                            ? 'border-emerald-500 bg-emerald-500'
-                            : 'border-slate-300 dark:border-slate-700'
+              {/* Order Status Stepper & Bidirectional Control */}
+              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-slate-900 dark:text-white">Order Pipeline</p>
+                  <span className="text-[10px] text-slate-400">Click any step to set</span>
+                </div>
+
+                {/* Interactive Clickable Steps */}
+                <div className="relative pl-6 space-y-3 border-l-2 border-slate-100 dark:border-slate-800 ml-2">
+                  {ORDER_STAGES.map((stage, idx) => {
+                    const stepStateOrder = ['pending', 'acknowledged', 'onDelivery', 'done'];
+                    const currentIdx = stepStateOrder.indexOf(activeOrder.state);
+                    const isPassed = idx <= currentIdx;
+                    const isCurrent = activeOrder.state === stage.id;
+
+                    return (
+                      <button
+                        key={stage.id}
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => handleSetState(activeOrder.id, stage.id)}
+                        className={`group relative block w-full text-left transition rounded-lg p-1.5 -ml-1.5 ${
+                          isCurrent
+                            ? 'bg-[#5B3DF5]/10 border border-[#5B3DF5]/30 dark:bg-[#5B3DF5]/20'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
                         }`}
-                      />
-                      <p className={`font-semibold ${step.done ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
-                        {step.title}
-                      </p>
-                      <p className="text-[10px] text-slate-400">{step.subtitle}</p>
-                    </div>
-                  ))}
+                      >
+                        <div
+                          className={`absolute -left-[27px] top-2.5 h-3.5 w-3.5 rounded-full border-2 transition ${
+                            isCurrent
+                              ? 'border-[#5B3DF5] bg-[#5B3DF5] ring-2 ring-[#5B3DF5]/30'
+                              : isPassed
+                              ? 'border-emerald-500 bg-emerald-500'
+                              : 'border-slate-300 bg-white dark:border-slate-700 dark:bg-[#13172B]'
+                          }`}
+                        />
+                        <div className="flex items-center justify-between">
+                          <p
+                            className={`font-semibold text-xs ${
+                              isCurrent
+                                ? 'text-[#5B3DF5] dark:text-[#818cf8] font-bold'
+                                : isPassed
+                                ? 'text-slate-900 dark:text-white'
+                                : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          >
+                            {stage.title}
+                          </p>
+                          {isCurrent && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#5B3DF5] bg-[#5B3DF5]/15 px-1.5 py-0.5 rounded">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          {idx === 0
+                            ? `${activeOrder.customer} (${activeOrder.createdAt})`
+                            : stage.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Direct State Quick Jump Bar */}
+                <div className="pt-2">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+                    Quick State Jump (Forward / Backward)
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                    {ORDER_STAGES.map((s) => {
+                      const isSelected = activeOrder.state === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={isPending || isSelected}
+                          onClick={() => handleSetState(activeOrder.id, s.id)}
+                          className={`rounded-lg py-1.5 px-2 text-[11px] font-semibold text-center transition border ${
+                            isSelected
+                              ? 'bg-[#5B3DF5] border-[#5B3DF5] text-white shadow-xs pointer-events-none'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {STATE_LABEL[s.id]}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons: Bidirectional Advance / Revert & Chat / Delete */}
               <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {NEXT_STATE[activeOrder.state] && (
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => handleAdvanceState(activeOrder.id, activeOrder.state)}
-                    className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#5B3DF5] py-2.5 font-bold text-white shadow-md shadow-[#5B3DF5]/20 hover:bg-[#4C2EE0] transition disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Mark as {STATE_LABEL[NEXT_STATE[activeOrder.state]]}</span>
-                  </button>
-                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Revert / Previous State */}
+                  {PREV_STATE[activeOrder.state] ? (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleRevertState(activeOrder.id, activeOrder.state)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50/50 py-2.5 font-bold text-amber-800 hover:bg-amber-100 transition dark:border-amber-700/60 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/40 disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Revert to {STATE_LABEL[PREV_STATE[activeOrder.state]]}</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-center rounded-xl border border-slate-100 py-2.5 text-[11px] text-slate-400 dark:border-slate-800">
+                      Initial Stage
+                    </div>
+                  )}
+
+                  {/* Advance / Next State */}
+                  {NEXT_STATE[activeOrder.state] ? (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleAdvanceState(activeOrder.id, activeOrder.state)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-[#5B3DF5] py-2.5 font-bold text-white shadow-md shadow-[#5B3DF5]/20 hover:bg-[#4C2EE0] transition disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Advance to {STATE_LABEL[NEXT_STATE[activeOrder.state]]}</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 py-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      Order Fulfilled
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <Link
                     href={`/b/${businessId}/inbox`}

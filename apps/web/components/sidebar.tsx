@@ -55,7 +55,6 @@ const primaryNav: Array<{
       { href: 'posts?tab=autoreply', label: 'Auto-Reply' },
     ],
   },
-  { href: 'playground', label: 'Automations', icon: Sparkles },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
   { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
   { href: 'channels', label: 'Integrations', icon: Blocks },

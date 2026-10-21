@@ -224,6 +224,9 @@ export function PostFeed({
   onFilterPlatform,
   onDelete,
 }: PostFeedProps) {
+  const hasFacebook = channels.some((c) => c.platform === 'facebook');
+  const hasInstagram = channels.some((c) => c.platform === 'instagram');
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
       <div className="shrink-0 space-y-3 border-b border-border/40 bg-card p-4">
@@ -240,41 +243,48 @@ export function PostFeed({
           </Link>
         </div>
 
-        <div className="flex gap-1">
-          <button
-            onClick={() => onFilterPlatform('all')}
-            className={cn(
-              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-              filterPlatform === 'all'
-                ? 'bg-primary/10 font-bold text-primary'
-                : 'text-muted-foreground hover:bg-muted',
+        {/* Dynamic Channel Filter: Only show tabs for actually connected platforms */}
+        {(hasFacebook || hasInstagram) && (
+          <div className="flex gap-1">
+            <button
+              onClick={() => onFilterPlatform('all')}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                filterPlatform === 'all'
+                  ? 'bg-primary/10 font-bold text-primary'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              All
+            </button>
+            {hasFacebook && (
+              <button
+                onClick={() => onFilterPlatform('facebook')}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                  filterPlatform === 'facebook'
+                    ? 'bg-primary/10 font-bold text-primary'
+                    : 'text-muted-foreground hover:bg-muted',
+                )}
+              >
+                <Facebook className="h-3 w-3" /> Facebook
+              </button>
             )}
-          >
-            All
-          </button>
-          <button
-            onClick={() => onFilterPlatform('facebook')}
-            className={cn(
-              'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-              filterPlatform === 'facebook'
-                ? 'bg-primary/10 font-bold text-primary'
-                : 'text-muted-foreground hover:bg-muted',
+            {hasInstagram && (
+              <button
+                onClick={() => onFilterPlatform('instagram')}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                  filterPlatform === 'instagram'
+                    ? 'bg-primary/10 font-bold text-primary'
+                    : 'text-muted-foreground hover:bg-muted',
+                )}
+              >
+                <Instagram className="h-3 w-3" /> Instagram
+              </button>
             )}
-          >
-            <Facebook className="h-3 w-3" /> Facebook
-          </button>
-          <button
-            onClick={() => onFilterPlatform('instagram')}
-            className={cn(
-              'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-              filterPlatform === 'instagram'
-                ? 'bg-primary/10 font-bold text-primary'
-                : 'text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <Instagram className="h-3 w-3" /> Instagram
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
