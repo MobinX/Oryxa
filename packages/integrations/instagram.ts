@@ -4,29 +4,35 @@ import type { InstagramAccountOption } from './facebook';
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 /**
+ * A separate Facebook Login for Business configuration for Instagram. Its ID selects the
+ * permissions and assets in the app dashboard, so the dialog below sends `config_id` and no
+ * `scope` — mixing the two is how the Instagram flow would silently inherit the Page login's
+ * permissions. The Facebook channel keeps its own scope-based URL in `facebook.ts` untouched.
+ */
+const INSTAGRAM_LOGIN_CONFIG_ID =
+  process.env.META_INSTAGRAM_CONFIG_ID ?? '1850988986083553';
+
+/**
  * Instagram Login rides the same Facebook Login dialog as a Page: the professional account is
  * reached through the Page it is linked to, and its events are sent with that Page's token.
- * The scopes below are the Page scopes the connector already asks for plus the two Instagram
- * permissions that make DMs and comments readable and answerable.
+ * The configuration ID is what asks for the Instagram permissions and Page assets.
+ *
+ * `response_type=code` plus `override_default_response_type` guarantees the callback receives
+ * `?code=`; without them a configuration whose default response type is `token` would return
+ * the token in the URL fragment, which a server redirect cannot read.
  */
 export function getInstagramOAuthUrl(state: string): string {
   const appId = process.env.META_APP_ID;
   const redirectUri = process.env.META_REDIRECT_URI;
-  const scopes = [
-    'pages_show_list',
-    'pages_messaging',
-    'pages_manage_metadata',
-    'pages_read_engagement',
-    'pages_read_user_content',
-    'pages_manage_engagement',
-    'instagram_basic',
-    'instagram_manage_messages',
-    'instagram_manage_comments',
-  ];
-  if (process.env.META_BUSINESS_MANAGEMENT === 'true') {
-    scopes.push('business_management');
-  }
-  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes.join(',')}&state=${encodeURIComponent(state)}`;
+  const params = new URLSearchParams({
+    client_id: appId ?? '',
+    redirect_uri: redirectUri ?? '',
+    config_id: INSTAGRAM_LOGIN_CONFIG_ID,
+    response_type: 'code',
+    override_default_response_type: 'true',
+    state,
+  });
+  return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
 }
 
 type LinkedInstagramAccount = {
