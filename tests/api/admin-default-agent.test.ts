@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
@@ -20,8 +20,11 @@ type PlatformRow = {
   guidanceDefaults: { replyGuidance: string; commentReplyGuidance: string };
 };
 
-/** The bearer the test environment hands out when `LOGS_UI_PASSWORD` is unset. */
-const OPERATOR = logsOperatorPassword();
+/** There is no default console password, so the suite configures one for every test. */
+const OPERATOR = 'operator-console-test-secret';
+beforeEach(() => {
+  process.env.LOGS_UI_PASSWORD = OPERATOR;
+});
 const bearer = (token: string) => `Bearer ${token}`;
 
 const getAs = (auth?: string) =>
@@ -118,7 +121,6 @@ describe('the gate in front of the fleet-wide write', () => {
     process.env.NODE_ENV = 'production';
     delete process.env.LOGS_UI_PASSWORD;
 
-    // The default that answers in a dev box is deliberately not reachable from a production deploy.
     expect(logsOperatorPassword()).toBeUndefined();
   });
 });
