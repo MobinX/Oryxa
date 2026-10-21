@@ -9,20 +9,46 @@ import { persistPageReply } from '@repo/db/crud/comment';
 import type { CommentReaction, LiveCommentThread } from '@/lib/comment-types';
 
 /** Resolve page access token the same way messaging/posts do: channel FK → apiToken. */
-async function resolveChannel(businessId: string, channelId: string) {
-  const channel = await db.query.channels.findFirst({
-    where: and(
-      eq(channels.id, channelId),
-      eq(channels.businessId, businessId),
-      isNull(channels.deletedAt),
-    ),
-  });
+async function resolveChannel(businessId: string, channelId?: string | null) {
+  let channel = null;
+
+  // 1. Try resolving by explicit channelId if valid
+  if (channelId) {
+    channel = await db.query.channels.findFirst({
+      where: and(
+        eq(channels.id, channelId),
+        eq(channels.businessId, businessId),
+        isNull(channels.deletedAt),
+      ),
+    });
+  }
+
+  // 2. Fallback: If channelId was missing or outdated, find an active Facebook channel for this business
+  if (!channel) {
+    channel = await db.query.channels.findFirst({
+      where: and(
+        eq(channels.businessId, businessId),
+        eq(channels.platform, 'facebook'),
+        isNull(channels.deletedAt),
+      ),
+    });
+  }
+
+  // 3. Fallback: Any active channel with an apiToken for this business
+  if (!channel) {
+    channel = await db.query.channels.findFirst({
+      where: and(
+        eq(channels.businessId, businessId),
+        isNull(channels.deletedAt),
+      ),
+    });
+  }
 
   if (!channel) {
-    throw new Error('Channel not found for this business.');
+    return null;
   }
   if (!channel.apiToken) {
-    throw new Error('Channel is missing a Facebook access token.');
+    return null;
   }
 
   return {
@@ -31,8 +57,9 @@ async function resolveChannel(businessId: string, channelId: string) {
   };
 }
 
-async function resolveChannelToken(businessId: string, channelId: string) {
-  return (await resolveChannel(businessId, channelId)).apiToken;
+async function resolveChannelToken(businessId: string, channelId?: string | null) {
+  const resolved = await resolveChannel(businessId, channelId);
+  return resolved?.apiToken ?? null;
 }
 
 /**
@@ -49,7 +76,12 @@ export async function getPostCommentsAction(
 ): Promise<LiveCommentThread[]> {
   await requireAuth();
 
-  const { apiToken: pageToken, pageId } = await resolveChannel(businessId, channelId);
+  const resolved = await resolveChannel(businessId, channelId);
+  if (!resolved || !resolved.apiToken) {
+    // If channel is not configured or lacks Facebook token, gracefully return empty list
+    return [];
+  }
+  const { apiToken: pageToken, pageId } = resolved;
 
   type GraphComment = {
     id: string;
@@ -186,7 +218,11 @@ export async function replyToCommentAction(
 ) {
   await requireAuth();
 
-  const { apiToken: pageToken, pageId } = await resolveChannel(businessId, channelId);
+  const resolved = await resolveChannel(businessId, channelId);
+  if (!resolved || !resolved.apiToken) {
+    throw new Error('No active channel with Facebook access token found.');
+  }
+  const { apiToken: pageToken, pageId } = resolved;
 
   // Same Graph call shape as createPostCommentAction (form-urlencoded).
   let externalReplyId: string | undefined;
@@ -257,6 +293,9 @@ export async function createPostCommentAction(
   await requireAuth();
 
   const pageToken = await resolveChannelToken(businessId, channelId);
+  if (!pageToken) {
+    throw new Error('No active channel with Facebook access token found.');
+  }
   const url = `${GRAPH_API}/${platformPostId}/comments`;
   const body = new URLSearchParams({
     message: content,
@@ -305,6 +344,9 @@ export async function reactToCommentAction(
   await requireAuth();
 
   const pageToken = await resolveChannelToken(businessId, channelId);
+  if (!pageToken) {
+    throw new Error('No active channel with Facebook access token found.');
+  }
 
   try {
     if (reaction === null) {
