@@ -20,25 +20,17 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { advanceOrderStateAction, deleteOrderAction } from '@/app/actions/orders';
+import { ORDER_STATES, ORDER_STATE_LABEL, normalizeOrderState, nextOrderState, prevOrderState, formatTaka } from '@/lib/order-state';
 
-const NEXT_STATE: Record<string, string> = {
-  pending: 'acknowledged',
-  acknowledged: 'onDelivery',
-  onDelivery: 'done',
-};
+const NEXT_STATE: Record<string, string> = Object.fromEntries(
+  ORDER_STATES.map((st) => [st, nextOrderState(st)]).filter(([, v]) => v),
+) as Record<string, string>;
 
-const PREV_STATE: Record<string, string> = {
-  done: 'onDelivery',
-  onDelivery: 'acknowledged',
-  acknowledged: 'pending',
-};
+const PREV_STATE: Record<string, string> = Object.fromEntries(
+  ORDER_STATES.map((st) => [st, prevOrderState(st)]).filter(([, v]) => v),
+) as Record<string, string>;
 
-const STATE_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  acknowledged: 'Confirmed',
-  onDelivery: 'On Delivery',
-  done: 'Delivered',
-};
+const STATE_LABEL: Record<string, string> = ORDER_STATE_LABEL;
 
 const ORDER_STAGES: Array<{ id: 'pending' | 'acknowledged' | 'onDelivery' | 'done'; title: string; desc: string }> = [
   { id: 'pending', title: 'Order Placed', desc: 'Awaiting merchant review' },
@@ -73,8 +65,8 @@ export function OrdersProductsWorkspace({
     email: o.customerEmail || '',
     address: o.customerAddress || 'Delivery address on file',
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
-    amount: `৳${typeof o.totalPrice === 'number' ? o.totalPrice.toFixed(0) : (parseFloat(o.totalPrice || '0')).toFixed(0)}`,
-    state: (o.state || 'pending').toLowerCase(),
+    amount: formatTaka(o.totalPrice),
+    state: normalizeOrderState(o.state) as string,
     paymentReference: o.paymentReference || o.txId || null,
     createdAt: o.createdAt ? new Date(o.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
   }));
@@ -89,7 +81,7 @@ export function OrdersProductsWorkspace({
   const totalOrdersCount = ordersList.length;
   const pendingCount = ordersList.filter((o) => o.state === 'pending').length;
   const processingCount = ordersList.filter((o) => o.state === 'acknowledged').length;
-  const deliveredCount = ordersList.filter((o) => o.state === 'done' || o.state === 'ondelivery').length;
+  const deliveredCount = ordersList.filter((o) => o.state === 'done' || o.state === 'onDelivery').length;
 
   const filteredOrders = ordersList.filter((o) => {
     const matchesTab = orderFilterTab === 'all' || o.state === orderFilterTab;
@@ -164,10 +156,10 @@ export function OrdersProductsWorkspace({
         {
           title: 'Handed to Courier',
           subtitle:
-            activeOrder.state === 'ondelivery' || activeOrder.state === 'done'
+            activeOrder.state === 'onDelivery' || activeOrder.state === 'done'
               ? 'Dispatched for delivery'
               : 'Pending dispatch',
-          done: activeOrder.state === 'ondelivery' || activeOrder.state === 'done',
+          done: activeOrder.state === 'onDelivery' || activeOrder.state === 'done',
         },
         {
           title: 'Delivered & Completed',
@@ -310,7 +302,7 @@ export function OrdersProductsWorkspace({
               </span>
             </div>
             <div className="flex gap-1 text-[10px]">
-              {(['all', 'pending', 'acknowledged', 'done'] as const).map((t) => (
+              {(['all', 'pending', 'acknowledged', 'onDelivery', 'done'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
