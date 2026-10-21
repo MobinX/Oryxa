@@ -4,34 +4,36 @@ import type { InstagramAccountOption } from './facebook';
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 /**
- * A separate Facebook Login for Business configuration for Instagram. Its ID selects the
- * permissions and assets in the app dashboard, so the dialog below sends `config_id` and no
- * `scope` — mixing the two is how the Instagram flow would silently inherit the Page login's
- * permissions. The Facebook channel keeps its own scope-based URL in `facebook.ts` untouched.
+ * The Instagram login uses the same manual Facebook Login flow as the Page connector — a
+ * `scope` list, no configuration ID. The Instagram permissions are requested directly here,
+ * while the Facebook channel keeps its own scope list in `facebook.ts`.
  */
-const INSTAGRAM_LOGIN_CONFIG_ID = '1850988986083553';
+const INSTAGRAM_SCOPES = [
+  'pages_show_list',
+  'pages_messaging',
+  'pages_manage_metadata',
+  'pages_read_engagement',
+  'instagram_basic',
+  'instagram_manage_messages',
+  'instagram_manage_comments',
+];
 
 /**
  * Instagram Login rides the same Facebook Login dialog as a Page: the professional account is
  * reached through the Page it is linked to, and its events are sent with that Page's token.
- * The configuration ID is what asks for the Instagram permissions and Page assets.
  *
- * `response_type=code` plus `override_default_response_type` guarantees the callback receives
- * `?code=`; without them a configuration whose default response type is `token` would return
- * the token in the URL fragment, which a server redirect cannot read.
+ * `portfolio` is the caller's explicit answer to the connector's "where are your Pages?" choice,
+ * exactly as on the Facebook flow: true adds `business_management`, false deliberately does not.
+ * Left undefined, the deployment flag decides.
  */
-export function getInstagramOAuthUrl(state: string): string {
+export function getInstagramOAuthUrl(state: string, portfolio?: boolean): string {
   const appId = process.env.META_APP_ID;
   const redirectUri = process.env.META_REDIRECT_URI;
-  const params = new URLSearchParams({
-    client_id: appId ?? '',
-    redirect_uri: redirectUri ?? '',
-    config_id: INSTAGRAM_LOGIN_CONFIG_ID,
-    response_type: 'code',
-    override_default_response_type: 'true',
-    state,
-  });
-  return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
+  const scopes = [...INSTAGRAM_SCOPES];
+  if (portfolio ?? process.env.META_BUSINESS_MANAGEMENT === 'true') {
+    scopes.push('business_management');
+  }
+  return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes.join(',')}&state=${encodeURIComponent(state)}`;
 }
 
 type LinkedInstagramAccount = {

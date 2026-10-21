@@ -659,15 +659,16 @@ const igAuthRoute = createRoute({
 channelsRouter.openapi(igAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
+  const portfolio = process.env.META_BUSINESS_MANAGEMENT === 'true';
   const state = await createOAuthState({
     businessId,
     userId: user.id,
     platform: 'instagram',
     // Same deployment switch as the Page flow: portfolio Pages are merged only when the app has
     // been granted `business_management`, because asking for an unapproved scope fails the login.
-    portfolio: process.env.META_BUSINESS_MANAGEMENT === 'true',
+    portfolio,
   });
-  return c.json({ url: getInstagramOAuthUrl(state) });
+  return c.json({ url: getInstagramOAuthUrl(state, portfolio) });
 });
 
 const igPendingAccountsRoute = createRoute({
