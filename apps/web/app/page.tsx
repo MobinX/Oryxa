@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { COMPANY_NAME } from '@/lib/brand';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
-import { ActiveWorkflowPipeline } from '@/components/active-workflow-pipeline';
+import { MotionVideoAd } from '@/components/motion-video-ad';
 import {
   Sparkles,
   ArrowRight,
@@ -218,74 +218,11 @@ export default function HomePage() {
       </section>
 
       {/* =====================================================================
-          3. DARK 6-STEP LIVE AUTOMATION FLOW (Active Interactive Pipeline)
+          3. CINEMATIC DESKTOP MOTION VIDEO AD & COMMERCIAL AUTOMATION SHOWCASE
          ===================================================================== */}
-      <section id="workflow" className="border-t border-b border-white/10 bg-[#0B0D1D] py-20 text-white lg:py-24">
-        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8 space-y-10">
-          {/* Header Row */}
-          <div className="grid grid-cols-1 items-start justify-between gap-8 lg:grid-cols-12">
-            <div className="lg:col-span-6 space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/15 px-3.5 py-1 text-xs font-semibold text-[#A78BFA]">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>AI-Powered Commerce Automation</span>
-              </div>
-
-              <h2 className="font-geist text-3xl font-extrabold tracking-tight text-white sm:text-5xl leading-[1.12]">
-                From customer message
-                <br />
-                to <span className="text-[#818CF8]">completed order.</span>
-              </h2>
-
-              <p className="max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
-                See how {COMPANY_NAME} automatically handles customer conversations, finds products,
-                creates orders and keeps you updated — all in one place.
-              </p>
-            </div>
-
-            {/* Top-Right 4 Capability Badges Box */}
-            <div className="lg:col-span-6">
-              <div className="grid grid-cols-2 gap-4 rounded-2xl border border-white/10 bg-[#12162B]/90 p-5 sm:grid-cols-4">
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <Zap className="h-5 w-5" />
-                  </div>
-                  <p className="text-xs font-semibold text-slate-200 leading-snug">
-                    Auto replies &amp; order creation
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <Calendar className="h-5 w-5" />
-                  </div>
-                  <p className="text-xs font-semibold text-slate-200 leading-snug">
-                    Event based post automation
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <MessageSquare className="h-5 w-5" />
-                  </div>
-                  <p className="text-xs font-semibold text-slate-200 leading-snug">
-                    Comment replies &amp; customer support
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <Bell className="h-5 w-5" />
-                  </div>
-                  <p className="text-xs font-semibold text-slate-200 leading-snug">
-                    Smart notifications when you&apos;re needed
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Active Living Workflow Pipeline */}
-          <ActiveWorkflowPipeline />
+      <section id="workflow" className="border-t border-b border-white/10 bg-[#0A0C18] py-20 text-white lg:py-24">
+        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
+          <MotionVideoAd />
         </div>
       </section>
 
