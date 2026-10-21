@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const SHOTS_DIR = process.env.E2E_SHOTS_DIR ?? '/workspace/oryxa-shots';
-const PROJECT = 'onlyorders';
+const PROJECT = () => test.info().project.name;
 
 function shotPath(step: number, suffix = '') {
-  return path.join(SHOTS_DIR, `${PROJECT}-hero-step${step}${suffix}.png`);
+  return path.join(SHOTS_DIR, `${PROJECT()}-hero-step${step}${suffix}.png`);
 }
 
 // Ensure shots dir exists before any test writes to it
