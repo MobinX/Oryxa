@@ -232,6 +232,20 @@
       "when": 1792902400000,
       "tag": "0032_product_options",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792988800000,
+      "tag": "0033_instagram_comment_integration_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793075200000,
+      "tag": "0034_admin_channels_and_messenger_notifications",
+      "breakpoints": true
     }
   ]
 }

@@ -31,5 +31,5 @@ export async function triggerAgentRun(
 
 /** Production entry-point: no SSE, no overrides, real Facebook send. */
 export async function runAgentForConversation(conversationId: string): Promise<void> {
-  await runAgentCore(conversationId, {});
+  return runAgentCore(conversationId, {});
 }

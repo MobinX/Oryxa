@@ -17,10 +17,14 @@ const orderDefaults = {
 // Rest-arg signatures, so a recorded call can be read back as its real arguments.
 const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 const sendButtonsMock = vi.fn(async (..._args: unknown[]) => undefined);
-vi.mock('@repo/integrations/facebook', () => ({
-  sendMessage: (...args: unknown[]) => sendMessageMock(...args),
-  sendButtons: (...args: unknown[]) => sendButtonsMock(...args),
-}));
+vi.mock('@repo/integrations/facebook', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@repo/integrations/facebook')>();
+  return {
+    ...actual,
+    sendMessage: (...args: unknown[]) => sendMessageMock(...args),
+    sendButtons: (...args: unknown[]) => sendButtonsMock(...args),
+  };
+});
 
 /** The arguments a mocked send was called with. */
 function lastSend(mock: typeof sendMessageMock | typeof sendButtonsMock): unknown[] {
@@ -169,7 +173,7 @@ describe('Agent Tools', () => {
     expect(result).not.toMatch(/'done'/);
   });
 
-  it('does not expose a send tool for the final text reply', async () => {
+  it('exposes send_message tool for replies with suggestions', async () => {
     const seed = await seedTestWorld();
     sendMessageMock.mockClear();
     const tools = createAgentTools({
@@ -178,8 +182,7 @@ describe('Agent Tools', () => {
       pageToken: 'page-tok',
       customerPlatformId: 'fb-user-1',
     });
-    expect(tools.some((tool) => String(tool.name) === 'send_message')).toBe(false);
-    expect(sendMessageMock).not.toHaveBeenCalled();
+    expect(tools.some((tool) => String(tool.name) === 'send_message')).toBe(true);
   });
 
   it('show_products sends a card per product, with the Order button carrying its id', async () => {

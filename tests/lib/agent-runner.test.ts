@@ -148,7 +148,12 @@ describe('Agent Runner', () => {
     await runAgentForConversation(seed.conversation.id);
     runSpy.mockRestore();
 
-    expect(sendMessageMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'Which size would you like?');
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'Which size would you like?',
+      { platform: 'facebook' },
+    );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
     expect(selfContents).toContain('Which size would you like?');
@@ -166,6 +171,7 @@ describe('Agent Runner', () => {
       expect.any(String),
       seed.conversation.customerPlatformId,
       'fallback reply',
+      { platform: 'facebook' },
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     const selfContents = messages?.filter((m) => m.from === 'self').map((m) => m.content);
@@ -209,14 +215,14 @@ describe('Agent Runner', () => {
     runSpy.mockRestore();
   }, 30_000);
 
-  it('shows the model pixels for the last three pictures and words for the ones before', async () => {
+  it('shows the model pixels for the last six pictures and words for the ones before', async () => {
     // A photo and the question about it routinely arrive as two deliveries: the second run must
     // still be looking at the picture, not telling the customer it cannot see it. Older pictures
     // stay a note, so a long thread does not pay for its whole album on every reply.
     const seed = await seedTestWorld();
     const { createMessage } = await import('@repo/db/crud/conversation');
     const photoTurnsSeeded: Array<{ id: string }> = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
       photoTurnsSeeded.push(
         await createMessage({
           conversationId: seed.conversation.id,
@@ -231,10 +237,10 @@ describe('Agent Runner', () => {
       conversationId: seed.conversation.id,
       from: 'customer',
       content: 'the one asking now',
-      imageKeys: ['photo-4'],
+      imageKeys: ['photo-7'],
     });
 
-    // History is ordered by `time`, and five inserts finish inside one clock tick: on a tie the
+    // History is ordered by `time`, and eight inserts finish inside one clock tick: on a tie the
     // database returns them in whatever order it likes, which is how this test passed locally and
     // failed on a runner. Spacing the timestamps is the only way the newest message is newest.
     const { db } = await import('@db/client');
@@ -262,9 +268,9 @@ describe('Agent Runner', () => {
     await runAgentForConversation(seed.conversation.id);
 
     const photoTurns = capturedHistory.filter((m) => m.imageKeys.length > 0 || m.hadImages);
-    expect(photoTurns.length).toBe(5);
-    expect(photoTurns.slice(-3).every((m) => m.imageKeys.length === 1)).toBe(true);
-    expect(photoTurns.slice(0, -3).every((m) => m.hadImages && m.imageKeys.length === 0)).toBe(true);
+    expect(photoTurns.length).toBe(8);
+    expect(photoTurns.slice(-6).every((m) => m.imageKeys.length === 1)).toBe(true);
+    expect(photoTurns.slice(0, -6).every((m) => m.hadImages && m.imageKeys.length === 0)).toBe(true);
     expect(photoTurns.at(-1)?.content).toBe('the one asking now');
 
     runSpy.mockRestore();

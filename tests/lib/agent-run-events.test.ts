@@ -125,7 +125,12 @@ describe('agent run outcome logging', () => {
       provider: 'test-provider',
       model: 'test-model',
     });
-    expect(sendMessageMock).toHaveBeenCalledWith(expect.anything(), seed.conversation.customerPlatformId, 'Yes, 10 left.');
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      seed.conversation.customerPlatformId,
+      'Yes, 10 left.',
+      { platform: 'facebook' },
+    );
     expect(typeof runs[0].durationMs).toBe('number');
     // The reply is stated once: on the outcome event, never on a second one.
     expect(events.filter((e) => e.replyText !== undefined)).toEqual([runs[0]]);
