@@ -1360,6 +1360,218 @@ export const adminSwapBrand = (bearer: string, { dryRun = false }: { dryRun?: bo
     signInPath: null,
   });
 
+/* Official Channels (spec Official): the console's own channels, inbox, tickets, prospects. */
+
+export type OfficialSettings = {
+  availability: string;
+  availabilityNote: string | null;
+  aiEnabled: boolean;
+  autoReply: boolean;
+  tone: string | null;
+  language: string | null;
+  instructions: string | null;
+  updatedAt: string;
+};
+
+export type OfficialChannel = {
+  id: string;
+  platform: string;
+  platformChannelId: string;
+  label: string;
+  createdAt: string;
+};
+
+export type OfficialChannelResult = {
+  id: string;
+  created?: boolean;
+  verified?: boolean;
+  error?: string;
+};
+
+export type OfficialConversation = {
+  id: string;
+  channelId: string;
+  platform: string;
+  customerPlatformId: string;
+  customerName: string | null;
+  aiPaused: boolean;
+  status: string;
+  stateAt: string;
+  createdAt: string;
+};
+
+export type OfficialThreadMessage = {
+  id: string;
+  from: 'customer' | 'self';
+  sentBy: string | null;
+  state: string;
+  content: string;
+  time: string;
+};
+
+export type OfficialTicket = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  customerPlatformId: string;
+  customerName: string | null;
+  type: 'support' | 'security';
+  subject: string | null;
+  summary: string | null;
+  status: string;
+  priority: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OfficialProspect = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  platform: string;
+  contactPlatformId: string;
+  name: string | null;
+  country: string | null;
+  businessType: string | null;
+  employeesEstimate: string | null;
+  budget: string | null;
+  needs: string | null;
+  consent: boolean | null;
+  score: number;
+  scoreBreakdown: Record<string, number>;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const adminOfficialSettings = (bearer: string) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', { token: bearer, signInPath: null });
+
+export const adminOfficialSaveSettings = (bearer: string, input: Partial<OfficialSettings>) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialChannels = (bearer: string) =>
+  apiFetch<{ channels: OfficialChannel[] }>('/api2/admin/official/channels', {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialVerifyChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ verified: boolean; error?: string }>(`/api2/admin/official/channels/${channelId}/verify`, {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConnectWhatsApp = (bearer: string, input: { token: string; phoneNumberId: string }) =>
+  apiFetch<OfficialChannelResult>('/api2/admin/official/channels/whatsapp/connect', {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialDisconnectChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ id: string; disconnected: boolean }>(`/api2/admin/official/channels/${channelId}/disconnect`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConversations = (bearer: string, params: { platform?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.platform) query.set('platform', params.platform);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ conversations: OfficialConversation[] }>(`/api2/admin/official/conversations${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialThread = (bearer: string, conversationId: string) =>
+  apiFetch<{
+    conversation: OfficialConversation;
+    messages: OfficialThreadMessage[];
+    tickets: OfficialTicket[];
+  }>(`/api2/admin/official/conversations/${conversationId}`, { token: bearer, signInPath: null });
+
+export const adminOfficialReply = (bearer: string, conversationId: string, content: string, paused?: boolean) =>
+  apiFetch<{ sent: boolean; conversationId: string }>(`/api2/admin/official/conversations/${conversationId}/reply`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify({ content, ...(paused !== undefined ? { paused } : {}) }),
+  });
+
+export const adminOfficialTakeover = (bearer: string, conversationId: string, paused: boolean) =>
+  apiFetch<{ conversationId: string; aiPaused: boolean }>(
+    `/api2/admin/official/conversations/${conversationId}/takeover`,
+    { method: 'POST', token: bearer, signInPath: null, body: JSON.stringify({ paused }) },
+  );
+
+export const adminOfficialTickets = (bearer: string, params: { type?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.type) query.set('type', params.type);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ tickets: OfficialTicket[] }>(`/api2/admin/official/tickets${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialPatchTicket = (
+  bearer: string,
+  ticketId: string,
+  input: { status?: string; priority?: string; notes?: string | null },
+) =>
+  apiFetch<{ ticket: OfficialTicket }>(`/api2/admin/official/tickets/${ticketId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialProspects = (bearer: string, params: { status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ prospects: OfficialProspect[]; weights: Record<string, number> }>(
+    `/api2/admin/official/prospects${suffix}`,
+    { token: bearer, signInPath: null },
+  );
+};
+
+export const adminOfficialPatchProspect = (
+  bearer: string,
+  prospectId: string,
+  input: { status?: string; notes?: string | null },
+) =>
+  apiFetch<{ prospect: OfficialProspect }>(`/api2/admin/official/prospects/${prospectId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialWeights = (
+  bearer: string,
+  input: { name?: number; country?: number; businessType?: number; employeesEstimate?: number; budget?: number; needs?: number },
+) =>
+  apiFetch<{ weights: Record<string, number>; rescanned: number }>('/api2/admin/official/prospect-weights', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
 // Customers (scoped through the business's company)
 export type Customer = {
   id: string;

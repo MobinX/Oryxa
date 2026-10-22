@@ -57,7 +57,8 @@ export class ChannelTakenError extends Error {
   }
 }
 
-type ChannelPlatform = 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter';
+/** Every platform a store channel may hold; `tiktok` exists in the enum but has no store flow yet. */
+type ChannelPlatform = 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter' | 'tiktok';
 
 async function assertSoleLiveOwner(
   businessId: string,
