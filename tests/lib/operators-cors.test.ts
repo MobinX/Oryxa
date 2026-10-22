@@ -31,6 +31,13 @@ describe('isOperatorEmail', () => {
     // identity must stay outside; only the owner's own address is built in.
     expect(isOperatorEmail('admin123@oryxa.app')).toBe(false);
   });
+  it('uses only the environment list — no built-in operator emails', () => {
+    process.env.ADMIN_EMAILS = 'boss@y.com';
+    expect(isOperatorEmail('admin123@oryxa.app')).toBe(false);
+    delete process.env.ADMIN_EMAILS;
+    expect(isOperatorEmail('admin123@oryxa.app')).toBe(false);
+    expect(isOperatorEmail('mobin.devx@gmail.com')).toBe(false);
+  });
 });
 
 describe('CORS allowlist', () => {

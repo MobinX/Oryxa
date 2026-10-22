@@ -115,6 +115,15 @@ app.route('/webhooks', waWebhookRouter);
 app.route('/internal', internalRouter);
 app.route('/internal', audioCheckRouter);
 
+function apiDocsEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true';
+}
+
+// The contract is useful to developers and noise to an attacker mapping the API. It is
+// on outside production, and in production only when explicitly asked for.
+app.use('/doc', async (c, next) => (apiDocsEnabled() ? next() : c.notFound()));
+app.use('/ui', async (c, next) => (apiDocsEnabled() ? next() : c.notFound()));
+
 // app.doc() config accepts no `components` key, so security schemes must be
 // registered on the registry or every `security: [{ bearerAuth: [] }]` route
 // ships a dangling reference.
