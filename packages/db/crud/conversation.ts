@@ -366,7 +366,9 @@ export async function deleteMessage(conversationId: string, messageId: string) {
  * the conversation with its whole history — would not.
  */
 export async function processInboundMessage(
-  channel: { id: string; businessId: string },
+  // Official Channels conversations run on the operator's own accounts with no business
+  // behind them; the column (and this type) allows NULL.
+  channel: { id: string; businessId: string | null },
   senderId: string,
   text: string,
   externalId?: string,

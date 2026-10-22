@@ -253,6 +253,13 @@
       "when": 1793161600000,
       "tag": "0035_admin_ai_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793248000000,
+      "tag": "0036_official_channels",
+      "breakpoints": true
     }
   ]
 }

@@ -28,7 +28,7 @@ Needs user approval (see delivery doc): live token encryption key provisioning, 
   - New tables in 0036: official_settings, tickets, ticket_events, prospects, prospect_events, prospect_weights; platform enum + 'tiktok'.
   - TikTok: no GA DM API for official accounts → enum value + honest status card, no fake connect.
 - [x] Phase removal — store-agent reverted to f83a1d8 (agent-runner-core, comment-runner, conversations route, packages/agent); deleted: ai-studio/capacity/inbox/leads pages, actions/admin-ai, lib/ai-context, lib/lead-capture, routes/admin-ai, crud/ai-config, crud/lead, shared/schemas/admin-ai + their tests. Sidebar (components/admin-sidebar.tsx) replaces top tabs; desktop rail collapsible (localStorage), mobile drawer behind hamburger; login page untouched. WA webhook keeps handshake+signature+store flow, lead-capture wiring stripped. 681 tests / 78 files green, web+api builds green, typecheck 201 (= baseline).
-- [ ] Phase migration
+- [x] Phase migration — 0036_official_channels.sql (+rollback, PGlite-tested in tests/db/official-crud.test.ts): ticket/prospect enums + 'tiktok' platform value, conversations.business_id → nullable, official_settings/tickets/ticket_events/prospects/prospect_events/prospect_weights tables (singleton guards via unique index on constant). Schema.ts mirror; NOT applied to shared Neon (needs owner approval). crud/official.ts: settings/update, tickets (get-or-create per conversation+type, events), prospects (dedupe per channel+contact, consent per customer's statement, scoring vs configurable weights + rescore).
 - [ ] Phase official backend
 - [ ] Phase UI
 - [ ] Phase tests/build

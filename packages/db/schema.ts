@@ -14,7 +14,7 @@ export type StoreTheme = {
 };
 
 export const orderStateEnum = pgEnum('order_state', ['pending', 'acknowledged', 'onDelivery', 'done']);
-export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter']);
+export const platformEnum = pgEnum('platform', ['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter', 'tiktok']);
 export const messageFromEnum = pgEnum('message_from', ['self', 'customer']);
 export const messageStateEnum = pgEnum('message_state', ['pending', 'working', 'done']);
 export const postStateEnum = pgEnum('post_state', ['draft', 'scheduled', 'published', 'failed']);
@@ -28,6 +28,30 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'ai_post_tuning',
 ]);
 export const planActorKindEnum = pgEnum('plan_actor_kind', ['operator', 'merchant', 'system']);
+
+/**
+ * Official Channels ticketing. `type` is the AI-reported intent — support or security;
+ * sales questions become prospects instead, and `other` stays a plain conversation.
+ */
+export const ticketTypeEnum = pgEnum('ticket_type', ['support', 'security']);
+export const ticketStatusEnum = pgEnum('ticket_status', [
+  'open',
+  'in_progress',
+  'waiting',
+  'resolved',
+  'closed',
+]);
+export const ticketPriorityEnum = pgEnum('ticket_priority', ['low', 'normal', 'high', 'urgent']);
+
+/** How far an onboarding inquiry has moved after the AI gathered it from a conversation. */
+export const prospectStatusEnum = pgEnum('prospect_status', [
+  'new',
+  'reviewing',
+  'prioritized',
+  'onboarding_requested',
+  'onboarded',
+  'rejected',
+]);
 
 /**
  * The leads CRM pipeline (spec D). Statuses are closed so the operator UI can render
@@ -223,6 +247,156 @@ export const leadRelations = relations(leads, ({ one, many }) => ({
 
 export const leadEventRelations = relations(leadEvents, ({ one }) => ({
   lead: one(leads, { fields: [leadEvents.leadId], references: [leads.id] }),
+}));
+
+/* ------------------------------------------------------------------ */
+/* Official Channels: OnlyOrders' own accounts, admin-side only.        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The global official-channel settings. One row (guarded by a unique index on a constant
+ * in the migration); absent = defaults, and the crud layer get-or-creates on first write.
+ */
+export const officialSettings = pgTable('official_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** 'available' | 'taking_onboarding_requests' — the AI's wording follows this value. */
+  availability: varchar('availability', { length: 40 }).default('available').notNull(),
+  availabilityNote: text('availability_note'),
+  aiEnabled: boolean('ai_enabled').default(true).notNull(),
+  autoReply: boolean('auto_reply').default(true).notNull(),
+  tone: varchar('tone', { length: 40 }).default('friendly'),
+  language: varchar('language', { length: 20 }).default('auto'),
+  /** Free-form instructions the official AI must follow, written by an operator. */
+  instructions: text('instructions'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  singletonUniq: uniqueIndex('official_settings_singleton_idx').on(sql`true`),
+}));
+
+/** A support or a security ticket, opened from (or alongside) an official conversation. */
+export const tickets = pgTable('tickets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channelId: uuid('channel_id')
+    .references(() => channels.id, { onDelete: 'cascade' })
+    .notNull(),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+  customerPlatformId: varchar('customer_platform_id', { length: 255 }).notNull(),
+  customerName: varchar('customer_name', { length: 255 }),
+  type: ticketTypeEnum('type').default('support').notNull(),
+  status: ticketStatusEnum('status').default('open').notNull(),
+  priority: ticketPriorityEnum('priority').default('normal').notNull(),
+  // No FK on purpose: like planAssignments.actorUserId, the audit trail outlives accounts.
+  assigneeUserId: uuid('assignee_user_id'),
+  subject: varchar('subject', { length: 500 }),
+  summary: text('summary'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  statusPriorityIdx: index('tickets_status_priority_idx').on(t.status, t.priority, t.updatedAt),
+  conversationIdx: index('tickets_conversation_idx').on(t.conversationId),
+}));
+
+/** Append-only history for a ticket; nobody edits or deletes these rows. */
+export const ticketEvents = pgTable('ticket_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id')
+    .references(() => tickets.id, { onDelete: 'cascade' })
+    .notNull(),
+  /** operator | ai | system */
+  actorKind: varchar('actor_kind', { length: 10 }).default('system').notNull(),
+  actorUserId: uuid('actor_user_id'),
+  kind: varchar('kind', { length: 40 }).notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  ticketTimeIdx: index('ticket_events_ticket_time_idx').on(t.ticketId, t.createdAt),
+}));
+
+/**
+ * An onboarding inquiry the official AI gathered progressively. Deduped on
+ * (channel_id, contact_platform_id) — the person's ID on that platform — never on
+ * a self-reported name. Every field except the identity is optional: a field only
+ * fills when the customer actually gave it (and `consent` only when they agreed).
+ */
+export const prospects = pgTable('prospects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channelId: uuid('channel_id')
+    .references(() => channels.id, { onDelete: 'cascade' })
+    .notNull(),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+  platform: varchar('platform', { length: 30 }).notNull(),
+  contactPlatformId: varchar('contact_platform_id', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  country: varchar('country', { length: 100 }),
+  businessType: varchar('business_type', { length: 100 }),
+  employeesEstimate: varchar('employees_estimate', { length: 40 }),
+  budget: varchar('budget', { length: 100 }),
+  needs: text('needs'),
+  consent: boolean('consent').default(false).notNull(),
+  consentAt: timestamp('consent_at'),
+  status: prospectStatusEnum('status').default('new').notNull(),
+  /** Scored against prospect_weights at capture; rescore recomputes with current weights. */
+  score: integer('score').default(0).notNull(),
+  scoreBreakdown: jsonb('score_breakdown').$type<Record<string, number>>().default(sql`'{}'::jsonb`).notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  dedupeUniq: uniqueIndex('prospects_channel_contact_uniq_idx').on(t.channelId, t.contactPlatformId),
+  statusScoreIdx: index('prospects_status_idx').on(t.status, t.score),
+}));
+
+/** Append-only audit for a prospect. */
+export const prospectEvents = pgTable('prospect_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  prospectId: uuid('prospect_id')
+    .references(() => prospects.id, { onDelete: 'cascade' })
+    .notNull(),
+  /** operator | ai | system */
+  actorKind: varchar('actor_kind', { length: 10 }).default('system').notNull(),
+  actorUserId: uuid('actor_user_id'),
+  kind: varchar('kind', { length: 40 }).notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  prospectTimeIdx: index('prospect_events_prospect_time_idx').on(t.prospectId, t.createdAt),
+}));
+
+/**
+ * The scoring weights an operator configures. One row (unique index on a constant in the
+ * migration); the crud layer upserts it. Each weight is 0–10 for its field.
+ */
+export const prospectWeights = pgTable('prospect_weights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  weights: jsonb('weights').$type<Record<string, number>>().default(sql`'{}'::jsonb`).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  singletonUniq: uniqueIndex('prospect_weights_singleton_idx').on(sql`true`),
+}));
+
+export const officialSettingsRelations = relations(officialSettings, () => ({}));
+
+export const ticketRelations = relations(tickets, ({ one, many }) => ({
+  channel: one(channels, { fields: [tickets.channelId], references: [channels.id] }),
+  conversation: one(conversations, { fields: [tickets.conversationId], references: [conversations.id] }),
+  events: many(ticketEvents),
+}));
+
+export const ticketEventRelations = relations(ticketEvents, ({ one }) => ({
+  ticket: one(tickets, { fields: [ticketEvents.ticketId], references: [tickets.id] }),
+}));
+
+export const prospectRelations = relations(prospects, ({ one, many }) => ({
+  channel: one(channels, { fields: [prospects.channelId], references: [channels.id] }),
+  conversation: one(conversations, { fields: [prospects.conversationId], references: [conversations.id] }),
+  events: many(prospectEvents),
+}));
+
+export const prospectEventRelations = relations(prospectEvents, ({ one }) => ({
+  prospect: one(prospects, { fields: [prospectEvents.prospectId], references: [prospects.id] }),
 }));
 
 /**
@@ -573,7 +747,9 @@ export const messengerNotificationUsers = pgTable('messenger_notification_user_i
 
 export const conversations = pgTable('conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
-  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  // Official Channels conversations have no store behind them; the operator's own
+  // accounts keep businessId NULL and every store query filters on its own channel ids.
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }),
   channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
   customerPlatformId: varchar('customer_platform_id', { length: 255 }).notNull(),
   customerName: varchar('customer_name', { length: 255 }),
