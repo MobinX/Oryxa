@@ -31,7 +31,8 @@ export function logsOperatorPassword(): string | undefined {
 }
 
 export function logsOperatorUser(): string {
-  return process.env.LOGS_UI_USER?.trim() || 'admin123';
+  // A label for the log line, never a credential: the password must always come from env.
+  return process.env.LOGS_UI_USER?.trim() || 'operator';
 }
 
 /** Equal length first, because `timingSafeEqual` throws on a length mismatch. */

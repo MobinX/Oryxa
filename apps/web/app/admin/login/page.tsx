@@ -12,6 +12,8 @@ export const metadata = {
 
 const MESSAGES: Record<string, string> = {
   invalid: 'That user id and password do not match.',
+  rate_limited:
+    'Too many sign-in attempts from this address — wait a few minutes and try again.',
   disabled:
     'This deployment has no console secret. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
   notoperator:

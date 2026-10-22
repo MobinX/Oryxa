@@ -12,7 +12,9 @@ const SESSION_MS = 8 * 60 * 60 * 1000;
  * larger risk than repeating four lines of env parsing.
  */
 export function logsOperatorUser(): string {
-  return process.env.LOGS_UI_USER?.trim() || 'admin123';
+  // A label, never a credential — the legacy default was a guessable
+  // 'admin123', which also made the operator email guessable.
+  return process.env.LOGS_UI_USER?.trim() || 'operator';
 }
 
 /**
