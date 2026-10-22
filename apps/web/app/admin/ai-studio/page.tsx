@@ -17,6 +17,7 @@ import { ChannelConfigForm } from './channel-config-form';
 import { BusinessProfileForm } from './business-profile-form';
 import { KnowledgeEditor } from './knowledge-editor';
 import { SandboxPreview } from './sandbox-preview';
+import { CommentsOverview } from './comments-overview';
 
 export const instant = false;
 
@@ -104,6 +105,7 @@ export default async function AdminAiStudioPage({
       {active && (
         <div className="space-y-6">
           <SandboxPreview bearer={bearer} channelId={active.id} />
+          <CommentsOverview bearer={bearer} businessId={active.businessId} />
           <ChannelConfigForm bearer={bearer} channelId={active.id} config={config} />
           {active.businessId && (
             <>

@@ -126,8 +126,15 @@ adminAiRouter.get('/admin/ai/channels/:channelId/verify', async (c) => {
     verified = check.verified;
     error = check.error;
   } else if (channel.platform === 'facebook' || channel.platform === 'instagram') {
-    verified = Boolean(await getPageIdForToken(channel.apiToken));
-    error = verified ? undefined : 'the page token did not resolve to an identity';
+    // "Never show connected unless verified": /me must resolve AND return the very
+    // identity this channel stores, not just any identity the token can see.
+    const identityId = await getPageIdForToken(channel.apiToken);
+    verified = Boolean(identityId && identityId === channel.platformChannelId);
+    error = verified
+      ? undefined
+      : identityId
+        ? `token resolves to ${identityId}, but this channel stores ${channel.platformChannelId}`
+        : 'the page token did not resolve to an identity';
   } else {
     return c.json({ verified: false, error: `no health check for platform ${channel.platform}` }, 422);
   }

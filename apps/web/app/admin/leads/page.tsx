@@ -24,20 +24,30 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 export default async function AdminLeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; platform?: string }>;
 }) {
   const bearer = await requireConsoleBearer();
-  const { q } = await searchParams;
+  const { q, status, platform } = await searchParams;
 
   let leads: AdminLead[] = [];
   let loadError: string | null = null;
   try {
-    leads = (await listAdminLeads(bearer, q ? { search: q } : {})).leads;
+    leads = (
+      await listAdminLeads(bearer, {
+        ...(q ? { search: q } : {}),
+        ...(status ? { status } : {}),
+        ...(platform ? { platform } : {}),
+      })
+    ).leads;
   } catch (err) {
     loadError = err instanceof ApiError ? `${err.status}: ${err.message}` : 'The API could not be reached';
   }
 
-  const csvHref = '/api2/admin/ai/leads/export.csv';
+  const csvParams = new URLSearchParams();
+  if (q) csvParams.set('search', q);
+  if (status) csvParams.set('status', status);
+  if (platform) csvParams.set('platform', platform);
+  const csvHref = `/api2/admin/ai/leads/export.csv${csvParams.size ? `?${csvParams}` : ''}`;
 
   return (
     <div className="space-y-6">
@@ -64,18 +74,55 @@ export default async function AdminLeadsPage({
         )}
       </div>
 
-      <form className="flex max-w-xl gap-2" action="/admin/leads">
-        <input
-          type="search"
-          name="q"
-          placeholder="Search leads…"
-          defaultValue={q}
-          className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
-        />
-        <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          Search
-        </button>
-      </form>
+      <div className="flex max-w-xl flex-wrap gap-2">
+        <form className="flex max-w-xl flex-1 gap-2" action="/admin/leads">
+          <input
+            type="search"
+            name="q"
+            placeholder="Search leads…"
+            defaultValue={q}
+            className="w-full min-w-40 rounded-md border border-border bg-card px-3 py-2 text-sm"
+          />
+          {status && <input type="hidden" name="status" value={status} />}
+          {platform && <input type="hidden" name="platform" value={platform} />}
+          <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+            Search
+          </button>
+        </form>
+        {status && (
+          <a href={`/admin/leads${q ? `?q=${encodeURIComponent(q)}` : ''}`} className="self-center text-sm text-muted-foreground underline">
+            clear status
+          </a>
+        )}
+        {platform && (
+          <a href={`/admin/leads${q ? `?q=${encodeURIComponent(q)}` : ''}`} className="self-center text-sm text-muted-foreground underline">
+            clear platform
+          </a>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2 text-xs sm:text-sm">
+        {['new', 'qualified', 'awaiting_information', 'waitlisted', 'contact_requested', 'contacted', 'converted', 'closed'].map(
+          (value) => {
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            if (platform) params.set('platform', platform);
+            if (status && status === value) params.set('status', value);
+            const isActive = status === value;
+            if (isActive) return null;
+            params.set('status', value);
+            return (
+              <a
+                key={value}
+                href={`/admin/leads?${params}`}
+                className={`rounded-full border px-3 py-1.5 ${isActive ? 'border-primary bg-primary/10' : 'border-border/50 text-muted-foreground hover:text-foreground'}`}
+              >
+                {value.replace(/_/g, ' ')}
+              </a>
+            );
+          },
+        )}
+      </div>
 
       {loadError && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
