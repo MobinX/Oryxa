@@ -79,27 +79,7 @@ export async function runAgentCore(
   }
 
   const answering = await resolveAnsweringAgent(conv.channel.agent);
-  const platform: 'facebook' | 'instagram' | 'whatsapp' =
-    conv.channel.platform === 'instagram' ? 'instagram' : conv.channel.platform === 'whatsapp' ? 'whatsapp' : 'facebook';
-
-  // AI Studio gate (spec B) runs before anything is claimed: a channel switched off, or a
-  // conversation paused for human takeover (spec E), never answers and never burns a run.
-  // "AI NEVER replies after human takeover" is exactly this one check.
-  const { buildAiContext } = await import('@api/lib/ai-context');
-  const aiContext = await buildAiContext({
-    channelId: conv.channel.id,
-    businessId: conv.businessId,
-    leadId: conv.id,
-  });
-  if (!aiContext.config.aiEnabled || (conv as { aiPaused?: boolean }).aiPaused) {
-    const reason = (conv as { aiPaused?: boolean }).aiPaused ? 'ai_paused' : 'ai_off';
-    console.log(
-      `[agent-runner-core] AI disabled for conversation ${conversationId} (${reason}) — leaving unanswered for human`,
-    );
-    emitAnomaly('ai_disabled', { detail: `${conversationId}:${reason}` });
-    return;
-  }
-
+  const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   // Atomic claim: only one concurrent caller transitions idle→working and gets
   // to run the agent. This is the single race-free gate that prevents duplicate
@@ -126,7 +106,7 @@ export async function runAgentCore(
     emitAnomaly('run_loop_depth', { count: runDepth });
   }
 
-  if (!sendMessageOverride && platform !== 'whatsapp') {
+  if (!sendMessageOverride) {
     await senderAction(conv.channel.apiToken, conv.customerPlatformId, 'typing_on');
   }
   emitSse('runner_start', { conversationId });
@@ -272,21 +252,7 @@ export async function runAgentCore(
   // the Agent so the same path is exercised whether or not we are in test mode. The raw
   // value goes to the tools, not the resolved one: a tool reads "override present" as
   // "nothing reaches the wire", which is how the message budget knows not to charge.
-  // WhatsApp answers through the Cloud API with the phone number the channel stores as
-  // its platform id — the Messenger/Instagram Graph send would not understand this token.
-  const { sendWhatsAppText } = await import('@repo/integrations/whatsapp');
-  const realSend = async (token: string, psid: string, text: string) => {
-    if (platform === 'whatsapp' && conv.channel.platformChannelId) {
-      await sendWhatsAppText(token, conv.channel.platformChannelId, psid, text);
-      return;
-    }
-    if (platform === 'instagram' || platform === 'facebook') {
-      await sendMessage(token, psid, text, { platform });
-      return;
-    }
-    throw new Error(`no send path configured for platform ${platform}`);
-  };
-  const resolvedSendMessage = sendMessageOverride ?? realSend;
+  const resolvedSendMessage = sendMessageOverride ?? sendMessage;
 
   const agent = new Agent({
     systemPrompt: answering.systemPrompt,
@@ -415,9 +381,10 @@ export async function runAgentCore(
         emitSse('message_sent', { text: replyText, fallback: true });
         try {
           // The test override still receives exactly the three arguments it always did; a real
-          // send learns the platform so Instagram gets its 1,000-character chunks and
-          // WhatsApp its 4,096-character Cloud API messages.
-          await resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText);
+          // send learns the platform so Instagram gets its 1,000-character chunks.
+          await (sendMessageOverride
+            ? resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText)
+            : sendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText, { platform }));
         } catch (err) {
           if (chargedPeriod) {
             try {
@@ -431,7 +398,6 @@ export async function runAgentCore(
         await createMessage({
           conversationId: conv.id,
           from: 'self',
-          sentBy: 'ai',
           content: replyText,
           state: 'done',
         });

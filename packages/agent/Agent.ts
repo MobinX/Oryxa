@@ -96,9 +96,7 @@ export interface AgentConfig {
   customerPlatformId: string;
   customerName?: string | null;
   /** Which inbox this token answers as; tools use it for the platform's text limit and wording. */
-  platform?: 'facebook' | 'instagram' | 'whatsapp';
-  /** The WhatsApp Cloud API phone number a send is addressed through (platform='whatsapp'). */
-  phoneNumberId?: string;
+  platform?: 'facebook' | 'instagram';
   /** True on the turn right after a customer typed instead of tapping the offered chips. */
   suppressSuggestions?: boolean;
   catalogSummary?: string;
@@ -335,7 +333,6 @@ export class Agent {
           customerPlatformId: this.config.customerPlatformId,
           customerName: this.config.customerName,
           platform: this.config.platform,
-          phoneNumberId: this.config.phoneNumberId,
           suppressSuggestions: this.config.suppressSuggestions,
           emitSse,
           sendMessageOverride,

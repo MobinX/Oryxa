@@ -263,7 +263,6 @@ export function createCommentAgentTools(
         await createMessage({
           conversationId: conversation.id,
           from: 'self',
-          sentBy: 'ai',
           content: cleanText,
           state: 'done',
         });
