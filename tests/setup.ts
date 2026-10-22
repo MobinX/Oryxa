@@ -3,6 +3,7 @@ import 'dotenv/config';
 // Test env overrides — .env may set production values that break unit tests
 process.env.NODE_ENV = 'test';
 process.env.INTERNAL_KEY = 'test-internal-key';
+process.env.ALLOW_DEV_AUTH_BYPASS = 'true';
 process.env.META_VERIFY_TOKEN = 'test-token';
 process.env.META_APP_SECRET = process.env.META_APP_SECRET ?? 'test-app-secret';
 process.env.WEB_URL = 'http://localhost:3400';

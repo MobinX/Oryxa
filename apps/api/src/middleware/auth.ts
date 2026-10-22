@@ -31,13 +31,34 @@ export type AuthUser = {
   email?: string | null;
 };
 
+/** What the ID token itself says, independent of whether a `users` row exists yet. */
+export type AuthIdentity = {
+  firebaseUid: string;
+  email?: string | null;
+  name?: string | null;
+};
+
 declare module 'hono' {
   interface ContextVariableMap {
     user: AuthUser;
+    authIdentity: AuthIdentity;
   }
 }
 
-export async function authMiddleware(c: Context, next: Next) {
+/**
+ * The dev token is a convenience for local work, never a second authentication scheme.
+ * It requires both an explicit opt-in and a non-production environment: an unset NODE_ENV
+ * on a deployed instance must not be enough to hand out the dev account.
+ */
+function devAuthBypassEnabled(): boolean {
+  return process.env.ALLOW_DEV_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production';
+}
+
+type TokenVerification =
+  | { identity: AuthIdentity; user: Awaited<ReturnType<typeof getUserByFirebaseUid>> }
+  | Response;
+
+async function verifyRequestToken(c: Context): Promise<TokenVerification> {
   const authHeader = c.req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     emit('auth', { reason: authHeader ? 'not_bearer' : 'missing' });
@@ -54,16 +75,13 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   // Dev bypass for testing without Firebase
-  if (token === 'dev-test-token' && process.env.NODE_ENV !== 'production') {
+  if (token === 'dev-test-token' && devAuthBypassEnabled()) {
     const user = await getUserByFirebaseUid('dev-test-uid');
     if (user) {
-      c.set('user', {
-        id: user.id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-      });
-      return next();
+      return {
+        identity: { firebaseUid: user.firebaseUid, email: user.email, name: user.name },
+        user,
+      };
     }
   }
 
@@ -76,27 +94,62 @@ export async function authMiddleware(c: Context, next: Next) {
   try {
     const decoded = await getAuth(app).verifyIdToken(token, true);
     const user = await getUserByFirebaseUid(decoded.uid);
-    if (!user) {
-      emit('auth', { reason: 'user_not_synced', uid: decoded.uid });
-      return c.json({ error: 'User not synced' }, 401);
-    }
-    c.set('user', {
-      id: user.id,
-      firebaseUid: user.firebaseUid,
-      name: user.name,
-      email: user.email,
-    });
-    return next();
+    return {
+      identity: {
+        firebaseUid: decoded.uid,
+        email: decoded.email ?? null,
+        name: decoded.name ?? null,
+      },
+      user,
+    };
   } catch (err) {
     emit('auth', { reason: authRejectReason(err), uid: firebaseUidOf(err) });
     return c.json({ error: 'Invalid token' }, 401);
   }
 }
 
+export async function authMiddleware(c: Context, next: Next) {
+  const verified = await verifyRequestToken(c);
+  if (verified instanceof Response) return verified;
+
+  if (!verified.user) {
+    emit('auth', { reason: 'user_not_synced', uid: verified.identity.firebaseUid });
+    return c.json({ error: 'User not synced' }, 401);
+  }
+
+  c.set('authIdentity', verified.identity);
+  c.set('user', {
+    id: verified.user.id,
+    firebaseUid: verified.user.firebaseUid,
+    name: verified.user.name,
+    email: verified.user.email,
+  });
+  return next();
+}
+
+/**
+ * Auth for the sync route specifically: the first call for an account happens before its
+ * `users` row exists, so a verified token is enough and the row is the thing being created.
+ * The request never gets to choose its own uid or email — those come from the token only.
+ */
+export async function syncAuthMiddleware(c: Context, next: Next) {
+  const verified = await verifyRequestToken(c);
+  if (verified instanceof Response) return verified;
+
+  c.set('authIdentity', verified.identity);
+  c.set('user', {
+    id: verified.user?.id ?? '',
+    firebaseUid: verified.identity.firebaseUid,
+    name: verified.user?.name ?? verified.identity.name ?? 'User',
+    email: verified.identity.email ?? verified.user?.email ?? null,
+  });
+  return next();
+}
+
 /**
  * verifyIdToken failures and a database failure look identical to the client.
- * A non-Firebase error here is ambiguous by construction, because the try block
- * also wraps next() — so it is named as what it is rather than blamed on the DB.
+ * A non-Firebase error here is ambiguous by construction, so it is named as what it
+ * is rather than blamed on the DB.
  */
 function authRejectReason(err: unknown): string {
   const code = (err as { code?: unknown } | undefined)?.code;
