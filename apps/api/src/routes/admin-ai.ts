@@ -1,8 +1,8 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from '@hono/zod-openapi';
-import { db } from '@db/client';
-import { channels, commentThreads, comments, conversations, leads, messages } from '@db/schema';
+import { db } from '@repo/db/client';
+import { channels, commentThreads, comments, conversations, leads, messages } from '@repo/db/schema';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
 import { createChannel, ChannelTakenError, findChannelByPlatformAccountId } from '@repo/db/crud/channel';
 import {
