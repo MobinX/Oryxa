@@ -135,9 +135,40 @@ export async function setConversationAiPaused(
 }
 
 /**
- * The official-inbox twin: official conversations have businessId NULL, so the scoped
- * store variant above can never find them. Same node of the same gate, just addressed
- * by the conversation itself (the caller has already resolved it on an admin channel).
+ * The official-inbox twin of the store claim, made atomic over the takeover flag: a
+ * conversation that is paused or already claimed cannot be claimed again, and a claim
+ * won before the human paused still keeps the AI out because `ai_paused` is read inside
+ * this one statement. Idle means the same thing the store side found safe: freshly
+ * created ('done' default) and 'pending' (the just-inserted customer turn) are clean
+ * start points; a stale 'working' claim needs the age test, exactly as the store claim.
+ */
+export async function claimOfficialConversationForAgentRun(
+  conversationId: string,
+  staleBefore?: Date,
+) {
+  const idle = and(
+    inArray(conversations.lastMessageState, ['done', 'pending']),
+    eq(conversations.aiPaused, false),
+  );
+  const abandoned =
+    staleBefore === undefined
+      ? undefined
+      : and(
+          eq(conversations.lastMessageState, 'working'),
+          eq(conversations.aiPaused, false),
+          lt(conversations.lastStateAt, staleBefore),
+        );
+  const claimed = await db
+    .update(conversations)
+    .set({ lastMessageState: 'working', lastStateAt: new Date() })
+    .where(and(eq(conversations.id, conversationId), or(idle, abandoned)))
+    .returning({ id: conversations.id });
+  return claimed.length > 0 ? claimed[0] : null;
+}
+
+/**
+ * The official twin of the business-scoped pause above: official conversations have
+ * businessId NULL, so the store variant can never find them.
  */
 export async function setOfficialConversationAiPaused(conversationId: string, aiPaused: boolean) {
   const [row] = await db

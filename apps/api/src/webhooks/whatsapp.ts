@@ -7,6 +7,7 @@ import { officialIngest } from '@api/lib/official/ingest';
 import { hmacSha256Hex, timingSafeEquals } from '@repo/integrations/crypto';
 import { findChannelByPlatformAccountId, decryptChannelToken } from '@repo/db/crud/channel';
 import { getOrCreateConversation, processInboundMessage } from '@repo/db/crud/conversation';
+import { upsertProspectFromTurn } from '@repo/db/crud/official';
 import { markWhatsAppRead, sendWhatsAppText } from '@repo/integrations/whatsapp';
 
 /**
@@ -326,6 +327,32 @@ async function processOfficialWaMessages(
       continue;
     }
     tagContext({ channelId: officialCtx.id });
+
+    // STOP/START on an official number is the consent edge of a prospect, not a lead:
+    // the statement lands on the prospect row so the AI never claims a consent the
+    // customer withdrew here. No reply is sent — silence is the honest answer, and a
+    // service text would contradict the customer's withdrawal.
+    if (OPT_OUT_RE.test(text)) {
+      await upsertProspectFromTurn(
+        { channelId: officialCtx.id, platform: 'whatsapp', contactPlatformId: waId },
+        { consent: false },
+        { kind: 'system' },
+      );
+      waLog('official opt-out', { waId });
+      await markWhatsAppRead(officialCtx.apiToken, officialCtx.platformChannelId, externalId).catch(() => undefined);
+      continue;
+    }
+    if (OPT_IN_RE.test(text)) {
+      await upsertProspectFromTurn(
+        { channelId: officialCtx.id, platform: 'whatsapp', contactPlatformId: waId },
+        { consent: true },
+        { kind: 'system' },
+      );
+      waLog('official opt-in', { waId });
+      await markWhatsAppRead(officialCtx.apiToken, officialCtx.platformChannelId, externalId).catch(() => undefined);
+      continue;
+    }
+
     const verdict = await officialIngest(officialCtx, {
       senderId: waId,
       text,

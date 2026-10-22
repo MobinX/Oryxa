@@ -2,7 +2,7 @@ import { asc, eq, isNull, and } from 'drizzle-orm';
 import { db } from '@repo/db/client';
 import { conversations, messages } from '@repo/db/schema';
 import {
-  claimConversationForAgentRun,
+  claimOfficialConversationForAgentRun,
   processInboundMessage,
   createMessage,
   updateConversationState,
@@ -101,11 +101,11 @@ export async function officialIngest(
   const log = (outcome: string, extra: Record<string, unknown> = {}) =>
     emit('official', { channel: channel.platform, channelId: channel.id, outcome, ...extra });
 
-  const { conversationId, inserted, priorStatus } = await processInboundMessage(
+  const { conversationId, inserted } = await processInboundMessage(
     { id: channel.id, businessId: null },
     turn.senderId,
     turn.text,
-    turn.externalId ?? undefined,
+    (turn.externalId || undefined) ?? undefined,
   );
 
   if (!inserted) {
@@ -140,15 +140,10 @@ export async function officialIngest(
     return { conversationId, inserted: true, answered: false, reason: settings.aiEnabled ? 'auto_reply_off' : 'ai_off' };
   }
 
-  // The store side's own gate: a conversation whose last state is not idle belongs to
-  // whatever run or operator holds it. The runner's stale-recovery covers dead claims
-  // everywhere, and that watchdog runs on the same columns here.
-  if (priorStatus !== 'done') {
-    log('in_flight', {});
-    return { conversationId, inserted: true, answered: false, reason: 'in_flight' };
-  }
-
-  const claimed = await claimConversationForAgentRun(conversationId);
+  // One atomic claim carries every race answer the store side splits across steps:
+  // paused-by-a-human, in-flight (working), and the idle 'done' precondition. Whoever
+  // did not win the claim hears about it and never reaches the model or the send.
+  const claimed = await claimOfficialConversationForAgentRun(conversationId);
   if (!claimed) {
     log('claim_lost', {});
     return { conversationId, inserted: true, answered: false, reason: 'claim_lost' };
