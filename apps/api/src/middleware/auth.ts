@@ -74,7 +74,7 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
-    const decoded = await getAuth(app).verifyIdToken(token);
+    const decoded = await getAuth(app).verifyIdToken(token, true);
     const user = await getUserByFirebaseUid(decoded.uid);
     if (!user) {
       emit('auth', { reason: 'user_not_synced', uid: decoded.uid });
