@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { COMPANY_NAME } from '@/lib/brand';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
-import { MotionVideoAd } from '@/components/motion-video-ad';
+import { RaycastSections } from '@/components/raycast-sections';
 import {
   Sparkles,
   ArrowRight,
@@ -218,13 +218,9 @@ export default function HomePage() {
       </section>
 
       {/* =====================================================================
-          3. CINEMATIC DESKTOP MOTION VIDEO AD & COMMERCIAL AUTOMATION SHOWCASE
+          3. RAYCAST-INSPIRED COMMAND CENTER & WORKFLOW SHOWCASE
          ===================================================================== */}
-      <section id="workflow" className="border-t border-b border-white/10 bg-[#0A0C18] py-20 text-white lg:py-24">
-        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
-          <MotionVideoAd />
-        </div>
-      </section>
+      <RaycastSections />
 
       {/* =====================================================================
           4. PRICING & COMPARE PLANS SECTION (Dark Themed Harmony)
