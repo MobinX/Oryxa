@@ -15,6 +15,7 @@ export * from '@shared/schemas/admin-analytics';
 export * from '@shared/schemas/logs';
 export * from '@shared/schemas/plan';
 export * from '@shared/schemas/billing';
+export * from '@shared/schemas/admin-ai';
 export * from './prompts/agent';
 export * from './language';
 export * from '@shared/timezone';
