@@ -14,7 +14,7 @@ export async function setAuthSession(
     signInMethod?: string;
   },
 ) {
-  await syncUser({
+  await syncUser(idToken, {
     firebaseUid: profile.firebaseUid,
     name: profile.name,
     email: profile.email,

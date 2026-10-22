@@ -51,7 +51,7 @@ export async function operatorSignInAction(idToken: string) {
     redirect('/admin/login?error=invalid');
   }
 
-  await syncUser({
+  await syncUser(idToken, {
     firebaseUid: verified.uid,
     name: `${COMPANY_NAME} Operator`,
     email: verified.email ?? undefined,

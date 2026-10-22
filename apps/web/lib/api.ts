@@ -64,12 +64,16 @@ export async function apiFetch<T>(
 }
 
 // User
-export const syncUser = (data: {
-  firebaseUid: string;
-  name: string;
-  email?: string;
-  signInMethod: string;
-}) => apiFetch('/api/v1/users/sync', { method: 'POST', body: JSON.stringify(data) });
+/** The sync route now authorises on the Firebase bearer itself; uid/email come from the token. */
+export const syncUser = (
+  token: string,
+  data: {
+    firebaseUid: string;
+    name: string;
+    email?: string;
+    signInMethod: string;
+  },
+) => apiFetch('/api/v1/users/sync', { method: 'POST', token, signInPath: null, body: JSON.stringify(data) });
 
 export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
