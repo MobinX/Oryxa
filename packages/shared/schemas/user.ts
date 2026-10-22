@@ -8,6 +8,12 @@ export const syncUserInputSchema = z.object({
   signInMethod: z.string().min(1).max(50),
 }).openapi('SyncUserInput');
 
+/** The sync route after authentication: identity comes from the verified token, never the body. */
+export const syncAuthenticatedUserInputSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  signInMethod: z.string().min(1).max(50).optional(),
+}).openapi('SyncAuthenticatedUserInput');
+
 export const updateUserInputSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   gender: z.string().max(20).nullable().optional(),

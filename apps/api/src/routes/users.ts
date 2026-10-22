@@ -1,13 +1,13 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
-  syncUserInputSchema,
+  syncAuthenticatedUserInputSchema,
   selectUserSchema,
   userMeOutputSchema,
   updateUserInputSchema,
   deleteUserOutputSchema,
 } from '@repo/shared';
 import { syncUser, getUserById, updateUser, deleteUser } from '@repo/db/crud/user';
-import { authMiddleware } from '@api/middleware/auth';
+import { authMiddleware, syncAuthMiddleware } from '@api/middleware/auth';
 
 export const usersRouter = new OpenAPIHono();
 
@@ -15,17 +15,27 @@ const syncRoute = createRoute({
   method: 'post',
   path: '/sync',
   tags: ['Users'],
+  security: [{ bearerAuth: [] }],
   request: {
-    body: { content: { 'application/json': { schema: syncUserInputSchema } } },
+    body: { content: { 'application/json': { schema: syncAuthenticatedUserInputSchema } } },
   },
   responses: {
     201: { content: { 'application/json': { schema: selectUserSchema } }, description: 'User synced' },
+    401: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Unauthorized' },
   },
 });
 
+usersRouter.use('/sync', syncAuthMiddleware);
 usersRouter.openapi(syncRoute, async (c) => {
   const data = c.req.valid('json');
-  const user = await syncUser(data);
+  const identity = c.get('authIdentity');
+  const current = c.get('user');
+  const user = await syncUser({
+    firebaseUid: identity.firebaseUid,
+    name: data.name ?? current.name ?? identity.name ?? 'User',
+    email: identity.email ?? current.email ?? undefined,
+    signInMethod: data.signInMethod ?? 'google',
+  });
   return c.json(
     {
       ...user,
