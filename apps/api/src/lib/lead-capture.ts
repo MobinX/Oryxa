@@ -31,9 +31,19 @@ export function extractLeadFields(text: string, platformName?: string | null): E
   // bare sequence of digits inside an order or price is not a phone number.
   if (/(contact|call|reach|text|whatsapp me|give (?:me )?(?:your )?(?:number|phone)|phone(?:\s+no)?\s*[:=]|number is|phone is|:\s*[\d(])/.test(lower)) {
     const match = [...text.matchAll(PHONE_RE)]
-      .map((m) => m[0].trim())
-      .find((candidate) => candidate.replace(/\D/g, '').length >= 7 && candidate.replace(/\D/g, '').length <= 15);
-    if (match) fields.phone = match;
+      .map((m) => ({
+        candidate: m[0].trim(),
+        // Where the candidate sits in the text, to spot "card number is …"-style
+        // non-contact numbers: a bare digit run inside an order or account context.
+        index: m.index ?? 0,
+      }))
+      .find(
+        ({ candidate, index }) =>
+          candidate.replace(/\D/g, '').length >= 7 &&
+          candidate.replace(/\D/g, '').length <= 15 &&
+          !/(?:order|card|invoice|tracking|serial|receipt)\b[^\n]{0,16}$/i.test(text.slice(Math.max(0, index - 20), index).toLowerCase()),
+      );
+    if (match) fields.phone = match.candidate;
   }
 
   const email = text.match(EMAIL_RE)?.[0];

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { emit, emitAnomaly, errorFields, tagContext } from '@api/lib/log';
+import { emit, emitAnomaly, errorFields } from '@api/lib/log';
+import { tagContext } from '@api/lib/ctx';
 import { runInBackground } from '@api/lib/background';
 import { triggerAgentRun } from '@api/lib/agent-runner';
 import { hmacSha256Hex, timingSafeEquals } from '@repo/integrations/crypto';
@@ -298,7 +299,7 @@ async function processWaMessage(
       channelId: channelCtx.id,
       platform: 'whatsapp',
       platformUserId: waId,
-      conversationId,
+      conversationId: result.conversationId,
       sourceChannel: 'whatsapp',
     },
     { ...extractLeadFields(text), customerPlatformName: contactName },
