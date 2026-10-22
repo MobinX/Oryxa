@@ -30,6 +30,202 @@ export const integrationTypeEnum = pgEnum('integration_type', [
 export const planActorKindEnum = pgEnum('plan_actor_kind', ['operator', 'merchant', 'system']);
 
 /**
+ * The leads CRM pipeline (spec D). Statuses are closed so the operator UI can render
+ * them as a rail; unknown ones arrive only when someone writes SQL by hand.
+ */
+export const leadStatusEnum = pgEnum('lead_status', [
+  'new',
+  'qualified',
+  'awaiting_information',
+  'waitlisted',
+  'contact_requested',
+  'contacted',
+  'converted',
+  'closed',
+]);
+
+/**
+ * How the agent is allowed to answer one channel. Every field is advisory context for the
+ * runner except the on/off toggles and the confidence threshold, which the runner enforces.
+ * One row per channel: the connect flows leave it absent until someone opens the AI Studio.
+ */
+export const channelAiConfigs = pgTable('channel_ai_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channelId: uuid('channel_id')
+    .references(() => channels.id, { onDelete: 'cascade' })
+    .notNull(),
+  aiEnabled: boolean('ai_enabled').default(true).notNull(),
+  aiCommentsEnabled: boolean('ai_comments_enabled').default(true).notNull(),
+  privateRepliesEnabled: boolean('private_replies_enabled').default(true).notNull(),
+  autoReply: boolean('auto_reply').default(true).notNull(),
+  /** Below it the AI escalates to a human instead of guessing. */
+  confidenceThreshold: numeric('confidence_threshold', { precision: 3, scale: 2 })
+    .default('0.60')
+    .notNull(),
+  maxReplyLength: integer('max_reply_length').default(1000).notNull(),
+  tone: varchar('tone', { length: 40 }).default('friendly'),
+  /** 'auto' keeps the repo's own Bangla/Banglish/English detection in charge. */
+  language: varchar('language', { length: 20 }).default('auto'),
+  perChannelInstructions: text('per_channel_instructions'),
+  leadQuestions: jsonb('lead_questions').$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  escalationRules: jsonb('escalation_rules')
+    .$type<Record<string, unknown>>()
+    .default(sql`'{}'::jsonb`)
+    .notNull(),
+  commentBehavior: jsonb('comment_behavior')
+    .$type<Record<string, unknown>>()
+    .default(sql`'{}'::jsonb`)
+    .notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  channelUniq: uniqueIndex('channel_ai_configs_channel_uniq_idx').on(t.channelId),
+}));
+
+/**
+ * What the AI may claim about the business it answers for. No field is prefabricated:
+ * the row is created empty and the operator writes it, because a synthesized answer is
+ * exactly the fabricated data the spec forbids.
+ */
+export const businessProfiles = pgTable('business_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  displayName: varchar('display_name', { length: 120 }).default('Only Order').notNull(),
+  description: text('description'),
+  productsServices: text('products_services'),
+  audience: text('audience'),
+  serviceAreas: text('service_areas'),
+  pricingPackages: text('pricing_packages'),
+  hoursHolidays: text('hours_holidays'),
+  contacts: text('contacts'),
+  website: varchar('website', { length: 300 }),
+  socials: text('socials'),
+  limitations: text('limitations'),
+  policies: text('policies'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  businessUniq: uniqueIndex('business_profiles_business_uniq_idx').on(t.businessId),
+}));
+
+/** Per-business knowledge base / FAQ the agent draws on before guessing. */
+export const knowledgeEntries = pgTable('knowledge_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  question: text('question').notNull(),
+  answer: text('answer').notNull(),
+  tags: text('tags').array().default(sql`'{}'::text[]`).notNull(),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  businessActiveIdx: index('knowledge_entries_business_idx').on(t.businessId, t.active),
+}));
+
+/**
+ * How much work the business can still take on. `available_capacity` is the only field the
+ * software writes between manual saves: each reservation is one atomic conditional decrement
+ * (`available_capacity > 0`), the exclusive gate the spec demands, because this driver cannot
+ * open a transaction (see the quota_usage comment for the same lesson).
+ */
+export const capacity = pgTable('capacity', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  acceptingNewCustomers: boolean('accepting_new_customers').default(true).notNull(),
+  maxCapacity: integer('max_capacity').default(0).notNull(),
+  availableCapacity: integer('available_capacity').default(0).notNull(),
+  /** off | auto | manual */
+  waitlistMode: varchar('waitlist_mode', { length: 20 }).default('off').notNull(),
+  fullCapacityMessage: text('full_capacity_message'),
+  followUpInfo: text('follow_up_info'),
+  preferredContact: varchar('preferred_contact', { length: 40 }),
+  etaText: varchar('eta_text', { length: 200 }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  businessUniq: uniqueIndex('capacity_business_uniq_idx').on(t.businessId),
+}));
+
+/** One hold on one capacity slot. Releasing keeps the row, mirroring order history. */
+export const capacityReservations = pgTable('capacity_reservations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+  conversationId: uuid('conversation_id'),
+  /** active | released */
+  status: varchar('status', { length: 20 }).default('active').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  releasedAt: timestamp('released_at'),
+}, (t) => ({
+  businessStatusIdx: index('capacity_reservations_business_idx').on(t.businessId, t.status),
+}));
+
+/**
+ * The leads CRM row. Deduped on (channel_id, platform_user_id) — never on name or phone,
+ * which are self-reported values the same person may enter differently every time.
+ */
+export const leads = pgTable('leads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+  commentThreadId: uuid('comment_thread_id').references(() => commentThreads.id, { onDelete: 'set null' }),
+  platform: platformEnum('platform').notNull(),
+  platformUserId: varchar('platform_user_id', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  businessName: varchar('business_name', { length: 255 }),
+  phone: varchar('phone', { length: 20 }),
+  email: varchar('email', { length: 255 }),
+  contactMethod: varchar('contact_method', { length: 20 }),
+  requirements: text('requirements'),
+  interest: text('interest'),
+  timeframe: varchar('timeframe', { length: 100 }),
+  consent: boolean('consent').default(false).notNull(),
+  consentAt: timestamp('consent_at'),
+  sourceChannel: varchar('source_channel', { length: 30 }),
+  conversationRef: varchar('conversation_ref', { length: 255 }),
+  status: leadStatusEnum('status').default('new').notNull(),
+  // No FK on purpose, same as planAssignments.actorUserId: an audit trail outlives accounts.
+  assigneeUserId: uuid('assignee_user_id'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  dedupeUniq: uniqueIndex('leads_channel_platform_user_uniq_idx').on(t.channelId, t.platformUserId),
+  businessStatusIdx: index('leads_business_status_idx').on(t.businessId, t.status, t.updatedAt),
+  businessPhoneIdx: index('leads_business_phone_idx').on(t.businessId, t.phone),
+}));
+
+/** Append-only audit + history for a lead. Nobody edits or deletes these. */
+export const leadEvents = pgTable('lead_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'cascade' }).notNull(),
+  /** operator | ai | system */
+  actorKind: varchar('actor_kind', { length: 10 }).default('system').notNull(),
+  actorUserId: uuid('actor_user_id'),
+  kind: varchar('kind', { length: 40 }).notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  leadTimeIdx: index('lead_events_lead_time_idx').on(t.leadId, t.createdAt),
+}));
+
+export const leadRelations = relations(leads, ({ one, many }) => ({
+  business: one(businesses, { fields: [leads.businessId], references: [businesses.id] }),
+  channel: one(channels, { fields: [leads.channelId], references: [channels.id] }),
+  conversation: one(conversations, { fields: [leads.conversationId], references: [conversations.id] }),
+  commentThread: one(commentThreads, { fields: [leads.commentThreadId], references: [commentThreads.id] }),
+  events: many(leadEvents),
+}));
+
+export const leadEventRelations = relations(leadEvents, ({ one }) => ({
+  lead: one(leads, { fields: [leadEvents.leadId], references: [leads.id] }),
+}));
+
+/**
  * What the operator sells. Limits are read at gate time and never copied onto the
  * business, which is why editing a plan propagates to every business on it instantly.
  *
@@ -386,6 +582,8 @@ export const conversations = pgTable('conversations', {
   lastMessageState: messageStateEnum('last_message_state').default('done').notNull(),
   /** Tracks when lastMessageState last changed — used by the stale-runner watchdog. */
   lastStateAt: timestamp('last_state_at').defaultNow().notNull(),
+  /** True after a human took the thread over: the agent must never answer it again. */
+  aiPaused: boolean('ai_paused').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -408,6 +606,11 @@ export const messages = pgTable('messages', {
    * and the agent can look at it again — Meta's own attachment URL goes stale within hours.
    */
   imageKeys: text('image_keys').array().notNull().default(sql`'{}'::text[]`),
+  /**
+   * Who actually composed a store-side row: 'ai' when the agent wrote it, 'human' when a
+   * person sent it from a dashboard. Null on legacy rows — the inbox renders those plainly.
+   */
+  sentBy: varchar('sent_by', { length: 10 }),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('messages_conversation_time_idx').on(t.conversationId, t.time),
