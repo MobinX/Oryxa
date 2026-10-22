@@ -105,10 +105,10 @@ export default async function AdminAiStudioPage({
       {active && (
         <div className="space-y-6">
           <SandboxPreview bearer={bearer} channelId={active.id} />
-          <CommentsOverview bearer={bearer} businessId={active.businessId} />
           <ChannelConfigForm bearer={bearer} channelId={active.id} config={config} />
           {active.businessId && (
             <>
+              <CommentsOverview bearer={bearer} businessId={active.businessId} />
               <BusinessProfileForm bearer={bearer} businessId={active.businessId} profile={profile} />
               <KnowledgeEditor bearer={bearer} businessId={active.businessId} entries={knowledge} />
             </>
