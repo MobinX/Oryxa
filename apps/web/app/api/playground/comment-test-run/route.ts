@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
-import { authorizePlaygroundRun } from '@/lib/playground-access';
+import { authorizePlaygroundRun, hasPlaygroundToken } from '@/lib/playground-access';
+import { clientIp, rateLimit } from '@/lib/rate-limit';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function jsonError(status: number, error: string) {
+function jsonError(status: number, error: string, headers?: Record<string, string>) {
   return new Response(JSON.stringify({ error }), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 }
 
@@ -23,6 +24,18 @@ function text(value: unknown, max: number): string | null {
  * `authorizePlaygroundRun` settles that against the merchant API before anything is forwarded.
  */
 export async function POST(req: NextRequest) {
+  // Session before anything else: an unauthenticated caller is refused without their
+  // body being read, so the route does no work at all for the anonymous spray.
+  if (!(await hasPlaygroundToken())) {
+    return jsonError(401, 'Sign in to your account first');
+  }
+
+  // The run spends the store's real LLM tokens, so per-IP + per-store request budget above.
+  const limit = rateLimit(clientIp(req.headers), 'comment-test-run');
+  if (!limit.allowed) {
+    return jsonError(429, 'Too many runs — slow down', { 'Retry-After': String(limit.retryAfter) });
+  }
+
   let body: { businessId?: unknown; channelId?: unknown; comment?: unknown; history?: unknown; commenterName?: unknown; postId?: unknown };
   try {
     body = await req.json();
@@ -57,7 +70,12 @@ export async function POST(req: NextRequest) {
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   const cleanBaseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
-  const internalKey = process.env.INTERNAL_KEY || 'change-me-to-random-secret';
+  // The internal key is a shared secret, not a placeholder: a deployed app that launches without
+  // one must fail loudly here rather than forward runs under a guessable default.
+  const internalKey = process.env.INTERNAL_KEY;
+  if (!internalKey) {
+    return jsonError(500, 'server misconfigured');
+  }
 
   const apiRes = await fetch(`${cleanBaseUrl}/internal/test-comment-run`, {
     method: 'POST',
