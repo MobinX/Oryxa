@@ -1,11 +1,28 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { testRunInputSchema, commentTestRunInputSchema } from '@repo/shared';
 import { runAgentCore } from '@api/lib/agent-runner-core';
 import { runCommentTest } from '@api/lib/comment-test-runner';
 import type { SseEmitter } from '@repo/agent';
+import { createRateLimiter } from '@api/lib/rate-limit';
 
 export const testRunRouter = new Hono();
+
+/** Playground runs spend tenant tokens, so one caller cannot loop them. */
+const testRunLimited = createRateLimiter(
+  Number(process.env.INTERNAL_TEST_RATE_LIMIT_PER_MIN ?? 30) || 30,
+  60_000,
+);
+
+const testRunRateLimit: MiddlewareHandler = async (c, next) => {
+  const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = forwarded || c.req.header('x-real-ip') || 'unknown';
+  if (testRunLimited(ip)) return c.json({ error: 'Too many requests' }, 429);
+  return next();
+};
+
+testRunRouter.use('/test-run', testRunRateLimit);
+testRunRouter.use('/test-comment-run', testRunRateLimit);
 
 /**
  * POST /internal/test-run
@@ -39,12 +56,6 @@ export const testRunRouter = new Hono();
  *   error               { message }           ← replaces done when setup fails
  */
 testRunRouter.post('/test-run', async (c) => {
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const internalKey = c.req.header('x-internal-key');
-  if (internalKey !== process.env.INTERNAL_KEY) {
-    return c.text('Unauthorized', 401);
-  }
-
   // ── Parse & validate body ─────────────────────────────────────────────────
   let body: unknown;
   try {
@@ -185,11 +196,6 @@ testRunRouter.post('/test-run', async (c) => {
  *   done            { commentThreadId }
  */
 testRunRouter.post('/test-comment-run', async (c) => {
-  const internalKey = c.req.header('x-internal-key');
-  if (internalKey !== process.env.INTERNAL_KEY) {
-    return c.text('Unauthorized', 401);
-  }
-
   let body: unknown;
   try {
     body = await c.req.json();
