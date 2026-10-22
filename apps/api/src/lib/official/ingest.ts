@@ -1,4 +1,4 @@
-import { asc, eq, isNull, and, inArray } from 'drizzle-orm';
+import { asc, eq, isNull, and } from 'drizzle-orm';
 import { db } from '@repo/db/client';
 import { conversations, messages } from '@repo/db/schema';
 import {
@@ -77,27 +77,16 @@ async function conversationRow(conversationId: string) {
   });
 }
 
-/** Whether anything else is still driving this conversation (defense, not the main gate). */
-async function conversationInterlocked(conversationId: string): Promise<boolean> {
-  const pending = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.conversationId, conversationId),
-        eq(messages.from, 'customer'),
-        inArray(messages.state, ['pending']),
-      ),
-    )
-    .limit(2);
-  return pending.length === 0;
-}
-
 export type OfficialIngestVerdict = {
   conversationId: string;
   inserted: boolean;
   answered: boolean;
   reason?: string;
+};
+
+export type OfficialIngestOptions = {
+  /** Injected in tests; absent means the repo's provider selection talks to the network. */
+  llm?: Parameters<typeof runOfficialTurn>[0]['llm'];
 };
 
 /**
@@ -107,6 +96,7 @@ export type OfficialIngestVerdict = {
 export async function officialIngest(
   channel: OfficialChannelCtx,
   turn: OfficialInboundTurn,
+  options: OfficialIngestOptions = {},
 ): Promise<OfficialIngestVerdict> {
   const log = (outcome: string, extra: Record<string, unknown> = {}) =>
     emit('official', { channel: channel.platform, channelId: channel.id, outcome, ...extra });
@@ -150,8 +140,10 @@ export async function officialIngest(
     return { conversationId, inserted: true, answered: false, reason: settings.aiEnabled ? 'auto_reply_off' : 'ai_off' };
   }
 
-  if (priorStatus !== 'done' && !(await conversationInterlocked(conversationId))) {
-    // A run is in flight; the runner's stale recovery covers a dead claim, as everywhere.
+  // The store side's own gate: a conversation whose last state is not idle belongs to
+  // whatever run or operator holds it. The runner's stale-recovery covers dead claims
+  // everywhere, and that watchdog runs on the same columns here.
+  if (priorStatus !== 'done') {
     log('in_flight', {});
     return { conversationId, inserted: true, answered: false, reason: 'in_flight' };
   }
@@ -166,7 +158,7 @@ export async function officialIngest(
   try {
     const history = await conversationThread(conversationId);
     result = await runOfficialTurn({
-      history: history.filter((row) => row.content !== turn.text || row.from === 'customer'),
+      history,
       message: turn.text,
       customerName: conv.customerName ?? turn.customerName ?? null,
       settings: {
@@ -176,6 +168,7 @@ export async function officialIngest(
         language: settings.language,
         instructions: settings.instructions,
       },
+      ...(options.llm ? { llm: options.llm } : {}),
     });
   } catch (err) {
     emit('error', errorFields(err));

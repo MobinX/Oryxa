@@ -181,10 +181,10 @@ const FALLBACK_TURN: OfficialTurnResult = {
 export async function runOfficialTurn(input: OfficialTurnInput): Promise<OfficialTurnResult> {
   const llm = input.llm ?? createOfficialModel({ provider: defaultOfficialProvider() });
   try {
-    const answer = contentText(await llm.invoke([
+    const answer = contentText((await llm.invoke([
       ['system', systemPrompt(input)],
       ['human', customerTurn(input)],
-    ]));
+    ])).content);
     return asOfficialTurn(parseJsonish(answer)) ?? { ...FALLBACK_TURN, needHuman: true };
   } catch (err) {
     console.error('[official-ai] turn failed:', err);
