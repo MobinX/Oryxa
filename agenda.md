@@ -41,3 +41,8 @@ Self-test: web runs at http://127.0.0.1:3410 (after build) — use Playwright.
 - Added original HomeBento (12-col feature bento: Messenger AI, in-chat checkout, orders dashboard, courier tracking + 3-step row); hero phone demo kept.
 - Figma reference not fetched (no token); OpenCode glm/deepseek free + Qoder DeepSeek-Flash hung with no output, so coded directly.
 - Build OK, Playwright desktop+Android pass; :3410 restarted.
+
+## 2026-10-22 HomeBento → animated workflow
+- Library: Motion (motion/react, MIT) with LazyMotion+domAnimation, useInView, useReducedMotion — IntersectionObserver-based lazy triggers, WAAPI transform/opacity at 60fps, about 30KB gz vs GSAP+ScrollTrigger 44KB.
+- Code written by OpenCode deepseek-v4.1-flash-free (Z Code CLI: Model creation failed; OpenCode glm-5.3-flash-free ran out before writing).
+- Autoplay 3.5s loop while in view, click to select, mobile chips, reduced-motion static final states. e2e/home-motion.spec.ts + video.
