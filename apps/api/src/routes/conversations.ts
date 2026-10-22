@@ -16,6 +16,7 @@ import {
   createMessage,
   getConversationForBusiness,
   updateConversationState,
+  setConversationAiPaused,
   deleteConversation,
 } from '@repo/db/crud/conversation';
 import { sendMessage, isFacebookSendError } from '@repo/integrations/facebook';
@@ -66,6 +67,8 @@ conversationsRouter.openapi(listConversationsRoute, async (c) => {
         customerPlatformId: conv.customerPlatformId,
         createdAt: conv.createdAt.toISOString(),
         pageName,
+        /** Spec E takeover state; the inbox shows the "AI paused" badge from it. */
+        aiPaused: conv.aiPaused,
       };
     }),
   );
@@ -143,6 +146,7 @@ conversationsRouter.openapi(createMessageRoute, async (c) => {
   const message = await createMessage({
     conversationId,
     from: 'self',
+    sentBy: 'human',
     content: data.content,
     contentType: data.contentType,
     state: 'done',
@@ -180,6 +184,37 @@ conversationsRouter.openapi(updateStateRoute, async (c) => {
 
   await updateConversationState(conversationId, state);
   return c.json({ id: conversationId, updatedState: state });
+});
+
+/**
+ * Human takeover (spec E): `paused: true` hands the customer from the AI to the operator —
+ * the runner gate sees `aiPaused` and never answers until someone pauses it off.
+ * Belongs to the same bearer-auth surface the inbox already runs behind.
+ */
+const aiPauseRoute = createRoute({
+  method: 'patch',
+  path: '/{businessId}/conversations/{conversationId}/ai',
+  tags: ['Conversations'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), conversationId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: z.object({ paused: z.boolean() }) } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.object({ id: z.string(), aiPaused: z.boolean() }) } },
+      description: 'Takeover state updated',
+    },
+  },
+});
+
+conversationsRouter.openapi(aiPauseRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const conversationId = c.req.param('conversationId');
+  const { paused } = c.req.valid('json');
+
+  const row = await setConversationAiPaused(businessId, conversationId, paused);
+  return c.json({ id: conversationId, aiPaused: row?.aiPaused ?? paused });
 });
 
 const deleteConversationRoute = createRoute({

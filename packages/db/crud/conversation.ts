@@ -64,6 +64,12 @@ export async function createMessage(data: {
   contentType?: string;
   state?: 'pending' | 'working' | 'done';
   imageKeys?: string[];
+  /**
+   * Who actually wrote a `self` row: `ai` when the agent produced it, `human` when an
+   * operator sent it from the inbox. Null only on legacy rows — the inbox filter reads
+   * that as "written before the marking existed".
+   */
+  sentBy?: 'ai' | 'human';
 }) {
   const [message] = await db
     .insert(messages)
@@ -74,6 +80,7 @@ export async function createMessage(data: {
       contentType: data.contentType ?? 'text',
       state: data.state ?? (data.from === 'customer' ? 'pending' : 'done'),
       imageKeys: data.imageKeys ?? [],
+      sentBy: data.sentBy ?? null,
     })
     .returning();
 
@@ -105,6 +112,26 @@ export async function updateConversationAgentState(
     .update(conversations)
     .set({ agentState })
     .where(eq(conversations.id, conversationId));
+}
+
+/**
+ * Human takeover (spec E): pausing keeps every gate in the runner off (the AI NEVER
+ * replies after a takeover) until an operator resumes it. Un-pausing is explicit —
+ * nothing resumes on its own.
+ */
+export async function setConversationAiPaused(
+  businessId: string,
+  conversationId: string,
+  aiPaused: boolean,
+) {
+  const [row] = await db
+    .update(conversations)
+    .set({ aiPaused })
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
+    )
+    .returning({ id: conversations.id, aiPaused: conversations.aiPaused });
+  return row ?? null;
 }
 
 export async function checkPendingMessages(conversationId: string) {
@@ -249,7 +276,20 @@ export async function listConversations(
     // moves, so ordering by it buries the threads an agent has just replied to under whatever
     // happened to be created most recently.
     orderBy: [desc(conversations.lastStateAt), desc(conversations.createdAt)],
-    with: { channel: { columns: { extraInfo: true } } },
+    with: {
+      channel: { columns: { extraInfo: true } },
+    },
+    columns: {
+      id: true,
+      customerName: true,
+      lastMessageState: true,
+      channelId: true,
+      customerPlatformId: true,
+      createdAt: true,
+      businessId: true,
+      aiPaused: true,
+      lastStateAt: true,
+    },
   });
 }
 
@@ -275,6 +315,8 @@ export async function listMessages(conversationId: string, businessId: string, l
     msgs.reverse().map(async (m) => ({
       id: m.id,
       from: m.from,
+      /** AI vs human for `self` rows — the inbox marks who wrote a reply. */
+      sentBy: m.sentBy === 'human' ? 'human' : m.sentBy === 'ai' ? 'ai' : null,
       content: m.content,
       contentType: m.contentType,
       time: m.time.toISOString(),

@@ -114,6 +114,7 @@ const OUTCOME: Record<string, string> = {
   quota_exhausted: 'ALLOWANCE USED UP — the agent was not started',
   no_agent: 'NO AGENT ATTACHED — nobody will answer this customer',
   not_triggered: 'no run started',
+  ai_disabled: 'AI ANSWER OFF — the channel config or a human takeover stopped the run',
   unsupported_content: 'nothing to answer (attachment, sticker or audio)',
   incomplete_payload: 'payload has no id or text — cannot be routed',
   unknown_account: 'no live Instagram channel for this account',
@@ -910,6 +911,8 @@ export const ANOMALY_KINDS = [
   'graph_send_failed',
   'quota_exhausted',
   'quota_gate_failed',
+  'ai_disabled',
+  'wa_signature_invalid',
 ] as const;
 
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];

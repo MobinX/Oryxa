@@ -24,6 +24,7 @@ import {
   type MessengerCard,
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
+import { sendWhatsAppText } from '@repo/integrations/whatsapp';
 import type { SseEmitter } from '@agent/Agent';
 import type { ConversationAgentState } from '@repo/shared';
 
@@ -724,7 +725,9 @@ export function createAgentTools(
     customerName?: string | null;
     emitSse?: SseEmitter;
     /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
-    platform?: MessagingPlatform;
+    platform?: MessagingPlatform | 'whatsapp';
+    /** The WhatsApp Cloud API phone number a send goes through (platform='whatsapp'). */
+    phoneNumberId?: string;
     /** Set for the one turn after a typed reply ignored the previous chips. */
     suppressSuggestions?: boolean;
     /** Override the Facebook send function (e.g. no-op in test mode). */
@@ -763,6 +766,17 @@ export function createAgentTools(
     }
   }
 
+  /**
+   * A WhatsApp answer is always plain text: no card templates, no quick replies, no button
+   * rows — the Cloud API has none of the Messenger formats. When it returns true the text
+   * is on the wire and Messenger code below must not run.
+   */
+  async function sendWhatsAppPlain(text: string): Promise<boolean> {
+    if (context.platform !== 'whatsapp' || !context.phoneNumberId) return false;
+    await sendWhatsAppText(context.pageToken, context.phoneNumberId, context.customerPlatformId, text);
+    return true;
+  }
+
   /** A unit paid for a send that never happened is given straight back. */
   async function returnMessageUnit(period: string | null): Promise<void> {
     if (!period) return;
@@ -791,8 +805,9 @@ export function createAgentTools(
       );
       return;
     }
+    if (await sendWhatsAppPlain(cardsAsText(cards))) return;
     await fbSendMessage(context.pageToken, context.customerPlatformId, cards, {
-      platform: context.platform,
+      platform: context.platform as MessagingPlatform,
     });
   }
 
@@ -808,6 +823,10 @@ export function createAgentTools(
       );
       return;
     }
+    if (
+      await sendWhatsAppPlain(`${text} (${buttons.map((button) => button.title).join(' / ')})`)
+    )
+      return;
     await fbSendButtons(context.pageToken, context.customerPlatformId, text, buttons);
   }
 
@@ -836,6 +855,7 @@ export function createAgentTools(
     await createMessage({
       conversationId: context.conversationId,
       from: 'self',
+      sentBy: 'ai',
       content,
       state: 'done',
     });
@@ -886,7 +906,7 @@ export function createAgentTools(
       await returnMessageUnit(budget.period);
       throw err;
     }
-    await createMessage({ conversationId: context.conversationId, from: 'self', content, state: 'done' });
+    await createMessage({ conversationId: context.conversationId, from: 'self', sentBy: 'ai', content, state: 'done' });
     onSent?.(content, 'card');
   };
 
@@ -1555,8 +1575,10 @@ export function createAgentTools(
       const askedForChips = cleaned.length >= 2;
       // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
       // the old one on screen (most visibly in the Android Messenger client), so this turn
-      // answers in one plain message with the choices written out instead.
-      const withChips = askedForChips && !context.suppressSuggestions;
+      // answers in one plain message with the choices written out instead. WhatsApp has no
+      // chip row to begin with: plain text either way.
+      const withChips =
+        askedForChips && !context.suppressSuggestions && context.platform !== 'whatsapp';
       const suppressedChips = askedForChips && !withChips;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
@@ -1570,11 +1592,13 @@ export function createAgentTools(
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
         } else if (withChips) {
           await fbSendQuickReplies(context.pageToken, context.customerPlatformId, text, cleaned, {
-            platform: context.platform,
+            platform: context.platform as MessagingPlatform,
           });
+        } else if (await sendWhatsAppPlain(said)) {
+          // WhatsApp delivered the plain-text answer above.
         } else {
           await fbSendMessage(context.pageToken, context.customerPlatformId, text, {
-            platform: context.platform,
+            platform: context.platform as MessagingPlatform,
           });
         }
       } catch (err) {
@@ -1589,6 +1613,7 @@ export function createAgentTools(
       await createMessage({
         conversationId: context.conversationId,
         from: 'self',
+        sentBy: 'ai',
         content: said,
         state: 'done',
       });

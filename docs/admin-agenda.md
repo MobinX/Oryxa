@@ -12,3 +12,4 @@ Implementer: GLM-5.3-flash via OpenCode. Status: executing autonomous phases 1â€
 - [ ] Phase 6 delivery â†’ docs/admin-ai-delivery.md
 
 Needs user approval (see delivery doc): live token encryption key provisioning, admin123@oryxa.app account decision, WhatsApp connect, deploy/rotation in production.
+- Coordinator (8:30pm): admin123 account deactivated in Firebase, 2 operator accounts provisioned via apps/api/scripts/provision-operators.ts, ADMIN_EMAILS set in env, verifyIdToken checkRevoked=true (commit 41b966d). Do NOT touch accounts/env.

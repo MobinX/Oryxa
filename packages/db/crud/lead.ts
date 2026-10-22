@@ -230,6 +230,25 @@ export async function deleteLead(businessId: string, leadId: string) {
   return { deleted: true };
 }
 
+/** The lead a (channel, platform user) belongs to; null when the pair has none. */
+export async function findLeadId(channelId: string, platformUserId: string): Promise<string | null> {
+  const row = await db.query.leads.findFirst({
+    where: and(eq(leads.channelId, channelId), eq(leads.platformUserId, platformUserId), isNull(leads.deletedAt)),
+    columns: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+/** STOP/START (spec J): consent is a single boolean plus the instant it was last set. */
+export async function setLeadConsent(leadId: string, consent: boolean) {
+  const [row] = await db
+    .update(leads)
+    .set({ consent, consentAt: consent ? new Date() : null, updatedAt: new Date() })
+    .where(eq(leads.id, leadId))
+    .returning({ id: leads.id, consent: leads.consent });
+  return row ?? null;
+}
+
 export async function listLeadEvents(leadId: string) {
   return db.query.leadEvents.findMany({
     where: eq(leadEvents.leadId, leadId),

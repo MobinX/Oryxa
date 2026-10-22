@@ -22,6 +22,7 @@ import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
+import { waWebhookRouter } from '@api/webhooks/whatsapp';
 import { internalRouter } from '@api/routes/internal/run';
 import { audioCheckRouter } from '@api/routes/internal/audio-check';
 import { companiesRouter } from '@api/routes/companies';
@@ -108,6 +109,7 @@ app.route('/api2', logsRouter);
 app.route('/api2', adminRouter);
 app.route('/api2', adminPlansRouter);
 app.route('/webhooks', fbWebhookRouter);
+app.route('/webhooks', waWebhookRouter);
 app.route('/internal', internalRouter);
 app.route('/internal', audioCheckRouter);
 

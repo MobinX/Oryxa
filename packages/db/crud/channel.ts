@@ -226,6 +226,26 @@ export async function getChannelByPlatformAccountId(
   return row;
 }
 
+/**
+ * Full channel row for a platform account id, across businesses — the webhook resolver for
+ * a platform (WhatsApp) whose envelope carries only the account id. Reveals the token.
+ */
+export async function findChannelByPlatformAccountId(
+  platform: 'whatsapp',
+  platformChannelId: string,
+) {
+  const row = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.platform, platform),
+      eq(channels.platformChannelId, platformChannelId),
+      isNull(channels.deletedAt),
+    ),
+    with: { agent: true },
+  });
+  revealChannelToken(row);
+  return row ?? null;
+}
+
 export async function getChannelByBusinessPlatformChannelId(
   businessId: string,
   platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',

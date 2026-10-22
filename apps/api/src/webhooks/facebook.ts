@@ -795,6 +795,7 @@ async function handleDetailsPostback(
       await createMessage({
         conversationId: conversation.id,
         from: 'self',
+        sentBy: 'ai',
         content: [
           `Showing product details of ${product.id}, ${product.name}`,
           `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
@@ -843,6 +844,7 @@ async function handleDetailsPostback(
     await createMessage({
       conversationId: conversation.id,
       from: 'self',
+      sentBy: 'ai',
       content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
       state: 'done',
     });

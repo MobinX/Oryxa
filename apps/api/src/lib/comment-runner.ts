@@ -127,6 +127,18 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
   }
   const platform = thread.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
+  // AI Studio comment gate (spec B/F): a channel with comments switched off never answers —
+  // the runner claims nothing and the comments stay pending for a human.
+  const { resolveChannelAiConfig } = await import('@repo/db/crud/ai-config');
+  const aiConfig = await resolveChannelAiConfig(thread.channel.id);
+  if (!aiConfig.aiCommentsEnabled || !aiConfig.aiEnabled) {
+    console.log(
+      `[comment-runner] comments disabled on channel ${thread.channel.id} — no AI reply`,
+    );
+    emitAnomaly('ai_disabled', { detail: `${commentThreadId}:comments_off` });
+    return;
+  }
+
   const claimed = await claimCommentThreadForRun(
     thread.id,
     new Date(Date.now() - STALE_RUNNER_MS),
@@ -215,6 +227,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     ];
 
     const catalogSummary = catalog.summary;
+    // The comment answer sees the same AI Studio context (spec B/F): profile, FAQ, capacity.
+    const { buildAiContext } = await import('@api/lib/ai-context');
+    const aiProfileBlock = (await buildAiContext({ channelId: thread.channel.id, businessId: thread.businessId })).block;
     emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
@@ -238,7 +253,8 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     );
 
     const agent = new Agent({
-      systemPrompt: answering.systemPrompt,
+      systemPrompt:
+        answering.systemPrompt + (aiProfileBlock ? `\n\n${aiProfileBlock}` : ''),
       postContext,
       business: thread.business ?? { id: thread.businessId, name: 'Store' },
       history,

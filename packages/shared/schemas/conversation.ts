@@ -19,11 +19,15 @@ export const conversationListItemSchema = z.object({
   customerPlatformId: z.string(),
   createdAt: timestampSchema,
   pageName: z.string().nullable().optional(),
+  /** True when an operator has taken over (spec E); the AI stays off until resumed. */
+  aiPaused: z.boolean().optional(),
 });
 
 export const messageSchema = z.object({
   id: uuidSchema,
   from: messageFromSchema,
+  /** For `self` rows: `ai` or `human` — null on legacy rows and customer rows. */
+  sentBy: z.enum(['ai', 'human']).nullable().optional(),
   content: z.string(),
   contentType: z.string(),
   time: timestampSchema,
