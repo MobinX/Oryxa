@@ -16,8 +16,8 @@ vi.mock('@api/lib/agent-runner', () => ({
   runAgentForConversation: vi.fn(),
 }));
 
-const markReadMock = vi.fn(async () => undefined);
-const sendTextMock = vi.fn(async () => undefined);
+const markReadMock = vi.fn(async (..._args: unknown[]) => undefined);
+const sendTextMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/whatsapp', () => ({
   markWhatsAppRead: (...args: unknown[]) => markReadMock(...args),
   sendWhatsAppText: (...args: unknown[]) => sendTextMock(...args),

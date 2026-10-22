@@ -145,7 +145,7 @@ describe('lead crud', () => {
     const identity = {
       businessId: business.id,
       channelId: channel.id,
-      platform: 'whatsapp',
+      platform: 'whatsapp' as const,
       platformUserId: 'WA_USER_1',
     };
     const first = await upsertLeadFromTurn(identity, { name: 'Rina', phone: '+880 1712 111 222' });
