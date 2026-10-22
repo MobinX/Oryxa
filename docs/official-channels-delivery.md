@@ -1,6 +1,6 @@
 # Official Channels — Delivery
 
-Branch `admin-ai-channels`; commits from `a2e5988` (plan) through `e2e8c76`. Working tree clean.
+Branch `admin-ai-channels`; commits from `a2e5988` (plan) through `d07c03f`. Working tree clean.
 Verification at delivery: **704/704 vitest** (80 files), `bun run build` (api + web) **green**,
 tsc findings verified as a strict subset of the pre-existing baseline (no NEW errors in touched
 files; 17 baseline errors were fixed in passing), `npx playwright test e2e/admin-channels.spec.ts`
@@ -104,6 +104,32 @@ ratios already keep their label (`not counted`).
   `/admin/channels`, `/admin/official`, `/admin/official/inbox`, `/admin/official/tickets`,
   `/admin/official/prospects`; asserts no 500-card anywhere, no TODO/placeholder text on the
   dashboard, and the official page's real controls + honest TikTok note.
+
+### Mercury review follow-up — commit `d07c03f`
+`docs/official-channels-review.md` findings addressed where they were real:
+- **S1 takeover race**: `claimOfficialConversationForAgentRun()` reads `ai_paused` *inside*
+  the atomic claim (idle ['done','pending'] ∧ ¬paused, or a stale `working` claim with the
+  age test — the same recovery semantics the store claim proved safe). An in-flight claim
+  from before a pause can never reach the model; the pre-check on `conv.aiPaused` remains
+  only as the fast path that names the reason.
+- **I1 side-effect gating**: prospect/ticket writes happen strictly after the
+  `inserted===false` early return and the claim, so webhook redelivery appends no
+  duplicate audit rows.
+- **I2 empty-string external ids** are normalized to undefined before insert (NULLs are
+  distinct in the unique index; `''` would collide across channels).
+- **M1 WA consent edge**: STOP/START messages on an official WhatsApp number record
+  `consent: false/true` on the prospect row directly (`actor: system`) — the old `leads`
+  table is never touched for official numbers, and no service text contradicts a
+  withdrawal. The AI's prompt-side consent relay and this webhook-level floor agree.
+- **S3**: the WhatsApp token is verified against the exact `phone_number_id` before any
+  row is written, stored through the same `encryptChannelToken` path as Facebook, and
+  never logged.
+- **S4/D1/D3/D4/M3**: strict JSON parse + fail-closed fallback (`needHuman`) deny malformed
+  output any side effect; `schema.ts` carries the nullable `business_id` in the same
+  commit as the migration; `upsertAdminChannel` refuses a store-held WhatsApp number
+  (409, same message as the FB path); `official_settings` is a real DB singleton
+  (unique index on constant); `tiktok` audited — it cannot be created by any flow here,
+  and the explicit platform unions were widened where drizzle's enum type flows through.
 
 ## 2. Honest limits and current edges
 - **Meta OAuth for admin channels**: FB Pages still connect via the existing
