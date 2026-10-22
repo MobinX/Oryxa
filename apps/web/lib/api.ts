@@ -8,7 +8,9 @@ import { redirect } from 'next/navigation';
  * hands them to the API — the same route a server render already takes.
  */
 const API_URL =
-  typeof window === 'undefined' ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001' : '';
+  typeof (globalThis as { window?: unknown }).window === 'undefined'
+    ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001'
+    : '';
 
 export class ApiError extends Error {
   constructor(
@@ -376,7 +378,7 @@ export async function uploadVariantImage(
     // B2 not configured — return null so the product can
     // still be saved without the image instead of failing the whole request.
     if (res.status === 503) return null;
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
     throw new ApiError(err.error ?? 'Upload failed', res.status);
   }
 

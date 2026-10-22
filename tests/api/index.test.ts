@@ -13,7 +13,7 @@ describe('API root', () => {
   it('GET / returns service info', async () => {
     const res = await app.request('/');
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { name: string; version: string };
     expect(body.name).toBe('Oryxa API');
     expect(body.version).toBe('1.0.0');
   });
@@ -21,7 +21,7 @@ describe('API root', () => {
   it('GET /doc returns OpenAPI spec', async () => {
     const res = await app.request('/doc');
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { openapi: string; info: { title: string } };
     expect(body.openapi).toBe('3.0.0');
     expect(body.info.title).toBe('Oryxa API');
   });
