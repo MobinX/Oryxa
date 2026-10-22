@@ -34,6 +34,7 @@ import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { tagContext } from '@api/lib/ctx';
+import { officialIngest } from '@api/lib/official/ingest';
 
 /** The webhook's own narration, on stdout, next to the event stream. */
 function fbLog(message: string, data?: unknown): void {
@@ -551,11 +552,51 @@ fbWebhookRouter.post('/instagram', receiveMetaWebhook);
  */
 const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/**
+ * Customer DMs on an admin-only page skip the store flow entirely and hand their turns to
+ * the Officials pipeline. Notification codes stay with the flow above — they are a
+ * redemption handshake, not a conversation, so they never enter an official thread (the
+ * pipeline's external-id dedupe would store them once as junk prose). Echoes, receipts and
+ * unsupported content are dropped exactly as the store flow drops them.
+ */
+async function processOfficialMessaging(
+  channel: {
+    id: string;
+    apiToken: string;
+    platform: ChannelPlatform;
+    platformChannelId: string;
+  },
+  events: MessagingEvent[],
+): Promise<void> {
+  const officialCtx = {
+    id: channel.id,
+    apiToken: channel.apiToken,
+    platform: channel.platform,
+    platformChannelId: channel.platformChannelId,
+  };
+  for (const ev of events) {
+    const text = ev.message?.text?.trim() ?? '';
+    if (text && NOTIFICATION_CODE.test(text.toLowerCase())) continue;
+    const inbound = await inboundFromMessagingEvent(ev, channel.platform);
+    if (!inbound || !inbound.text) continue;
+    if (inbound.images.length > 0) {
+      fbLog('official skip — image-only turn has no transcript', { senderId: inbound.senderId });
+      continue;
+    }
+    fbLog('official ingest dispatch', { senderId: inbound.senderId, textLen: inbound.text.length });
+    const verdict = await officialIngest(officialCtx, {
+      senderId: inbound.senderId,
+      text: inbound.text,
+      externalId: inbound.externalId ?? null,
+    });
+    fbLog('official ingest verdict', { senderId: inbound.senderId, ...verdict });
+  }
+}
+
 async function processMessengerNotificationCodes(
   channel: { id: string; apiToken: string },
   events: MessagingEvent[],
-): Promise<void> {
-  for (const ev of events) {
+): Promise<void> {  for (const ev of events) {
     const senderId = ev.sender?.id;
     const text = ev.message?.text?.trim().toLowerCase();
     if (!senderId || ev.message?.is_echo || !text) continue;
@@ -669,16 +710,21 @@ async function processEntries(
       agentId: channel.agentId ?? null,
     });
 
-    // The operator's page is a notification door, not a shop: its DMs carry codes and nothing
-    // else. No conversation, no agent, no quota — this intercept is the whole handling.
+    // The operator's page is a notification door and an official-inbox door: DMs carry
+    // notification codes and, beyond those, customer traffic for the Officials pipeline.
+    // No conversation with a store, no agent, no quota — this intercept is the whole handling.
     if (channel.isAdminOnly) {
-      fbLog('processEntries admin-only channel — notification codes only', {
+      fbLog('processEntries admin-only channel — notification codes + official inbox', {
         pageId: entry.id,
         messagingCount: messaging.length,
       });
       if (messaging.length > 0) {
         await processMessengerNotificationCodes(
           { id: channel.id, apiToken: channel.apiToken },
+          messaging,
+        );
+        await processOfficialMessaging(
+          { id: channel.id, apiToken: channel.apiToken, platform, platformChannelId: entry.id },
           messaging,
         );
       }

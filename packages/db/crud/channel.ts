@@ -388,10 +388,13 @@ export async function upsertAdminChannel(input: {
   platformChannelId: string;
   apiToken: string;
   pageName: string;
+  /** Official Channels connects WhatsApp admin inboxes too; the default keeps the old FB-only behavior. */
+  platform?: 'facebook' | 'instagram' | 'whatsapp';
 }): Promise<{ id: string; created: boolean }> {
+  const platform = input.platform ?? 'facebook';
   const live = await db.query.channels.findFirst({
     where: and(
-      eq(channels.platform, 'facebook'),
+      eq(channels.platform, platform),
       eq(channels.platformChannelId, input.platformChannelId),
       isNull(channels.deletedAt),
     ),
@@ -410,7 +413,7 @@ export async function upsertAdminChannel(input: {
 
   const removed = await db.query.channels.findFirst({
     where: and(
-      eq(channels.platform, 'facebook'),
+      eq(channels.platform, platform),
       eq(channels.platformChannelId, input.platformChannelId),
       isNotNull(channels.deletedAt),
     ),
@@ -434,7 +437,7 @@ export async function upsertAdminChannel(input: {
   const [created] = await db
     .insert(channels)
     .values({
-      platform: 'facebook',
+      platform,
       apiToken: encryptChannelToken(input.apiToken)!,
       platformChannelId: input.platformChannelId,
       extraInfo: JSON.stringify({ pageName: input.pageName }),

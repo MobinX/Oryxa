@@ -3,6 +3,7 @@ import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { tagContext } from '@api/lib/ctx';
 import { runInBackground } from '@api/lib/background';
 import { triggerAgentRun } from '@api/lib/agent-runner';
+import { officialIngest } from '@api/lib/official/ingest';
 import { hmacSha256Hex, timingSafeEquals } from '@repo/integrations/crypto';
 import { findChannelByPlatformAccountId, decryptChannelToken } from '@repo/db/crud/channel';
 import { getOrCreateConversation, processInboundMessage } from '@repo/db/crud/conversation';
@@ -168,12 +169,6 @@ async function processWaValue(value: WaMessagesValue): Promise<void> {
   }
 
   const businessId = resolved.businessId;
-  if (!businessId) {
-    // The operator's own number connected from the admin console:
-    // notification-only, like the admin Messenger page.
-    waLog('skip — channel has no business', { phoneNumberId });
-    return;
-  }
 
   const channelCtx = {
     id: resolved.id,
@@ -186,6 +181,12 @@ async function processWaValue(value: WaMessagesValue): Promise<void> {
 
   const firstContact = value.contacts?.[0];
   const contactName = firstContact?.profile?.name ?? null;
+
+  if (!businessId) {
+    // The operator's own number, connected from the admin console: Officials pipeline.
+    await processOfficialWaMessages(resolved, value, contactName);
+    return;
+  }
 
   for (const message of value.messages ?? []) {
     await processWaMessage(channelCtx, message, contactName);
@@ -295,10 +296,50 @@ async function processWaMessage(
   waLog('agent trigger', { externalId, verdict });
 }
 
+/**
+ * The operator's own WhatsApp number on an Official Channels channel: every customer
+ * message enters the Officials pipeline instead of a store flow. Text-only, like the
+ * store side — media is marked read and left for the human official inbox.
+ */
+async function processOfficialWaMessages(
+  resolved: { id: string; platformChannelId: string; apiToken: string },
+  value: WaMessagesValue,
+  contactName: string | null,
+): Promise<void> {
+  const officialCtx = {
+    id: resolved.id,
+    apiToken: decryptChannelToken(resolved.apiToken),
+    platform: 'whatsapp' as const,
+    platformChannelId: resolved.platformChannelId,
+  };
+  if (!value.messages?.length) return;
+
+  for (const message of value.messages) {
+    const waId = message.from;
+    const externalId = message.id;
+    const text = messageText(message);
+    if (!waId || !externalId || !text) {
+      if (externalId) {
+        await markWhatsAppRead(officialCtx.apiToken, officialCtx.platformChannelId, externalId).catch(() => undefined);
+        waLog('official skip — unsupported content', { id: externalId, type: message.type });
+      }
+      continue;
+    }
+    tagContext({ channelId: officialCtx.id });
+    const verdict = await officialIngest(officialCtx, {
+      senderId: waId,
+      text,
+      externalId,
+      customerName: contactName,
+    });
+    waLog('official ingest', { externalId, ...verdict });
+    await markWhatsAppRead(officialCtx.apiToken, officialCtx.platformChannelId, externalId).catch(() => undefined);
+  }
+}
+
 /** Mark read + send a service text that must never fail the webhook. */
 async function ackAndReply(
-  channelCtx: { apiToken: string; platformChannelId: string },
-  waId: string,
+  channelCtx: { apiToken: string; platformChannelId: string },  waId: string,
   messageId: string,
   text: string,
 ): Promise<void> {
