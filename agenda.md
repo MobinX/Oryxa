@@ -35,3 +35,9 @@ Self-test: web runs at http://127.0.0.1:3410 (after build) — use Playwright.
 - 12:20 orchestrator: worktree + branch created, raycast refs captured.
 - 13:28 Qoder: e2e/template-ui.spec.ts created (desktop 1440x900 + Android 412x915, overflow/hero/phone/nav checks, screenshots to /workspace/oryxa-shots/template-ui-*.png); 2 passed.
 - 13:55 GLM-5.3: task 2 restyle done in owned files only. page.tsx rebuilt on shared marketing shell: new components/marketing/{nav,footer,glow,cta-banner,primitives}.tsx (floating glass nav + mobile menu, footer glow hairline + columns, fixed ambient glow/grid bg, CTA banner, SectionHeading/Eyebrow/Reveal/GlowCard primitives, scoped `oo-*` styles with prefers-reduced-motion kill-switch). raycast-sections.tsx restyled: command-palette window (query filter + run feedback + kbd hints), pillar bento + capability mini-tiles, tabbed channel showcase, testimonials, stats strip. Pricing rebuilt (glass cards, gradient-border featured Pro, compare table, trust grid). HeroInteractiveAd stays right of hero (#live-demo); anchors #workflow/#pricing preserved. Verify: bun --filter web build passes; Playwright self-checks at 3411: h1/header/phone-demo visible, zero horizontal overflow at 1440 and 412, reduced-motion context shows content immediately (opacity 1). No commit/push. Note: port 3410 holds a pre-existing next dev server with 403 chunk errors (not touched); self-test used 3411.
+
+## 2026-10-22 template-ui v2 (home)
+- Removed "Less busywork. More momentum." section (raycast-sections.tsx deleted).
+- Added original HomeBento (12-col feature bento: Messenger AI, in-chat checkout, orders dashboard, courier tracking + 3-step row); hero phone demo kept.
+- Figma reference not fetched (no token); OpenCode glm/deepseek free + Qoder DeepSeek-Flash hung with no output, so coded directly.
+- Build OK, Playwright desktop+Android pass; :3410 restarted.

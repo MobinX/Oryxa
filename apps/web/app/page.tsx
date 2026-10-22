@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { COMPANY_NAME } from '@/lib/brand';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
-import { RaycastSections } from '@/components/raycast-sections';
+import { HomeBento } from '@/components/marketing/home-bento';
 import { MarketingNav } from '@/components/marketing/nav';
 import { MarketingFooter } from '@/components/marketing/footer';
 import { GlowBackground, MarketingStyles } from '@/components/marketing/glow';
@@ -284,7 +284,7 @@ export default function HomePage() {
         </section>
 
         {/* 2. WORKFLOW / FEATURE SECTIONS */}
-        <RaycastSections />
+        <HomeBento />
 
         {/* 3. PRICING */}
         <section id="pricing" className="relative overflow-hidden py-20 lg:py-24">
