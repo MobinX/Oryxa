@@ -203,7 +203,7 @@ describe('Official Channels admin API', () => {
   it('settings GET/PATCH round-trips availability', async () => {
     const res = await app.request('/api2/admin/official/settings', { headers: OPERATOR });
     expect(res.status).toBe(200);
-    const base = await res.json();
+    const base = (await res.json()) as { availability: string };
     expect(base.availability).toBe('available');
 
     const patch = await app.request('/api2/admin/official/settings', {
@@ -212,7 +212,7 @@ describe('Official Channels admin API', () => {
       body: JSON.stringify({ availability: 'taking_onboarding_requests', availabilityNote: 'backlog until August' }),
     });
     expect(patch.status).toBe(200);
-    expect((await patch.json()).availability).toBe('taking_onboarding_requests');
+    expect(((await patch.json()) as { availability: string }).availability).toBe('taking_onboarding_requests');
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -232,7 +232,7 @@ describe('Official Channels admin API', () => {
       body: JSON.stringify({ token: 'bad', phoneNumberId: 'PN_1' }),
     });
     expect(res.status).toBe(422);
-    expect((await res.json()).verified).toBe(false);
+    expect(((await res.json()) as { verified: boolean }).verified).toBe(false);
     spy.mockRestore();
   });
 
@@ -290,7 +290,7 @@ describe('Official Channels admin API', () => {
     // The ingest already wrote one conversation; admin list should show it, and
     // conversations belonging to stores (businessId not null) must not appear.
     const res = await app.request('/api2/admin/official/conversations?platform=facebook', { headers: OPERATOR });
-    const body = await res.json();
+    const body = (await res.json()) as { conversations: Array<{ channelId: string; status: string }>; available: boolean; reason: string };
     const ids = body.conversations.map((c: { channelId: string }) => c.channelId);
     expect(ids).toContain(id);
     for (const c of body.conversations) expect(c.status).toBeDefined();
@@ -303,12 +303,12 @@ describe('Official Channels admin API', () => {
       body: JSON.stringify({ budget: 4 }),
     });
     expect(patch.status).toBe(200);
-    expect((await patch.json()).weights.budget).toBe(4);
+    expect((((await patch.json()) as { weights: Record<string, number> }).weights.budget)).toBe(4);
   });
 
   it('tiktok surfaces honest limits', async () => {
     const res = await app.request('/api2/admin/official/tiktok', { headers: OPERATOR });
-    const body = await res.json();
+    const body = (await res.json()) as { conversations: Array<{ channelId: string; status: string }>; available: boolean; reason: string };
     expect(body.available).toBe(false);
     expect(body.reason).toContain('not yet');
   });

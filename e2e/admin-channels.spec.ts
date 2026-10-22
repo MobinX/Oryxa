@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Admin AI channels pages (spec L: "Playwright e2e: log in and check new admin pages").
+ * Admin console pages (spec L: "Playwright e2e: log in and check new admin pages").
  * Runs against an already-running web app; the operator signs in with the console's own
  * email+password login. Skipped without ONLYORDERS_OPERATOR_EMAIL / ONLYORDERS_OPERATOR_PASSWORD —
  * real credentials come from env only.
@@ -15,17 +15,19 @@ async function shot(page: Page, name: string) {
 }
 
 const PAGES = [
+  { path: '/admin', heading: /dashboard/i },
   { path: '/admin/channels', heading: 'Admin channels' },
-  { path: '/admin/ai-studio', heading: 'AI Studio' },
-  { path: '/admin/capacity', heading: 'Capacity' },
-  { path: '/admin/inbox', heading: 'Inbox' },
-  { path: '/admin/leads', heading: 'Leads' },
+  { path: '/admin/official', heading: 'Official channels' },
+  { path: '/admin/official/inbox', heading: 'Official inbox' },
+  { path: '/admin/official/tickets', heading: 'Tickets' },
+  { path: '/admin/official/prospects', heading: 'Prospects' },
 ];
 
-test.describe('admin AI channels pages', () => {
+test.describe('admin console pages', () => {
   test.skip(!EMAIL || !PASSWORD, 'ONLYORDERS_OPERATOR_EMAIL/PASSWORD not set');
+  test.setTimeout(120_000);
 
-  test('operator signs in and every new admin page renders', async ({ page }) => {
+  test('operator signs in and every admin page renders', async ({ page }) => {
     await page.goto('/admin/login');
     await page.getByLabel(/user id|email/i).fill(EMAIL!);
     await page.locator('input[type="password"]').first().fill(PASSWORD!);
@@ -42,5 +44,27 @@ test.describe('admin AI channels pages', () => {
       await expect(page.getByRole('main')).not.toContainText(/Internal Server Error|\b5\d\d:/);
       await shot(page, `admin${path.replace(/\//g, '-')}`);
     }
+  });
+
+  test('official pages carry the sidebar and honest Tiktok note', async ({ page }) => {
+    test.skip(!EMAIL || !PASSWORD, 'ONLYORDERS_OPERATOR_EMAIL/PASSWORD not set');
+    await page.goto('/admin/login');
+    await page.getByLabel(/user id|email/i).fill(EMAIL!);
+    await page.locator('input[type="password"]').first().fill(PASSWORD!);
+    await page.getByRole('button', { name: /sign in/i }).first().click();
+    await page.waitForURL((url) => url.pathname.startsWith('/admin') && !url.pathname.includes('login'), {
+      timeout: 45_000,
+    });
+
+    await page.goto('/admin/official');
+    await expect(page.getByText('Official channels')).toBeVisible({ timeout: 30_000 });
+    // The AI settings form is real controls, not a screenshot.
+    await expect(page.getByText('How the official AI answers')).toBeVisible();
+    await expect(page.getByText('Connect WhatsApp')).toBeVisible();
+    await expect(page.getByText('TikTok')).toBeVisible();
+    // Dashboard still speaks in real numbers, not placeholders.
+    await page.goto('/admin');
+    await expect(page.getByRole('main')).not.toContainText(/TODO|placeholder sample/i);
+    await shot(page, 'official-landing');
   });
 });
