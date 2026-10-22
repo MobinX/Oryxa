@@ -10,7 +10,8 @@ const server = {
 /** Default export for `bun --hot` so reload keeps API_PORT. */
 export default server;
 
+// Bun auto-serves the default export when this file is the entrypoint; calling Bun.serve here
+// as well bound the port twice (EADDRINUSE) outside --hot.
 if (import.meta.main) {
-  Bun.serve(server);
   console.log(`Oryxa API running on http://localhost:${port}`);
 }
