@@ -7,15 +7,14 @@ import { ApiError, listAdminLeads, type AdminLead } from '@/lib/api';
 export const instant = false;
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  new_lead: 'default',
-  qualifying: 'secondary',
+  new: 'default',
   qualified: 'default',
-  quoted: 'secondary',
-  booked: 'default',
-  rejected: 'destructive',
-  waitlisted: 'outline',
   awaiting_information: 'outline',
-  junk: 'destructive',
+  waitlisted: 'outline',
+  contact_requested: 'secondary',
+  contacted: 'secondary',
+  converted: 'default',
+  closed: 'destructive',
 };
 
 /**

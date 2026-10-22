@@ -1768,3 +1768,25 @@ export const listAdminAiComments = (token: string, businessId: string) =>
       latest: { id: string; from: string; content: string; time: string } | null;
     }>;
   }>(`/api2/admin/ai/businesses/${businessId}/comments`, { token, signInPath: null });
+
+export type AdminAiPreview = {
+  channelId: string;
+  platform: string;
+  businessId: string;
+  aiEnabled: boolean;
+  autoReply: boolean;
+  confidenceThreshold: string;
+  tone: string;
+  language: string;
+  lead: { id: string; status: string; name: string | null } | null;
+  block: string;
+};
+
+/** Sandbox preview (spec B): the context a customer turn would see — no send, no model call. */
+export const previewAdminAi = (token: string, channelId: string, leadId?: string) =>
+  apiFetch<AdminAiPreview>(`/api2/admin/ai/channels/${channelId}/ai-preview`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(leadId ? { leadId } : {}),
+    signInPath: null,
+  });

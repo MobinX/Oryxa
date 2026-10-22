@@ -25,6 +25,7 @@ import {
   listLeadEvents,
 } from '@repo/db/crud/lead';
 import { setConversationAiPaused, createMessage as createMessageRow } from '@repo/db/crud/conversation';
+import { buildAiContext } from '@api/lib/ai-context';
 import { verifyWhatsAppPhoneNumber, sendWhatsAppText } from '@repo/integrations/whatsapp';
 import { getPageIdForToken, sendMessage, isFacebookSendError } from '@repo/integrations/facebook';
 
@@ -150,6 +151,44 @@ adminAiRouter.patch('/admin/ai/channels/:channelId/config', async (c) => {
   const row = await saveChannelAiConfig(c.req.param('channelId'), body);
   if (!row) return c.json({ error: 'Channel not found' }, 404);
   return c.json({ channelId: row.channelId, updatedAt: row.updatedAt.toISOString() });
+});
+
+/**
+ * Sandbox preview (spec B: "sandbox test conversation before going live"). No message is
+ * sent anywhere and no model is called — this is exactly the context block a customer's
+ * next turn would put in front of the model, so an operator can see what the AI will
+ * know (and which sections will read as empty) before switching the channel on.
+ */
+adminAiRouter.post('/admin/ai/channels/:channelId/ai-preview', async (c) => {
+  const channel = await db.query.channels.findFirst({
+    where: and(eq(channels.id, c.req.param('channelId')), isNull(channels.deletedAt)),
+    columns: { id: true, platform: true, businessId: true },
+  });
+  if (!channel) return c.json({ error: 'Channel not found' }, 404);
+  if (!channel.businessId) {
+    return c.json({ error: 'Admin-only channels answer no customers — nothing to preview' }, 400);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const leadId = (body as { leadId?: string }).leadId ?? null;
+  const context = await buildAiContext({ channelId: channel.id, businessId: channel.businessId, leadId });
+  return c.json({
+    channelId: channel.id,
+    platform: channel.platform,
+    businessId: channel.businessId,
+    aiEnabled: context.config.aiEnabled,
+    autoReply: context.config.autoReply,
+    confidenceThreshold: context.config.confidenceThreshold,
+    tone: context.config.tone,
+    language: context.config.language,
+    lead: context.lead
+      ? {
+          id: context.lead.id,
+          status: context.lead.status,
+          name: context.lead.name,
+        }
+      : null,
+    block: context.block,
+  });
 });
 
 adminAiRouter.get('/admin/ai/businesses/:businessId/profile', async (c) => {

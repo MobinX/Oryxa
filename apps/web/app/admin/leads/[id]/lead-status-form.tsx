@@ -3,23 +3,24 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { updateAdminLead, type AdminLead } from '@/lib/api';
 
 const STATUSES = [
-  'new_lead',
-  'qualifying',
+  'new',
   'qualified',
-  'quoted',
-  'booked',
   'awaiting_information',
   'waitlisted',
-  'rejected',
-  'junk',
+  'contact_requested',
+  'contacted',
+  'converted',
+  'closed',
 ] as const;
 
 export function LeadStatusForm({ bearer, lead }: { bearer: string; lead: AdminLead }) {
   const [status, setStatus] = useState(lead.status);
+  const [assignee, setAssignee] = useState(lead.assigneeUserId ?? '');
   const [notes, setNotes] = useState(lead.notes ?? '');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,7 @@ export function LeadStatusForm({ bearer, lead }: { bearer: string; lead: AdminLe
     try {
       await updateAdminLead(bearer, lead.businessId, lead.id, {
         status,
+        assigneeUserId: assignee.trim() || null,
         notes: notes || undefined,
       });
       setMessage('Saved.');
@@ -53,6 +55,10 @@ export function LeadStatusForm({ bearer, lead }: { bearer: string; lead: AdminLe
             <option key={value} value={value}>{value}</option>
           ))}
         </select>
+      </label>
+      <label className="space-y-1 text-sm">
+        <span>Assignee (operator user id)</span>
+        <Input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="uuid or empty to unassign" />
       </label>
       <label className="space-y-1 text-sm">
         <span>Notes</span>

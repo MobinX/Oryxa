@@ -125,7 +125,10 @@ function observedFill(existing: LeadRow | null, observed: {
   fill('phone', observed.phone);
   fill('email', observed.email);
   fill('interest', observed.interest);
-  if (observed.consent && !(existing && existing.consent)) {
+  // Consent is sticky once explicitly set (spec J): an operator-visible opt-out stays
+  // put and only the webhook's START path or an operator flips it back. Observed consent
+  // applies to a never-addressed row (consent not explicitly set before).
+  if (observed.consent && (existing ? !existing.consentAt : true)) {
     patch.consent = true;
     patch.consentAt = new Date();
   }
@@ -239,11 +242,13 @@ export async function findLeadId(channelId: string, platformUserId: string): Pro
   return row?.id ?? null;
 }
 
-/** STOP/START (spec J): consent is a single boolean plus the instant it was last set. */
+/** STOP/START (spec J): consent is a single boolean plus the instant it was last set —
+ *  both directions stamp consentAt, so a "never addressed" row is distinguishable from
+ *  an explicit opt-out. */
 export async function setLeadConsent(leadId: string, consent: boolean) {
   const [row] = await db
     .update(leads)
-    .set({ consent, consentAt: consent ? new Date() : null, updatedAt: new Date() })
+    .set({ consent, consentAt: new Date(), updatedAt: new Date() })
     .where(eq(leads.id, leadId))
     .returning({ id: leads.id, consent: leads.consent });
   return row ?? null;
