@@ -2,8 +2,9 @@
 
 Branch `admin-ai-channels`, implementer GLM-5.3-flash via OpenCode, 2026-10-22.
 Status: phases A–K of `docs/admin-ai-channels-spec.md` implemented and verified locally.
-Done = 84 test files / 730 tests green (`tests/neon` excluded), web build + api bundle build green,
+Done = 85 test files / 732 tests green (`tests/neon` excluded), web build + api bundle build green,
 no new typecheck errors in touched files (repo total 201 < baseline 207).
+Lint: no lint script is configured anywhere in this monorepo — the gate does not exist to run.
 
 ## What shipped (commits, in order)
 
@@ -21,6 +22,7 @@ no new typecheck errors in touched files (repo total 201 < baseline 207).
 | `0c29bac` | type-clean test fixtures |
 | `11531a0` | follow-up pass: AI Studio sandbox preview (`POST /admin/ai/channels/:id/ai-preview` — the context block a customer turn would get, nothing sent, no model call), lead assignee UI, consent stickiness (an explicit opt-out survives every later observed consent; only the webhook START path or an operator re-enables), AI scenarios 1–12 tests (stubbed at agent boundary), e2e spec for the new admin pages |
 | `follow-ups` | bundle fix: `@repo/integrations` package exports gained `./crypto` and `./whatsapp` (`bun build` resolves via package exports, not tsconfig paths); admin-ai imports moved from `@db/*` to the repo-wide `@repo/db/*` convention — `bun run build:api` is now green (it was red before) |
+| `96/096df82…` | final gap pass: comments overview card in AI Studio (spec F, endpoint existed without UI), lead status filters + CSV respecting filters (spec D), strict channel identity verify — a facebook/instagram token must resolve to the *stored* page id, not just any identity (spec A "never show connected unless verified"); verify tests |
 
 ## Env (names only — values live in git-ignored env files)
 
