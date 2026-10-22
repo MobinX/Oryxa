@@ -2,8 +2,8 @@
 
 Branch `admin-ai-channels`, implementer GLM-5.3-flash via OpenCode, 2026-10-22.
 Status: phases A–K of `docs/admin-ai-channels-spec.md` implemented and verified locally.
-Done = 83 test files / 725 tests green (`tests/neon` excluded), web build green, no new typecheck
-errors in touched files (repo total 201 < baseline 207).
+Done = 84 test files / 730 tests green (`tests/neon` excluded), web build + api bundle build green,
+no new typecheck errors in touched files (repo total 201 < baseline 207).
 
 ## What shipped (commits, in order)
 
@@ -19,6 +19,8 @@ errors in touched files (repo total 201 < baseline 207).
 | `5cf3fdb` | web UI: AI Studio (`/admin/ai-studio`), Capacity (`/admin/capacity`), Inbox (`/admin/inbox`), Leads (`/admin/leads` + detail), WhatsApp connect + per-channel token verify (`/admin/channels`), new tabs |
 | `58e8f7b` | tests + WA webhook context fix (`tagContext` from `@api/lib/ctx`) + phone-context guard in lead capture |
 | `0c29bac` | type-clean test fixtures |
+| `11531a0` | follow-up pass: AI Studio sandbox preview (`POST /admin/ai/channels/:id/ai-preview` — the context block a customer turn would get, nothing sent, no model call), lead assignee UI, consent stickiness (an explicit opt-out survives every later observed consent; only the webhook START path or an operator re-enables), AI scenarios 1–12 tests (stubbed at agent boundary), e2e spec for the new admin pages |
+| `follow-ups` | bundle fix: `@repo/integrations` package exports gained `./crypto` and `./whatsapp` (`bun build` resolves via package exports, not tsconfig paths); admin-ai imports moved from `@db/*` to the repo-wide `@repo/db/*` convention — `bun run build:api` is now green (it was red before) |
 
 ## Env (names only — values live in git-ignored env files)
 
@@ -58,11 +60,17 @@ errors in touched files (repo total 201 < baseline 207).
 
 ## Known gaps / blockers
 
+- **Playwright e2e** (`e2e/admin-channels.spec.ts`) is written but environment-gated: it needs a
+  running web app and `ONLYORDERS_OPERATOR_EMAIL/PASSWORD` (real operator credentials come from
+  env only), so it could not execute in this worktree. Run after `bun run dev:web` with env set.
 - **Real WhatsApp credentials**: package tests use mocked Meta endpoints; end-to-end send
   needs a real WABA token/number (owner).
 - `messages` template sending is implemented but not exercised against real Meta (sendWhatsAppTemplate).
 - Capacity counter edits while conversations run: reservations are per-business slots, not per-lead
   prompts; a lead auto-waitlist path (waitlistMode auto → propose joining) is prompt-level only.
+- Consent semantics (follow-up): `consent.at` is stamped in both directions, so "never
+  addressed" is distinguishable from an explicit opt-out; an opt-out is sticky — observed
+  consent from a later turn never re-enables it (only the webhook START edge or an operator).
 - `reconcileLeadFromReply` exists and is tested but is not yet wired into the agent tool loop
   (deterministic webhook-side capture is wired; the prompt-side lead questions flow through the
   AI context block instead).
