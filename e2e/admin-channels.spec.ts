@@ -38,8 +38,8 @@ test.describe('admin AI channels pages', () => {
       const res = await page.goto(path);
       expect(res?.status(), `${path} status`).toBeLessThan(400);
       await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 30_000 });
-      // Either data or an honest empty/error card — never a blank screen.
-      await expect(page.getByText(/No .* yet|Save|Search|Loading|reached|Connect|unavailable|error/i).first()).toBeVisible();
+      // The page body must not be a server-error card (e.g. a 500 from the API).
+      await expect(page.getByRole('main')).not.toContainText(/Internal Server Error|\b5\d\d:/);
       await shot(page, `admin${path.replace(/\//g, '-')}`);
     }
   });
