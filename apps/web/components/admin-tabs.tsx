@@ -2,12 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bot, CreditCard, Cpu, FileText, LayoutDashboard, Radio, ScrollText, Settings } from 'lucide-react';
+import { Bot, CreditCard, Cpu, FileText, Inbox, LayoutDashboard, Radio, ScrollText, Settings, Sparkles, Users } from 'lucide-react';
 
 const TABS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/plans', label: 'Plans', icon: CreditCard, exact: true },
   { href: '/admin/channels', label: 'Channels', icon: Radio, exact: false },
+  { href: '/admin/ai-studio', label: 'AI Studio', icon: Sparkles, exact: false },
+  { href: '/admin/capacity', label: 'Capacity', icon: Users, exact: false },
+  { href: '/admin/inbox', label: 'Inbox', icon: Inbox, exact: false },
+  { href: '/admin/leads', label: 'Leads', icon: Users, exact: false },
   { href: '/admin/token-analytics', label: 'Tokens', icon: Cpu, exact: false },
   { href: '/admin/default-agent', label: 'Default', icon: FileText, exact: true },
   { href: '/admin/agent-playground', label: 'Playground', icon: Bot, exact: false },

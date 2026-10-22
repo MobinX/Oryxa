@@ -1457,3 +1457,314 @@ export type CustomerHistory = {
 
 export const getCustomer = (token: string, businessId: string, customerId: string) =>
   apiFetch<CustomerHistory>(`/api/v1/${businessId}/customers/${customerId}`, { token });
+
+/* ---------- Admin AI console (/api2/admin/ai, spec A-F) ---------- */
+
+export type AdminAiChannel = {
+  id: string;
+  platform: string;
+  platformChannelId: string;
+  businessId: string | null;
+  businessName: string | null;
+  isAdminOnly: boolean;
+  createdAt: string;
+  aiEnabled: boolean;
+  aiCommentsEnabled: boolean;
+};
+
+export const listAdminAiChannels = (token: string) =>
+  apiFetch<{ channels: AdminAiChannel[] }>('/api2/admin/ai/channels', { token, signInPath: null });
+
+export type AdminAiChannelConfig = {
+  channelId: string;
+  platform: string;
+  businessId: string | null;
+  config: AdminAiChannelRow | null;
+};
+
+export type AdminAiChannelRow = {
+  id: string;
+  channelId: string;
+  aiEnabled: boolean;
+  aiCommentsEnabled: boolean;
+  privateRepliesEnabled: boolean;
+  autoReply: boolean;
+  confidenceThreshold: string;
+  maxReplyLength: number;
+  tone: string | null;
+  language: string | null;
+  perChannelInstructions: string | null;
+  leadQuestions: string[];
+  commentBehavior: Record<string, string> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const getAdminAiChannelConfig = (token: string, channelId: string) =>
+  apiFetch<AdminAiChannelConfig>(`/api2/admin/ai/channels/${channelId}/config`, { token, signInPath: null });
+
+export const saveAdminAiChannelConfig = (token: string, channelId: string, data: Record<string, unknown>) =>
+  apiFetch<{ channelId: string; updatedAt: string }>(`/api2/admin/ai/channels/${channelId}/config`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export type AdminBusinessProfile = {
+  id?: string;
+  businessId?: string;
+  displayName?: string | null;
+  description?: string | null;
+  productsServices?: string | null;
+  audience?: string | null;
+  serviceAreas?: string | null;
+  pricingPackages?: string | null;
+  hoursHolidays?: string | null;
+  contacts?: string | null;
+  website?: string | null;
+  socials?: string | null;
+  limitations?: string | null;
+  policies?: string | null;
+};
+
+export const getAdminBusinessProfile = (token: string, businessId: string) =>
+  apiFetch<{ profile: AdminBusinessProfile | null }>(
+    `/api2/admin/ai/businesses/${businessId}/profile`,
+    { token, signInPath: null },
+  );
+
+export const saveAdminBusinessProfile = (token: string, businessId: string, data: Record<string, unknown>) =>
+  apiFetch<{ updatedAt: string }>(`/api2/admin/ai/businesses/${businessId}/profile`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export type AdminKnowledgeEntry = {
+  id: string;
+  question: string;
+  answer: string;
+  tags: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const listAdminKnowledge = (token: string, businessId: string) =>
+  apiFetch<{ entries: AdminKnowledgeEntry[] }>(`/api2/admin/ai/businesses/${businessId}/knowledge`, {
+    token,
+    signInPath: null,
+  });
+
+export const createAdminKnowledge = (token: string, businessId: string, data: { question: string; answer: string; active?: boolean }) =>
+  apiFetch<{ id: string }>(`/api2/admin/ai/businesses/${businessId}/knowledge`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export const updateAdminKnowledge = (token: string, businessId: string, entryId: string, data: Record<string, unknown>) =>
+  apiFetch<{ id: string }>(`/api2/admin/ai/knowledge/${entryId}?businessId=${businessId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export const deleteAdminKnowledge = (token: string, businessId: string, entryId: string) =>
+  apiFetch<{ deleted: boolean }>(`/api2/admin/ai/knowledge/${entryId}?businessId=${businessId}`, {
+    method: 'DELETE',
+    token,
+    signInPath: null,
+  });
+
+export type AdminCapacity = {
+  businessId: string;
+  acceptingNewCustomers: boolean;
+  maxCapacity: number;
+  availableCapacity: number;
+  waitlistMode: 'off' | 'auto' | 'manual';
+  fullCapacityMessage: string | null;
+  followUpInfo: string | null;
+  preferredContact: string | null;
+  etaText: string | null;
+  notes: string | null;
+};
+
+export const getAdminCapacity = (token: string, businessId: string) =>
+  apiFetch<AdminCapacity>(`/api2/admin/ai/businesses/${businessId}/capacity`, { token, signInPath: null });
+
+export const saveAdminCapacity = (token: string, businessId: string, data: Record<string, unknown>) =>
+  apiFetch<AdminCapacity>(`/api2/admin/ai/businesses/${businessId}/capacity`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export type AdminLead = {
+  id: string;
+  businessId: string;
+  platform: string;
+  name: string | null;
+  businessName: string | null;
+  phone: string | null;
+  email: string | null;
+  contactMethod?: string | null;
+  requirements?: string | null;
+  interest?: string | null;
+  timeframe?: string | null;
+  status: string;
+  consent: boolean;
+  assigneeUserId?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const listAdminLeads = (
+  token: string,
+  filters: { businessId?: string; search?: string; status?: string; limit?: number; offset?: number } = {},
+) => {
+  const params = new URLSearchParams();
+  const entries: Record<string, string | number | undefined> = { ...filters };
+  for (const [key, value] of Object.entries(entries)) {
+    if (value !== undefined && value !== '') params.set(key, encodeURIComponent(String(value)));
+  }
+  return apiFetch<{ leads: AdminLead[] }>(`/api2/admin/ai/leads${params.size ? `?${params}` : ''}`, {
+    token,
+    signInPath: null,
+  });
+};
+
+export const getAdminLead = (token: string, businessId: string, leadId: string) =>
+  apiFetch<{ lead: AdminLead; events: AdminLeadEvent[] }>(
+    `/api2/admin/ai/leads/${leadId}?businessId=${encodeURIComponent(businessId)}`,
+    { token, signInPath: null },
+  );
+
+export const updateAdminLead = (token: string, businessId: string, leadId: string, data: Record<string, unknown>) =>
+  apiFetch<{ id: string }>(`/api2/admin/ai/leads/${leadId}?businessId=${encodeURIComponent(businessId)}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export const exportAdminLeadsCsvUrl = (businessId: string) =>
+  `/api2/admin/ai/leads/export.csv?businessId=${encodeURIComponent(businessId)}`;
+
+export type AdminLeadEvent = {
+  id: string;
+  kind: string;
+  actor: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AdminInboxConversation = {
+  id: string;
+  businessId: string;
+  channelId: string;
+  platform: string;
+  channelLabel: string;
+  customerName: string | null;
+  customerPlatformId: string;
+  lastMessageState: string;
+  aiPaused: boolean;
+  lastStateAt: string;
+};
+
+export const listAdminInbox = (
+  token: string,
+  filters: { businessId?: string; channelId?: string; platform?: string } = {},
+) => {
+  const params = new URLSearchParams();
+  if (filters.businessId) params.set('businessId', filters.businessId);
+  if (filters.channelId) params.set('channelId', filters.channelId);
+  if (filters.platform) params.set('platform', filters.platform);
+  return apiFetch<{ conversations: AdminInboxConversation[] }>(
+    `/api2/admin/ai/inbox${params.size ? `?${params}` : ''}`,
+    { token, signInPath: null },
+  );
+};
+
+export type AdminInboxThread = {
+  conversation: {
+    id: string;
+    businessId: string;
+    businessName: string | null;
+    channelId: string;
+    platform: string | null;
+    customerName: string | null;
+    customerPlatformId: string;
+    lastMessageState: string;
+    aiPaused: boolean;
+  };
+  lead: AdminLead | null;
+  messages: Array<{
+    id: string;
+    from: 'self' | 'customer';
+    sentBy: 'ai' | 'human' | null;
+    content: string;
+    contentType: string;
+    time: string;
+    state: string;
+  }>;
+};
+
+export const getAdminInboxThread = (token: string, conversationId: string) =>
+  apiFetch<AdminInboxThread>(`/api2/admin/ai/inbox/${conversationId}`, { token, signInPath: null });
+
+export const replyAdminInbox = (token: string, conversationId: string, data: { content: string; pauseAi?: boolean }) =>
+  apiFetch<{ sent: boolean }>(`/api2/admin/ai/inbox/${conversationId}/reply`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export const setAdminInboxAi = (token: string, conversationId: string, paused: boolean) =>
+  apiFetch<{ id: string; aiPaused: boolean }>(`/api2/admin/ai/inbox/${conversationId}/takeover`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ paused }),
+    signInPath: null,
+  });
+
+export const connectAdminWhatsapp = (token: string, data: { token: string; phoneNumberId: string; businessId: string }) =>
+  apiFetch<{
+    id?: string;
+    status?: string;
+    displayPhoneNumber?: string | null;
+    verifiedName?: string | null;
+    verified?: boolean;
+    error?: string;
+  }>('/api2/admin/ai/whatsapp/connect', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+    signInPath: null,
+  });
+
+export const verifyAdminAiChannel = (token: string, channelId: string) =>
+  apiFetch<{ verified: boolean; error?: string }>(`/api2/admin/ai/channels/${channelId}/verify`, {
+    token,
+    signInPath: null,
+  });
+
+export const listAdminAiComments = (token: string, businessId: string) =>
+  apiFetch<{
+    comments: Array<{
+      id: string;
+      platform: string;
+      platformItemId: string;
+      commenterName: string | null;
+      lastCommentState: string;
+      createdAt: string;
+      latest: { id: string; from: string; content: string; time: string } | null;
+    }>;
+  }>(`/api2/admin/ai/businesses/${businessId}/comments`, { token, signInPath: null });
