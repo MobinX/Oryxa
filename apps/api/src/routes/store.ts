@@ -1,3 +1,4 @@
+import { createRateLimiter } from '@api/lib/rate-limit';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   publicStoreSchema,
@@ -71,8 +72,18 @@ const checkoutRoute = createRoute({
   },
 });
 
+const checkoutRateLimited = createRateLimiter(Number(process.env.CHECKOUT_RATE_LIMIT_PER_MIN || 10), 60_000);
+
 storeRouter.openapi(checkoutRoute, async (c) => {
   const slug = c.req.param('slug');
+  const ip =
+    c.req.header('cf-connecting-ip') ||
+    c.req.header('x-real-ip') ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
+  if (checkoutRateLimited(`${ip}|${slug}`)) {
+    return c.json({ error: 'Too many checkout attempts, try again in a minute' }, 429);
+  }
   const body = c.req.valid('json');
   try {
     const result = await createPublicCheckout(slug, body);

@@ -256,12 +256,42 @@ export async function getOrdersByPlatformId(
   return { orders: items, hasMore, offset, limit };
 }
 
+/** Allowed state transitions mapping from->to[] */
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending: ['acknowledged', 'onDelivery', 'done'],
+  acknowledged: ['onDelivery', 'pending'],
+  onDelivery: ['done', 'acknowledged'],
+  done: [],
+};
+
+/** OrderStateTransitionError with typed error mapped to 409 */
+export class OrderStateTransitionError extends Error {
+  constructor(message: string, readonly allowedStates?: string[]) {
+    super(message);
+    this.name = 'OrderStateTransitionError';
+  }
+}
+
+export function validateTransition(fromState: string, toState: string): void {
+  if (fromState === toState) return; // idempotent re-submit is a no-op, not an error
+  const allowed = ALLOWED_TRANSITIONS[fromState];
+  if (!allowed || !allowed.includes(toState)) {
+    throw new OrderStateTransitionError(
+      `Invalid state transition from ${fromState} to ${toState}`,
+      allowed,
+    );
+  }
+}
+
 export async function updateOrderState(businessId: string, orderId: string, input: unknown) {
   const parsed = updateOrderStateInputSchema.parse(input);
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
+
+  // Validate transition before applying
+  validateTransition(order.state, parsed.state);
 
   const [updated] = await db
     .update(orders)
@@ -278,6 +308,10 @@ export async function updateOrder(businessId: string, orderId: string, input: un
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
+
+  if ((parsed as { state?: string }).state !== undefined) {
+    validateTransition(order.state, (parsed as { state: string }).state);
+  }
 
   const fields: Record<string, unknown> = { ...parsed };
   if (parsed.count !== undefined && parsed.count !== order.count) {
@@ -350,18 +384,24 @@ export async function deleteOrder(businessId: string, orderId: string) {
   });
   if (!order) return null;
 
-  // Only unfulfilled orders still hold reserved stock. `done` orders already
-  // consumed those units, so deleting the record must not put them back.
-  if (order.variantId && order.state !== 'done') {
+  // Only unfulfilled orders (pending/acknowledged) still hold reserved stock; onDelivery/done
+  // units are already gone. neon-http has no interactive transactions, so the soft-delete is a
+  // guarded UPDATE first and stock is returned only by the request that actually deleted the row:
+  // a concurrent or repeated delete cannot restock twice.
+  const canRestock = ['pending', 'acknowledged'].includes(order.state);
+
+  const [deleted] = await db
+    .update(orders)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(orders.id, orderId), isNull(orders.deletedAt)))
+    .returning({ id: orders.id });
+  if (!deleted) return null;
+
+  if (canRestock && order.variantId) {
     await db
       .update(variants)
       .set({ stock: sql`${variants.stock} + ${order.count}` })
       .where(eq(variants.id, order.variantId));
   }
-
-  await db
-    .update(orders)
-    .set({ deletedAt: new Date() })
-    .where(eq(orders.id, orderId));
   return { deleted: true };
 }

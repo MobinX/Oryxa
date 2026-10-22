@@ -1,3 +1,4 @@
+import { isOperatorEmail } from '@api/lib/operators';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   createBusinessInputSchema,
@@ -46,7 +47,7 @@ businessesRouter.openapi(listRoute, async (c) => {
 
   // Operators always have access to the sandbox store
   const userEmail = user.email?.toLowerCase().trim();
-  const isOperator = userEmail === 'admin123@oryxa.app' || userEmail === 'mobin.devx@gmail.com' || Boolean(process.env.ADMIN_EMAILS?.includes(userEmail ?? ''));
+  const isOperator = isOperatorEmail(userEmail);
   if (isOperator && !rows.some((b) => b.slug === 'oryxa-sandbox')) {
     const { getBusinessBySlug } = await import('@repo/db/crud/business');
     const sandbox = await getBusinessBySlug('oryxa-sandbox');

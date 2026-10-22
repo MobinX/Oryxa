@@ -3,596 +3,508 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { COMPANY_NAME } from '@/lib/brand';
-import { OnlyOrdesLogo } from '@/components/sidebar';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
-import { MotionVideoAd } from '@/components/motion-video-ad';
+import { HomeBento } from '@/components/marketing/home-bento';
+import { MarketingNav } from '@/components/marketing/nav';
+import { MarketingFooter } from '@/components/marketing/footer';
+import { GlowBackground, MarketingStyles } from '@/components/marketing/glow';
+import { CtaBanner } from '@/components/marketing/cta-banner';
+import { Eyebrow, Reveal, SectionHeading } from '@/components/marketing/primitives';
 import {
-  Sparkles,
   ArrowRight,
+  BarChart3,
   Check,
-  ChevronDown,
-  MessageSquare,
-  Zap,
-  ShoppingBag,
-  Calendar,
   Clock,
   Layers,
-  BarChart3,
-  Users,
-  Search,
-  Bell,
   Lock,
-  Server,
-  Headphones,
   ShieldCheck,
-  Globe,
-  Share2,
+  ShoppingBag,
+  Sparkles,
 } from 'lucide-react';
 
+const HERO_PROOF_POINTS = [
+  { icon: Clock, title: 'Instant replies', copy: 'AI answers customers 24/7' },
+  { icon: Layers, title: 'One inbox', copy: 'Every channel, zero tab chaos' },
+  { icon: ShoppingBag, title: 'Chat to order', copy: 'Receipts → courier handoff' },
+  { icon: BarChart3, title: 'Auto posts', copy: 'Drops published on schedule' },
+];
+
+const TRUST_POINTS = [
+  {
+    icon: Lock,
+    tone: 'bg-violet-500/15 text-violet-300',
+    title: 'Secure access',
+    copy: 'We only request the permissions needed to run your accounts.',
+  },
+  {
+    icon: ShieldCheck,
+    tone: 'bg-sky-500/15 text-sky-300',
+    title: 'Your data, your control',
+    copy: 'Disconnect channels or delete your workspace any time.',
+  },
+  {
+    icon: Layers,
+    tone: 'bg-emerald-500/15 text-emerald-300',
+    title: 'Reliable infrastructure',
+    copy: 'Built on trusted providers with industry-standard security.',
+  },
+  {
+    icon: Clock,
+    tone: 'bg-amber-500/15 text-amber-300',
+    title: 'Real human support',
+    copy: 'Our team is on hand when you need a person, not a bot.',
+  },
+];
+
+type BillingPeriod = 'monthly' | 'yearly';
+
+type Plan = {
+  tag: string;
+  tagTone: string;
+  title: string;
+  copy: string;
+  monthly?: number;
+  yearly?: number;
+  custom?: true;
+  cta: string;
+  featured?: boolean;
+  badge?: string;
+  features: Array<{ text: string; on: boolean }>;
+};
+
+const PLANS: Plan[] = [
+  {
+    tag: 'Free',
+    tagTone: 'border-white/10 bg-white/[0.06] text-slate-300',
+    title: 'Get started',
+    copy: 'Perfect for trying out OnlyOrders with the basics.',
+    monthly: 0,
+    yearly: 0,
+    cta: 'Get started free',
+    featured: false,
+    features: [
+      { text: '50 AI replies per month', on: true },
+      { text: '1 Facebook page', on: true },
+      { text: 'Inbox & comment management', on: true },
+      { text: 'Basic order management', on: true },
+      { text: 'AI auto-reply', on: true },
+      { text: 'AI post generation', on: false },
+      { text: 'Advanced analytics', on: false },
+      { text: 'Priority support', on: false },
+    ],
+  },
+  {
+    tag: 'Starter',
+    tagTone: 'border-[#5B3DF5]/30 bg-[#5B3DF5]/15 text-[#A78BFA]',
+    title: 'For small businesses',
+    copy: 'Essential automation for growing online stores.',
+    monthly: 29,
+    yearly: 23,
+    cta: 'Get started',
+    featured: false,
+    features: [
+      { text: '500 AI replies per month', on: true },
+      { text: '3 social channels', on: true },
+      { text: 'Order management', on: true },
+      { text: 'AI auto-reply & smart suggestions', on: true },
+      { text: 'AI post generation (basic)', on: true },
+      { text: 'Customer tags & notes', on: true },
+      { text: 'Basic analytics', on: true },
+      { text: 'Priority support', on: false },
+    ],
+  },
+  {
+    tag: 'Pro',
+    tagTone: 'border-[#5B3DF5]/50 bg-[#5B3DF5]/20 text-[#A78BFA]',
+    title: 'For growing businesses',
+    copy: 'More automation, more channels, advanced everything.',
+    monthly: 79,
+    yearly: 63,
+    cta: 'Get started',
+    featured: true,
+    badge: 'Most popular',
+    features: [
+      { text: '2,000 AI replies per month', on: true },
+      { text: 'All social channels', on: true },
+      { text: 'Advanced order management', on: true },
+      { text: 'AI post generation (advanced)', on: true },
+      { text: 'Payment verification (bKash, Nagad)', on: true },
+      { text: 'Courier integration', on: true },
+      { text: 'Advanced analytics', on: true },
+      { text: 'Priority support', on: true },
+    ],
+  },
+  {
+    tag: 'Enterprise',
+    tagTone: 'border-white/10 bg-white/[0.06] text-slate-300',
+    title: 'For large businesses',
+    copy: 'Custom builds for high-volume stores and agencies.',
+    custom: true,
+    cta: 'Contact sales',
+    featured: false,
+    features: [
+      { text: 'Unlimited replies', on: true },
+      { text: 'All channels', on: true },
+      { text: 'Advanced automation', on: true },
+      { text: 'Custom integrations', on: true },
+      { text: 'Dedicated account manager', on: true },
+      { text: 'Advanced analytics & reporting', on: true },
+      { text: 'SLA & onboarding support', on: true },
+      { text: 'Custom features', on: true },
+    ],
+  },
+];
+
+const COMPARE_ROWS: Array<{
+  label: string;
+  cells: [string, string, string, string];
+  highlightPro?: boolean;
+}> = [
+  { label: 'AI replies per month', cells: ['50', '500', '2,000', 'Unlimited'], highlightPro: true },
+  { label: 'Social channels', cells: ['1 page', '3 channels', 'All channels', 'All channels'] },
+  { label: 'AI post generation', cells: ['—', 'Basic', 'Advanced', 'Advanced + custom'], highlightPro: true },
+  { label: 'Order management', cells: ['✓', '✓', '✓', '✓'] },
+  { label: 'Payment verification', cells: ['—', '—', '✓', '✓'] },
+  { label: 'Courier integration', cells: ['—', '—', '✓', '✓'] },
+  { label: 'Analytics & reporting', cells: ['Basic', 'Basic', 'Advanced', 'Advanced + custom'], highlightPro: true },
+  { label: 'Priority support', cells: ['—', '—', '✓', '✓'] },
+];
+
+function cellClass(ci: number, cell: string, highlight: boolean) {
+  if (cell === '✓') return 'text-emerald-400';
+  if (cell === '—') return 'text-slate-600';
+  if (ci === 2 && highlight) return 'font-semibold text-[#A78BFA]';
+  if (ci === 3) return 'font-bold text-white';
+  if (ci === 0) return 'text-slate-400';
+  return 'text-slate-300';
+}
+
 export default function HomePage() {
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
 
   return (
-    <div className="min-h-screen bg-[#08090A] text-slate-100 font-inter selection:bg-[#5B3DF5] selection:text-white overflow-x-hidden">
-      {/* Subtle top ambient radial lighting */}
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(91,61,245,0.18),rgba(255,255,255,0))]" />
+    <div className="relative min-h-screen overflow-x-hidden bg-[#08090A] font-inter text-slate-100 selection:bg-[#5B3DF5] selection:text-white">
+      <MarketingStyles />
+      <GlowBackground />
+      <MarketingNav />
 
-      {/* =====================================================================
-          1. TOP NAVIGATION BAR (Unified Sleek Dark Header)
-         ===================================================================== */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#08090A]/80 backdrop-blur-xl transition-all">
-        <div className="mx-auto flex h-18 max-w-[1380px] items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-10">
-            <Link href="/" className="focus:outline-none">
-              <OnlyOrdesLogo lightText />
-            </Link>
+      <main>
+        {/* 1. HERO + PHONE DEMO (right) */}
+        <section id="live-demo" className="relative overflow-hidden pb-16 pt-10 lg:pb-24 lg:pt-20">
+          <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
+              {/* Copy (left) */}
+              <div className="space-y-6 lg:col-span-5">
+                <Reveal>
+                  <Eyebrow icon={<Sparkles className="h-3.5 w-3.5" />}>
+                    AI commerce autopilot
+                  </Eyebrow>
+                </Reveal>
 
-            <nav className="hidden items-center gap-7 text-sm font-medium text-slate-300 md:flex">
-              <a href="#live-demo" className="inline-flex items-center gap-1 transition hover:text-white">
-                <span>Product</span>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-              </a>
-              <a href="#workflow" className="inline-flex items-center gap-1 transition hover:text-white">
-                <span>Solutions</span>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-              </a>
-              <a href="#pricing" className="transition hover:text-white">
-                Pricing
-              </a>
-              <Link href="/docs" className="inline-flex items-center gap-1 transition hover:text-white">
-                <span>Resources</span>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-              </Link>
-            </nav>
-          </div>
+                <Reveal delayMs={70}>
+                  <h1 className="font-geist text-4xl font-extrabold leading-[1.06] tracking-tight text-white sm:text-5xl xl:text-[56px]">
+                    Your orders,{' '}
+                    <span className="relative inline-block">
+                      <span className="bg-gradient-to-r from-[#A78BFA] via-[#C084FC] to-[#5B3DF5] bg-clip-text text-transparent">
+                        on autopilot.
+                      </span>
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute -inset-4 -z-10 rounded-full bg-[#5B3DF5]/25 blur-3xl"
+                      />
+                    </span>
+                  </h1>
+                </Reveal>
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-xs font-semibold text-slate-200 shadow-sm transition hover:border-white/30 hover:bg-white/10 sm:text-sm"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-[#5B3DF5]/30 transition hover:brightness-110 active:scale-98 sm:text-sm"
-            >
-              <span>Get started</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* =====================================================================
-          2. HERO SECTION + REALISTIC SMARTPHONE MOTION SHOWCASE
-         ===================================================================== */}
-      <section id="live-demo" className="relative overflow-hidden pt-8 pb-16 lg:pt-14 lg:pb-24">
-        {/* Glow orb behind hero right */}
-        <div className="pointer-events-none absolute -top-24 right-0 -z-10 h-[580px] w-[650px] rounded-full bg-gradient-to-br from-[#5B3DF5]/20 via-[#7C3AED]/15 to-indigo-600/10 blur-3xl" />
-
-        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-8">
-            {/* Left Column Copy (5 cols on lg) */}
-            <div className="lg:col-span-5 space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#5B3DF5]/30 bg-[#5B3DF5]/15 px-3.5 py-1.5 text-xs font-semibold text-[#A78BFA]">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>AI-Powered Commerce Management</span>
-              </div>
-
-              <h1 className="font-geist text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl xl:text-[54px]">
-                Grow your online business with AI that{' '}
-                <span className="bg-gradient-to-r from-[#818CF8] via-[#A78BFA] to-[#C084FC] bg-clip-text text-transparent">
-                  works for you
-                </span>
-              </h1>
-
-              <p className="max-w-xl text-base leading-relaxed text-slate-300 sm:text-[17px]">
-                {COMPANY_NAME} helps online sellers manage customer conversations, orders, products and
-                social media — with intelligent automation that saves time and helps you sell more.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3.5 pt-1">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-7 py-3.5 text-sm font-semibold text-white shadow-xl shadow-[#5B3DF5]/35 transition hover:brightness-110 active:scale-98"
-                >
-                  <span>Start for free</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <a
-                  href="#workflow"
-                  className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:bg-white/10"
-                >
-                  Explore demo
-                </a>
-              </div>
-
-              {/* 4 Mini Feature Pills Row */}
-              <div className="grid grid-cols-2 gap-3.5 pt-6 sm:grid-cols-4 border-t border-white/10">
-                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                  <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <MessageSquare className="h-4 w-4" />
-                  </div>
-                  <p className="text-xs font-bold text-white">Unified Inbox</p>
-                  <p className="text-[11px] text-slate-400">All channels in one</p>
-                </div>
-
-                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                  <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <p className="text-xs font-bold text-white">AI Auto-Reply</p>
-                  <p className="text-[11px] text-slate-400">Save time, sell 24/7</p>
-                </div>
-
-                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                  <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <ShoppingBag className="h-4 w-4" />
-                  </div>
-                  <p className="text-xs font-bold text-white">Order Creation</p>
-                  <p className="text-[11px] text-slate-400">Chat to delivery</p>
-                </div>
-
-                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                  <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                    <Calendar className="h-4 w-4" />
-                  </div>
-                  <p className="text-xs font-bold text-white">Auto Post</p>
-                  <p className="text-[11px] text-slate-400">Engage customers</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Dynamic Smartphone Showcase (7 cols on lg) */}
-            <div className="lg:col-span-7 flex justify-center">
-              <HeroInteractiveAd />
-            </div>
-          </div>
-
-          {/* Bottom Floating Value Strip */}
-          <div className="mt-12 rounded-2xl border border-white/10 bg-[#0E1122]/90 p-5 shadow-2xl backdrop-blur-xl">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-white/10">
-              <div className="flex items-center gap-3.5 px-2">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-white">Faster replies</p>
-                  <p className="text-xs text-slate-400">Respond to customers under 1 second</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3.5 px-2 lg:pl-6">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                  <Layers className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-white">Less tab switching</p>
-                  <p className="text-xs text-slate-400">All customer channels in one place</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3.5 px-2 lg:pl-6">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                  <BarChart3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-white">Orders in one place</p>
-                  <p className="text-xs text-slate-400">From chat inquiry to courier tracking</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3.5 px-2 lg:pl-6">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5B3DF5]/20 text-[#A78BFA]">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-white">Engage automatically</p>
-                  <p className="text-xs text-slate-400">AI-generated posts and comments</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================================
-          3. CINEMATIC DESKTOP MOTION VIDEO AD & COMMERCIAL AUTOMATION SHOWCASE
-         ===================================================================== */}
-      <section id="workflow" className="border-t border-b border-white/10 bg-[#0A0C18] py-20 text-white lg:py-24">
-        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
-          <MotionVideoAd />
-        </div>
-      </section>
-
-      {/* =====================================================================
-          4. PRICING & COMPARE PLANS SECTION (Dark Themed Harmony)
-         ===================================================================== */}
-      <section id="pricing" className="py-20 lg:py-24">
-        <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center space-y-3">
-            <span className="inline-block rounded-full border border-[#5B3DF5]/30 bg-[#5B3DF5]/15 px-3.5 py-1 text-xs font-semibold text-[#A78BFA]">
-              Simple &amp; Transparent Pricing
-            </span>
-            <h2 className="font-geist text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-              Choose the Right Plan for Your Business
-            </h2>
-            <p className="text-sm text-slate-400 sm:text-base">
-              All plans include core automation features. Upgrade anytime as your business grows.
-            </p>
-
-            {/* Monthly / Yearly Toggle */}
-            <div className="pt-3 flex items-center justify-center gap-3">
-              <div className="inline-flex items-center rounded-full border border-white/10 bg-[#12162B] p-1 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => setBillingPeriod('monthly')}
-                  className={`rounded-full px-5 py-1.5 text-xs font-bold transition ${
-                    billingPeriod === 'monthly'
-                      ? 'bg-[#5B3DF5] text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillingPeriod('yearly')}
-                  className={`rounded-full px-5 py-1.5 text-xs font-bold transition ${
-                    billingPeriod === 'yearly'
-                      ? 'bg-[#5B3DF5] text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Yearly
-                </button>
-              </div>
-              <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold text-emerald-400">
-                Save up to 20%
-              </span>
-            </div>
-          </div>
-
-          {/* 4 Plan Cards Grid */}
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {/* Free */}
-            <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#0E1122]/90 p-6 shadow-xl backdrop-blur-md">
-              <div>
-                <span className="inline-block rounded-md bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
-                  Free
-                </span>
-                <h3 className="mt-3 font-geist text-xl font-bold text-white">Get Started</h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Perfect for trying out {COMPANY_NAME} with basic features.
-                </p>
-                <div className="mt-5 flex items-baseline gap-1 border-b border-white/10 pb-5">
-                  <span className="font-geist text-4xl font-extrabold text-white">$0</span>
-                  <span className="text-xs text-slate-400">/ month</span>
-                </div>
-                <ul className="mt-5 space-y-2.5 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> 50 AI replies per month</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> 1 Facebook page</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Inbox &amp; comment management</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Basic order management</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> AI auto-reply</li>
-                  <li className="flex items-center gap-2 text-slate-600"><Check className="h-4 w-4" /> AI post generation</li>
-                  <li className="flex items-center gap-2 text-slate-600"><Check className="h-4 w-4" /> Advanced analytics</li>
-                  <li className="flex items-center gap-2 text-slate-600"><Check className="h-4 w-4" /> Priority support</li>
-                </ul>
-              </div>
-              <Link
-                href="/login"
-                className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 text-xs font-bold text-slate-200 transition hover:bg-white/10"
-              >
-                Get started free
-              </Link>
-            </div>
-
-            {/* Starter */}
-            <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#0E1122]/90 p-6 shadow-xl backdrop-blur-md">
-              <div>
-                <span className="inline-block rounded-md bg-[#5B3DF5]/20 border border-[#5B3DF5]/30 px-2.5 py-0.5 text-[11px] font-semibold text-[#A78BFA]">
-                  Starter
-                </span>
-                <h3 className="mt-3 font-geist text-xl font-bold text-white">For Small Businesses</h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Essential features for growing online stores.
-                </p>
-                <div className="mt-5 flex items-baseline gap-1 border-b border-white/10 pb-5">
-                  <span className="font-geist text-4xl font-extrabold text-white">
-                    ${billingPeriod === 'yearly' ? 23 : 29}
-                  </span>
-                  <span className="text-xs text-slate-400">/ month</span>
-                </div>
-                <ul className="mt-5 space-y-2.5 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> 500 AI replies per month</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> 3 social channels</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Order management</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> AI auto-reply &amp; smart suggestions</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> AI post generation (basic)</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Customer tags &amp; notes</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Basic analytics</li>
-                  <li className="flex items-center gap-2 text-slate-600"><Check className="h-4 w-4" /> Priority support</li>
-                </ul>
-              </div>
-              <Link
-                href="/login"
-                className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 text-xs font-bold text-slate-200 transition hover:bg-white/10"
-              >
-                Get started
-              </Link>
-            </div>
-
-            {/* Pro (Most Popular) */}
-            <div className="relative flex flex-col justify-between rounded-2xl border-2 border-[#5B3DF5] bg-gradient-to-b from-[#181C38] to-[#0E1122] p-6 shadow-2xl shadow-[#5B3DF5]/20">
-              <span className="absolute right-4 top-4 rounded-full bg-[#5B3DF5] px-3 py-1 text-[10px] font-bold text-white shadow-md">
-                Most Popular
-              </span>
-              <div>
-                <span className="inline-block rounded-md bg-[#5B3DF5]/30 border border-[#5B3DF5]/50 px-2.5 py-0.5 text-[11px] font-semibold text-[#A78BFA]">
-                  Pro
-                </span>
-                <h3 className="mt-3 font-geist text-xl font-bold text-white">For Growing Businesses</h3>
-                <p className="mt-1 text-xs text-slate-300">
-                  More automation, more channels and advanced features.
-                </p>
-                <div className="mt-5 flex items-baseline gap-1 border-b border-white/10 pb-5">
-                  <span className="font-geist text-4xl font-extrabold text-white">
-                    ${billingPeriod === 'yearly' ? 63 : 79}
-                  </span>
-                  <span className="text-xs text-slate-400">/ month</span>
-                </div>
-                <ul className="mt-5 space-y-2.5 text-xs text-slate-200">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> 2,000 AI replies per month</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> All social channels</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Advanced order management</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> AI post generation (advanced)</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Payment verification (bKash, Nagad)</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Courier integration</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Advanced analytics</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Priority support</li>
-                </ul>
-              </div>
-              <Link
-                href="/login"
-                className="mt-7 flex h-10 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-xs font-bold text-white shadow-lg shadow-[#5B3DF5]/30 transition hover:brightness-110"
-              >
-                Get started
-              </Link>
-            </div>
-
-            {/* Enterprise */}
-            <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-[#0E1122]/90 p-6 shadow-xl backdrop-blur-md">
-              <div>
-                <span className="inline-block rounded-md bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
-                  Enterprise
-                </span>
-                <h3 className="mt-3 font-geist text-xl font-bold text-white">For Large Businesses</h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Custom solutions for high volume stores and agencies.
-                </p>
-                <div className="mt-5 flex items-baseline gap-1 border-b border-white/10 pb-5">
-                  <span className="font-geist text-2xl font-extrabold text-white">Custom pricing</span>
-                </div>
-                <ul className="mt-5 space-y-2.5 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Unlimited replies</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> All channels</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Advanced automation</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Custom integrations</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Dedicated account manager</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Advanced analytics &amp; reporting</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> SLA &amp; onboarding support</li>
-                  <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#818CF8]" /> Custom features</li>
-                </ul>
-              </div>
-              <Link
-                href="/login"
-                className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 text-xs font-bold text-slate-200 transition hover:bg-white/10"
-              >
-                Contact sales
-              </Link>
-            </div>
-          </div>
-
-          {/* Compare Plans Table */}
-          <div className="mt-12 rounded-2xl border border-white/10 bg-[#0E1122]/90 p-6 shadow-2xl backdrop-blur-md lg:p-8">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              <div className="lg:col-span-3">
-                <h3 className="font-geist text-xl font-bold text-white">Compare Plans</h3>
-                <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                  See what&apos;s included in each plan and choose what fits your business.
-                </p>
-              </div>
-              <div className="lg:col-span-9 overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-white/10 text-white font-bold">
-                      <th className="py-2.5 pr-4">Feature</th>
-                      <th className="py-2.5 px-4 text-center">Free</th>
-                      <th className="py-2.5 px-4 text-center">Starter</th>
-                      <th className="py-2.5 px-4 text-center text-[#A78BFA]">Pro</th>
-                      <th className="py-2.5 pl-4 text-center">Enterprise</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/8 text-slate-300">
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">AI replies per month</td>
-                      <td className="py-2.5 px-4 text-center text-slate-400">50</td>
-                      <td className="py-2.5 px-4 text-center text-slate-300">500</td>
-                      <td className="py-2.5 px-4 text-center font-bold text-white">2,000</td>
-                      <td className="py-2.5 pl-4 text-center font-bold text-white">Unlimited</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Social channels</td>
-                      <td className="py-2.5 px-4 text-center text-slate-400">1 page</td>
-                      <td className="py-2.5 px-4 text-center text-slate-300">3 channels</td>
-                      <td className="py-2.5 px-4 text-center text-white">All channels</td>
-                      <td className="py-2.5 pl-4 text-center text-white">All channels</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">AI post generation</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-slate-300">Basic</td>
-                      <td className="py-2.5 px-4 text-center font-semibold text-[#A78BFA]">Advanced</td>
-                      <td className="py-2.5 pl-4 text-center text-white">Advanced + custom</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Order management</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 pl-4 text-center text-emerald-400">✓</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Payment verification</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 pl-4 text-center text-emerald-400">✓</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Courier integration</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 pl-4 text-center text-emerald-400">✓</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Analytics &amp; reporting</td>
-                      <td className="py-2.5 px-4 text-center text-slate-400">Basic</td>
-                      <td className="py-2.5 px-4 text-center text-slate-300">Basic</td>
-                      <td className="py-2.5 px-4 text-center font-semibold text-[#A78BFA]">Advanced</td>
-                      <td className="py-2.5 pl-4 text-center text-white">Advanced + custom</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 pr-4 font-medium text-white">Priority support</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-slate-600">—</td>
-                      <td className="py-2.5 px-4 text-center text-emerald-400">✓</td>
-                      <td className="py-2.5 pl-4 text-center text-emerald-400">✓</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Your Business Data Stays in Your Control */}
-          <div className="mt-12 grid grid-cols-1 gap-6 border-t border-white/10 pt-10 lg:grid-cols-12">
-            <div className="lg:col-span-3">
-              <h3 className="font-geist text-lg font-extrabold text-white">
-                Your Business Data Stays in Your Control
-              </h3>
-              <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
-                We follow industry best practices to keep your data secure and private. You always
-                control your connected accounts and can disconnect anytime.
-              </p>
-            </div>
-            <div className="lg:col-span-9 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400">
-                  <Lock className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-xs font-bold text-white">Secure Access</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    We only request necessary permissions to manage your business accounts.
+                <Reveal delayMs={140}>
+                  <p className="max-w-xl text-balance text-base leading-relaxed text-slate-300 sm:text-[17px]">
+                    {COMPANY_NAME} turns DMs and comments into confirmed orders
+                    — smart replies, live catalog checks, payment verification
+                    and courier handoff, all from one inbox.
                   </p>
-                </div>
+                </Reveal>
+
+                <Reveal delayMs={210}>
+                  <div className="flex flex-wrap items-center gap-3.5 pt-1">
+                    <Link
+                      href="/login"
+                      className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_0_44px_-10px_rgba(91,61,245,0.95)] transition hover:brightness-110 active:scale-97 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70"
+                    >
+                      Start selling free
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                    </Link>
+                    <a
+                      href="#workflow"
+                      className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/[0.04] px-7 py-3.5 text-sm font-semibold text-slate-200 backdrop-blur transition hover:bg-white/[0.09] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+                    >
+                      See it in action
+                    </a>
+                  </div>
+                </Reveal>
+
+                <Reveal delayMs={280}>
+                  <p className="text-xs text-slate-500">
+                    Free plan forever · Setup in minutes · Cancel anytime
+                  </p>
+                </Reveal>
               </div>
 
-              <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400">
-                  <ShieldCheck className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-xs font-bold text-white">Your Data, Your Control</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    You can disconnect your accounts and delete your workspace whenever you want.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
-                  <Server className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-xs font-bold text-white">Reliable Infrastructure</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    Built on trusted cloud providers with industry standard security practices.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
-                  <Headphones className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-xs font-bold text-white">Real Human Support</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    Get help from our team whenever you need it. We&apos;re here to support your business.
-                  </p>
-                </div>
-              </div>
+              {/* Phone demo (right) */}
+              <Reveal delayMs={120} className="lg:col-span-7">
+                <HeroInteractiveAd />
+              </Reveal>
             </div>
+
+            {/* Glass value strip */}
+            <Reveal delayMs={120} className="mt-16">
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-1.5 shadow-2xl backdrop-blur-xl">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#A78BFA]/60 to-transparent"
+                />
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                  {HERO_PROOF_POINTS.map(({ icon: Icon, title, copy }) => (
+                    <div
+                      key={title}
+                      className="flex items-center gap-4 rounded-2xl bg-white/[0.02] px-5 py-4 transition hover:bg-[#5B3DF5]/[0.08]"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#5B3DF5]/25 bg-[#5B3DF5]/12">
+                        <Icon className="h-4.5 w-4.5 text-[#A78BFA]" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white">{title}</p>
+                        <p className="truncate text-xs text-slate-400">{copy}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* =====================================================================
-          5. FOOTER (Sleek Dark Theme)
-         ===================================================================== */}
-      <footer className="border-t border-white/10 bg-[#060708] py-12 text-xs text-slate-400">
-        <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-            <div className="flex items-center gap-3">
-              <OnlyOrdesLogo lightText />
-              <span className="text-slate-600">·</span>
-              <p className="text-slate-500">
-                © {new Date().getFullYear()} {COMPANY_NAME}. All rights reserved.
-              </p>
+        {/* 2. WORKFLOW / FEATURE SECTIONS */}
+        <HomeBento />
+
+        {/* 3. PRICING */}
+        <section id="pricing" className="relative overflow-hidden py-20 lg:py-24">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-10 h-[420px] w-[min(900px,130vw)] -translate-x-1/2 rounded-full bg-[#5B3DF5]/[0.08] blur-3xl"
+          />
+
+          <div className="relative mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="Simple, transparent pricing"
+              icon={<Sparkles className="h-3.5 w-3.5" />}
+              title="Pick the plan that fits your store."
+              copy="Every plan ships with the core automation. Upgrade only when your orders are."
+            />
+
+            {/* Billing toggle */}
+            <Reveal delayMs={100}>
+              <div className="mt-9 flex items-center justify-center gap-3">
+                <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] p-1 shadow-[inset_0_2px_8px_rgba(0,0,0,0.5)]">
+                  {(['monthly', 'yearly'] as BillingPeriod[]).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setBillingPeriod(p)}
+                      aria-pressed={billingPeriod === p}
+                      className={`rounded-full px-5 py-1.5 text-xs font-bold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70 ${
+                        billingPeriod === p
+                          ? 'bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-white shadow-[0_0_20px_-4px_rgba(91,61,245,0.8)]'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+                  Save up to 20% yearly
+                </span>
+              </div>
+            </Reveal>
+
+            {/* Plan cards */}
+            <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {PLANS.map((plan, i) => (
+                <Reveal key={plan.tag} delayMs={i * 80} className="h-full">
+                  {plan.featured ? (
+                    <div className="relative flex h-full flex-col rounded-3xl p-px shadow-[0_30px_80px_-30px_rgba(91,61,245,0.6)]">
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 rounded-3xl bg-gradient-to-b from-[#5B3DF5] via-[#7C3AED]/40 to-[#5B3DF5]/10"
+                      />
+                      <span
+                        aria-hidden
+                        className="absolute right-7 top-6 z-10 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-3 py-1 text-[10px] font-bold text-white shadow-md"
+                      >
+                        {plan.badge}
+                      </span>
+                      <div className="relative flex h-full flex-col rounded-[calc(1.5rem-1px)] bg-[#0C0E1A] p-6">
+                        <PlanBody plan={plan} billingPeriod={billingPeriod} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="group flex h-full flex-col rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:border-[#7C3AED]/50 hover:bg-[#5B3DF5]/[0.06] hover:shadow-[0_24px_60px_-24px_rgba(91,61,245,0.45)]">
+                      <PlanBody plan={plan} billingPeriod={billingPeriod} />
+                    </div>
+                  )}
+                </Reveal>
+              ))}
             </div>
 
-            <div className="flex items-center gap-6">
-              <Link href="/privacy" className="hover:text-white transition">
-                Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-white transition">
-                Terms of Service
-              </Link>
-              <Link href="/docs" className="hover:text-white transition">
-                Documentation
-              </Link>
-              <Link href="/data-delete-instructions" className="hover:text-white transition">
-                Data Deletion
-              </Link>
-            </div>
+            {/* Compare plans */}
+            <Reveal delayMs={100} className="mt-12">
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl lg:p-8">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-[#A78BFA]/50 to-transparent"
+                />
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                  <div className="lg:col-span-3">
+                    <h3 className="font-geist text-xl font-bold text-white">Compare plans</h3>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                      Every line item, up front — so you can decide in one scroll.
+                    </p>
+                  </div>
+                  <div className="table-wrap lg:col-span-9">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-white/10 font-bold text-white">
+                          <th className="py-2.5 pr-4">Feature</th>
+                          <th className="px-4 py-2.5 text-center">Free</th>
+                          <th className="px-4 py-2.5 text-center">Starter</th>
+                          <th className="px-4 py-2.5 text-center text-[#A78BFA]">Pro</th>
+                          <th className="py-2.5 pl-4 text-center">Enterprise</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06] text-slate-300">
+                        {COMPARE_ROWS.map((row) => (
+                          <tr key={row.label} className="transition hover:bg-white/[0.02]">
+                            <td className="py-2.5 pr-4 font-medium text-white">{row.label}</td>
+                            {row.cells.map((cell, ci) => (
+                              <td
+                                key={ci}
+                                className={`px-4 py-2.5 text-center ${cellClass(ci, cell, row.highlightPro === true)}`}
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Trust grid */}
+            <section aria-label="How your data stays yours" className="mt-14 border-t border-white/10 pt-12">
+              <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+                <div className="lg:col-span-3">
+                  <Reveal>
+                    <h3 className="font-geist text-lg font-extrabold text-white">
+                      Your business data stays in your control
+                    </h3>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                      Best-practice security and privacy, plus the right to
+                      disconnect whenever you decide.
+                    </p>
+                  </Reveal>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
+                  {TRUST_POINTS.map((pt, i) => (
+                    <Reveal key={pt.title} delayMs={i * 70}>
+                      <div className="flex h-full items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 transition hover:border-[#7C3AED]/40 hover:bg-[#5B3DF5]/[0.05]">
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${pt.tone}`}
+                        >
+                          <pt.icon className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white">{pt.title}</p>
+                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                            {pt.copy}
+                          </p>
+                        </div>
+                      </div>
+                    </Reveal>
+                  ))}
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {/* 4. CTA */}
+        <CtaBanner />
+      </main>
+
+      {/* 5. FOOTER */}
+      <MarketingFooter />
     </div>
+  );
+}
+
+function PlanBody({
+  plan,
+  billingPeriod,
+}: {
+  plan: (typeof PLANS)[number];
+  billingPeriod: BillingPeriod;
+}) {
+  return (
+    <>
+      <div>
+        <span
+          className={`inline-block rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${plan.tagTone}`}
+        >
+          {plan.tag}
+        </span>
+        <h3 className="mt-3 font-geist text-xl font-bold text-white">{plan.title}</h3>
+        <p className="mt-1.5 min-h-9 text-xs text-slate-400">{plan.copy}</p>
+        <div className="mt-5 flex items-baseline gap-1 border-b border-white/[0.08] pb-5">
+          {plan.custom ? (
+            <span className="font-geist text-2xl font-extrabold text-white">Custom pricing</span>
+          ) : (
+            <>
+              <span className="font-geist text-4xl font-extrabold text-white">
+                ${billingPeriod === 'yearly' ? plan.yearly : plan.monthly}
+              </span>
+              <span className="text-xs text-slate-400">/ month</span>
+            </>
+          )}
+        </div>
+        <ul className="mt-5 space-y-2.5 text-xs">
+          {plan.features.map((f) => (
+            <li
+              key={f.text}
+              className={`flex items-center gap-2 ${f.on ? 'text-slate-300' : 'text-slate-600'}`}
+            >
+              <Check
+                className={`h-4 w-4 shrink-0 ${
+                  f.on ? (plan.featured ? 'text-emerald-400' : 'text-[#818CF8]') : ''
+                }`}
+              />
+              {f.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Link
+        href="/login"
+        className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70 ${
+          plan.featured
+            ? 'bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-white shadow-[0_0_28px_-6px_rgba(91,61,245,0.8)] hover:brightness-110'
+            : 'border border-white/15 bg-white/[0.04] text-slate-200 hover:bg-white/[0.09]'
+        }`}
+      >
+        {plan.cta}
+      </Link>
+    </>
   );
 }

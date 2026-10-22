@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { LOG_CORPUS, type Fields } from '../helpers/log-corpus';
 import { logsRouter } from '@api/routes/logs';
-import { logsAccessMiddleware, logsOperatorUser } from '@api/middleware/logs-access';
+import { logsAccessMiddleware, logsOperatorPassword, logsOperatorUser } from '@api/middleware/logs-access';
 import { logRequest } from '@api/lib/logmiddleware';
 import { emit, flush, storedEvents, __testOnly } from '@api/lib/log';
 import { startContext, withContext } from '@api/lib/ctx';
@@ -333,10 +333,10 @@ describe('GET /api2/logs access control', () => {
     expect(res.ok).toBe(false);
   });
 
-  it('accepts the admin123 defaults outside production', async () => {
+  it('has no default console password outside production either', async () => {
     const res = await hit(probe(), withBearer('admin123'));
-    expect(res.status).toBe(200);
-    expect(storedEvents().find((event) => event.evt === 'auth')?.reason).toBe('logs_operator');
+    expect(storedEvents().some((event) => event.evt === 'auth' && event.reason === 'logs_operator')).toBe(false);
+    expect(logsOperatorPassword()).toBeUndefined();
   });
 
   it('reads the operator name from LOGS_UI_USER', () => {

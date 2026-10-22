@@ -20,14 +20,14 @@ export function logsAllowlist(): string[] {
  * The second way in: a single operator account, so the log console does not need a
  * Firebase user provisioned into the allowlist. `LOGS_UI_PASSWORD` is the shared
  * secret between the web app and this one — the web app holds it server-side and
- * presents it as the bearer, so it never reaches the browser. The `admin123`
- * defaults exist only outside production; a production deploy with the password
- * unset has no operator path at all rather than a guessable one.
+ * presents it as the bearer, so it never reaches the browser. There is no
+ * default password in any environment; with it unset there is no operator path.
  */
 export function logsOperatorPassword(): string | undefined {
   const configured = process.env.LOGS_UI_PASSWORD?.trim();
   if (configured) return configured;
-  return process.env.NODE_ENV === 'production' ? undefined : 'admin123';
+  // No default in any environment: the console is closed until LOGS_UI_PASSWORD is set.
+  return undefined;
 }
 
 export function logsOperatorUser(): string {

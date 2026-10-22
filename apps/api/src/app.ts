@@ -1,3 +1,4 @@
+import { allowedOrigin } from '@api/lib/cors-origins';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { cors } from 'hono/cors';
@@ -63,7 +64,7 @@ wireDatabaseLogging();
 app.use(
   '*',
   cors({
-    origin: (origin) => origin || '*',
+    origin: (origin) => allowedOrigin(origin),
     allowHeaders: ['Content-Type', 'Authorization', 'x-internal-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,

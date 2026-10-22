@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatTaka } from '@/lib/order-state';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
@@ -97,11 +98,11 @@ async function OrderDetail({
       <div className="mt-4 grid gap-3 rounded-lg bg-[var(--muted)] p-4 text-sm sm:grid-cols-2">
         <div>
           <span className="text-[var(--muted-foreground)]">Total: </span>
-          <strong>${order.totalPrice.toFixed(2)}</strong>
+          <strong>{formatTaka(order.totalPrice)}</strong>
         </div>
         <div>
           <span className="text-[var(--muted-foreground)]">Unit price: </span>
-          ${order.variantPrice.toFixed(2)} × {order.count}
+          {formatTaka(order.variantPrice)} × {order.count}
         </div>
         <div className="sm:col-span-2 flex items-start gap-3">
           {order.variantImageUrl ? (
