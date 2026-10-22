@@ -339,6 +339,23 @@ describe('GET /api2/logs access control', () => {
     expect(logsOperatorPassword()).toBeUndefined();
   });
 
+  it('refuses the example password and anything shorter than 12 characters', () => {
+    process.env.LOGS_UI_PASSWORD = 'change-me';
+    expect(logsOperatorPassword()).toBeUndefined();
+    process.env.LOGS_UI_PASSWORD = 'short-key';
+    expect(logsOperatorPassword()).toBeUndefined();
+  });
+
+  it('accepts a long non-example operator password', () => {
+    process.env.LOGS_UI_PASSWORD = 'a-real-operator-secret';
+    expect(logsOperatorPassword()).toBe('a-real-operator-secret');
+  });
+
+  it('has no admin123 operator-name default', () => {
+    delete process.env.LOGS_UI_USER;
+    expect(logsOperatorUser()).not.toBe('admin123');
+  });
+
   it('reads the operator name from LOGS_UI_USER', () => {
     process.env.LOGS_UI_USER = ' ops ';
     expect(logsOperatorUser()).toBe('ops');
