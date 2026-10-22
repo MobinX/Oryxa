@@ -4,7 +4,7 @@ import { z } from '@hono/zod-openapi';
 import { db } from '@repo/db/client';
 import { channels, commentThreads, comments, conversations, leads, messages } from '@repo/db/schema';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
-import { createChannel, ChannelTakenError, findChannelByPlatformAccountId } from '@repo/db/crud/channel';
+import { createChannel, ChannelTakenError, findChannelByPlatformAccountId, deleteChannel } from '@repo/db/crud/channel';
 import {
   getChannelAiConfig,
   saveChannelAiConfig,
@@ -113,8 +113,7 @@ adminAiRouter.post('/admin/ai/whatsapp/connect', async (c) => {
 });
 
 /** Health check (spec A): re-verify the stored token against the platform it belongs to. */
-adminAiRouter.get('/admin/ai/channels/:channelId/verify', async (c) => {
-  const channel = await db.query.channels.findFirst({
+adminAiRouter.get('/admin/ai/channels/:channelId/verify', async (c) => {  const channel = await db.query.channels.findFirst({
     where: and(eq(channels.id, c.req.param('channelId')), isNull(channels.deletedAt)),
   });
   if (!channel) return c.json({ error: 'Channel not found' }, 404);
@@ -139,6 +138,29 @@ adminAiRouter.get('/admin/ai/channels/:channelId/verify', async (c) => {
     return c.json({ verified: false, error: `no health check for platform ${channel.platform}` }, 422);
   }
   return c.json({ verified, ...(error ? { error } : {}) });
+});
+
+/**
+ * Disconnect (spec A: every channel connects *and* disconnects here). Soft delete only —
+ * the row keeps its audit trail and the number can be re-connected later with a fresh
+ * token verify. Webhook deliveries after this are skipped as unknown, never answered.
+ */
+adminAiRouter.post('/admin/ai/channels/:channelId/disconnect', async (c) => {
+  const channel = await db.query.channels.findFirst({
+    where: and(eq(channels.id, c.req.param('channelId')), isNull(channels.deletedAt)),
+    columns: { id: true, businessId: true },
+  });
+  if (!channel) return c.json({ error: 'Channel not found' }, 404);
+  if (channel.businessId) {
+    const row = await deleteChannel(channel.businessId, channel.id);
+    if (!row) return c.json({ error: 'Channel not found' }, 404);
+  } else {
+    await db
+      .update(channels)
+      .set({ deletedAt: new Date() })
+      .where(eq(channels.id, channel.id));
+  }
+  return c.json({ id: channel.id, disconnected: true });
 });
 
 /* ---------- AI Studio: per-channel config, business profile, knowledge ---------- */

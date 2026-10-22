@@ -11,7 +11,7 @@ import {
   type AdminChannel,
 } from '@/lib/api';
 import { connectAdminFacebookAction } from '@/app/actions/admin-channels';
-import { connectAdminWhatsappAction, verifyAdminChannelAction } from '@/app/actions/admin-ai';
+import { connectAdminWhatsappAction, verifyAdminChannelAction, disconnectAdminChannelAction } from '@/app/actions/admin-ai';
 
 export const instant = false;
 
@@ -31,10 +31,11 @@ export default async function AdminChannelsPage({
     error?: string;
     verifiedWa?: string;
     connectedWa?: string;
+    disconnected?: string;
   }>;
 }) {
   const bearer = await requireConsoleBearer();
-  const { connected, failed, detail, error, verifiedWa, connectedWa } = await searchParams;
+  const { connected, failed, detail, error, verifiedWa, connectedWa, disconnected } = await searchParams;
 
   let channels: AdminChannel[] = [];
   let aiChannels: AdminAiChannel[] = [];
@@ -97,6 +98,12 @@ export default async function AdminChannelsPage({
           {verifiedWa} verified — the stored token is valid.
         </Card>
       )}
+      {disconnected && (
+        <Card className="border-primary/30 p-4 text-sm">
+          Channel disconnected — it no longer answers webhooks. Re-connect any time with a fresh
+          token; new Meta webhooks and DMs to the number inherit the same socket for a while.
+        </Card>
+      )}
       {loadError && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
       )}
@@ -149,13 +156,21 @@ export default async function AdminChannelsPage({
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{channel.platformChannelId}</p>
                 </div>
-                <form action={verifyAdminChannelAction}>
-                  <input type="hidden" name="channelId" value={channel.id} />
-                  <input type="hidden" name="label" value={`${channel.platform} ${channel.platformChannelId}`} />
-                  <Button type="submit" variant="outline" size="sm">
-                    Verify token
-                  </Button>
-                </form>
+                <div className="flex shrink-0 gap-2">
+                  <form action={verifyAdminChannelAction}>
+                    <input type="hidden" name="channelId" value={channel.id} />
+                    <input type="hidden" name="label" value={`${channel.platform} ${channel.platformChannelId}`} />
+                    <Button type="submit" variant="outline" size="sm">
+                      Verify token
+                    </Button>
+                  </form>
+                  <form action={disconnectAdminChannelAction}>
+                    <input type="hidden" name="channelId" value={channel.id} />
+                    <Button type="submit" variant="ghost" size="sm">
+                      Disconnect
+                    </Button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>

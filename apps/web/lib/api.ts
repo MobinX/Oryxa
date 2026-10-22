@@ -1790,3 +1790,10 @@ export const previewAdminAi = (token: string, channelId: string, leadId?: string
     body: JSON.stringify(leadId ? { leadId } : {}),
     signInPath: null,
   });
+
+export const disconnectAdminChannel = (token: string, channelId: string) =>
+  apiFetch<{ id: string; disconnected: boolean }>(`/api2/admin/ai/channels/${channelId}/disconnect`, {
+    method: 'POST',
+    token,
+    signInPath: null,
+  });

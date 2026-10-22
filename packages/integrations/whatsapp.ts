@@ -43,7 +43,22 @@ export function whatsappChunks(text: string): string[] {
   return chunkText(text);
 }
 
+/** Transient-looking failures are worth one immediate retry (spec G: outbound retry). */
+const RETRYABLE_STATUS = (status: number) => status === 429 || status >= 500;
+
 async function postWhatsApp(token: string, phoneNumberId: string, payload: unknown) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rawPostWhatsApp(token, phoneNumberId, payload);
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (attempt >= 1 || !RETRYABLE_STATUS(status ?? 0)) throw err;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, 300 * 2 ** attempt)));
+    }
+  }
+}
+
+async function rawPostWhatsApp(token: string, phoneNumberId: string, payload: unknown) {
   const res = await loggedFetch(`${GRAPH_API}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {

@@ -62,3 +62,26 @@ export async function verifyAdminChannelAction(formData: FormData) {
   }
   redirect(`/admin/channels?verifiedWa=${encodeURIComponent(label)}`);
 }
+
+/** Disconnect (spec A): soft-delete a channel; webhooks then miss it. */
+export async function disconnectAdminChannelAction(formData: FormData) {
+  const bearer = await requireConsoleBearer();
+  const channelId = String(formData.get('channelId') ?? '');
+  if (!channelId) {
+    redirect('/admin/channels?error=disconnect&detail=missing-channelId');
+  }
+  const { disconnectAdminChannel } = await import('@/lib/api');
+  try {
+    await disconnectAdminChannel(bearer, channelId);
+  } catch (err) {
+    const detail =
+      err instanceof ApiError
+        ? `${err.status}: ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : 'Disconnect failed';
+    // Outside the try: redirect throws its own control-flow error, which the catch would eat.
+    redirect(`/admin/channels?error=disconnect&detail=${encodeURIComponent(detail)}`);
+  }
+  redirect('/admin/channels?disconnected=1');
+}
