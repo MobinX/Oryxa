@@ -2,6 +2,8 @@
 const nextConfig = {
   cacheComponents: true,
   allowedDevOrigins: ['dev.oryxa.us', 'dev-api.oryxa.us'],
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   /**
    * `COMPANY_NAME` and `PARENT_COMPANY_NAME` are the names the UI prints (see lib/brand.ts) and
    * `'use client'` pages print them too. Without this line a non-`NEXT_PUBLIC_` variable is
