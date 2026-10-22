@@ -134,6 +134,20 @@ export async function setConversationAiPaused(
   return row ?? null;
 }
 
+/**
+ * The official-inbox twin: official conversations have businessId NULL, so the scoped
+ * store variant above can never find them. Same node of the same gate, just addressed
+ * by the conversation itself (the caller has already resolved it on an admin channel).
+ */
+export async function setOfficialConversationAiPaused(conversationId: string, aiPaused: boolean) {
+  const [row] = await db
+    .update(conversations)
+    .set({ aiPaused })
+    .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)))
+    .returning({ id: conversations.id, aiPaused: conversations.aiPaused });
+  return row ?? null;
+}
+
 export async function checkPendingMessages(conversationId: string) {
   const pending = await db.query.messages.findFirst({
     where: and(

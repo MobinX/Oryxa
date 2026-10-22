@@ -170,15 +170,6 @@ async function processWaValue(value: WaMessagesValue): Promise<void> {
 
   const businessId = resolved.businessId;
 
-  const channelCtx = {
-    id: resolved.id,
-    businessId,
-    platformChannelId: resolved.platformChannelId,
-    apiToken: decryptChannelToken(resolved.apiToken),
-    agentId: resolved.agentId ?? null,
-  };
-  tagContext({ channelId: channelCtx.id, businessId });
-
   const firstContact = value.contacts?.[0];
   const contactName = firstContact?.profile?.name ?? null;
 
@@ -187,6 +178,15 @@ async function processWaValue(value: WaMessagesValue): Promise<void> {
     await processOfficialWaMessages(resolved, value, contactName);
     return;
   }
+
+  const channelCtx = {
+    id: resolved.id,
+    businessId,
+    platformChannelId: resolved.platformChannelId,
+    apiToken: decryptChannelToken(resolved.apiToken),
+    agentId: resolved.agentId ?? null,
+  };
+  tagContext({ channelId: channelCtx.id, businessId: channelCtx.businessId });
 
   for (const message of value.messages ?? []) {
     await processWaMessage(channelCtx, message, contactName);
@@ -330,7 +330,7 @@ async function processOfficialWaMessages(
       senderId: waId,
       text,
       externalId,
-      customerName: contactName,
+      customerName: contactName ?? undefined,
     });
     waLog('official ingest', { externalId, ...verdict });
     await markWhatsAppRead(officialCtx.apiToken, officialCtx.platformChannelId, externalId).catch(() => undefined);

@@ -101,7 +101,7 @@ export async function listTickets(filters: TicketFilters): Promise<TicketRow[]> 
 }
 
 export async function getTicketById(ticketId: string): Promise<TicketRow | null> {
-  return db.query.tickets.findFirst({ where: eq(tickets.id, ticketId) });
+  return (await db.query.tickets.findFirst({ where: eq(tickets.id, ticketId) })) ?? null;
 }
 
 export async function listTicketEvents(ticketId: string): Promise<TicketEventRow[]> {
@@ -288,7 +288,7 @@ export async function listProspects(filters: ProspectFilters): Promise<ProspectR
 }
 
 export async function getProspectById(prospectId: string): Promise<ProspectRow | null> {
-  return db.query.prospects.findFirst({ where: eq(prospects.id, prospectId) });
+  return (await db.query.prospects.findFirst({ where: eq(prospects.id, prospectId) })) ?? null;
 }
 
 export async function listProspectEvents(prospectId: string): Promise<ProspectEventRow[]> {
@@ -441,9 +441,9 @@ export async function upsertProspectFromTurn(
   const consentDeclined = observed.consent === false;
 
   if (existing) {
-    const merged = { ...existing };
+    const merged = { ...existing } as Record<string, unknown>;
     for (const [field, value] of Object.entries(providedFields)) {
-      if (merged[field as keyof ProspectRow] == null) merged[field as keyof ProspectRow] = value;
+      if (merged[field] == null) merged[field] = value;
     }
     merged.conversationId = identity.conversationId ?? merged.conversationId;
     if (consentWanted && !merged.consent) {
@@ -455,28 +455,30 @@ export async function upsertProspectFromTurn(
       merged.consentAt = null;
     }
 
-    const changedFields = Object.keys(providedFields).filter(
-      (field) =>
-        (merged[field as keyof ProspectRow] as unknown) !==
-        (existing[field as keyof ProspectRow] as unknown),
-    );
+    const changedFields = providedFields
+      ? Object.keys(providedFields).filter(
+          (field) =>
+            (merged[field as string] as unknown) !==
+            (existing[field as keyof ProspectRow] as unknown),
+        )
+      : [];
     const consentChanged = merged.consent !== existing.consent;
     if (!changedFields.length && !consentChanged) return existing;
 
     const { weights } = await getWeights();
-    const scored = scoreProspect({ ...merged, consent: merged.consent }, weights);
+    const scored = scoreProspect({ ...merged, consent: merged.consent as boolean }, weights);
     const [row] = await db
       .update(prospects)
       .set({
-        name: merged.name,
-        country: merged.country,
-        businessType: merged.businessType,
-        employeesEstimate: merged.employeesEstimate,
-        budget: merged.budget,
-        needs: merged.needs,
-        consent: merged.consent,
-        consentAt: merged.consentAt,
-        conversationId: merged.conversationId,
+        name: (merged.name as string | null) ?? null,
+        country: (merged.country as string | null) ?? null,
+        businessType: (merged.businessType as string | null) ?? null,
+        employeesEstimate: (merged.employeesEstimate as string | null) ?? null,
+        budget: (merged.budget as string | null) ?? null,
+        needs: (merged.needs as string | null) ?? null,
+        consent: merged.consent as boolean,
+        consentAt: (merged.consentAt as Date | null) ?? null,
+        conversationId: (merged.conversationId as string | null) ?? null,
         score: scored.score,
         scoreBreakdown: scored.breakdown,
         updatedAt: new Date(),

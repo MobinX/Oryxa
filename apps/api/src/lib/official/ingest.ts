@@ -6,7 +6,7 @@ import {
   processInboundMessage,
   createMessage,
   updateConversationState,
-  setConversationAiPaused,
+  setOfficialConversationAiPaused,
   markCustomerMessagesDone,
 } from '@repo/db/crud/conversation';
 import {
@@ -128,6 +128,14 @@ export async function officialIngest(
   if (!conv) {
     log('conversation_missing', {});
     return { conversationId, inserted: true, answered: false, reason: 'conversation_missing' };
+  }
+
+  // The platform profile name backfills the thread's customer name once, when known.
+  if (!conv.customerName && turn.customerName) {
+    await db
+      .update(conversations)
+      .set({ customerName: turn.customerName })
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.customerName)));
   }
 
   if (conv.aiPaused) {
@@ -264,7 +272,7 @@ export async function officialHumanReply(
   });
   await updateConversationState(conversationId, 'done');
   await markCustomerMessagesDone(conversationId);
-  if (pauseAi) await setConversationAiPaused(conversationId, pauseAi);
+  if (pauseAi) await setOfficialConversationAiPaused(conversationId, pauseAi);
   return { sent: true, conversationId };
 }
 

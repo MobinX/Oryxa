@@ -37,6 +37,8 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
     'instagramId', 'pageId', 'resolved',
   ],
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
+  // Official Channels' own pipeline lane: one row per stage of an operator-inbox turn.
+  official: ['channel', 'channelId', 'conversationId', 'externalId', 'intent', 'outcome', 'reason', 'confidence'],
   db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
   db_summary: ['table', 'count', 'totalMs'],
   agent_run: [
@@ -90,6 +92,7 @@ const LANE: Record<Evt, string> = {
   webhook: '[webhook]',
   webhook_item: '[webhook]',
   instagram: '[ig]',
+  official: '[official]',
   http_out: '[net]',
   db: '[db]',
   db_summary: '[db]',
@@ -912,6 +915,7 @@ export const ANOMALY_KINDS = [
   'quota_exhausted',
   'quota_gate_failed',
   'ai_disabled',
+  'official_model_failure',
   'wa_signature_invalid',
 ] as const;
 

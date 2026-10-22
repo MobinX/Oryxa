@@ -9,7 +9,7 @@ import {
   listAdminChannels,
   upsertAdminChannel,
 } from '@repo/db/crud/channel';
-import { setConversationAiPaused } from '@repo/db/crud/conversation';
+import { setOfficialConversationAiPaused } from '@repo/db/crud/conversation';
 import {
   addTicketNote,
   getProspectById,
@@ -257,13 +257,13 @@ adminOfficialRouter.get('/admin/official/conversations', async (c) => {
       customerName: conversations.customerName,
       aiPaused: conversations.aiPaused,
       lastMessageState: conversations.lastMessageState,
-      stateAt: conversations.stateAt,
+      stateAt: conversations.lastStateAt,
       createdAt: conversations.createdAt,
     })
     .from(conversations)
     .innerJoin(channels, eq(channels.id, conversations.channelId))
     .where(and(...conditions))
-    .orderBy(desc(conversations.stateAt))
+    .orderBy(desc(conversations.lastStateAt))
     .limit(Math.min(q.limit ?? 50, 100))
     .offset(q.offset ?? 0);
 
@@ -307,7 +307,7 @@ adminOfficialRouter.get('/admin/official/conversations/:conversationId', async (
     db
       .select()
       .from(ticketsTable)
-      .where(and(eq(ticketsTable.conversationId, id), isNull(ticketsTable.deletedAt)))
+      .where(eq(ticketsTable.conversationId, id))
       .orderBy(desc(ticketsTable.createdAt)),
   ]);
 
@@ -320,7 +320,7 @@ adminOfficialRouter.get('/admin/official/conversations/:conversationId', async (
       customerName: conv.customerName,
       aiPaused: conv.aiPaused,
       status: conv.lastMessageState,
-      stateAt: conv.stateAt.toISOString(),
+      stateAt: conv.lastStateAt.toISOString(),
       createdAt: conv.createdAt.toISOString(),
     },
     messages: thread
@@ -363,9 +363,9 @@ adminOfficialRouter.post('/admin/official/conversations/:conversationId/takeover
   const convId = c.req.param('conversationId');
   const ctx = await officialConversationPlatform(convId);
   if (!ctx) return c.json({ error: 'Conversation not found on an official channel' }, 404);
-  const row = await setConversationAiPaused(convId, bodyParse.data.paused);
+  const row = await setOfficialConversationAiPaused(convId, bodyParse.data.paused);
   if (!row) return c.json({ error: 'Conversation not found' }, 404);
-  return c.json({ conversationId: row.conversationId, aiPaused: row.aiPaused });
+  return c.json({ conversationId: row.id, aiPaused: row.aiPaused });
 });
 
 /* ---------- tickets: support + security ---------- */
@@ -492,7 +492,7 @@ adminOfficialRouter.get('/admin/official/prospects/:prospectId/events', async (c
       id: ev.id,
       kind: ev.kind,
       data: ev.data,
-      actor: ev.actor,
+      actor: { kind: ev.actorKind, userId: ev.actorUserId },
       createdAt: ev.createdAt.toISOString(),
     })),
   });
