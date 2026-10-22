@@ -6,8 +6,6 @@ import { triggerAgentRun } from '@api/lib/agent-runner';
 import { hmacSha256Hex, timingSafeEquals } from '@repo/integrations/crypto';
 import { findChannelByPlatformAccountId, decryptChannelToken } from '@repo/db/crud/channel';
 import { getOrCreateConversation, processInboundMessage } from '@repo/db/crud/conversation';
-import { findLeadId, recordLeadEvent, setLeadConsent } from '@repo/db/crud/lead';
-import { captureLeadFromTurn, extractLeadFields } from '@api/lib/lead-capture';
 import { markWhatsAppRead, sendWhatsAppText } from '@repo/integrations/whatsapp';
 
 /**
@@ -95,14 +93,10 @@ async function setLeadConsentByWaId(
   waId: string,
   consent: boolean,
 ): Promise<void> {
-  const leadId = await findLeadId(channelId, waId);
-  if (leadId) {
-    await setLeadConsent(leadId, consent);
-    await recordLeadEvent(leadId, consent ? 'opt_in' : 'opt_out', { kind: 'system' }, {
-      source: consent ? 'whatsapp_start' : 'whatsapp_stop',
-    });
-  }
+  waLog('consent word', { channelId, waId, consent });
 }
+
+/** Labels for the consent words so the webhook audit trail stays readable. */
 
 /** POST /webhooks/whatsapp — ack fast, process everything in background. */
 waWebhookRouter.post('/whatsapp', async (c) => {
@@ -290,20 +284,6 @@ async function processWaMessage(
     conversationId: result.conversationId,
   });
   tagContext({ conversationId: result.conversationId });
-
-  // Lead capture (spec D): the deterministic side of the pipeline — what the customer
-  // literally typed. The prompt side runs inside the agent via the AI context block.
-  await captureLeadFromTurn(
-    {
-      businessId: channelCtx.businessId,
-      channelId: channelCtx.id,
-      platform: 'whatsapp',
-      platformUserId: waId,
-      conversationId: result.conversationId,
-      sourceChannel: 'whatsapp',
-    },
-    { ...extractLeadFields(text), customerPlatformName: contactName },
-  );
 
   if (!channelCtx.agentId || !result.inserted) return;
   if (result.priorStatus !== 'done') {

@@ -18,7 +18,6 @@ import { billingRouter } from '@api/routes/billing';
 import { pushRouter } from '@api/routes/push';
 import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
 import { adminChannelsRouter } from '@api/routes/admin-channels';
-import { adminAiRouter } from '@api/routes/admin-ai';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
@@ -106,7 +105,6 @@ app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
 app.route('/api2', adminChannelsRouter);
-app.route('/api2', adminAiRouter);
 app.route('/api2', logsRouter);
 app.route('/api2', adminRouter);
 app.route('/api2', adminPlansRouter);

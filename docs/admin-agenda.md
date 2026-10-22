@@ -27,9 +27,10 @@ Needs user approval (see delivery doc): live token encryption key provisioning, 
   - Official conversations reuse `conversations`/`messages` with business_id NULLed (0036, additive): gets external-id idempotency, claim lock, ai_paused takeover, sent_by marks for free.
   - New tables in 0036: official_settings, tickets, ticket_events, prospects, prospect_events, prospect_weights; platform enum + 'tiktok'.
   - TikTok: no GA DM API for official accounts → enum value + honest status card, no fake connect.
-- [ ] Phase removal
+- [x] Phase removal — store-agent reverted to f83a1d8 (agent-runner-core, comment-runner, conversations route, packages/agent); deleted: ai-studio/capacity/inbox/leads pages, actions/admin-ai, lib/ai-context, lib/lead-capture, routes/admin-ai, crud/ai-config, crud/lead, shared/schemas/admin-ai + their tests. Sidebar (components/admin-sidebar.tsx) replaces top tabs; desktop rail collapsible (localStorage), mobile drawer behind hamburger; login page untouched. WA webhook keeps handshake+signature+store flow, lead-capture wiring stripped. 681 tests / 78 files green, web+api builds green, typecheck 201 (= baseline).
 - [ ] Phase migration
 - [ ] Phase official backend
 - [ ] Phase UI
 - [ ] Phase tests/build
 - [ ] Delivery doc
+- Coordinator 23:06: Mercury architecture review in docs/official-channels-review.md — address its Major/Security items (S1, M1, I1, D1-D4) during implementation.
