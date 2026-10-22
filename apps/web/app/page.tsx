@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { COMPANY_NAME } from '@/lib/brand';
 import { OnlyOrdesLogo } from '@/components/sidebar';
-import { HeroWorkflowShowcase } from '@/components/hero-workflow-showcase';
+import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
 import { MotionVideoAd } from '@/components/motion-video-ad';
 import {
   Sparkles,
@@ -166,7 +166,7 @@ export default function HomePage() {
 
             {/* Right Column: Dynamic Smartphone Showcase (7 cols on lg) */}
             <div className="lg:col-span-7 flex justify-center">
-              <HeroWorkflowShowcase />
+              <HeroInteractiveAd />
             </div>
           </div>
 
