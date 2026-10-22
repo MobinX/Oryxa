@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 import type { ConversationAgentState } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
+import { decryptChannelToken } from '@repo/db/crud/channel';
 
 export async function getOrCreateConversation(
   businessId: string,
@@ -35,7 +36,7 @@ export async function getOrCreateConversation(
 }
 
 export async function getConversationWithHistory(conversationId: string) {
-  return db.query.conversations.findFirst({
+  const row = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)),
     with: {
       messages: {
@@ -52,6 +53,8 @@ export async function getConversationWithHistory(conversationId: string) {
       business: true,
     },
   });
+  if (row?.channel) row.channel.apiToken = decryptChannelToken(row.channel.apiToken);
+  return row;
 }
 
 export async function createMessage(data: {
@@ -285,10 +288,12 @@ export async function listMessages(conversationId: string, businessId: string, l
 }
 
 export async function getConversationForBusiness(conversationId: string, businessId: string) {
-  return db.query.conversations.findFirst({
+  const row = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
     with: { channel: true },
   });
+  if (row?.channel) row.channel.apiToken = decryptChannelToken(row.channel.apiToken);
+  return row;
 }
 
 export async function deleteConversation(businessId: string, conversationId: string) {

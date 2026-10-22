@@ -1,6 +1,11 @@
 import { eq, and, isNull, ne, or, isNotNull, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, channels } from '@db/schema';
+import {
+  decryptMessageSecret,
+  encryptMessageSecret,
+  isEncryptedEnvelope,
+} from '@repo/integrations/crypto';
 import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
 import {
   createAgentInputSchema,
@@ -8,6 +13,33 @@ import {
   createChannelInputSchema,
   updateChannelInputSchema,
 } from '@repo/shared';
+
+/**
+ * Channel secrets live encrypted at rest (spec E): `MESSAGES_ENCRYPTION_KEY` turns every
+ * written `api_token` into a "v1:<iv>:<tag>:<ct>" envelope, and every read that hands the
+ * token to a platform call reveals it again. A deployment with no key configured keeps the
+ * legacy behavior — plaintext in and out — so rolling the env var out never breaks a send;
+ * the envelope prefix is what tells the difference both ways.
+ */
+export function encryptChannelToken(plain: string | null | undefined): string | null {
+  if (plain == null) return null;
+  if (isEncryptedEnvelope(plain)) return plain;
+  if (!process.env.MESSAGES_ENCRYPTION_KEY) return plain;
+  return encryptMessageSecret(plain);
+}
+
+export function decryptChannelToken(stored: string): string {
+  if (!isEncryptedEnvelope(stored)) return stored;
+  if (!process.env.MESSAGES_ENCRYPTION_KEY) {
+    throw new Error('channel token is encrypted but MESSAGES_ENCRYPTION_KEY is not set');
+  }
+  return decryptMessageSecret(stored);
+}
+
+/** Reveals the resolved bearer token on a fetched channel row, in place. */
+function revealChannelToken(row: { apiToken: string } | null | undefined) {
+  if (row) row.apiToken = decryptChannelToken(row.apiToken);
+}
 
 /**
  * A platform account (a Facebook Page, a WhatsApp number) can be connected to exactly one
@@ -149,7 +181,7 @@ export async function createChannel(businessId: string, input: unknown) {
       .update(channels)
       .set({
         deletedAt: null,
-        apiToken: parsed.apiToken,
+        apiToken: encryptChannelToken(parsed.apiToken)!,
         agentId,
         extraInfo: parsed.extraInfo ?? null,
       })
@@ -160,16 +192,18 @@ export async function createChannel(businessId: string, input: unknown) {
 
   const [channel] = await db
     .insert(channels)
-    .values({ ...parsed, agentId, businessId })
+    .values({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken)!, agentId, businessId })
     .returning();
   return { id: channel.id, status: 'linked' as const };
 }
 
 export async function getChannelByPageId(pageId: string) {
-  return db.query.channels.findFirst({
+  const row = await db.query.channels.findFirst({
     where: and(eq(channels.platform, 'facebook'), eq(channels.platformChannelId, pageId), isNull(channels.deletedAt)),
     with: { agent: true, business: true },
   });
+  revealChannelToken(row);
+  return row;
 }
 
 /**
@@ -180,7 +214,7 @@ export async function getChannelByPlatformAccountId(
   platform: 'instagram',
   accountId: string,
 ) {
-  return db.query.channels.findFirst({
+  const row = await db.query.channels.findFirst({
     where: and(
       eq(channels.platform, platform),
       eq(channels.platformChannelId, accountId),
@@ -188,6 +222,8 @@ export async function getChannelByPlatformAccountId(
     ),
     with: { agent: true, business: true },
   });
+  revealChannelToken(row);
+  return row;
 }
 
 export async function getChannelByBusinessPlatformChannelId(
@@ -241,17 +277,21 @@ export async function findChannelByBusinessPlatformChannelId(
 }
 
 export async function getChannelById(channelId: string) {
-  return db.query.channels.findFirst({
+  const row = await db.query.channels.findFirst({
     where: and(eq(channels.id, channelId), isNull(channels.deletedAt)),
     with: { agent: true },
   });
+  revealChannelToken(row);
+  return row;
 }
 
 export async function listChannels(businessId: string) {
-  return db.query.channels.findMany({
+  const rows = await db.query.channels.findMany({
     where: and(eq(channels.businessId, businessId), isNull(channels.deletedAt)),
     with: { agent: true },
   });
+  for (const row of rows) revealChannelToken(row);
+  return rows;
 }
 
 export async function updateChannelAgent(channelId: string, businessId: string, agentId: string | null) {
@@ -281,7 +321,7 @@ export async function updateChannel(businessId: string, channelId: string, input
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set(parsed)
+    .set({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };
@@ -302,7 +342,7 @@ export async function reactivateChannel(businessId: string, channelId: string, i
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set({ ...parsed, deletedAt: null })
+    .set({ ...parsed, deletedAt: null, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };
@@ -341,7 +381,7 @@ export async function upsertAdminChannel(input: {
     await db
       .update(channels)
       .set({
-        apiToken: input.apiToken,
+        apiToken: encryptChannelToken(input.apiToken)!,
         extraInfo: JSON.stringify({ pageName: input.pageName }),
       })
       .where(eq(channels.id, live.id));
@@ -363,7 +403,7 @@ export async function upsertAdminChannel(input: {
         businessId: null,
         agentId: null,
         isAdminOnly: true,
-        apiToken: input.apiToken,
+        apiToken: encryptChannelToken(input.apiToken)!,
         extraInfo: JSON.stringify({ pageName: input.pageName }),
       })
       .where(eq(channels.id, removed.id))
@@ -375,7 +415,7 @@ export async function upsertAdminChannel(input: {
     .insert(channels)
     .values({
       platform: 'facebook',
-      apiToken: input.apiToken,
+      apiToken: encryptChannelToken(input.apiToken)!,
       platformChannelId: input.platformChannelId,
       extraInfo: JSON.stringify({ pageName: input.pageName }),
       isAdminOnly: true,
@@ -385,10 +425,12 @@ export async function upsertAdminChannel(input: {
 }
 
 export async function listAdminChannels() {
-  return db.query.channels.findMany({
+  const rows = await db.query.channels.findMany({
     where: and(eq(channels.isAdminOnly, true), isNull(channels.deletedAt)),
     orderBy: [asc(channels.createdAt)],
   });
+  for (const row of rows) revealChannelToken(row);
+  return rows;
 }
 
 /** Who holds a live channel for this page, and whether that holder is the operator. */

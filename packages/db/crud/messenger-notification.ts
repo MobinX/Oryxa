@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { channels, messengerNotificationUsers, messengerNotifications } from '@db/schema';
+import { decryptChannelToken } from '@repo/db/crud/channel';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -73,7 +74,7 @@ export async function upsertMessengerNotificationUser(input: {
 
 /** Every Messenger account following this business, with the page token allowed to message it. */
 export async function listMessengerNotificationRecipients(businessId: string) {
-  return db
+  const rows = await db
     .select({
       platformUserId: messengerNotificationUsers.platformUserId,
       channelApiToken: channels.apiToken,
@@ -83,6 +84,7 @@ export async function listMessengerNotificationRecipients(businessId: string) {
     .where(
       and(eq(messengerNotificationUsers.businessId, businessId), isNull(channels.deletedAt)),
     );
+  return rows.map((row) => ({ ...row, channelApiToken: decryptChannelToken(row.channelApiToken) }));
 }
 
 /** Unlinks one account; scoped to the business, so an id from another store matches nothing. */

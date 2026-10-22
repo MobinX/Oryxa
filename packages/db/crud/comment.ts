@@ -2,6 +2,8 @@ import { eq, and, or, lt, isNull, inArray, desc, asc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { commentThreads, comments } from '@db/schema';
 
+import { decryptChannelToken } from '@repo/db/crud/channel';
+
 export async function getOrCreateCommentThreadWithFlag(
   businessId: string,
   channelId: string,
@@ -71,7 +73,7 @@ export async function getOrCreateCommentThread(
 }
 
 export async function getCommentThreadWithChannel(threadId: string) {
-  return db.query.commentThreads.findFirst({
+  const row = await db.query.commentThreads.findFirst({
     where: and(eq(commentThreads.id, threadId), isNull(commentThreads.deletedAt)),
     with: {
       channel: {
@@ -80,6 +82,8 @@ export async function getCommentThreadWithChannel(threadId: string) {
       business: true,
     },
   });
+  if (row?.channel) row.channel.apiToken = decryptChannelToken(row.channel.apiToken);
+  return row;
 }
 
 export async function updateCommentThreadState(
