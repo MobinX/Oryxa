@@ -4,9 +4,9 @@ import { app } from '@api/index';
 import { logsOperatorPassword } from '@api/middleware/logs-access';
 import { seedTestWorld } from '../helpers/seed';
 
-const getPageIdForTokenMock = vi.fn(async () => 'PAGE_FROM_TOKEN');
+const getPageIdForTokenMock = vi.fn(async (..._args: unknown[]): Promise<string | null> => 'PAGE_FROM_TOKEN');
 const sendTextMock = vi.fn(async (..._args: unknown[]) => undefined);
-const verifyWaMock = vi.fn(async () => ({ verified: true }));
+const verifyWaMock = vi.fn(async (..._args: unknown[]) => ({ verified: true as boolean, error: undefined as string | undefined }));
 
 vi.mock('@repo/integrations/facebook', async () => {
   const actual = await import('@repo/integrations/facebook');
@@ -33,8 +33,8 @@ const bearer = () => ({ Authorization: `Bearer ${logsOperatorPassword()}` });
 describe('admin AI channel verify', () => {
   withPglite();
   beforeEach(() => {
-    getPageIdForTokenMock.mockClear().mockImplementation(async () => 'PAGE_FROM_TOKEN');
-    verifyWaMock.mockClear().mockImplementation(async () => ({ verified: true }));
+    getPageIdForTokenMock.mockClear().mockImplementation(async (): Promise<string | null> => 'PAGE_FROM_TOKEN');
+    verifyWaMock.mockClear().mockImplementation(async (..._args: unknown[]) => ({ verified: true, error: undefined }));
   });
 
   it('facebook: verified only when the token resolves to the connected page id', async () => {
