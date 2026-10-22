@@ -333,7 +333,7 @@ function outcomeOf(verdict: TriggerVerdict, otherwise: string): string {
 }
 
 async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
-  if (process.env.TESTING !== 'true') {
+  if (process.env.TESTING !== 'true' || process.env.NODE_ENV === 'production') {
     fbLog('[TESTING] Testing mode not enabled');
     return null;
   }
@@ -358,13 +358,13 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
     }
   }
 
-  // POST request: read text, copy all non-host headers, and execute async fetch
+  // POST request: read text and forward only the headers Meta's receiver needs. Copying every
+  // header would hand the upstream host our cookies or authorization if one were ever added.
   const rawBody = await c.req.text();
   const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(c.req.header() as Record<string, string | undefined>)) {
-    if (value !== undefined && key.toLowerCase() !== 'host') {
-      headers[key] = value;
-    }
+  for (const name of ['content-type', 'x-hub-signature-256']) {
+    const value = c.req.header(name);
+    if (value !== undefined) headers[name] = value;
   }
 
   fetch(forwardUrl, {
@@ -448,7 +448,12 @@ async function receiveMetaWebhook(c: any): Promise<Response> {
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
   const mode = process.env.META_WEBHOOK_SIGNATURE_MODE ?? 'enforce';
-  const isLogOnly = mode === 'log-only';
+  const logOnlyRequested = mode === 'log-only';
+  const isLogOnly = logOnlyRequested && process.env.NODE_ENV !== 'production';
+  if (logOnlyRequested && !isLogOnly) {
+    fbLog(`POST ${path} signature mode log-only is refused in production — enforcing`);
+    emit('webhook', { event: 'signature_mode_ignored', mode });
+  }
 
   // Log request metadata without exposing secrets
   fbLog(`POST ${path} received`, {

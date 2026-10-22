@@ -131,6 +131,43 @@ describe('Facebook Webhook', () => {
     }
   });
 
+  it('enforces signatures in production even when log-only is configured', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    process.env.META_WEBHOOK_SIGNATURE_MODE = 'log-only';
+    try {
+      const res = await fbWebhookRouter.request('http://localhost/facebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
+        body: JSON.stringify({ object: 'page', entry: [] }),
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      delete process.env.META_WEBHOOK_SIGNATURE_MODE;
+    }
+  });
+
+  it('does not forward testing webhooks in production', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    process.env.TESTING = 'true';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const res = await fbWebhookRouter.request('http://localhost/facebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ object: 'page', entry: [] }),
+      });
+      expect(res.status).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      process.env.NODE_ENV = previousNodeEnv;
+      delete process.env.TESTING;
+    }
+  });
+
   it('rejects an Instagram event with a forged signature (403)', async () => {
     const res = await fbWebhookRouter.request('http://localhost/instagram', {
       method: 'POST',
