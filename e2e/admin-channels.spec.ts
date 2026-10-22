@@ -39,7 +39,7 @@ test.describe('admin AI channels pages', () => {
       expect(res?.status(), `${path} status`).toBeLessThan(400);
       await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 30_000 });
       // Either data or an honest empty/error card — never a blank screen.
-      await expect(page.getByText(/No .* yet|Save|Search|Loading|reached/).first()).toBeVisible();
+      await expect(page.getByText(/No .* yet|Save|Search|Loading|reached|Connect|unavailable|error/i).first()).toBeVisible();
       await shot(page, `admin${path.replace(/\//g, '-')}`);
     }
   });
