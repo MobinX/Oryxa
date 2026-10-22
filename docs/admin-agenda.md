@@ -17,3 +17,19 @@ Needs user approval (see delivery doc): live token encryption key provisioning, 
 - Implementer (final polish): AI-studio sandbox preview endpoint + card, lead assignee field, consent stickiness (opt-out survives observed consent; consentAt stamped both ways), AI scenarios 1–12 tests, `e2e/admin-channels.spec.ts` (env-gated, skipped without operator creds), bundle build fixed (`@repo/integrations` exports `./crypto` + `./whatsapp`; admin-ai on `@repo/db/*` convention) → `build:api` now green. Totals: 84 files / 730 tests green, typecheck 201, web + api builds green. Commit 11531a0/follow-ups.
 - Implementer (second gap pass): comments overview UI (spec F), lead status/platform filters + filter-aware CSV (spec D), strict identity verify for FB/IG channels (token must resolve to the stored page id, spec A) + verify tests. Totals: 85 files / 732 tests, typecheck 201, web + api builds green. Note: repo has no lint script — nothing to run.
 - 22:20 migration 0035 applied to shared Neon (user-approved, additive); e2e 2/2 pass
+
+## Official Channels (spec docs/official-channels-spec.md, 2026-10-22)
+
+- [x] Architecture first → docs/official-channels-plan.md. Key decisions:
+  - §2 dashboard: numbers verified REAL already (crud/admin-analytics.ts SQL over messages/orders/token-analytics/visits; date ranges + zero states). No fake stats found on /admin; re-verified in delivery doc.
+  - §1 removal: store-agent files restored to f83a1d8 exactly (agent-runner-core, comment-runner, conversations route, packages/agent); ai-context/lead-capture deleted; ai-studio/capacity/inbox/leads pages + actions/admin-ai deleted; routes/admin-ai.ts replaced by routes/admin-official.ts.
+  - Keeps: admin123 removal, provision-operators, checkRevoked, crypto.ts, bunServe fix, WhatsApp client, 0035 tables (leads/capacity stay in DB, unused — their notNull business_id FK doesn't fit official prospects).
+  - Official conversations reuse `conversations`/`messages` with business_id NULLed (0036, additive): gets external-id idempotency, claim lock, ai_paused takeover, sent_by marks for free.
+  - New tables in 0036: official_settings, tickets, ticket_events, prospects, prospect_events, prospect_weights; platform enum + 'tiktok'.
+  - TikTok: no GA DM API for official accounts → enum value + honest status card, no fake connect.
+- [ ] Phase removal
+- [ ] Phase migration
+- [ ] Phase official backend
+- [ ] Phase UI
+- [ ] Phase tests/build
+- [ ] Delivery doc
