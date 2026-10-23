@@ -4,8 +4,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { requireConsoleBearer } from '@/lib/admin-access';
-import { adminOfficialProspects, type OfficialProspect } from '@/lib/api';
+import { adminOfficialProspects, ApiError, type OfficialProspect } from '@/lib/api';
 import { officialProspectPatchAction, officialWeightsAction } from '@/app/actions/admin-official';
+import { AdminPageHeader } from '@/components/admin-page-header';
+import {
+  isOfficialMigrationPending,
+  OfficialMigrationCard,
+} from '@/components/official-migration-card';
 
 export const instant = false;
 
@@ -22,6 +27,7 @@ export default async function OfficialProspectsPage({
   let prospects: OfficialProspect[] = [];
   let weights: Record<string, number> = {};
   let loadError: string | null = null;
+  let migrationPending = false;
   try {
     const body = await adminOfficialProspects(bearer, {
       status: params.status === 'all' ? undefined : (params.status ?? undefined),
@@ -29,34 +35,33 @@ export default async function OfficialProspectsPage({
     prospects = body.prospects;
     weights = body.weights;
   } catch (err) {
-    loadError = err instanceof Error ? err.message : 'The prospect list could not be read.';
+    if (isOfficialMigrationPending(err)) {
+      migrationPending = true;
+    } else {
+      loadError = err instanceof ApiError ? `${err.status}: ${err.message}` : 'The prospect list could not be read.';
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <Users className="h-6 w-6 text-primary" />
-            Prospects
-          </h1>
-          <p className="mt-1 max-w-2xl text-muted-foreground">
-            People the official AI is onboarding: every field only appears because the customer
-            themselves said it, and the consent line is recorded when they agreed.
-          </p>
-        </div>
-        <form className="flex items-end gap-2">
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Status</span>
-            <select name="status" defaultValue={params.status ?? 'all'} className="h-10 rounded-md border bg-card px-3 text-sm">
-              {['all', ...STATUSES].map((value) => (
-                <option key={value} value={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-          <Button type="submit" variant="outline" className="h-10">Filter</Button>
-        </form>
-      </div>
+      <AdminPageHeader
+        icon={Users}
+        title="Prospects"
+        description="People the official AI is onboarding: every field only appears because the customer themselves said it, and the consent line is recorded when they agreed."
+        actions={
+          <form className="flex items-end gap-2">
+            <label className="text-sm">
+              <span className="mb-1 block font-medium">Status</span>
+              <select name="status" defaultValue={params.status ?? 'all'} className="h-10 rounded-md border bg-card px-3 text-sm">
+                {['all', ...STATUSES].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <Button type="submit" variant="outline" className="h-10">Filter</Button>
+          </form>
+        }
+      />
 
       {params.error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">{params.error}</Card>
@@ -69,8 +74,9 @@ export default async function OfficialProspectsPage({
       {loadError && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
       )}
+      {migrationPending && <OfficialMigrationCard />}
 
-      {!loadError && (
+      {!loadError && !migrationPending && (
         <>
           <Card className="p-6">
             <h2 className="text-base font-semibold">Scoring weights</h2>

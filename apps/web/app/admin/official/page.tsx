@@ -2,10 +2,15 @@ import Link from 'next/link';
 import { Globe, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { requireConsoleBearer } from '@/lib/admin-access';
-import { ApiError, adminOfficialChannels, adminOfficialSettings, type OfficialChannel } from '@/lib/api';
+import { adminOfficialChannels, adminOfficialSettings, type OfficialChannel } from '@/lib/api';
+import {
+  isOfficialMigrationPending,
+  OfficialMigrationCard,
+} from '@/components/official-migration-card';
 import {
   connectOfficialWhatsAppAction,
   disconnectOfficialChannelAction,
@@ -33,28 +38,27 @@ export default async function OfficialChannelsPage({
   let channels: OfficialChannel[] = [];
   let settings: Awaited<ReturnType<typeof adminOfficialSettings>> | null = null;
   let loadError: string | null = null;
+  let migrationPending = false;
   try {
     [channels, settings] = await Promise.all([
       adminOfficialChannels(bearer).then((rows) => rows.channels),
       adminOfficialSettings(bearer),
     ]);
   } catch (err) {
-    loadError = err instanceof ApiError ? `${err.status}: ${err.message}` : 'The API could not be reached';
+    if (isOfficialMigrationPending(err)) {
+      migrationPending = true;
+    } else {
+      loadError = err instanceof ApiError ? `${err.status}: ${err.message}` : 'The API could not be reached';
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <Globe className="h-6 w-6 text-primary" />
-          Official channels
-        </h1>
-        <p className="mt-1 max-w-2xl text-muted-foreground">
-          The messaging accounts that speak for OnlyOrders itself: a customer DMs them with a
-          question about the platform, the AI answers as a person all day, and nothing here
-          belongs to a store&apos;s storefront.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={Globe}
+        title="Official channels"
+        description="The messaging accounts that speak for OnlyOrders itself: a customer DMs them with a question about the platform, the AI answers as a person all day, and nothing here belongs to a store's storefront."
+      />
 
       {params.error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">
@@ -87,8 +91,9 @@ export default async function OfficialChannelsPage({
       {loadError && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
       )}
+      {migrationPending && <OfficialMigrationCard />}
 
-      {!loadError && (
+      {!loadError && !migrationPending && (
         <>
           {channels.length > 0 && (
             <ul className="grid gap-4 sm:grid-cols-2">

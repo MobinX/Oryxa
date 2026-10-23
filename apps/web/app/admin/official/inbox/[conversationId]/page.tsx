@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { requireConsoleBearer } from '@/lib/admin-access';
-import { adminOfficialThread } from '@/lib/api';
+import { ApiError, adminOfficialThread } from '@/lib/api';
 import { officialReplyAction, officialTakeoverAction } from '@/app/actions/admin-official';
+import { OfficialMigrationCard, isOfficialMigrationPending } from '@/components/official-migration-card';
 
 export const instant = false;
 
@@ -22,19 +23,28 @@ export default async function OfficialThreadPage({
 
   let thread: Awaited<ReturnType<typeof adminOfficialThread>> | null = null;
   let loadError: string | null = null;
+  let migrationPending = false;
   try {
     thread = await adminOfficialThread(bearer, conversationId);
   } catch (err) {
-    loadError = err instanceof Error ? err.message : 'The thread could not be read.';
+    if (isOfficialMigrationPending(err)) {
+      migrationPending = true;
+    } else {
+      loadError = err instanceof ApiError ? `${err.status}: ${err.message}` : 'The thread could not be read.';
+    }
   }
 
-  if (loadError || !thread) {
+  if (loadError || migrationPending || !thread) {
     return (
       <div className="space-y-4">
         <Link href="/admin/official/inbox" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Back to inbox
         </Link>
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        {migrationPending ? (
+          <OfficialMigrationCard />
+        ) : (
+          <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        )}
       </div>
     );
   }

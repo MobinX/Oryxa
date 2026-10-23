@@ -1,8 +1,13 @@
 import Link from 'next/link';
 import { Inbox } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { adminOfficialConversations, type OfficialConversation } from '@/lib/api';
+import {
+  isOfficialMigrationPending,
+  OfficialMigrationCard,
+} from '@/components/official-migration-card';
 
 export const instant = false;
 
@@ -15,28 +20,29 @@ export default async function OfficialInboxPage() {
 
   let rows: OfficialConversation[] = [];
   let loadError: string | null = null;
+  let migrationPending = false;
   try {
     rows = (await adminOfficialConversations(await requireConsoleBearer())).conversations;
-  } catch {
-    loadError = 'The conversation list could not be read.';
+  } catch (err) {
+    if (isOfficialMigrationPending(err)) {
+      migrationPending = true;
+    } else {
+      loadError = 'The conversation list could not be read.';
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <Inbox className="h-6 w-6 text-primary" />
-          Official inbox
-        </h1>
-        <p className="mt-1 max-w-2xl text-muted-foreground">
-          Every person who messaged an official channel. The AI answers as a person while it is
-          enabled; a taken-over thread stays yours until you resume it.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={Inbox}
+        title="Official inbox"
+        description="Every person who messaged an official channel. The AI answers as a person while it is enabled; a taken-over thread stays yours until you resume it."
+      />
 
       {loadError && <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>}
+      {migrationPending && <OfficialMigrationCard />}
 
-      {rows.length === 0 && !loadError && (
+      {rows.length === 0 && !loadError && !migrationPending && (
         <Card className="py-12 text-center">
           <p className="font-semibold">No conversations yet</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">

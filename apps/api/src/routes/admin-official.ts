@@ -55,6 +55,30 @@ adminOfficialRouter.use('/admin/official/*', logsAuthMiddleware);
 
 const sendErr = (err: unknown) => (err instanceof Error ? err.message : 'Internal Server Error');
 
+/** Walks a driver error's cause chain looking for the Postgres error code. */
+function pgErrorCode(err: unknown): string | null {
+  for (let cur: unknown = err; cur; cur = (cur as { cause?: unknown })?.cause) {
+    const code = (cur as { code?: unknown })?.code;
+    if (typeof code === 'string') return code;
+  }
+  return null;
+}
+
+/**
+ * 42P01 (undefined_table) here means migration 0036_official_channels has not been applied
+ * to this database yet. That is a deployment state, not a bug in the console, so the answer
+ * is 503 with a named code — the web console renders a "migration pending" card from it
+ * instead of a raw 500.
+ */
+export const OFFICIAL_NOT_MIGRATED_ERROR = 'official_channels_not_migrated';
+
+adminOfficialRouter.onError(async (err, c) => {
+  if (pgErrorCode(err) === '42P01') {
+    return c.json({ error: OFFICIAL_NOT_MIGRATED_ERROR }, 503);
+  }
+  return c.json({ error: sendErr(err) }, 500);
+});
+
 function channelTakenMessage(err: unknown): string {
   return err instanceof ChannelTakenError
     ? 'This account answers a store already; disconnect it there first'
