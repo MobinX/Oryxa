@@ -1,10 +1,18 @@
-CREATE TYPE "ticket_type" AS ENUM('support', 'security');
+DO $$ BEGIN
+  CREATE TYPE "ticket_type" AS ENUM('support', 'security');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "ticket_status" AS ENUM('open', 'in_progress', 'waiting', 'resolved', 'closed');
+DO $$ BEGIN
+  CREATE TYPE "ticket_status" AS ENUM('open', 'in_progress', 'waiting', 'resolved', 'closed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "ticket_priority" AS ENUM('low', 'normal', 'high', 'urgent');
+DO $$ BEGIN
+  CREATE TYPE "ticket_priority" AS ENUM('low', 'normal', 'high', 'urgent');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "prospect_status" AS ENUM('new', 'reviewing', 'prioritized', 'onboarding_requested', 'onboarded', 'rejected');
+DO $$ BEGIN
+  CREATE TYPE "prospect_status" AS ENUM('new', 'reviewing', 'prioritized', 'onboarding_requested', 'onboarded', 'rejected');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 ALTER TYPE "platform" ADD VALUE IF NOT EXISTS 'tiktok';
 --> statement-breakpoint
