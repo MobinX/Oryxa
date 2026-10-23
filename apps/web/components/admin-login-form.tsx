@@ -39,7 +39,9 @@ export function AdminLoginForm({ user }: { user: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [typedUser, setTypedUser] = useState(user);
+  // Start empty: the operator types the full address they want to sign in with. The configured
+  // account is only a placeholder, never a value appended to or forced into the field.
+  const [typedUser, setTypedUser] = useState('');
 
   async function handleGoogle() {
     if (busy) return;
@@ -68,7 +70,7 @@ export function AdminLoginForm({ user }: { user: string }) {
   }
 
   async function resetPassword() {
-    const login = typedUser.trim();
+    const login = typedUser.trim() || user.trim();
     if (!login) { setError('Enter your operator email first.'); return; }
     setBusy(true);
     setError(null);
@@ -133,6 +135,7 @@ export function AdminLoginForm({ user }: { user: string }) {
             type="email"
             value={typedUser}
             onChange={(event) => setTypedUser(event.target.value)}
+            placeholder={user}
             autoComplete="username"
             required
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
