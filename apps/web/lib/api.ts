@@ -442,11 +442,13 @@ export const deleteChannel = (token: string, businessId: string, channelId: stri
 export const getFacebookAuthUrl = (
   token: string,
   businessId: string,
-  options?: { portfolio?: boolean },
+  options?: { portfolio?: boolean; returnOrigin?: string },
 ) => {
-  const choice =
-    options?.portfolio === undefined ? '' : `?portfolio=${String(options.portfolio)}`;
-  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${choice}`, {
+  const query = new URLSearchParams();
+  if (options?.portfolio !== undefined) query.set('portfolio', String(options.portfolio));
+  if (options?.returnOrigin) query.set('returnOrigin', options.returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${suffix}`, {
     token,
   });
 };
@@ -483,8 +485,18 @@ export const connectFacebookPages = (
     { method: 'POST', token, body: JSON.stringify(data) },
   );
 
-export const getInstagramAuthUrl = (token: string, businessId: string) =>
-  apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth`, { token });
+export const getInstagramAuthUrl = (
+  token: string,
+  businessId: string,
+  options?: { returnOrigin?: string },
+) => {
+  const query = new URLSearchParams();
+  if (options?.returnOrigin) query.set('returnOrigin', options.returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth${suffix}`, {
+    token,
+  });
+};
 
 export type InstagramPendingAccount = {
   id: string;
@@ -533,8 +545,12 @@ export type AdminChannel = {
 export const listAdminChannels = (token: string) =>
   apiFetch<{ channels: AdminChannel[] }>('/api2/admin/channels', { token });
 
-export const getAdminFacebookAuthUrl = (token: string) =>
-  apiFetch<{ url: string }>('/api2/admin/channels/facebook/auth', { token });
+export const getAdminFacebookAuthUrl = (token: string, returnOrigin?: string) => {
+  const query = new URLSearchParams();
+  if (returnOrigin) query.set('returnOrigin', returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api2/admin/channels/facebook/auth${suffix}`, { token });
+};
 
 export type AdminPendingPage = {
   id: string;

@@ -17,6 +17,7 @@ import {
   facebookPendingPageSchema,
   facebookConnectPagesInputSchema,
   facebookConnectPagesOutputSchema,
+  oauthReturnQuerySchema,
   instagramPendingAccountSchema,
   instagramConnectAccountsInputSchema,
   instagramConnectAccountsOutputSchema,
@@ -65,6 +66,7 @@ import {
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 import { emit } from '@api/lib/log';
+import { safeReturnOrigin } from '@api/lib/return-origin';
 
 export const channelsRouter = new OpenAPIHono();
 
@@ -465,7 +467,7 @@ const fbAuthRoute = createRoute({
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
-  const { portfolio } = c.req.valid('query');
+  const { portfolio, returnOrigin } = c.req.valid('query');
   // Meta echoes `state` back verbatim, so the user's answer survives the round trip inside
   // the same signed token that binds the flow to this business — no second token, and a
   // client cannot relabel someone else's flow as portfolio-aware.
@@ -473,7 +475,12 @@ channelsRouter.openapi(fbAuthRoute, async (c) => {
   // state is a signed, short-lived token bound to this user + business, so the
   // OAuth callback can't be replayed to attach a page to a business the caller
   // doesn't own.
-  const state = await createOAuthState({ businessId, userId: user.id, portfolio: choice });
+  const state = await createOAuthState({
+    businessId,
+    userId: user.id,
+    portfolio: choice,
+    returnOrigin: safeReturnOrigin(returnOrigin),
+  });
   const url = getFacebookOAuthUrl(state, choice);
   return c.json({ url });
 });
@@ -651,7 +658,10 @@ const igAuthRoute = createRoute({
   path: '/{businessId}/channels/instagram/auth',
   tags: ['Channels'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: oauthReturnQuerySchema,
+  },
   responses: {
     200: { content: { 'application/json': { schema: z.object({ url: z.string() }) } }, description: 'OAuth URL' },
   },
@@ -660,6 +670,7 @@ const igAuthRoute = createRoute({
 channelsRouter.openapi(igAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
+  const { returnOrigin } = c.req.valid('query');
   const portfolio = process.env.META_BUSINESS_MANAGEMENT === 'true';
   const state = await createOAuthState({
     businessId,
@@ -668,6 +679,7 @@ channelsRouter.openapi(igAuthRoute, async (c) => {
     // Same deployment switch as the Page flow: portfolio Pages are merged only when the app has
     // been granted `business_management`, because asking for an unapproved scope fails the login.
     portfolio,
+    returnOrigin: safeReturnOrigin(returnOrigin),
   });
   return c.json({ url: getInstagramOAuthUrl(state, portfolio) });
 });
@@ -908,17 +920,20 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   const verified = await verifyOAuthState(state);
   if (!verified) return c.text('Invalid or expired state', 400);
 
-  const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+  const webUrl = (process.env.WEB_URL ?? 'http://localhost:3400').replace(/\/+$/, '');
+  // The signed origin is where this particular merchant started (Oryxa or OnlyOrders). Validate
+  // it again at the redirect site; the fallback keeps old links and admin flows working.
+  const webOrigin = safeReturnOrigin(verified.returnOrigin) ?? webUrl;
   const platform = verified.platform;
   // The same signed flow serves the admin console: only the picker's home changes. Instagram
   // has its own picker because it shows accounts rather than Pages.
   const adminFlow = platform === 'facebook' && verified.businessId === ADMIN_FACEBOOK_FLOW;
   const pickerUrl =
     platform === 'instagram'
-      ? `${webUrl}/b/${verified.businessId}/channels/connect-instagram`
+      ? `${webOrigin}/b/${verified.businessId}/channels/connect-instagram`
       : adminFlow
-        ? `${webUrl}/admin/channels/connect-facebook`
-        : `${webUrl}/b/${verified.businessId}/channels/connect-facebook`;
+        ? `${webOrigin}/admin/channels/connect-facebook`
+        : `${webOrigin}/b/${verified.businessId}/channels/connect-facebook`;
   const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,

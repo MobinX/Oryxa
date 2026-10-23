@@ -1,5 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
+import { safeReturnOrigin } from '@api/lib/return-origin';
 import {
   ChannelTakenError,
   getLiveChannelOwner,
@@ -47,7 +48,11 @@ adminChannelsRouter.get('/admin/channels', async (c) => {
 });
 
 adminChannelsRouter.get('/admin/channels/facebook/auth', async (c) => {
-  const state = await createOAuthState({ businessId: ADMIN_FACEBOOK_FLOW, userId: 'operator' });
+  const state = await createOAuthState({
+    businessId: ADMIN_FACEBOOK_FLOW,
+    userId: 'operator',
+    returnOrigin: safeReturnOrigin(c.req.query('returnOrigin')),
+  });
   return c.json({ url: getFacebookOAuthUrl(state) });
 });
 
