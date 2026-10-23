@@ -34,11 +34,8 @@ function messageFor(code: string): string {
   return 'Sign-in failed.';
 }
 
-/**
- * `user` is what the console has always asked for; `domain` comes from the server, so the address
- * the account actually lives at is never typed and never guessed.
- */
-export function AdminLoginForm({ user, domain }: { user: string; domain: string }) {
+/** `user` is the full operator email, prefilled so the account is visible but still editable. */
+export function AdminLoginForm({ user }: { user: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,12 +69,12 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
 
   async function resetPassword() {
     const login = typedUser.trim();
-    if (!login) { setError('Enter your operator user id first.'); return; }
+    if (!login) { setError('Enter your operator email first.'); return; }
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await sendPasswordReset(login.includes('@') ? login : `${login}@${domain}`);
+      await sendPasswordReset(login);
       setNotice('If that operator account exists, Firebase will send password reset instructions to its email address.');
     } catch (err) {
       const failure = err as { code?: string; message?: string };
@@ -97,7 +94,7 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
     setError(null);
     setNotice(null);
     try {
-      const credential = await signInWithEmail(typed.includes('@') ? typed : `${typed}@${domain}`, password);
+      const credential = await signInWithEmail(typed, password);
       // Throws NEXT_REDIRECT on success, and on the failure redirects below — both must escape.
       await operatorSignInAction(await credential.user.getIdToken());
     } catch (err) {
@@ -130,9 +127,10 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
 
       <form action={submit} className="space-y-4">
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">User id</span>
+          <span className="text-sm font-medium">Email</span>
           <input
             name="user"
+            type="email"
             value={typedUser}
             onChange={(event) => setTypedUser(event.target.value)}
             autoComplete="username"

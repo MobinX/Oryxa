@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdminLoginForm } from '@/components/admin-login-form';
-import { hasLogsSession, logsOperatorUser, operatorAccountEmail } from '@/lib/logs-session';
+import { hasLogsSession, operatorAccountEmail } from '@/lib/logs-session';
 import { getBrand } from '@/lib/brand-server';
 
 export async function generateMetadata() {
@@ -62,10 +62,7 @@ async function AdminLoginContent({
           </p>
         </div>
 
-        <AdminLoginForm
-          user={logsOperatorUser()}
-          domain={operatorAccountEmail().split('@')[1] ?? 'oryxa.app'}
-        />
+        <AdminLoginForm user={operatorAccountEmail()} />
 
         {message ? (
           <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
