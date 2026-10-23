@@ -29,7 +29,7 @@ test.describe('admin console pages', () => {
 
   test('operator signs in and every admin page renders', async ({ page }) => {
     await page.goto('/admin/login');
-    await page.getByLabel(/user id|email/i).fill(EMAIL!);
+    await page.getByLabel(/user id|email/i).first().fill(EMAIL!);
     await page.locator('input[type="password"]').first().fill(PASSWORD!);
     await page.getByRole('button', { name: /sign in/i }).first().click();
     await page.waitForURL((url) => url.pathname.startsWith('/admin') && !url.pathname.includes('login'), {
@@ -49,7 +49,7 @@ test.describe('admin console pages', () => {
   test('official pages carry the sidebar and honest Tiktok note', async ({ page }) => {
     test.skip(!EMAIL || !PASSWORD, 'ONLYORDERS_OPERATOR_EMAIL/PASSWORD not set');
     await page.goto('/admin/login');
-    await page.getByLabel(/user id|email/i).fill(EMAIL!);
+    await page.getByLabel(/user id|email/i).first().fill(EMAIL!);
     await page.locator('input[type="password"]').first().fill(PASSWORD!);
     await page.getByRole('button', { name: /sign in/i }).first().click();
     await page.waitForURL((url) => url.pathname.startsWith('/admin') && !url.pathname.includes('login'), {
@@ -57,11 +57,14 @@ test.describe('admin console pages', () => {
     });
 
     await page.goto('/admin/official');
-    await expect(page.getByText('Official channels')).toBeVisible({ timeout: 30_000 });
+    // Role-scoped so the sidebar link with the same label cannot shadow the heading.
+    await expect(page.getByRole('heading', { name: 'Official channels' })).toBeVisible({ timeout: 30_000 });
     // The AI settings form is real controls, not a screenshot.
-    await expect(page.getByText('How the official AI answers')).toBeVisible();
-    await expect(page.getByText('Connect WhatsApp')).toBeVisible();
-    await expect(page.getByText('TikTok')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How the official AI answers' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Connect WhatsApp' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'TikTok' })).toBeVisible();
+    // A deployment without migration 0036 shows its own card, never a raw 500.
+    await expect(page.getByRole('main')).not.toContainText(/\b5\d\d:/);
     // Dashboard still speaks in real numbers, not placeholders.
     await page.goto('/admin');
     await expect(page.getByRole('main')).not.toContainText(/TODO|placeholder sample/i);
