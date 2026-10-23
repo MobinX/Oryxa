@@ -5,6 +5,7 @@ import { preloadPlayground } from '@/lib/playground-preload';
 import { PlaygroundClient } from '@/components/playground-client';
 import { operatorAccountEmail } from '@/lib/logs-session';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { FlaskConical, AlertTriangle } from 'lucide-react';
 
 /**
@@ -33,10 +34,7 @@ export default async function AdminAgentPlaygroundPage() {
   if (!sandbox) {
     return (
       <div className="space-y-6">
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <FlaskConical className="h-6 w-6 text-primary" />
-          Agent playground
-        </h1>
+        <AdminPageHeader icon={FlaskConical} title="Agent playground" />
         <Card className="border-amber-500/40 hover:shadow-card">
           <p className="flex items-center gap-2 font-semibold">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />

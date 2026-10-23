@@ -1,5 +1,6 @@
 import { Bot } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { adminGetOverrideReport, adminGetPlatformAgent } from '@/lib/api';
 import { DefaultAgentForm } from './default-agent-form';
@@ -35,16 +36,11 @@ export default async function DefaultAgentPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <Bot className="h-6 w-6 text-primary" />
-          Default agent
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The prompt and wording every store follows — until a store writes its own, which turns that one
-          store into an override.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={Bot}
+        title="Default agent"
+        description="The prompt and wording every store follows — until a store writes its own, which turns that one store into an override."
+      />
 
       {!agent ? (
         <Card className="border-amber-500/40">

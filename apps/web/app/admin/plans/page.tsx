@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { AlertTriangle, CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { cachedAdminBusinessPlans, cachedPlans } from '@/app/_cache/queries';
 import { ApiError } from '@/lib/api';
@@ -27,17 +28,11 @@ export default async function AdminPlansPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <CreditCard className="h-6 w-6 text-primary" />
-            Plans
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            What each plan allows, who is on it, and what happens to them the moment you change it.
-          </p>
-        </div>
-      </div>
+      <AdminPageHeader
+        icon={CreditCard}
+        title="Plans"
+        description="What each plan allows, who is on it, and what happens to them the moment you change it."
+      />
 
       <Card className="border-amber-500/40 hover:shadow-card">
         <p className="flex items-center gap-2 font-semibold">

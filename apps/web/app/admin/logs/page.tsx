@@ -26,6 +26,7 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { COMPANY_NAME } from '@/lib/brand';
 
 const LIMITS = [25, 50, 100, 200];
@@ -127,26 +128,19 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
   return (
     <div className="space-y-6">
       <TzProbe expected={zone} />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <ScrollText className="h-6 w-6 text-primary" />
-            Event log
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            One row per fact the API recorded: requests, webhooks, agent runs, tool calls,
-            database outcomes and the invariants they broke.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <AdminPageHeader
+        icon={ScrollText}
+        title="Event log"
+        description="One row per fact the API recorded: requests, webhooks, agent runs, tool calls, database outcomes and the invariants they broke."
+        actions={
           <Link href={hrefFor(filter)}>
             <Button variant="outline" size="sm">
               <RefreshCw className="mr-2 h-4 w-4" />
               Reload
             </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <Card className="hover:shadow-card">
         <form method="get" action="/admin/logs" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

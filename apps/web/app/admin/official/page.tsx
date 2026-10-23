@@ -6,7 +6,7 @@ import { AdminPageHeader } from '@/components/admin-page-header';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { requireConsoleBearer } from '@/lib/admin-access';
-import { adminOfficialChannels, adminOfficialSettings, type OfficialChannel } from '@/lib/api';
+import { ApiError, adminOfficialChannels, adminOfficialSettings, type OfficialChannel } from '@/lib/api';
 import {
   isOfficialMigrationPending,
   OfficialMigrationCard,

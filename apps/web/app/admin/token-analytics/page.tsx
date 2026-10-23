@@ -16,6 +16,7 @@ import { cachedAdminTokenUsage } from '@/app/_cache/queries';
 import { adminRead } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
 import { AdminMonthPills } from '@/components/admin-month-pills';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { compact, money, whole } from '@/lib/format';
 import type { AdminTokenUsage } from '@/lib/api';
 
@@ -48,20 +49,12 @@ async function UsageContent({ searchParams }: { searchParams: Promise<RawParams>
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <Cpu className="h-6 w-6 text-primary" />
-            Token usage
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            What the agent cost, store by store. Merchants see their own chats and sales; the
-            model bill is ours.
-          </p>
-        </div>
-
-        <AdminMonthPills hrefBase="/admin/token-analytics" month={month} />
-      </div>
+      <AdminPageHeader
+        icon={Cpu}
+        title="Token usage"
+        description="What the agent cost, store by store. Merchants see their own chats and sales; the model bill is ours."
+        actions={<AdminMonthPills hrefBase="/admin/token-analytics" month={month} />}
+      />
 
       {read.value ? (
         <UsageTable usage={read.value} month={month} />
@@ -124,8 +117,8 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
       </section>
 
       <Card className="px-0 py-0 hover:shadow-card">
-        <div className="border-b border-border/40 px-6 py-3">
-          <h2 className="text-base font-bold">Every store that spent tokens</h2>
+        <div className="border-b border-border/40 px-5 py-3">
+          <h2 className="text-base font-semibold">Every store that spent tokens</h2>
           <p className="text-xs text-muted-foreground">
             Ranked by tokens, {monthLabel(month)}. A store with no usage this month is absent —
             it either never ran the agent or has been deleted.
@@ -133,27 +126,27 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
         </div>
 
         {usage.businesses.length === 0 ? (
-          <p className="px-6 py-10 text-center text-muted-foreground">
+          <p className="px-5 py-10 text-center text-muted-foreground">
             Nothing was spent in {monthLabel(month)}.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-h-[480px] overflow-auto rounded-b-card">
             <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-border/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-6 py-2.5 font-medium">Business</th>
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-5 py-2.5 font-medium">Business</th>
                   <th className="px-3 py-2.5 text-right font-medium">Runs</th>
                   <th className="px-3 py-2.5 text-right font-medium">Tokens</th>
                   <th className="px-3 py-2.5 text-right font-medium">In / Out</th>
                   <th className="px-3 py-2.5 text-right font-medium">Cache hit</th>
                   <th className="px-3 py-2.5 text-right font-medium">Avg / run</th>
-                  <th className="px-6 py-2.5 text-right font-medium">Cost</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {usage.businesses.map((row) => (
                   <tr key={row.businessId} className="transition-colors hover:bg-muted/40">
-                    <td className="px-6 py-3">
+                    <td className="px-5 py-3">
                       <Link
                         href={`/admin/token-analytics/${row.businessId}?month=${month}`}
                         className="font-medium text-foreground hover:text-primary hover:underline"
@@ -177,7 +170,7 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
                     <td className="px-3 py-3 text-right tabular-nums">
                       {whole(Math.round(row.avgTokensPerRun))}
                     </td>
-                    <td className="px-6 py-3 text-right font-medium tabular-nums">
+                    <td className="px-5 py-3 text-right font-medium tabular-nums">
                       {money(row.estimatedCostUsd)}
                     </td>
                   </tr>
