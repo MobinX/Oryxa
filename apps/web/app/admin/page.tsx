@@ -265,7 +265,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
             </div>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="min-w-0 px-0 py-0 lg:col-span-2 hover:shadow-card">
               <div className="border-b border-border/40 px-5 py-3">
                 <h2 className="text-base font-semibold">Busiest businesses</h2>
