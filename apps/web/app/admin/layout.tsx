@@ -46,9 +46,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </header>
-      <div className="relative">
+      {/* One column pair: the sidebar is a sticky item of this flex box, the page its
+          neighbour, so the two can never paint over each other again. */}
+      <div className="mx-auto flex w-full max-w-7xl flex-col px-0 lg:flex-row lg:items-start">
         <AdminSidebar signedIn={signedIn} />
-        <main className="min-w-0 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
+        <main className="min-w-0 flex-1 px-4 pb-10 pt-2 sm:px-6 sm:pt-6">{children}</main>
       </div>
     </div>
   );
