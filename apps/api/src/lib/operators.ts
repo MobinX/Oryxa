@@ -2,7 +2,6 @@
  * Operator identities that may reach the `oryxa-sandbox` store without owning it.
  * Exact, case-insensitive match on the comma-separated ADMIN_EMAILS list — never a substring
  * match (`ADMIN_EMAILS.includes(email)` let `racle@x.com` in when `oracle@x.com` was listed).
- *
  * The list lives in the environment only. A personal address baked into source is a credential
  * every reader of the repository has, so an empty or unset ADMIN_EMAILS means no one is an
  * operator by this shortcut. The historical `admin123@oryxa.app` is deliberately not built in

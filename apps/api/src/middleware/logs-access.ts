@@ -23,8 +23,6 @@ const FORBIDDEN_OPERATOR_PASSWORDS = new Set(['change-me']);
  * The second way in: a single operator account, so the log console does not need a
  * Firebase user provisioned into the allowlist. `LOGS_UI_PASSWORD` is the shared
  * secret between the web app and this one — the web app holds it server-side and
- * presents it as the bearer, so it never reaches the browser.
- *
  * A password shorter than 12 characters, or the repository's historical example
  * value, is treated as unset. There is no default in any environment, so the
  * operator path fails closed until a real secret is configured.
