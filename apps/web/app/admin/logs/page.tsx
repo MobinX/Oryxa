@@ -27,7 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
 const LIMITS = [25, 50, 100, 200];
 const HOURS = [1, 6, 24, 72, 168];
@@ -36,10 +36,13 @@ type PageOrError = { page?: LogQueryResult; error?: string; status?: number };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
-export const metadata = {
-  title: 'Event log — admin',
-  description: `Every request, webhook, agent run and error the ${COMPANY_NAME} API recorded.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Event log — admin',
+    description: `Every request, webhook, agent run and error the ${companyName} API recorded.`,
+  };
+}
 
 function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;

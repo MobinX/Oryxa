@@ -6,7 +6,7 @@ import { clearOperatorAuthCookie, setOperatorAuthCookie } from '@/lib/admin-acce
 import { syncUser } from '@/lib/api';
 import { clearLogsSession, isOperatorEmail, operatorAccountEmail, startLogsSession } from '@/lib/logs-session';
 import { verifyOperatorToken } from '@/lib/operator-login';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
 /**
  * Finishes the sign-in the browser started against Firebase.
@@ -51,9 +51,10 @@ export async function operatorSignInAction(idToken: string) {
     redirect('/admin/login?error=invalid');
   }
 
+  const { companyName } = await getBrand();
   await syncUser(idToken, {
     firebaseUid: verified.uid,
-    name: `${COMPANY_NAME} Operator`,
+    name: `${companyName} Operator`,
     email: verified.email ?? undefined,
     signInMethod: 'password',
   });

@@ -19,7 +19,6 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { COMPANY_NAME } from '@/lib/brand';
 
 type StepInfo = {
   id: number;

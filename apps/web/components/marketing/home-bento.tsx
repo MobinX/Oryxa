@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useBrand } from '@/components/brand-provider';
 import {
   Bot,
   Box,
@@ -311,6 +312,7 @@ function useCountUp(target: number, reduced: boolean, delay = 0, duration = 900)
 }
 
 function MessengerPreview({ reduced }: { reduced: boolean }) {
+  const { companyName } = useBrand();
   const [stage, setStage] = useState(0);
 
   useEffect(() => {
@@ -341,7 +343,7 @@ function MessengerPreview({ reduced }: { reduced: boolean }) {
             <Bot className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Oryxa AI</p>
+            <p className="truncate text-sm font-semibold text-white">{companyName} AI</p>
             <p className="text-[10px] text-slate-500">Messenger · replies instantly</p>
           </div>
         </div>

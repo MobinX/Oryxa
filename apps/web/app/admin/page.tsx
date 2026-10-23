@@ -30,7 +30,6 @@ import { TzProbe } from '@/components/tz-probe';
 import { EventRow } from '@/components/log-event-row';
 import { AdminSkeleton } from '@/components/admin-skeleton';
 import { AdminDailyChart } from '@/components/admin-daily-chart';
-import { BrandSwapButton } from '@/components/brand-swap-button';
 import {
   ApiError,
   getAdminStats,
@@ -42,7 +41,7 @@ import { compact, deltaOf, money, whole, type Delta } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
 const RANGES = [7, 30, 90];
 const DEFAULT_DAYS = 30;
@@ -51,10 +50,13 @@ type StatsOrError = { stats?: AdminStats; error?: string; status?: number };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
-export const metadata = {
-  title: 'Admin — platform',
-  description: `Platform-wide analytics for the ${COMPANY_NAME} operator console.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Admin — platform',
+    description: `Platform-wide analytics for the ${companyName} operator console.`,
+  };
+}
 
 /** The links offer three ranges; anything the route can answer is accepted, so a pasted `?days=14` still works. */
 function readDays(value: string | string[] | undefined): number {
@@ -376,7 +378,6 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
         </>
       ) : null}
 
-      <BrandSwapButton />
     </div>
   );
 }

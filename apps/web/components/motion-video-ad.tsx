@@ -27,7 +27,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 export interface AdScene {
   id: number;
@@ -106,6 +106,7 @@ export const AD_SCENES: AdScene[] = [
 ];
 
 export function MotionVideoAd() {
+  const { companyName: COMPANY_NAME } = useBrand();
   const [activeSceneIdx, setActiveSceneIdx] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -517,7 +518,7 @@ export function MotionVideoAd() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold uppercase tracking-wider text-[#A78BFA]">
-                What OnlyOrdes Automates For You
+                What {COMPANY_NAME} Automates For You
               </span>
               <span className="text-[11px] text-slate-400">Click to preview scene</span>
             </div>

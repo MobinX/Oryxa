@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { SignOutForm } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
-export default function BusinessesLayout({ children }: { children: React.ReactNode }) {
+export default async function BusinessesLayout({ children }: { children: React.ReactNode }) {
+  const { companyName } = await getBrand();
+
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-200">
       <header className="sticky top-0 z-50 border-b border-border/40 bg-card/85 backdrop-blur-md">
@@ -14,7 +16,7 @@ export default function BusinessesLayout({ children }: { children: React.ReactNo
               O
             </div>
             <span className="font-geist text-lg font-bold tracking-tight bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-foreground">
-              {COMPANY_NAME}
+              {companyName}
             </span>
           </Link>
           <div className="flex items-center gap-3">

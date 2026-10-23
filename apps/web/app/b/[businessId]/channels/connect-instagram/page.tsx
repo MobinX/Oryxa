@@ -6,7 +6,7 @@ import { listInstagramPendingAccounts } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { ConnectInstagramForm } from '@/components/connect-instagram-form';
 import ConnectFacebookSkeleton from '../connect-facebook/skeleton';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
 export default function ConnectInstagramPage({
   params,
@@ -22,11 +22,13 @@ export default function ConnectInstagramPage({
   );
 }
 
-const NO_ACCOUNT = {
-  title: 'No Instagram professional account was found',
-  body: `Facebook listed your Pages, but none of them names an Instagram professional account that ${COMPANY_NAME} can answer as.`,
-  fix: 'In the Instagram app, open Settings → Account type and tools and make sure the account is Professional (Business or Creator), then link it to the Facebook Page in your Meta Business settings. After that, connect Instagram again.',
-};
+function noAccount(companyName: string) {
+  return {
+    title: 'No Instagram professional account was found',
+    body: `Facebook listed your Pages, but none of them names an Instagram professional account that ${companyName} can answer as.`,
+    fix: 'In the Instagram app, open Settings → Account type and tools and make sure the account is Professional (Business or Creator), then link it to the Facebook Page in your Meta Business settings. After that, connect Instagram again.',
+  };
+}
 
 async function ConnectInstagramContent({
   params,
@@ -38,9 +40,11 @@ async function ConnectInstagramContent({
   const { businessId } = await params;
   const { token, error, detail } = await searchParams;
   const authToken = await requireAuth();
+  const { companyName } = await getBrand();
 
   if (!token) {
     if (error === 'no-instagram-account') {
+      const diagnosis = noAccount(companyName);
       return (
         <div className="mx-auto max-w-lg space-y-6">
           <div>
@@ -53,15 +57,15 @@ async function ConnectInstagramContent({
             </p>
           </div>
           <Card className="border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
-            <h3 className="font-semibold text-amber-800 dark:text-amber-200">{NO_ACCOUNT.title}</h3>
-            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{NO_ACCOUNT.body}</p>
+            <h3 className="font-semibold text-amber-800 dark:text-amber-200">{diagnosis.title}</h3>
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{diagnosis.body}</p>
             {detail && (
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
                 {decodeURIComponent(detail)}
               </p>
             )}
             <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
-              <strong>To fix this:</strong> {NO_ACCOUNT.fix}
+              <strong>To fix this:</strong> {diagnosis.fix}
             </p>
             <div className="mt-4">
               <Link

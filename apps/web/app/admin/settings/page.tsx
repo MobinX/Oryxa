@@ -2,13 +2,16 @@ import { KeyRound } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { logsBearer, operatorAccountEmail } from '@/lib/logs-session';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 import { PasswordSettingsForm } from './password-form';
 
-export const metadata = {
-  title: 'Admin — settings',
-  description: `The ${COMPANY_NAME} console operator's account settings.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Admin — settings',
+    description: `The ${companyName} console operator's account settings.`,
+  };
+}
 
 /**
  * The one page that changes who can walk in, so it opens only behind the console session.

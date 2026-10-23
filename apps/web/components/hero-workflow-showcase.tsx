@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { useBrand } from '@/components/brand-provider';
 
 // ---------------------------------------------------------------------------
 // Data
@@ -23,7 +24,7 @@ const SCENES: SceneMeta[] = [
   { id: 1, label: 'Customer message', eyebrow: '01 · Messenger', caption: 'Customer asks about your product on Messenger', accent: '#818CF8' },
   { id: 2, label: 'AI product card', eyebrow: '02 · AI Reply', caption: 'AI agent instantly replies with a rich product card', accent: '#A78BFA' },
   { id: 3, label: 'In-chat checkout', eyebrow: '03 · Checkout', caption: 'Customer fills the checkout sheet without leaving the chat', accent: '#C084FC' },
-  { id: 4, label: 'Order dashboard', eyebrow: '04 · Dashboard', caption: 'New order appears in the OnlyOrders dashboard instantly', accent: '#5B3DF5' },
+  { id: 4, label: 'Order dashboard', eyebrow: '04 · Dashboard', caption: 'New order appears in your dashboard instantly', accent: '#5B3DF5' },
   { id: 5, label: 'Courier booked', eyebrow: '05 · Logistics', caption: 'Courier is auto-booked and a consignment ID is generated', accent: '#38BDF8' },
   { id: 6, label: 'Delivery DM', eyebrow: '06 · Delivery', caption: 'Customer gets an out-for-delivery DM, then a delivered confirmation', accent: '#34D399' },
 ];
@@ -309,6 +310,7 @@ const SCENE_COMPONENTS = [
 // ---------------------------------------------------------------------------
 
 export function HeroWorkflowShowcase() {
+  const { companyName } = useBrand();
   const [activeScene, setActiveScene] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
@@ -418,7 +420,7 @@ export function HeroWorkflowShowcase() {
     <section
       ref={sectionRef}
       role="region"
-      aria-label="OnlyOrders workflow showcase"
+      aria-label={`${companyName} workflow showcase`}
       data-testid="hero-showcase"
       data-scene={activeScene + 1}
       className="w-full max-w-2xl mx-auto select-none"

@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { ArrowLeft, Code } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 export default function DevelopersPage() {
+  const { companyName: COMPANY_NAME } = useBrand();
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-inter flex flex-col justify-between">
       {/* Navbar */}

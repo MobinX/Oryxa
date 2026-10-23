@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
 import { HomeBento } from '@/components/marketing/home-bento';
 import { MarketingNav } from '@/components/marketing/nav';
@@ -77,7 +77,7 @@ const PLANS: Plan[] = [
     tag: 'Free',
     tagTone: 'border-white/10 bg-white/[0.06] text-slate-300',
     title: 'Get started',
-    copy: 'Perfect for trying out OnlyOrders with the basics.',
+    copy: 'Perfect for trying out the platform with the basics.',
     monthly: 0,
     yearly: 0,
     cta: 'Get started free',
@@ -180,6 +180,7 @@ function cellClass(ci: number, cell: string, highlight: boolean) {
 }
 
 export default function HomePage() {
+  const { companyName: COMPANY_NAME } = useBrand();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
 
   return (

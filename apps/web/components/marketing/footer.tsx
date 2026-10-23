@@ -1,5 +1,7 @@
+'use client';
+
 import Link from 'next/link';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 
 const FOOTER_COLUMNS = [
@@ -31,6 +33,8 @@ const FOOTER_COLUMNS = [
 ];
 
 export function MarketingFooter() {
+  const { companyName } = useBrand();
+
   return (
     <footer className="relative mt-24 border-t border-white/10 bg-[#060709]/80 backdrop-blur-xl">
       <div
@@ -82,7 +86,7 @@ export function MarketingFooter() {
 
         <div className="flex flex-col items-center justify-between gap-3 border-t border-white/[0.06] py-6 text-xs text-slate-600 sm:flex-row">
           <p>
-            © {new Date().getFullYear()} {COMPANY_NAME}. All rights reserved.
+            © {new Date().getFullYear()} {companyName}. All rights reserved.
           </p>
           <p className="text-slate-600">
             Made for social sellers, everywhere they sell.

@@ -472,7 +472,7 @@ export function parseShopifyCsv(file: File, handlers: ShopifyCsvHandlers): () =>
         const seen = row.slice(0, 6).map((value) => value.trim()).filter(Boolean).join(', ').slice(0, 140);
         handlers.onError(
           new Error(
-            `This CSV is not a supported format. Upload a Shopify product export (a "Handle" or "URL handle" column) or the compact Oryxa template (a "Product Name" column — its header is shown in the import dialog). Its first row reads: "${seen}".`,
+            `This CSV is not a supported format. Upload a Shopify product export (a "Handle" or "URL handle" column) or the compact template (a "Product Name" column — its header is shown in the import dialog). Its first row reads: "${seen}".`,
           ),
         );
       }

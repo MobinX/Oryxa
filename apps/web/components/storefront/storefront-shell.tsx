@@ -3,7 +3,7 @@ import { CartDrawer } from '@/components/storefront/cart-drawer';
 import { CartProvider } from '@/components/storefront/cart-context';
 import { StorefrontHeader } from '@/components/storefront/storefront-header';
 import { isDarkStructure, storeStructure, themeVars } from '@/lib/storefront';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 import type { PublicStore } from '@/lib/storefront';
 import type { ReactNode } from 'react';
 
@@ -178,8 +178,15 @@ export const STORE_CSS = `
   }
 `;
 
-export function StorefrontShell({ store, children }: { store: PublicStore; children: ReactNode }) {
+export async function StorefrontShell({
+  store,
+  children,
+}: {
+  store: PublicStore;
+  children: ReactNode;
+}) {
   const { theme } = store;
+  const { companyName } = await getBrand();
 
   return (
     <div
@@ -219,14 +226,20 @@ export function StorefrontShell({ store, children }: { store: PublicStore; child
 
         <main>{children}</main>
 
-        <StorefrontFooter store={store} />
+        <StorefrontFooter store={store} companyName={companyName} />
         <CartDrawer slug={store.slug} />
       </CartProvider>
     </div>
   );
 }
 
-function StorefrontFooter({ store }: { store: PublicStore }) {
+function StorefrontFooter({
+  store,
+  companyName,
+}: {
+  store: PublicStore;
+  companyName: string;
+}) {
   return (
     <footer className="mt-24 border-t border-[var(--store-line)] bg-[var(--store-surface)]">
       <div className="mx-auto grid w-full max-w-[1560px] gap-10 px-5 py-16 sm:grid-cols-2 sm:px-8 lg:px-12">
@@ -284,7 +297,7 @@ function StorefrontFooter({ store }: { store: PublicStore }) {
           <span>&copy; {store.name}</span>
           <span>
             Powered by{' '}
-            <span className="text-[var(--store-ink-2)]">{COMPANY_NAME}</span>
+            <span className="text-[var(--store-ink-2)]">{companyName}</span>
           </span>
         </div>
       </div>

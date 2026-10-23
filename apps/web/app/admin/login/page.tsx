@@ -3,12 +3,15 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdminLoginForm } from '@/components/admin-login-form';
 import { hasLogsSession, logsOperatorUser, operatorAccountEmail } from '@/lib/logs-session';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
-export const metadata = {
-  title: 'Admin — sign in',
-  description: `Sign in to the ${COMPANY_NAME} admin console.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Admin — sign in',
+    description: `Sign in to the ${companyName} admin console.`,
+  };
+}
 
 const MESSAGES: Record<string, string> = {
   invalid: 'That user id and password do not match.',

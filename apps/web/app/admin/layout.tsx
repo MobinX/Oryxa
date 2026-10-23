@@ -5,13 +5,14 @@ import { AdminSidebar } from '@/components/admin-sidebar';
 import { SignOutForm } from '@/components/sign-out-button';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { logsBearer } from '@/lib/logs-session';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The rail is the chrome of a signed-in console, so the sign-in page does not offer a
   // shortcut to a page the reader has not earned yet. Only the console's own session
   // counts as earned: an account token proves a merchant, not an operator.
   const signedIn = Boolean(await logsBearer());
+  const { companyName } = await getBrand();
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-background text-foreground transition-colors duration-200">
@@ -26,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 O
               </div>
               <span className="truncate font-geist text-base font-bold tracking-tight text-foreground sm:text-lg">
-                {COMPANY_NAME}
+                {companyName}
               </span>
               <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">/ admin</span>
             </Link>

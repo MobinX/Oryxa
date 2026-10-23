@@ -1,13 +1,17 @@
 import Link from 'next/link';
 import { Check, ArrowRight, ChevronDown, Lock, ShieldCheck, Server, Headphones } from 'lucide-react';
 import { cachedPublicPlans } from '@/app/_cache/queries';
-import { COMPANY_NAME } from '@/lib/brand';
+import { getBrand } from '@/lib/brand-server';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 
-export const metadata = { title: `Pricing — ${COMPANY_NAME}` };
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return { title: `Pricing — ${companyName}` };
+}
 
 export default async function PricingPage() {
   await cachedPublicPlans().catch(() => null);
+  const { companyName } = await getBrand();
 
   return (
     <div className="min-h-screen bg-[#F8F9FC] font-inter text-slate-900">
@@ -88,7 +92,7 @@ export default async function PricingPage() {
               </span>
               <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">Get Started</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Perfect for trying out {COMPANY_NAME} with basic features.
+                Perfect for trying out {companyName} with basic features.
               </p>
               <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
                 <span className="font-geist text-4xl font-extrabold text-slate-950">$0</span>
