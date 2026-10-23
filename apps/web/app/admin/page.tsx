@@ -266,7 +266,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="px-0 py-0 lg:col-span-2 hover:shadow-card">
+            <Card className="min-w-0 px-0 py-0 lg:col-span-2 hover:shadow-card">
               <div className="border-b border-border/40 px-5 py-3">
                 <h2 className="text-base font-semibold">Busiest businesses</h2>
                 <p className="text-xs text-muted-foreground">
@@ -278,7 +278,10 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                   No business had a message, an order or a visit in this window.
                 </p>
               ) : (
-                <div className="max-h-96 overflow-auto rounded-b-card">
+                {/* Phones let the table grow and scroll as one page; only desktop caps its
+                    height. The card itself must be min-w-0 or the table's 620px minimum
+                    widens the whole dashboard. */}
+                <div className="min-w-0 overflow-x-auto rounded-b-card lg:max-h-96 lg:overflow-y-auto">
                   <table className="w-full min-w-[620px] text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
