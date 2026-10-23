@@ -916,6 +916,7 @@ export const ANOMALY_KINDS = [
   'quota_gate_failed',
   'ai_disabled',
   'official_model_failure',
+  'store_run_without_business',
   'wa_signature_invalid',
 ] as const;
 
