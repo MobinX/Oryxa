@@ -41,6 +41,7 @@ import {
 import { compact, deltaOf, money, whole, type Delta } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { COMPANY_NAME } from '@/lib/brand';
 
 const RANGES = [7, 30, 90];
@@ -102,47 +103,43 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
     <div className="space-y-6">
       <TzProbe expected={zone} />
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <LayoutDashboard className="h-6 w-6 text-primary" />
-            Platform
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Every business on one clock: who is here, what the agent is doing and what it costs.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/api/admin/export">
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
-          </Link>
-          <div className="flex items-center rounded-full border border-border/40 bg-muted/40 p-1">
-            {RANGES.map((range) => (
-              <Link
-                key={range}
-                href={`/admin?days=${range}`}
-                aria-current={days === range ? 'page' : undefined}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
-                  days === range
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {range}d
-              </Link>
-            ))}
-          </div>
-          <Link href={`/admin?days=${days}`}>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Reload
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <AdminPageHeader
+        icon={LayoutDashboard}
+        title="Platform"
+        description="Every business on one clock: who is here, what the agent is doing and what it costs."
+        actions={
+          <>
+            <Link href="/api/admin/export">
+              <Button variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+            </Link>
+            <div className="flex items-center rounded-full border border-border/40 bg-muted/40 p-1">
+              {RANGES.map((range) => (
+                <Link
+                  key={range}
+                  href={`/admin?days=${range}`}
+                  aria-current={days === range ? 'page' : undefined}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+                    days === range
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {range}d
+                </Link>
+              ))}
+            </div>
+            <Link href={`/admin?days=${days}`}>
+              <Button variant="outline" size="sm">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reload
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {result.error && (
         <Card className="border-destructive/40 hover:shadow-card">
@@ -249,7 +246,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
 
           <Card className="hover:shadow-card">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-base font-bold">Per day, on your clock</h2>
+              <h2 className="text-base font-semibold">Per day, on your clock</h2>
               <p className="text-xs text-muted-foreground">
                 {days} days · {zone}
               </p>
@@ -268,32 +265,32 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card className="px-0 py-0 lg:col-span-2 hover:shadow-card">
-              <div className="border-b border-border/40 px-6 py-3">
-                <h2 className="text-base font-bold">Busiest businesses</h2>
+              <div className="border-b border-border/40 px-5 py-3">
+                <h2 className="text-base font-semibold">Busiest businesses</h2>
                 <p className="text-xs text-muted-foreground">
                   Ranked by messages in the last {days} days.
                 </p>
               </div>
               {stats.topBusinesses.length === 0 ? (
-                <p className="px-6 py-10 text-center text-muted-foreground">
+                <p className="px-5 py-10 text-center text-muted-foreground">
                   No business had a message, an order or a visit in this window.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="max-h-96 overflow-auto rounded-b-card">
                   <table className="w-full min-w-[620px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <th className="px-6 py-2.5 font-medium">Business</th>
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-5 py-2.5 font-medium">Business</th>
                         <th className="px-3 py-2.5 text-right font-medium">Chats</th>
                         <th className="px-3 py-2.5 text-right font-medium">Messages</th>
                         <th className="px-3 py-2.5 text-right font-medium">Orders</th>
-                        <th className="px-6 py-2.5 text-right font-medium">Revenue</th>
+                        <th className="px-5 py-2.5 text-right font-medium">Revenue</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
                       {stats.topBusinesses.map((row) => (
                         <tr key={row.id} className="transition-colors hover:bg-muted/40">
-                          <td className="px-6 py-3">
+                          <td className="px-5 py-3">
                             <Link
                               href={`/b/${row.id}/analytics`}
                               className="font-medium text-foreground hover:text-primary hover:underline"
@@ -309,7 +306,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                           </td>
                           <td className="px-3 py-3 text-right tabular-nums">{whole(row.messages)}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{whole(row.orders)}</td>
-                          <td className="px-6 py-3 text-right font-medium tabular-nums">
+                          <td className="px-5 py-3 text-right font-medium tabular-nums">
                             {money(row.revenue)}
                           </td>
                         </tr>
@@ -321,8 +318,8 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
             </Card>
 
             <Card className="px-0 py-0 hover:shadow-card">
-              <div className="border-b border-border/40 px-6 py-3">
-                <h2 className="text-base font-bold">Health</h2>
+              <div className="border-b border-border/40 px-5 py-3">
+                <h2 className="text-base font-semibold">Health</h2>
                 <p className="text-xs text-muted-foreground">
                   Counted from the log store, not from Postgres.
                 </p>
@@ -345,7 +342,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                   tone="text-amber-600 dark:text-amber-400"
                 />
               </div>
-              <div className="border-t border-border/40 px-6 py-3">
+              <div className="border-t border-border/40 px-5 py-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Latest events
                 </h3>
@@ -362,7 +359,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                   ))}
                 </ul>
               ) : (
-                <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+                <p className="px-5 py-8 text-center text-sm text-muted-foreground">
                   {recent
                     ? 'Nothing in the log store yet — the API has recorded no events since it started, or Axiom ingest is off.'
                     : 'The log store did not answer. The numbers above are unaffected.'}

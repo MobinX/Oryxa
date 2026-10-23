@@ -37,6 +37,8 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
     'instagramId', 'pageId', 'resolved',
   ],
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
+  // Official Channels' own pipeline lane: one row per stage of an operator-inbox turn.
+  official: ['channel', 'channelId', 'conversationId', 'externalId', 'intent', 'outcome', 'reason', 'confidence'],
   db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
   db_summary: ['table', 'count', 'totalMs'],
   agent_run: [
@@ -90,6 +92,7 @@ const LANE: Record<Evt, string> = {
   webhook: '[webhook]',
   webhook_item: '[webhook]',
   instagram: '[ig]',
+  official: '[official]',
   http_out: '[net]',
   db: '[db]',
   db_summary: '[db]',
@@ -114,6 +117,7 @@ const OUTCOME: Record<string, string> = {
   quota_exhausted: 'ALLOWANCE USED UP — the agent was not started',
   no_agent: 'NO AGENT ATTACHED — nobody will answer this customer',
   not_triggered: 'no run started',
+  ai_disabled: 'AI ANSWER OFF — the channel config or a human takeover stopped the run',
   unsupported_content: 'nothing to answer (attachment, sticker or audio)',
   incomplete_payload: 'payload has no id or text — cannot be routed',
   unknown_account: 'no live Instagram channel for this account',
@@ -910,6 +914,10 @@ export const ANOMALY_KINDS = [
   'graph_send_failed',
   'quota_exhausted',
   'quota_gate_failed',
+  'ai_disabled',
+  'official_model_failure',
+  'store_run_without_business',
+  'wa_signature_invalid',
 ] as const;
 
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];

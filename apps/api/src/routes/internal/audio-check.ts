@@ -1,10 +1,6 @@
 import { Hono } from 'hono';
-import { existsSync } from 'node:fs';
-import {
-  ffmpegCandidates,
-  resolveFfmpegPath,
-  transcribeAudio,
-} from '@repo/integrations/azure-speech';
+import { resolveFfmpegPath, transcribeAudio } from '@repo/integrations/azure-speech';
+import { internalAuthMiddleware } from '@api/middleware/internal-auth';
 
 /**
  * Operator probe for the voice pipeline. A missing ffmpeg is the one failure that degrades
@@ -14,27 +10,14 @@ import {
  */
 export const audioCheckRouter = new Hono();
 
-function authorized(c: { req: { header(name: string): string | undefined } }): boolean {
-  return c.req.header('x-internal-key') === process.env.INTERNAL_KEY;
-}
+audioCheckRouter.use('*', internalAuthMiddleware);
 
 audioCheckRouter.get('/audio-check', async (c) => {
-  if (!authorized(c)) return c.text('Unauthorized', 401);
-
   const resolved = await resolveFfmpegPath(c.req.query('resolve') === '1');
-  return c.json({
-    cwd: process.cwd(),
-    resolved,
-    candidates: ffmpegCandidates().map((candidate) => ({
-      candidate,
-      exists: existsSync(candidate),
-    })),
-  });
+  return c.json({ ok: Boolean(resolved) });
 });
 
 audioCheckRouter.post('/audio-check', async (c) => {
-  if (!authorized(c)) return c.text('Unauthorized', 401);
-
   const body = (await c.req.json().catch(() => null)) as {
     audioBase64?: unknown;
     contentType?: unknown;

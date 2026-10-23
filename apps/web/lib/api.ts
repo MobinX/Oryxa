@@ -8,7 +8,9 @@ import { redirect } from 'next/navigation';
  * hands them to the API — the same route a server render already takes.
  */
 const API_URL =
-  typeof window === 'undefined' ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001' : '';
+  typeof (globalThis as { window?: unknown }).window === 'undefined'
+    ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001'
+    : '';
 
 export class ApiError extends Error {
   constructor(
@@ -64,12 +66,16 @@ export async function apiFetch<T>(
 }
 
 // User
-export const syncUser = (data: {
-  firebaseUid: string;
-  name: string;
-  email?: string;
-  signInMethod: string;
-}) => apiFetch('/api/v1/users/sync', { method: 'POST', body: JSON.stringify(data) });
+/** The sync route now authorises on the Firebase bearer itself; uid/email come from the token. */
+export const syncUser = (
+  token: string,
+  data: {
+    firebaseUid: string;
+    name: string;
+    email?: string;
+    signInMethod: string;
+  },
+) => apiFetch('/api/v1/users/sync', { method: 'POST', token, signInPath: null, body: JSON.stringify(data) });
 
 export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
@@ -372,7 +378,7 @@ export async function uploadVariantImage(
     // B2 not configured — return null so the product can
     // still be saved without the image instead of failing the whole request.
     if (res.status === 503) return null;
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
     throw new ApiError(err.error ?? 'Upload failed', res.status);
   }
 
@@ -1360,6 +1366,218 @@ export const adminSwapBrand = (bearer: string, { dryRun = false }: { dryRun?: bo
     signInPath: null,
   });
 
+/* Official Channels (spec Official): the console's own channels, inbox, tickets, prospects. */
+
+export type OfficialSettings = {
+  availability: string;
+  availabilityNote: string | null;
+  aiEnabled: boolean;
+  autoReply: boolean;
+  tone: string | null;
+  language: string | null;
+  instructions: string | null;
+  updatedAt: string;
+};
+
+export type OfficialChannel = {
+  id: string;
+  platform: string;
+  platformChannelId: string;
+  label: string;
+  createdAt: string;
+};
+
+export type OfficialChannelResult = {
+  id: string;
+  created?: boolean;
+  verified?: boolean;
+  error?: string;
+};
+
+export type OfficialConversation = {
+  id: string;
+  channelId: string;
+  platform: string;
+  customerPlatformId: string;
+  customerName: string | null;
+  aiPaused: boolean;
+  status: string;
+  stateAt: string;
+  createdAt: string;
+};
+
+export type OfficialThreadMessage = {
+  id: string;
+  from: 'customer' | 'self';
+  sentBy: string | null;
+  state: string;
+  content: string;
+  time: string;
+};
+
+export type OfficialTicket = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  customerPlatformId: string;
+  customerName: string | null;
+  type: 'support' | 'security';
+  subject: string | null;
+  summary: string | null;
+  status: string;
+  priority: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OfficialProspect = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  platform: string;
+  contactPlatformId: string;
+  name: string | null;
+  country: string | null;
+  businessType: string | null;
+  employeesEstimate: string | null;
+  budget: string | null;
+  needs: string | null;
+  consent: boolean | null;
+  score: number;
+  scoreBreakdown: Record<string, number>;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const adminOfficialSettings = (bearer: string) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', { token: bearer, signInPath: null });
+
+export const adminOfficialSaveSettings = (bearer: string, input: Partial<OfficialSettings>) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialChannels = (bearer: string) =>
+  apiFetch<{ channels: OfficialChannel[] }>('/api2/admin/official/channels', {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialVerifyChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ verified: boolean; error?: string }>(`/api2/admin/official/channels/${channelId}/verify`, {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConnectWhatsApp = (bearer: string, input: { token: string; phoneNumberId: string }) =>
+  apiFetch<OfficialChannelResult>('/api2/admin/official/channels/whatsapp/connect', {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialDisconnectChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ id: string; disconnected: boolean }>(`/api2/admin/official/channels/${channelId}/disconnect`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConversations = (bearer: string, params: { platform?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.platform) query.set('platform', params.platform);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ conversations: OfficialConversation[] }>(`/api2/admin/official/conversations${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialThread = (bearer: string, conversationId: string) =>
+  apiFetch<{
+    conversation: OfficialConversation;
+    messages: OfficialThreadMessage[];
+    tickets: OfficialTicket[];
+  }>(`/api2/admin/official/conversations/${conversationId}`, { token: bearer, signInPath: null });
+
+export const adminOfficialReply = (bearer: string, conversationId: string, content: string, paused?: boolean) =>
+  apiFetch<{ sent: boolean; conversationId: string }>(`/api2/admin/official/conversations/${conversationId}/reply`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify({ content, ...(paused !== undefined ? { paused } : {}) }),
+  });
+
+export const adminOfficialTakeover = (bearer: string, conversationId: string, paused: boolean) =>
+  apiFetch<{ conversationId: string; aiPaused: boolean }>(
+    `/api2/admin/official/conversations/${conversationId}/takeover`,
+    { method: 'POST', token: bearer, signInPath: null, body: JSON.stringify({ paused }) },
+  );
+
+export const adminOfficialTickets = (bearer: string, params: { type?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.type) query.set('type', params.type);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ tickets: OfficialTicket[] }>(`/api2/admin/official/tickets${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialPatchTicket = (
+  bearer: string,
+  ticketId: string,
+  input: { status?: string; priority?: string; notes?: string | null },
+) =>
+  apiFetch<{ ticket: OfficialTicket }>(`/api2/admin/official/tickets/${ticketId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialProspects = (bearer: string, params: { status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ prospects: OfficialProspect[]; weights: Record<string, number> }>(
+    `/api2/admin/official/prospects${suffix}`,
+    { token: bearer, signInPath: null },
+  );
+};
+
+export const adminOfficialPatchProspect = (
+  bearer: string,
+  prospectId: string,
+  input: { status?: string; notes?: string | null },
+) =>
+  apiFetch<{ prospect: OfficialProspect }>(`/api2/admin/official/prospects/${prospectId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialWeights = (
+  bearer: string,
+  input: { name?: number; country?: number; businessType?: number; employeesEstimate?: number; budget?: number; needs?: number },
+) =>
+  apiFetch<{ weights: Record<string, number>; rescanned: number }>('/api2/admin/official/prospect-weights', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
 // Customers (scoped through the business's company)
 export type Customer = {
   id: string;
@@ -1457,3 +1675,4 @@ export type CustomerHistory = {
 
 export const getCustomer = (token: string, businessId: string, customerId: string) =>
   apiFetch<CustomerHistory>(`/api/v1/${businessId}/customers/${customerId}`, { token });
+

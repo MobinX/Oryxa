@@ -16,22 +16,28 @@ export function logsAllowlist(): string[] {
     .filter((entry) => entry !== '');
 }
 
+const MIN_OPERATOR_PASSWORD_LENGTH = 12;
+const FORBIDDEN_OPERATOR_PASSWORDS = new Set(['change-me']);
+
 /**
  * The second way in: a single operator account, so the log console does not need a
  * Firebase user provisioned into the allowlist. `LOGS_UI_PASSWORD` is the shared
  * secret between the web app and this one — the web app holds it server-side and
- * presents it as the bearer, so it never reaches the browser. There is no
- * default password in any environment; with it unset there is no operator path.
+ * A password shorter than 12 characters, or the repository's historical example
+ * value, is treated as unset. There is no default in any environment, so the
+ * operator path fails closed until a real secret is configured.
  */
 export function logsOperatorPassword(): string | undefined {
   const configured = process.env.LOGS_UI_PASSWORD?.trim();
-  if (configured) return configured;
-  // No default in any environment: the console is closed until LOGS_UI_PASSWORD is set.
-  return undefined;
+  if (!configured) return undefined;
+  if (configured.length < MIN_OPERATOR_PASSWORD_LENGTH) return undefined;
+  if (FORBIDDEN_OPERATOR_PASSWORDS.has(configured.toLowerCase())) return undefined;
+  return configured;
 }
 
 export function logsOperatorUser(): string {
-  return process.env.LOGS_UI_USER?.trim() || 'admin123';
+  // A label for the log line, never a credential: the password must always come from env.
+  return process.env.LOGS_UI_USER?.trim() || 'operator';
 }
 
 /** Equal length first, because `timingSafeEqual` throws on a length mismatch. */

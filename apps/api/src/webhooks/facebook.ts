@@ -34,6 +34,7 @@ import { buildMessageImageKey, putImageAtKey } from '@repo/integrations/b2';
 import { STALE_RUNNER_MS } from '@api/lib/config';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
 import { tagContext } from '@api/lib/ctx';
+import { officialIngest } from '@api/lib/official/ingest';
 
 /** The webhook's own narration, on stdout, next to the event stream. */
 function fbLog(message: string, data?: unknown): void {
@@ -332,7 +333,7 @@ function outcomeOf(verdict: TriggerVerdict, otherwise: string): string {
 }
 
 async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Response | null> {
-  if (process.env.TESTING !== 'true') {
+  if (process.env.TESTING !== 'true' || process.env.NODE_ENV === 'production') {
     fbLog('[TESTING] Testing mode not enabled');
     return null;
   }
@@ -357,13 +358,13 @@ async function handleTestingForward(c: any, method: 'GET' | 'POST'): Promise<Res
     }
   }
 
-  // POST request: read text, copy all non-host headers, and execute async fetch
+  // POST request: read text and forward only the headers Meta's receiver needs. Copying every
+  // header would hand the upstream host our cookies or authorization if one were ever added.
   const rawBody = await c.req.text();
   const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(c.req.header() as Record<string, string | undefined>)) {
-    if (value !== undefined && key.toLowerCase() !== 'host') {
-      headers[key] = value;
-    }
+  for (const name of ['content-type', 'x-hub-signature-256']) {
+    const value = c.req.header(name);
+    if (value !== undefined) headers[name] = value;
   }
 
   fetch(forwardUrl, {
@@ -447,7 +448,12 @@ async function receiveMetaWebhook(c: any): Promise<Response> {
   const signature256 = c.req.header('x-hub-signature-256');
   const signature = c.req.header('x-hub-signature');
   const mode = process.env.META_WEBHOOK_SIGNATURE_MODE ?? 'enforce';
-  const isLogOnly = mode === 'log-only';
+  const logOnlyRequested = mode === 'log-only';
+  const isLogOnly = logOnlyRequested && process.env.NODE_ENV !== 'production';
+  if (logOnlyRequested && !isLogOnly) {
+    fbLog(`POST ${path} signature mode log-only is refused in production — enforcing`);
+    emit('webhook', { event: 'signature_mode_ignored', mode });
+  }
 
   // Log request metadata without exposing secrets
   fbLog(`POST ${path} received`, {
@@ -551,11 +557,51 @@ fbWebhookRouter.post('/instagram', receiveMetaWebhook);
  */
 const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/**
+ * Customer DMs on an admin-only page skip the store flow entirely and hand their turns to
+ * the Officials pipeline. Notification codes stay with the flow above — they are a
+ * redemption handshake, not a conversation, so they never enter an official thread (the
+ * pipeline's external-id dedupe would store them once as junk prose). Echoes, receipts and
+ * unsupported content are dropped exactly as the store flow drops them.
+ */
+async function processOfficialMessaging(
+  channel: {
+    id: string;
+    apiToken: string;
+    platform: ChannelPlatform;
+    platformChannelId: string;
+  },
+  events: MessagingEvent[],
+): Promise<void> {
+  const officialCtx = {
+    id: channel.id,
+    apiToken: channel.apiToken,
+    platform: channel.platform,
+    platformChannelId: channel.platformChannelId,
+  };
+  for (const ev of events) {
+    const text = ev.message?.text?.trim() ?? '';
+    if (text && NOTIFICATION_CODE.test(text.toLowerCase())) continue;
+    const inbound = await inboundFromMessagingEvent(ev, channel.platform);
+    if (!inbound || !inbound.text) continue;
+    if (inbound.images.length > 0) {
+      fbLog('official skip — image-only turn has no transcript', { senderId: inbound.senderId });
+      continue;
+    }
+    fbLog('official ingest dispatch', { senderId: inbound.senderId, textLen: inbound.text.length });
+    const verdict = await officialIngest(officialCtx, {
+      senderId: inbound.senderId,
+      text: inbound.text,
+      externalId: inbound.externalId ?? null,
+    });
+    fbLog('official ingest verdict', { senderId: inbound.senderId, ...verdict });
+  }
+}
+
 async function processMessengerNotificationCodes(
   channel: { id: string; apiToken: string },
   events: MessagingEvent[],
-): Promise<void> {
-  for (const ev of events) {
+): Promise<void> {  for (const ev of events) {
     const senderId = ev.sender?.id;
     const text = ev.message?.text?.trim().toLowerCase();
     if (!senderId || ev.message?.is_echo || !text) continue;
@@ -669,16 +715,21 @@ async function processEntries(
       agentId: channel.agentId ?? null,
     });
 
-    // The operator's page is a notification door, not a shop: its DMs carry codes and nothing
-    // else. No conversation, no agent, no quota — this intercept is the whole handling.
+    // The operator's page is a notification door and an official-inbox door: DMs carry
+    // notification codes and, beyond those, customer traffic for the Officials pipeline.
+    // No conversation with a store, no agent, no quota — this intercept is the whole handling.
     if (channel.isAdminOnly) {
-      fbLog('processEntries admin-only channel — notification codes only', {
+      fbLog('processEntries admin-only channel — notification codes + official inbox', {
         pageId: entry.id,
         messagingCount: messaging.length,
       });
       if (messaging.length > 0) {
         await processMessengerNotificationCodes(
           { id: channel.id, apiToken: channel.apiToken },
+          messaging,
+        );
+        await processOfficialMessaging(
+          { id: channel.id, apiToken: channel.apiToken, platform, platformChannelId: entry.id },
           messaging,
         );
       }
@@ -795,6 +846,7 @@ async function handleDetailsPostback(
       await createMessage({
         conversationId: conversation.id,
         from: 'self',
+        sentBy: 'ai',
         content: [
           `Showing product details of ${product.id}, ${product.name}`,
           `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
@@ -843,6 +895,7 @@ async function handleDetailsPostback(
     await createMessage({
       conversationId: conversation.id,
       from: 'self',
+      sentBy: 'ai',
       content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
       state: 'done',
     });

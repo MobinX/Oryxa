@@ -23,11 +23,14 @@ describe('isOperatorEmail', () => {
     process.env.ADMIN_EMAILS = 'oracle@x.com, boss@y.com';
     expect(isOperatorEmail(' Boss@Y.com ')).toBe(true);
   });
-  it('drops the built-in defaults once ADMIN_EMAILS is set', () => {
+  it('admin123@oryxa.app is not a default operator any more — only ADMIN_EMAILS admits it', () => {
     process.env.ADMIN_EMAILS = 'boss@y.com';
     expect(isOperatorEmail('admin123@oryxa.app')).toBe(false);
     delete process.env.ADMIN_EMAILS;
-    expect(isOperatorEmail('admin123@oryxa.app')).toBe(true);
+    // Even with no allowlist configured the historical password-shaped
+    // identity must stay outside; only the owner's own address is built in.
+    expect(isOperatorEmail('admin123@oryxa.app')).toBe(false);
+    expect(isOperatorEmail('mobin.devx@gmail.com')).toBe(false);
   });
 });
 

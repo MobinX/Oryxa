@@ -2,6 +2,8 @@
 const nextConfig = {
   cacheComponents: true,
   allowedDevOrigins: ['dev.oryxa.us', 'dev-api.oryxa.us'],
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   /**
    * `COMPANY_NAME` and `PARENT_COMPANY_NAME` are the names the UI prints (see lib/brand.ts) and
    * `'use client'` pages print them too. Without this line a non-`NEXT_PUBLIC_` variable is
@@ -38,6 +40,34 @@ const nextConfig = {
    * 307 rather than 308: a moved console should not be pinned in browser caches
    * across the next move.
    */
+  /**
+   * Baseline security headers on every response. No restrictive `script-src`
+   * or `connect-src`: Firebase Google popup login, reCAPTCHA and Next's inline
+   * bootstrap scripts all need non-self sources, and this app cannot afford to
+   * break them — so those two directives are simply left unmanaged.
+   */
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "form-action 'self' https://*.firebaseapp.com",
+            ].join('; '),
+          },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: '/logs', destination: '/admin/logs', permanent: false },

@@ -10,6 +10,7 @@ describe('Auth Middleware', () => {
 
   beforeEach(() => {
     process.env.NODE_ENV = 'test';
+    process.env.ALLOW_DEV_AUTH_BYPASS = 'true';
     delete process.env.FIREBASE_PROJECT_ID;
     delete process.env.FIREBASE_CLIENT_EMAIL;
     delete process.env.FIREBASE_PRIVATE_KEY;
@@ -33,6 +34,36 @@ describe('Auth Middleware', () => {
     const res = await app.request('/protected', { headers: authHeaders() });
     expect(res.status).toBe(200);
     expect((await res.json()).userId).toBeDefined();
+  });
+
+  it('refuses dev-test-token unless ALLOW_DEV_AUTH_BYPASS is explicitly true', async () => {
+    await seedTestWorld();
+    delete process.env.ALLOW_DEV_AUTH_BYPASS;
+    const app = new Hono();
+    app.use('*', authMiddleware);
+    app.get('/protected', (c) => c.json({ ok: true }));
+
+    try {
+      const res = await app.request('/protected', { headers: authHeaders() });
+      expect(res.status).toBe(503);
+    } finally {
+      process.env.ALLOW_DEV_AUTH_BYPASS = 'true';
+    }
+  });
+
+  it('refuses dev-test-token in production even when the bypass flag is set', async () => {
+    await seedTestWorld();
+    process.env.NODE_ENV = 'production';
+    const app = new Hono();
+    app.use('*', authMiddleware);
+    app.get('/protected', (c) => c.json({ ok: true }));
+
+    try {
+      const res = await app.request('/protected', { headers: authHeaders() });
+      expect(res.status).toBe(503);
+    } finally {
+      process.env.NODE_ENV = 'test';
+    }
   });
 
   it('returns 401 for invalid bearer format', async () => {

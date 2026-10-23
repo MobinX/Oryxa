@@ -21,12 +21,18 @@ import { businesses } from '@repo/db/schema';
 import { ADMIN_SANDBOX_SLUG } from '@repo/db/crud/business';
 import { syncUser } from '@repo/db/crud/user';
 
-const localPart = process.env.LOGS_UI_USER?.trim() || 'admin123';
+const localPart = process.env.LOGS_UI_USER?.trim() || 'operator';
 const domain = process.env.ADMIN_SIGNIN_DOMAIN?.trim() || 'oryxa.app';
 const email = `${localPart}@${domain}`;
 // Deliberately no default. This account is the gate for the whole operator console, so a
 // password that ships in the repository is a credential anyone with read access already knows.
 const password = process.env.ADMIN_SIGNIN_PASSWORD?.trim();
+// The operator account is the gate for the whole console, so refrained-from-default is not
+// enough — a new account must also not be born with a trivial secret.
+if (password && password.length < 12) {
+  console.error('ADMIN_SIGNIN_PASSWORD is too weak — a new operator needs at least 12 characters.');
+  process.exit(1);
+}
 const displayName = process.env.ADMIN_SIGNIN_NAME?.trim() || 'Oryxa Operator';
 
 if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {

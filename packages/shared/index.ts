@@ -13,6 +13,7 @@ export * from '@shared/schemas/post';
 export * from '@shared/schemas/token-analytics';
 export * from '@shared/schemas/admin-analytics';
 export * from '@shared/schemas/logs';
+export * from '@shared/schemas/official';
 export * from '@shared/schemas/plan';
 export * from '@shared/schemas/billing';
 export * from './prompts/agent';

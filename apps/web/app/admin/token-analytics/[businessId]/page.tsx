@@ -17,6 +17,7 @@ import { cachedAdminTokenUsageDetail } from '@/app/_cache/queries';
 import { adminRead, type Read } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
 import { AdminMonthPills } from '@/components/admin-month-pills';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { compact, money, whole } from '@/lib/format';
 import type { AdminTokenUsageDetail } from '@/lib/api';
 
@@ -127,19 +128,12 @@ async function DetailContent({
         <ArrowLeft className="h-4 w-4" /> All businesses
       </Link>
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <Cpu className="h-6 w-6 text-primary" />
-            {usage.business.name}
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            {usage.business.slug ?? 'no store published'} · {monthLabel(month)} ·{' '}
-            {whole(totals.runCount)} agent runs
-          </p>
-        </div>
-        <AdminMonthPills hrefBase={`/admin/token-analytics/${businessId}`} month={month} />
-      </div>
+      <AdminPageHeader
+        icon={Cpu}
+        title={usage.business.name}
+        description={`${usage.business.slug ?? 'no store published'} · ${monthLabel(month)} · ${whole(totals.runCount)} agent runs`}
+        actions={<AdminMonthPills hrefBase={`/admin/token-analytics/${businessId}`} month={month} />}
+      />
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
@@ -194,7 +188,7 @@ async function DetailContent({
 
       <Card className="px-0 py-0 hover:shadow-card">
         <div className="border-b border-border/40 px-6 py-3">
-          <h2 className="text-base font-bold">Which pipeline spent it</h2>
+          <h2 className="text-base font-semibold">Which pipeline spent it</h2>
           <p className="text-xs text-muted-foreground">
             One row per integration type in <code>hourly_token_analytics</code>.
           </p>
@@ -249,7 +243,7 @@ async function DetailContent({
 
       <Card className="px-0 py-0 hover:shadow-card">
         <div className="border-b border-border/40 px-6 py-3">
-          <h2 className="text-base font-bold">Day by day</h2>
+          <h2 className="text-base font-semibold">Day by day</h2>
           <p className="text-xs text-muted-foreground">
             UTC days, because the rollup buckets in UTC hours. Only the days that ran appear.
           </p>
