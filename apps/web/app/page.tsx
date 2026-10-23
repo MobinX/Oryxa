@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useBrand } from '@/components/brand-provider';
 import { HeroInteractiveAd } from '@/components/hero-interactive-ad';
+import { MotionVideoAd } from '@/components/motion-video-ad';
 import { HomeBento } from '@/components/marketing/home-bento';
 import { MarketingNav } from '@/components/marketing/nav';
 import { MarketingFooter } from '@/components/marketing/footer';
@@ -77,7 +78,7 @@ const PLANS: Plan[] = [
     tag: 'Free',
     tagTone: 'border-white/10 bg-white/[0.06] text-slate-300',
     title: 'Get started',
-    copy: 'Perfect for trying out the platform with the basics.',
+    copy: 'Perfect for trying out {brand} with the basics.',
     monthly: 0,
     yearly: 0,
     cta: 'Get started free',
@@ -181,6 +182,13 @@ function cellClass(ci: number, cell: string, highlight: boolean) {
 
 export default function HomePage() {
   const { companyName: COMPANY_NAME } = useBrand();
+  const showVideo = COMPANY_NAME === 'Oryxa';
+  // The free-plan sentence names the brand, which is why it is resolved here rather than in the
+  // module-level table: the same page serves both regional domains.
+  const plans = PLANS.map((plan) => ({
+    ...plan,
+    copy: plan.copy.replace('{brand}', COMPANY_NAME),
+  }));
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
 
   return (
@@ -284,8 +292,26 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 2. WORKFLOW / FEATURE SECTIONS */}
-        <HomeBento />
+        {/* 2. CINEMATIC VIDEO + COMMERCIAL AUTOMATION SHOWCASE — Oryxa only */}
+        {showVideo ? (
+          <section
+            id="workflow"
+            className="border-t border-b border-white/10 bg-[#0A0C18] py-20 text-white lg:py-24"
+          >
+            <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
+              <MotionVideoAd />
+            </div>
+          </section>
+        ) : null}
+
+        {/* 3. WORKFLOW / FEATURE SECTIONS */}
+        {showVideo ? (
+          <HomeBento />
+        ) : (
+          <div id="workflow">
+            <HomeBento />
+          </div>
+        )}
 
         {/* 3. PRICING */}
         <section id="pricing" className="relative overflow-hidden py-20 lg:py-24">
@@ -330,7 +356,7 @@ export default function HomePage() {
 
             {/* Plan cards */}
             <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
-              {PLANS.map((plan, i) => (
+              {plans.map((plan, i) => (
                 <Reveal key={plan.tag} delayMs={i * 80} className="h-full">
                   {plan.featured ? (
                     <div className="relative flex h-full flex-col rounded-3xl p-px shadow-[0_30px_80px_-30px_rgba(91,61,245,0.6)]">
