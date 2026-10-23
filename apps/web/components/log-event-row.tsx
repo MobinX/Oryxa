@@ -26,16 +26,20 @@ export function EventRow({
     <li className={`px-6 ${compact ? 'py-1.5' : 'py-2.5'} ${lane.row ?? ''}`}>
       <details className="group">
         <summary className="flex cursor-pointer list-none items-start gap-x-3">
-          <span className="shrink-0 pt-1 font-mono text-xs text-muted-foreground">
+          {/* A phone row is the message and nothing else; the clock and lane chip are desktop
+              context, and the whole row still opens the complete fields below. */}
+          <span className="hidden shrink-0 pt-1 font-mono text-xs text-muted-foreground sm:inline">
             {compact ? clock.slice(11) : clock}
           </span>
           <span
-            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${lane.chip}`}
+            className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide sm:flex ${lane.chip}`}
           >
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${lane.dot}`} />
             {tag}
           </span>
-          <span className={`min-w-0 flex-1 text-sm ${compact ? 'truncate' : 'line-clamp-2'} ${lane.text}`}>
+          <span
+            className={`min-w-0 flex-1 text-sm ${compact ? 'line-clamp-2 sm:truncate' : 'line-clamp-2'} ${lane.text}`}
+          >
             {text}
           </span>
           <span className="shrink-0 pt-0.5 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground group-open:text-foreground">
