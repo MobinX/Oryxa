@@ -278,10 +278,10 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                   No business had a message, an order or a visit in this window.
                 </p>
               ) : (
-                {/* Phones let the table grow and scroll as one page; only desktop caps its
-                    height. The card itself must be min-w-0 or the table's 620px minimum
-                    widens the whole dashboard. */}
                 <div className="min-w-0 overflow-x-auto rounded-b-card lg:max-h-96 lg:overflow-y-auto">
+                  {/* Phones let the table grow and scroll as one page; only desktop caps its
+                      height. The card itself must be min-w-0 or the table's 620px minimum
+                      widens the whole dashboard. */}
                   <table className="w-full min-w-[620px] text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
