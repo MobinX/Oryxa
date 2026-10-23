@@ -959,6 +959,32 @@ export const getLogEvents = (token: string, filter: LogFilter) => {
 export const getLogEventTypes = (token: string) =>
   apiFetch<{ types: LogEventTypeOption[] }>('/api2/logs/types', { token, signInPath: null });
 
+export type AxiomStorage = {
+  source: 'axiom' | 'memory';
+  available: boolean;
+  note?: string;
+  usedBytes: number | null;
+  usedGb: number | null;
+  limitGb: number;
+  limitConfigured: boolean;
+  remainingGb: number | null;
+  percentUsed: number | null;
+  measuredAt: string | null;
+  datasets: { name: string; bytes: number; measuredAt: string }[];
+  logDataset: {
+    name: string;
+    bytes: number | null;
+    retentionDays: number;
+    retentionEnabled: boolean;
+    retentionKnown: boolean;
+    oldestEventAt: string | null;
+    expiresAt: string | null;
+  };
+};
+
+export const getLogStorage = (token: string) =>
+  apiFetch<AxiomStorage>('/api2/logs/storage', { token, signInPath: null });
+
 // Admin — the operator dashboard read, on /api2 beside the log query.
 export type AdminWindowMetrics = {
   conversations: number;

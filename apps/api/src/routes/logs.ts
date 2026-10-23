@@ -1,6 +1,7 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   errorSchema,
+  axiomStorageResponseSchema,
   logQueryResponseSchema,
   logTypesResponseSchema,
   LOG_EVENT_LABELS,
@@ -20,6 +21,7 @@ import {
   type LogFilter,
 } from '@api/lib/log-query';
 import { emit, errorFields } from '@api/lib/log';
+import { readAxiomStorage } from '@api/lib/log-storage';
 
 // A validation hook of its own so a bad `type` answers in the shape this route
 // documents, instead of zod-openapi's default issue dump. Scoped to this router,
@@ -167,6 +169,29 @@ logsRouter.openapi(listLogTypesRoute, (c) =>
     200,
   ),
 );
+
+const getLogStorageRoute = createRoute({
+  method: 'get',
+  path: '/logs/storage',
+  tags: ['Logs'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { 'application/json': { schema: axiomStorageResponseSchema } },
+      description: 'Storage used across Axiom datasets, the allowance left, and the log dataset retention',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not allowed to read logs',
+    },
+  },
+});
+
+logsRouter.openapi(getLogStorageRoute, async (c) => c.json(await readAxiomStorage(), 200));
 
 /**
  * `datetime-local` inputs send no zone. Reading that as UTC puts the filter in the
