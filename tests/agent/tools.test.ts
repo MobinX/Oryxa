@@ -149,7 +149,7 @@ describe('Agent Tools', () => {
         sent.push(text);
       }),
       agentState: state,
-    }).find((t) => t.name === 'send_message')!;
+    }).find((t) => t.name === 'send_suggestions')!;
     const suggestions = ['A', 'B', 'S'];
 
     const first = JSON.parse(await tool.invoke({ message: 'Pick one', suggestions }));
@@ -249,7 +249,7 @@ describe('Agent Tools', () => {
     expect(result).not.toMatch(/'done'/);
   });
 
-  it('exposes send_message tool for replies with suggestions', async () => {
+  it('exposes separate send_message and send_suggestions tools', async () => {
     const seed = await seedTestWorld();
     sendMessageMock.mockClear();
     const tools = createAgentTools({
@@ -258,7 +258,12 @@ describe('Agent Tools', () => {
       pageToken: 'page-tok',
       customerPlatformId: 'fb-user-1',
     });
-    expect(tools.some((tool) => String(tool.name) === 'send_message')).toBe(true);
+    const messageTool = tools.find((tool) => String(tool.name) === 'send_message');
+    const suggestionTool = tools.find((tool) => String(tool.name) === 'send_suggestions');
+    expect(messageTool).toBeTruthy();
+    expect(suggestionTool).toBeTruthy();
+    expect(JSON.stringify(messageTool?.description)).toContain('takes no suggestions');
+    expect(JSON.stringify(suggestionTool?.description)).toContain('tappable answer chips');
   });
 
   it('show_products sends a card per product, with the Order button carrying its id', async () => {

@@ -267,6 +267,13 @@
       "when": 1793334400000,
       "tag": "0037_model_billing_agent_guidance_and_order_transactions",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793420800000,
+      "tag": "0038_default_agent_separate_suggestion_tool",
+      "breakpoints": true
     }
   ]
 }

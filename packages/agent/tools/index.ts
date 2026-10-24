@@ -1583,13 +1583,11 @@ export function createAgentTools(
   );
 
   /**
-   * One message, optionally with tappable answers. A plain question and its chips travel in a
-   * single tool call, so the model pays for one call instead of a message plus a suggestions
-   * call. The question and its options land in the conversation record; the model then ends its
-   * turn with SILENT so the automatically-delivered final text cannot repeat it.
+   * Plain text only. Suggestions are their own tool so a text reply can never
+   * accidentally carry a chip row from an earlier question.
    */
   const sendMessageTool = tool(
-    async ({ message, suggestions }) => {
+    async ({ message }) => {
       const logResult = (result: string) => {
         context.emitSse?.('tool_result', { name: 'send_message', result });
         return result;
@@ -1599,31 +1597,98 @@ export function createAgentTools(
       if (!text) {
         return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
       }
-      const cleaned = [
-        ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
-      ].slice(0, 10);
-      const askedForChips = cleaned.length >= 2;
-      // Same chips, same set: the second identical row is redundant even when the customer
-      // typed something in between. One suppression per repeat, so a third attempt can ask
-      // again if the model really needs to.
-      const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
-      const setKey = (options: string[]) => options.map(normalize).sort().join('\u0000');
-      const previous = context.agentState?.lastSentSuggestions ?? [];
-      const repeated =
-        askedForChips && previous.length >= 2 && setKey(cleaned) === setKey(previous);
-      const suppressRepeated = repeated && !context.agentState?.suggestionRepeatSkipped;
-      // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
-      // the old one on screen (most visibly in the Android Messenger client), so this turn
-      // answers in one plain message with the choices written out instead.
-      const withChips = askedForChips && !context.suppressSuggestions && !suppressRepeated;
-      const suppressedChips = askedForChips && !withChips && !suppressRepeated;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
       }
 
-      const said = askedForChips && !suppressRepeated ? `${text} (${cleaned.join(' / ')})` : text;
+      try {
+        if (context.sendMessageOverride) {
+          await context.sendMessageOverride(context.pageToken, context.customerPlatformId, text);
+        } else {
+          await fbSendMessage(context.pageToken, context.customerPlatformId, text, {
+            platform: context.platform,
+          });
+        }
+      } catch (err) {
+        await returnMessageUnit(budget.period);
+        throw err;
+      }
+
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content: text,
+        state: 'done',
+      });
+      onSent?.(text, 'reply');
+
+      return logResult(JSON.stringify({
+        sent: true,
+        instruction:
+          'The plain message is delivered. End your turn with the single word SILENT; do not send the same text again. Use send_suggestions instead when you want tappable choices.',
+      }));
+    },
+    {
+      name: 'send_message',
+      description:
+        `Send the customer one plain ${inbox} message. This tool takes no suggestions: when the next answer is one choice from a short list — color, size, quantity, category, yes/no, delivery or payment preference — call send_suggestions instead. After a successful send, end your turn with SILENT so nothing is sent twice.`,
+      schema: z.object({
+        message: z.string().min(1).max(1000).describe(
+          'The message text in the customer’s language, e.g. "Your order is confirmed."',
+        ),
+      }),
+    },
+  );
+
+  /**
+   * One question and its tappable answers travel together. The question and options land in the
+   * conversation record; the model then ends its turn with SILENT so the automatically-delivered
+   * final text cannot repeat it.
+   */
+  const sendSuggestionsTool = tool(
+    async ({ message, suggestions }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'send_suggestions', result });
+        return result;
+      };
+
+      const text = message.trim();
+      if (!text) {
+        return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
+      }
+      const cleaned = [
+        ...new Set(suggestions.map((option) => option.trim()).filter(Boolean)),
+      ].slice(0, 10);
+      if (cleaned.length < 2) {
+        return logResult(JSON.stringify({
+          sent: false,
+          reason: 'send_suggestions needs at least two distinct options',
+          instruction: 'Use send_message for a plain reply, or pass 2 to 10 real choices.',
+        }));
+      }
+
+      // Same chips, same set: the second identical row is redundant even when the customer
+      // typed something in between. One suppression per repeat, so a third attempt can ask
+      // again if the model really needs to.
+      const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const setKey = (options: string[]) => options.map(normalize).sort().join('\u0000');
+      const previous = context.agentState?.lastSentSuggestions ?? [];
+      const repeated = previous.length >= 2 && setKey(cleaned) === setKey(previous);
+      const suppressRepeated = repeated && !context.agentState?.suggestionRepeatSkipped;
+      // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
+      // the old one on screen (most visibly in the Android Messenger client), so this turn
+      // answers in one plain message with the choices written out instead.
+      const withChips = !context.suppressSuggestions && !suppressRepeated;
+      const suppressedChips = !withChips && !suppressRepeated;
+
+      const budget = await takeMessageUnit(!context.sendMessageOverride);
+      if (!budget.allowed) {
+        return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
+      }
+
+      const said = suppressRepeated ? text : `${text} (${cleaned.join(' / ')})`;
       try {
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
@@ -1664,32 +1729,27 @@ export function createAgentTools(
           ? { suggestionsSuppressed: true, suggestionsRepeated: true, suggestions: cleaned }
           : {}),
         ...(suppressedChips ? { suggestionsSuppressed: true, suggestions: cleaned } : {}),
-        ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
         instruction: withChips
           ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
           : suppressRepeated
             ? 'The same chip row was already offered, so this copy went out without it. End your turn with SILENT; do not send the same choices again in another message.'
-            : suppressedChips
-              ? 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.'
-              : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
+            : 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.',
       }));
     },
     {
-      name: 'send_message',
+      name: 'send_suggestions',
       description:
-        `Send the customer one ${inbox} message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.`,
+        `Send one ${inbox} message with 2 to 10 tappable answer chips. Use this instead of send_message whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing. Check the real values first (get_product_options, find_variant, Catalog Summary). Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT.`,
       schema: z.object({
         message: z.string().min(1).max(1000).describe(
-          'The message text in the customer’s language, e.g. "Which color would you like?"',
+          'The question or sentence shown above the chips, in the customer’s language, e.g. "Which color would you like?"',
         ),
         suggestions: z
           .array(z.string().min(1).max(80))
           .min(2)
           .max(10)
-          .nullable()
-          .optional()
           .describe(
-            'Optional tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers; null or omitted for a plain message.',
+            'Tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers.',
           ),
       }),
     },
@@ -1771,6 +1831,7 @@ export function createAgentTools(
     showVariantPhotosTool,
     suggestAlternativesTool,
     sendMessageTool,
+    sendSuggestionsTool,
     reportHumanInterveneTool,
   ];
 }
