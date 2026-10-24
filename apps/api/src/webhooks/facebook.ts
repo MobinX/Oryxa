@@ -1098,7 +1098,7 @@ async function processMessagingEvents(
         ? 'postback'
         : undefined;
 
-    const { conversationId, priorStatus, inserted, needsProfile, priorStateAt } =
+    const { conversationId, priorStatus, inserted, needsProfile, priorStateAt, autoPilot } =
       await processInboundMessage(
         { id: channel.id, businessId: channel.businessId },
         senderId,
@@ -1165,7 +1165,16 @@ async function processMessagingEvents(
     let outcome: string;
     let ageMs: number | undefined;
 
-    if (!inserted) {
+    if (!autoPilot) {
+      // The message stays stored and visible; only the automated answer is skipped.
+      outcome = 'autopilot_off';
+      fbLog('processMessagingEvents auto pilot off — message stored, agent skipped', {
+        index,
+        conversationId,
+        inserted,
+        priorStatus,
+      });
+    } else if (!inserted) {
       // Meta re-delivers the same mid because it never saw an answer. That is
       // precisely when the run it waited on is most likely to have died, so the
       // redelivery is treated as a recovery signal too — but only for a lock that

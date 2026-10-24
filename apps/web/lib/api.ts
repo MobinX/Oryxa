@@ -610,6 +610,8 @@ export type Conversation = {
   customerPlatformId: string;
   createdAt: string;
   pageName?: string | null;
+  /** False when the merchant turned the AI auto reply off for this thread. */
+  autoPilot?: boolean;
 };
 
 export const listConversations = (
@@ -674,6 +676,59 @@ export const sendMessage = (
   apiFetch<{ id: string; time: string }>(
     `/api/v1/${businessId}/conversations/${conversationId}/messages`,
     { method: 'POST', token, body: JSON.stringify({ content, contentType: 'text' }) },
+  );
+
+export const updateConversationAutoPilot = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  autoPilot: boolean,
+) =>
+  apiFetch<{ id: string; autoPilot: boolean }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/auto-pilot`,
+    { method: 'PATCH', token, body: JSON.stringify({ autoPilot }) },
+  );
+
+export type InboxSuggestion =
+  | { id: string; kind: 'text'; text: string }
+  | {
+      id: string;
+      kind: 'product';
+      productId: string;
+      variantId?: string | null;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+      subtitle?: string | null;
+    }
+  | {
+      id: string;
+      kind: 'category';
+      categoryId: string;
+      name: string;
+      productCount: number;
+      products: Array<{ id: string; name: string; price: number; imageUrl?: string | null }>;
+    };
+
+export const generateInboxSuggestions = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+) =>
+  apiFetch<{ forMessageId: string | null; suggestions: InboxSuggestion[] }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/suggestions`,
+    { method: 'POST', token },
+  );
+
+export const sendInboxSuggestion = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  input: { kind: 'product' | 'category'; productId?: string; categoryId?: string },
+) =>
+  apiFetch<{ sent: boolean; cards: number }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/suggestions/send`,
+    { method: 'POST', token, body: JSON.stringify(input) },
   );
 
 // Orders

@@ -333,9 +333,29 @@ export async function listConversations(
       createdAt: true,
       businessId: true,
       aiPaused: true,
+      autoPilot: true,
       lastStateAt: true,
     },
   });
+}
+
+export async function setConversationAutoPilot(
+  conversationId: string,
+  businessId: string,
+  autoPilot: boolean,
+) {
+  const [row] = await db
+    .update(conversations)
+    .set({ autoPilot })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.businessId, businessId),
+        isNull(conversations.deletedAt),
+      ),
+    )
+    .returning({ id: conversations.id, autoPilot: conversations.autoPilot });
+  return row ?? null;
 }
 
 export async function listMessages(conversationId: string, businessId: string, limit = 50) {
@@ -427,6 +447,7 @@ export async function processInboundMessage(
   inserted: boolean;
   needsProfile: boolean;
   priorStateAt: Date;
+  autoPilot: boolean;
 }> {
   let conv = await db.query.conversations.findFirst({
     where: and(
@@ -494,6 +515,7 @@ export async function processInboundMessage(
         inserted: false,
         needsProfile: false,
         priorStateAt: conv.lastStateAt,
+        autoPilot: conv.autoPilot,
       };
     }
 
@@ -533,6 +555,7 @@ export async function processInboundMessage(
     inserted: true,
     needsProfile,
     priorStateAt: conv.lastStateAt,
+    autoPilot: conv.autoPilot,
   };
 }
 

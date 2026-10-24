@@ -88,6 +88,13 @@ export async function runAgentCore(
   }
   const businessId: string = conv.businessId;
 
+  // Defence in depth: the webhook checks this before scheduling a run, but a stale
+  // recovery or an internal call must not answer a thread the merchant switched off.
+  if (!conv.autoPilot) {
+    console.log(`[agent-runner-core] auto pilot off for conversation ${conversationId} — skipping run`);
+    return;
+  }
+
   const answering = await resolveAnsweringAgent(conv.channel.agent);
   const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 

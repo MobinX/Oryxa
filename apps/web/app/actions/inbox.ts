@@ -2,7 +2,17 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
-import { sendMessage, deleteConversation, updateConversationState } from '@/lib/api';
+import {
+  sendMessage,
+  deleteConversation,
+  updateConversationState,
+  listMessages,
+  updateConversationAutoPilot,
+  generateInboxSuggestions,
+  sendInboxSuggestion,
+} from '@/lib/api';
+
+export type InboxMessage = Awaited<ReturnType<typeof listMessages>>[number];
 
 /**
  * `redirect()` and `notFound()` work by throwing, and their error has no useful message — only a
@@ -42,6 +52,68 @@ export async function sendMessageAction(
       }`,
     );
     return { error: err instanceof Error ? err.message : 'Failed to send message.' };
+  }
+}
+
+export async function sendInboxReplyAction(
+  businessId: string,
+  conversationId: string,
+  content: string,
+): Promise<{ error: string | null }> {
+  const token = await requireAuth();
+  const trimmed = content.trim();
+  if (!trimmed) return { error: 'Message cannot be empty.' };
+  try {
+    await sendMessage(token, businessId, conversationId, trimmed);
+    revalidatePath(`/b/${businessId}/inbox`);
+    return { error: null };
+  } catch (err) {
+    if (isControlFlow(err)) throw err;
+    return { error: err instanceof Error ? err.message : 'Failed to send message.' };
+  }
+}
+
+/** Polled by the open thread every five seconds; returns the latest page of messages. */
+export async function pollInboxMessagesAction(
+  businessId: string,
+  conversationId: string,
+): Promise<InboxMessage[]> {
+  const token = await requireAuth();
+  return listMessages(token, businessId, conversationId);
+}
+
+export async function setAutoPilotAction(
+  businessId: string,
+  conversationId: string,
+  autoPilot: boolean,
+): Promise<{ autoPilot: boolean }> {
+  const token = await requireAuth();
+  const result = await updateConversationAutoPilot(token, businessId, conversationId, autoPilot);
+  revalidatePath(`/b/${businessId}/inbox`);
+  return { autoPilot: result.autoPilot };
+}
+
+export async function generateSuggestionsAction(
+  businessId: string,
+  conversationId: string,
+) {
+  const token = await requireAuth();
+  return generateInboxSuggestions(token, businessId, conversationId);
+}
+
+export async function sendInboxSuggestionAction(
+  businessId: string,
+  conversationId: string,
+  input: { kind: 'product' | 'category'; productId?: string; categoryId?: string },
+): Promise<{ error: string | null }> {
+  const token = await requireAuth();
+  try {
+    await sendInboxSuggestion(token, businessId, conversationId, input);
+    revalidatePath(`/b/${businessId}/inbox`);
+    return { error: null };
+  } catch (err) {
+    if (isControlFlow(err)) throw err;
+    return { error: err instanceof Error ? err.message : 'Could not send this suggestion.' };
   }
 }
 

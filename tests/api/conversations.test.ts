@@ -111,6 +111,39 @@ describe('Conversations API', () => {
     expect((await res.json() as any).error).toMatch(/24 hours/);
   });
 
+  it('PATCH /:businessId/conversations/:id/auto-pilot switches the thread', async () => {
+    const seed = await seedTestWorld();
+    const off = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: false }) },
+    );
+    expect(off.status).toBe(200);
+    expect((await off.json() as any).autoPilot).toBe(false);
+
+    const list = await app.request(
+      `/api/v1/${seed.business.id}/conversations?limit=100`,
+      { headers: authHeaders() },
+    );
+    const rows = (await list.json()) as Array<{ id: string; autoPilot: boolean }>;
+    expect(rows.find((row) => row.id === seed.conversation.id)?.autoPilot).toBe(false);
+
+    const on = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: true }) },
+    );
+    expect((await on.json() as any).autoPilot).toBe(true);
+  });
+
+  it('POST suggestions answers empty without running the model while auto pilot is on', async () => {
+    const seed = await seedTestWorld();
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/suggestions`,
+      { method: 'POST', headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ forMessageId: null, suggestions: [] });
+  });
+
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {
     const seed = await seedTestWorld();
     const res = await app.request(

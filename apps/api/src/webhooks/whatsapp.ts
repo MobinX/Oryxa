@@ -288,6 +288,10 @@ async function processWaMessage(
   tagContext({ conversationId: result.conversationId });
 
   if (!channelCtx.agentId || !result.inserted) return;
+  if (!result.autoPilot) {
+    waLog('auto pilot off — message stored, agent skipped', { externalId });
+    return;
+  }
   if (result.priorStatus !== 'done') {
     // In flight; the runner's stale-recovery covers a dead lock, as on Messenger.
     waLog('conversation in flight — no trigger', { externalId });

@@ -120,6 +120,11 @@ export interface AgentConfig {
   tools?: StructuredTool[];
   /** Override the default Messenger reply guidance in the system prompt. */
   replyGuidance?: string;
+  /**
+   * Which wording rules the final text is validated against. Defaults to 'comment' when
+   * custom tools are supplied (the comment runner), 'messenger' otherwise.
+   */
+  validationChannel?: 'comment' | 'messenger';
   promptCacheKey?: string;
   /** Reasoning effort for OpenAI reasoning deployments (defaults to 'low' for text, 'medium' for photos). */
   reasoningEffort?: 'low' | 'medium' | 'high';
@@ -410,7 +415,7 @@ export class Agent {
     // Post-generation validation & sanitization
     const validation = validateAndSanitizeReply(replyText, {
       expectedLanguage: turnLanguage,
-      channel: this.config.tools ? 'comment' : 'messenger',
+      channel: this.config.validationChannel ?? (this.config.tools ? 'comment' : 'messenger'),
       isSilentExpected: turnIntent === 'comment_silent',
     });
     replyText = validation.sanitizedText;

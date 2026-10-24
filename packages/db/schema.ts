@@ -769,6 +769,11 @@ export const conversations = pgTable('conversations', {
   lastStateAt: timestamp('last_state_at').defaultNow().notNull(),
   /** True after a human took the thread over: the agent must never answer it again. */
   aiPaused: boolean('ai_paused').default(false).notNull(),
+  /**
+   * Per-thread auto reply switch. When false the customer's message is still stored and
+   * shown in the inbox, but no agent run answers it; the inbox suggests replies instead.
+   */
+  autoPilot: boolean('auto_pilot').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({

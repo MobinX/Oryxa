@@ -21,6 +21,67 @@ export const conversationListItemSchema = z.object({
   pageName: z.string().nullable().optional(),
   /** True when an operator has taken over (spec E); the AI stays off until resumed. */
   aiPaused: z.boolean().optional(),
+  /** False when the merchant turned auto reply off for this thread. */
+  autoPilot: z.boolean().optional(),
+});
+
+export const updateAutoPilotInputSchema = z.object({
+  autoPilot: z.boolean(),
+});
+
+export const updateAutoPilotOutputSchema = z.object({
+  id: uuidSchema,
+  autoPilot: z.boolean(),
+});
+
+export const suggestionProductSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  price: z.number(),
+  imageUrl: z.string().nullable().optional(),
+});
+
+/** One row of the inbox suggestion panel. Nothing here has been sent yet. */
+export const inboxSuggestionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    id: z.string(),
+    kind: z.literal('text'),
+    text: z.string(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('product'),
+    productId: uuidSchema,
+    variantId: uuidSchema.nullable().optional(),
+    title: z.string(),
+    price: z.number(),
+    imageUrl: z.string().nullable().optional(),
+    subtitle: z.string().nullable().optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('category'),
+    categoryId: uuidSchema,
+    name: z.string(),
+    productCount: z.number().int(),
+    products: z.array(suggestionProductSchema),
+  }),
+]);
+
+export const generateSuggestionsOutputSchema = z.object({
+  forMessageId: uuidSchema.nullable(),
+  suggestions: z.array(inboxSuggestionSchema),
+});
+
+export const sendSuggestionInputSchema = z.object({
+  kind: z.enum(['product', 'category']),
+  productId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+});
+
+export const sendSuggestionOutputSchema = z.object({
+  sent: z.boolean(),
+  cards: z.number().int(),
 });
 
 export const messageSchema = z.object({
