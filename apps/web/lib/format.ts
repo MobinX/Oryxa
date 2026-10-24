@@ -14,6 +14,14 @@ export function money(value: number): string {
   return `$${value.toFixed(value >= 1_000 ? 0 : 2)}`;
 }
 
+/** Token bills are often fractions of a cent; two decimals would hide the whole cost. */
+export function tokenMoney(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '$0.00';
+  if (value < 0.01) return `$${value.toFixed(6)}`;
+  if (value < 1) return `$${value.toFixed(4)}`;
+  return money(value);
+}
+
 export type Delta = { text: string; tone: 'up' | 'down' | 'flat' };
 
 /**

@@ -18,7 +18,7 @@ import { adminRead, type Read } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
 import { AdminMonthPills } from '@/components/admin-month-pills';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { compact, money, whole } from '@/lib/format';
+import { compact, tokenMoney, whole } from '@/lib/format';
 import type { AdminTokenUsageDetail } from '@/lib/api';
 
 export const instant = false;
@@ -181,7 +181,7 @@ async function DetailContent({
         <Kpi
           label="Estimated cost"
           icon={Receipt}
-          value={money(totals.estimatedCostUsd)}
+          value={tokenMoney(totals.estimatedCostUsd)}
           sub="from the hourly rollup, so a floor"
         />
       </section>
@@ -231,7 +231,7 @@ async function DetailContent({
                       {row.cacheHitPercent.toFixed(1)}%
                     </td>
                     <td className="px-6 py-3 text-right font-medium tabular-nums">
-                      {money(row.estimatedCostUsd)}
+                      {tokenMoney(row.estimatedCostUsd)}
                     </td>
                   </tr>
                 ))}
@@ -270,7 +270,7 @@ async function DetailContent({
                   {whole(day.runCount)} runs
                 </span>
                 <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {money(day.estimatedCostUsd)}
+                  {tokenMoney(day.estimatedCostUsd)}
                 </span>
               </li>
             ))}

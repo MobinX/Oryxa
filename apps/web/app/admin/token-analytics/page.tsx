@@ -17,7 +17,7 @@ import { adminRead } from '@/lib/admin-read';
 import { monthLabel, readMonth } from '@/lib/admin-month';
 import { AdminMonthPills } from '@/components/admin-month-pills';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { compact, money, whole } from '@/lib/format';
+import { compact, tokenMoney, whole } from '@/lib/format';
 import type { AdminTokenUsage } from '@/lib/api';
 
 export const instant = false;
@@ -111,7 +111,7 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
         <Kpi
           label="Estimated cost"
           icon={Receipt}
-          value={money(platform.estimatedCostUsd)}
+          value={tokenMoney(platform.estimatedCostUsd)}
           sub="from the hourly rollup, so a floor"
         />
       </section>
@@ -171,7 +171,7 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
                       {whole(Math.round(row.avgTokensPerRun))}
                     </td>
                     <td className="px-5 py-3 text-right font-medium tabular-nums">
-                      {money(row.estimatedCostUsd)}
+                      {tokenMoney(row.estimatedCostUsd)}
                     </td>
                   </tr>
                 ))}

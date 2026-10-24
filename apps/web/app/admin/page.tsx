@@ -37,7 +37,7 @@ import {
   type AdminStats,
   type LogQueryResult,
 } from '@/lib/api';
-import { compact, deltaOf, money, whole, type Delta } from '@/lib/format';
+import { compact, deltaOf, money, tokenMoney, whole, type Delta } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AdminPageHeader } from '@/components/admin-page-header';
@@ -214,7 +214,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
             <Kpi
               label="Estimated cost"
               icon={Receipt}
-              value={money(stats.window.estimatedCostUsd)}
+              value={tokenMoney(stats.window.estimatedCostUsd)}
               sub="from the hourly rollup, so a floor"
               delta={deltaOf(stats.window.estimatedCostUsd, stats.previous.estimatedCostUsd)}
               neutral
