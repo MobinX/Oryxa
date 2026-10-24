@@ -20,6 +20,21 @@ export function prevOrderState(state: OrderState): OrderState | null {
   return i > 0 ? ORDER_STATES[i - 1] : null;
 }
 
+/**
+ * Mirrors the API's ALLOWED_TRANSITIONS (packages/db/crud/order.ts). The API is the
+ * authority — this copy only lets the UI grey out a move it would reject with 409.
+ */
+export const ORDER_STATE_TRANSITIONS: Record<OrderState, readonly OrderState[]> = {
+  pending: ['acknowledged', 'onDelivery', 'done'],
+  acknowledged: ['onDelivery', 'pending'],
+  onDelivery: ['done', 'acknowledged'],
+  done: [],
+};
+
+export function canTransition(from: OrderState, to: OrderState): boolean {
+  return ORDER_STATE_TRANSITIONS[from].includes(to);
+}
+
 export const ORDER_STATE_LABEL: Record<OrderState, string> = {
   pending: 'Pending',
   acknowledged: 'Confirmed',

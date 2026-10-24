@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { advanceOrderStateAction, deleteOrderAction } from '@/app/actions/orders';
-import { ORDER_STATES, ORDER_STATE_LABEL, normalizeOrderState, nextOrderState, prevOrderState, formatTaka } from '@/lib/order-state';
+import { ORDER_STATES, ORDER_STATE_LABEL, normalizeOrderState, nextOrderState, prevOrderState, canTransition, formatTaka, type OrderState } from '@/lib/order-state';
 
 const NEXT_STATE: Record<string, string> = Object.fromEntries(
   ORDER_STATES.map((st) => [st, nextOrderState(st)]).filter(([, v]) => v),
@@ -55,6 +55,9 @@ export function OrdersProductsWorkspace({
   const [productSearch, setProductSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  // A successful transition shows before the server refresh lands, so the panel never
+  // keeps the old state next to a finished progress bar.
+  const [stateOverrides, setStateOverrides] = useState<Record<string, string>>({});
   const summaryRef = useRef<HTMLDivElement | null>(null);
 
   // Map real database orders
@@ -74,7 +77,7 @@ export function OrdersProductsWorkspace({
     shippingCost: Number.isFinite(Number(o.shippingCost)) ? Number(o.shippingCost) : 0,
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
     amount: formatTaka(o.totalPrice),
-    state: normalizeOrderState(o.state) as string,
+    state: stateOverrides[o.id] ?? (normalizeOrderState(o.state) as string),
     paymentMethod: o.paymentMethod || null,
     paymentReference: o.transactionId || o.paymentReference || o.txId || null,
     createdAt: o.createdAt ? new Date(o.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
@@ -108,9 +111,18 @@ export function OrdersProductsWorkspace({
 
   const handleSetState = (orderId: string, targetState: string) => {
     if (!targetState) return;
+    const current = ordersList.find((o) => o.id === orderId);
+    if (current && !canTransition(current.state as OrderState, targetState as OrderState)) {
+      setActionMessage(
+        `Cannot move from ${STATE_LABEL[current.state] || current.state} to ${STATE_LABEL[targetState] || targetState}`,
+      );
+      setTimeout(() => setActionMessage(null), 3500);
+      return;
+    }
     startTransition(async () => {
       try {
         await advanceOrderStateAction(businessId, orderId, targetState);
+        setStateOverrides((prev) => ({ ...prev, [orderId]: targetState }));
         setActionMessage(`Order updated to ${STATE_LABEL[targetState] || targetState}`);
         setTimeout(() => setActionMessage(null), 3000);
       } catch (err: any) {
@@ -436,6 +448,15 @@ export function OrdersProductsWorkspace({
           ref={summaryRef}
           className="scroll-mt-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-2xs dark:border-slate-800 dark:bg-[#13172B] lg:col-span-4 text-xs"
         >
+          {isPending && (
+            <div
+              role="progressbar"
+              aria-label="Updating order"
+              className="h-1 w-full overflow-hidden rounded-full bg-[#5B3DF5]/15"
+            >
+              <div className="h-full w-1/3 animate-order-progress rounded-full bg-[#5B3DF5]" />
+            </div>
+          )}
           {activeOrder ? (
             <>
               <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
@@ -559,14 +580,20 @@ export function OrdersProductsWorkspace({
                     const currentIdx = stepStateOrder.indexOf(activeOrder.state);
                     const isPassed = idx <= currentIdx;
                     const isCurrent = activeOrder.state === stage.id;
+                    const allowed = canTransition(activeOrder.state as OrderState, stage.id);
 
                     return (
                       <button
                         key={stage.id}
                         type="button"
-                        disabled={isPending}
+                        disabled={isPending || !allowed}
+                        title={
+                          allowed
+                            ? undefined
+                            : `Cannot move from ${STATE_LABEL[activeOrder.state] || activeOrder.state} to ${stage.title}`
+                        }
                         onClick={() => handleSetState(activeOrder.id, stage.id)}
-                        className={`group relative block w-full text-left transition rounded-lg p-1.5 -ml-1.5 ${
+                        className={`group relative block w-full text-left transition rounded-lg p-1.5 -ml-1.5 disabled:cursor-not-allowed disabled:opacity-50 ${
                           isCurrent
                             ? 'bg-[#5B3DF5]/10 border border-[#5B3DF5]/30 dark:bg-[#5B3DF5]/20'
                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -617,13 +644,19 @@ export function OrdersProductsWorkspace({
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                     {ORDER_STAGES.map((s) => {
                       const isSelected = activeOrder.state === s.id;
+                      const allowed = canTransition(activeOrder.state as OrderState, s.id);
                       return (
                         <button
                           key={s.id}
                           type="button"
-                          disabled={isPending || isSelected}
+                          disabled={isPending || isSelected || !allowed}
+                          title={
+                            allowed
+                              ? undefined
+                              : `Cannot move from ${STATE_LABEL[activeOrder.state] || activeOrder.state} to ${STATE_LABEL[s.id]}`
+                          }
                           onClick={() => handleSetState(activeOrder.id, s.id)}
-                          className={`rounded-lg py-1.5 px-2 text-[11px] font-semibold text-center transition border ${
+                          className={`rounded-lg py-1.5 px-2 text-[11px] font-semibold text-center transition border disabled:cursor-not-allowed disabled:opacity-40 ${
                             isSelected
                               ? 'bg-[#5B3DF5] border-[#5B3DF5] text-white shadow-xs pointer-events-none'
                               : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
