@@ -89,7 +89,9 @@ export function AdminLoginForm({ user }: { user: string }) {
     }
   }
 
-  async function submit(formData: FormData) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     const typed = String(formData.get('user') ?? '');
     const password = String(formData.get('password') ?? '');
     if (pending) return;
@@ -130,7 +132,7 @@ export function AdminLoginForm({ user }: { user: string }) {
         <span className="relative z-10 bg-card px-2 text-muted-foreground">Or sign in with operator id</span>
       </div>
 
-      <form action={submit} aria-busy={busy} className="space-y-4">
+      <form onSubmit={submit} aria-busy={busy} className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Email</span>
           <input
