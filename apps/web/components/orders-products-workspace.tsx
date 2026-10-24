@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   Clock,
@@ -55,6 +55,7 @@ export function OrdersProductsWorkspace({
   const [productSearch, setProductSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   // Map real database orders
   const ordersList = initialOrders.map((o: any, idx: number) => ({
@@ -364,7 +365,13 @@ export function OrdersProductsWorkspace({
                   <button
                     key={o.id}
                     type="button"
-                    onClick={() => setSelectedOrderId(o.id)}
+                    onClick={() => {
+                      setSelectedOrderId(o.id);
+                      // Below lg the summary is stacked under the list, so bring it into view.
+                      if (window.matchMedia('(max-width: 1023px)').matches) {
+                        summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
                     className={`flex w-full items-center justify-between rounded-xl p-2.5 text-left transition ${
                       isSelected
                         ? 'bg-[#5B3DF5]/10 border border-[#5B3DF5]/30 dark:bg-[#5B3DF5]/20'
@@ -425,7 +432,10 @@ export function OrdersProductsWorkspace({
         </div>
 
         {/* Real Order Details Drawer (Col-span-4) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-2xs dark:border-slate-800 dark:bg-[#13172B] lg:col-span-4 text-xs">
+        <div
+          ref={summaryRef}
+          className="scroll-mt-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-2xs dark:border-slate-800 dark:bg-[#13172B] lg:col-span-4 text-xs"
+        >
           {activeOrder ? (
             <>
               <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
