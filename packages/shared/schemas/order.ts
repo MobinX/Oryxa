@@ -46,7 +46,17 @@ export const listOrdersQuerySchema = z.object({
 
 export const orderListItemSchema = z.object({
   id: uuidSchema,
+  productId: uuidSchema.nullable().optional(),
+  variantId: uuidSchema.nullable().optional(),
+  productName: z.string().nullable().optional(),
+  variantName: z.string().nullable().optional(),
+  variantShortId: z.string().nullable().optional(),
+  variantImageUrl: z.string().nullable().optional(),
+  count: z.number().int().optional(),
+  variantPrice: z.number().optional(),
   customerName: z.string(),
+  customerPhone: z.string().nullable().optional(),
+  customerAddress: z.string().nullable().optional(),
   totalPrice: z.number(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),

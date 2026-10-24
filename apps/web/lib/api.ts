@@ -679,7 +679,17 @@ export const sendMessage = (
 // Orders
 export type OrderListItem = {
   id: string;
+  productId?: string | null;
+  variantId?: string | null;
+  productName?: string | null;
+  variantName?: string | null;
+  variantShortId?: string | null;
+  variantImageUrl?: string | null;
+  count?: number;
+  variantPrice?: number;
   customerName: string;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
   totalPrice: number;
   shippingCost?: number;
   paymentMethod?: string | null;

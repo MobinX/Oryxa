@@ -63,7 +63,14 @@ export function OrdersProductsWorkspace({
     customer: o.customerName || 'Customer',
     phone: o.customerPhone || 'Not provided',
     email: o.customerEmail || '',
-    address: o.customerAddress || 'Delivery address on file',
+    address: o.customerAddress || 'No delivery address on file',
+    productName: o.productName || null,
+    variantName: o.variantName || null,
+    variantShortId: o.variantShortId || null,
+    variantImageUrl: o.variantImageUrl || null,
+    count: Number.isFinite(Number(o.count)) ? Number(o.count) : 0,
+    unitPrice: Number.isFinite(Number(o.variantPrice)) ? Number(o.variantPrice) : 0,
+    shippingCost: Number.isFinite(Number(o.shippingCost)) ? Number(o.shippingCost) : 0,
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
     amount: formatTaka(o.totalPrice),
     state: normalizeOrderState(o.state) as string,
@@ -364,17 +371,35 @@ export function OrdersProductsWorkspace({
                         : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                     }`}
                   >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-900 dark:text-white">{o.orderNo}</span>
-                        <span className="text-[10px] text-slate-400">{o.createdAt}</span>
-                      </div>
-                      <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                        {o.customer}
-                      </p>
-                      {o.phone && o.phone !== 'Not provided' && (
-                        <p className="text-[10px] text-slate-400">{o.phone}</p>
+                    <div className="flex min-w-0 items-center gap-2 pr-2">
+                      {o.variantImageUrl ? (
+                        <img
+                          src={o.variantImageUrl}
+                          alt={o.productName ?? 'Order item'}
+                          className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                          <Package className="h-4 w-4 text-slate-400" />
+                        </div>
                       )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 dark:text-white">{o.orderNo}</span>
+                          <span className="text-[10px] text-slate-400">{o.createdAt}</span>
+                        </div>
+                        <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          {o.customer}
+                        </p>
+                        <p className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                          {o.productName ?? 'Item removed'}
+                          {o.variantName ? ` · ${o.variantName}` : ''}
+                          {o.count ? ` · Qty ${o.count}` : ''}
+                        </p>
+                        {o.phone && o.phone !== 'Not provided' && (
+                          <p className="truncate text-[10px] text-slate-400">{o.phone}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <span className="font-bold text-slate-900 dark:text-white">{o.amount}</span>
@@ -432,6 +457,33 @@ export function OrdersProductsWorkspace({
                 </div>
               </div>
 
+              <div className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                {activeOrder.variantImageUrl ? (
+                  <img
+                    src={activeOrder.variantImageUrl}
+                    alt={activeOrder.productName ?? 'Order item'}
+                    className="h-16 w-16 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[9px] text-slate-400 dark:bg-slate-800">
+                    No img
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {activeOrder.productName ?? 'Item removed'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {activeOrder.variantName ?? 'No variant'}
+                    {activeOrder.variantShortId ? ` · #${activeOrder.variantShortId}` : ''}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                    Qty {activeOrder.count} × {formatTaka(activeOrder.unitPrice)} ={' '}
+                    {activeOrder.amount}
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <p className="font-bold text-slate-900 dark:text-white">Customer</p>
                 <p className="mt-1 font-semibold text-slate-800 dark:text-slate-200">
@@ -457,11 +509,30 @@ export function OrdersProductsWorkspace({
                     {activeOrder.amount}
                   </span>
                 </div>
-                {activeOrder.paymentReference && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                    {activeOrder.paymentMethod ? `${activeOrder.paymentMethod} · ` : ''}Ref/TrxID: {activeOrder.paymentReference}
-                  </p>
+                {activeOrder.count > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Item {activeOrder.count} × {formatTaka(activeOrder.unitPrice)}</span>
+                    <span>{formatTaka(activeOrder.unitPrice * activeOrder.count)}</span>
+                  </div>
                 )}
+                {activeOrder.shippingCost > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Shipping</span>
+                    <span>{formatTaka(activeOrder.shippingCost)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[11px] dark:border-slate-800">
+                  <span className="text-slate-400">Payment method</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    {activeOrder.paymentMethod || '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-400">Transaction</span>
+                  <span className="truncate font-mono text-slate-700 dark:text-slate-200">
+                    {activeOrder.paymentReference || '—'}
+                  </span>
+                </div>
               </div>
 
               {/* Order Status Stepper & Bidirectional Control */}

@@ -174,18 +174,48 @@ export async function listOrders(
     where: and(...conditions),
     limit,
     orderBy: [desc(orders.createdAt)],
+    with: {
+      product: { with: { variants: { where: isNull(variants.deletedAt) } } },
+      variant: true,
+    },
   });
 
-  return items.map((o) => ({
-    id: o.id,
-    customerName: o.customerName,
-    totalPrice: parseFloat(o.totalPrice),
-    shippingCost: parseFloat(o.shippingCost),
-    paymentMethod: o.paymentMethod,
-    transactionId: o.transactionId,
-    state: o.state,
-    createdAt: o.createdAt.toISOString(),
-  }));
+  // The list panel shows what was bought, so the item and its photo travel with it — signed
+  // together, because a page of twenty sequential bucket calls would outlast the reader's patience.
+  return Promise.all(
+    items.map(async (o) => {
+      const productActive = o.product && !o.product.deletedAt ? o.product : null;
+      const variantActive = o.variant && !o.variant.deletedAt ? o.variant : null;
+      const storedImage =
+        variantActive?.imageUrl
+        ?? productActive?.variants.find((v) => v.imageUrl)?.imageUrl
+        ?? null;
+      const variantImageUrl = storedImage
+        ? await resolveStoredImageUrl(storedImage).catch(() => null)
+        : null;
+
+      return {
+        id: o.id,
+        productId: o.productId,
+        variantId: o.variantId,
+        productName: productActive?.name ?? null,
+        variantName: variantActive?.name ?? null,
+        variantShortId: variantActive?.variantId ?? null,
+        variantImageUrl,
+        count: o.count,
+        variantPrice: parseFloat(o.variantPrice),
+        customerName: o.customerName,
+        customerPhone: o.customerPhone,
+        customerAddress: o.customerAddress,
+        totalPrice: parseFloat(o.totalPrice),
+        shippingCost: parseFloat(o.shippingCost),
+        paymentMethod: o.paymentMethod,
+        transactionId: o.transactionId,
+        state: o.state,
+        createdAt: o.createdAt.toISOString(),
+      };
+    }),
+  );
 }
 
 /**
