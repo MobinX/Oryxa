@@ -51,4 +51,31 @@ describe('Agent', () => {
     const result = await agent.run();
     expect(typeof result.replyText).toBe('string');
   }, 30_000);
+
+  it('injects the merchant product and bargaining guidance into the system context', async () => {
+    const seed = await seedTestWorld();
+    const agent = new Agent({
+      systemPrompt: 'Reply briefly.',
+      business: {
+        id: seed.business.id,
+        name: seed.business.name,
+        description: 'A test store',
+        agentProductGuidance: 'Mention the fabric and wash care.',
+        agentBargainGuidance: 'Prices are fixed; offer free delivery above 2000 Taka.',
+      },
+      history: [{ from: 'customer', content: 'Discount?' }],
+      conversationId: seed.conversation.id,
+      pageToken: 'tok',
+      customerPlatformId: 'cust',
+      llm: createDefaultReplyFakeLlm('Let me help.'),
+    });
+
+    const result = await agent.run();
+    const system = result.messages
+      .filter((message) => message.role === 'system')
+      .map((message) => message.content)
+      .join('\n');
+    expect(system).toContain('Mention the fabric and wash care.');
+    expect(system).toContain('Prices are fixed; offer free delivery above 2000 Taka.');
+  }, 30_000);
 });
