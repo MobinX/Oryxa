@@ -175,6 +175,37 @@ describe('Conversations API', () => {
     expect(order?.customerId).toBe(body.customerId);
   });
 
+  it('GET /:businessId/conversations/:id/order-defaults prefills from the last order', async () => {
+    const seed = await seedTestWorld();
+    const created = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/orders`,
+      {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          productId: seed.productDetail.id,
+          variantId: seed.productDetail.variants[0]?.id,
+          count: 3,
+          customerName: 'Chat Buyer',
+          customerPhone: '01712345678',
+          customerAddress: '12 Test Road, Dhaka',
+        }),
+      },
+    );
+    expect(created.status).toBe(200);
+
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/order-defaults`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      count: 3,
+      customerPhone: '01712345678',
+      customerAddress: '12 Test Road, Dhaka',
+    });
+  });
+
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {
     const seed = await seedTestWorld();
     const res = await app.request(

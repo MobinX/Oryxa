@@ -27,6 +27,7 @@ import type { Category, InboxSuggestion, ProductDetail, ProductListItem } from '
 import {
   createInboxOrderAction,
   generateSuggestionsAction,
+  getInboxOrderDefaultsAction,
   getInboxProductAction,
   listInboxCategoriesAction,
   pollInboxMessagesAction,
@@ -229,6 +230,10 @@ export function InboxChat({
     if (suggestion.kind === 'order') {
       setDialog('order');
       setMenuOpen(false);
+      setOrderName(customerName ?? '');
+      setOrderCount(String(suggestion.count && suggestion.count > 0 ? suggestion.count : 1));
+      setOrderPhone(suggestion.customerPhone ?? '');
+      setOrderAddress(suggestion.customerAddress ?? '');
       await pickProduct(suggestion.productId, 'order');
       if (suggestion.variantId) setSelectedVariantId(suggestion.variantId);
       return;
@@ -283,6 +288,16 @@ export function InboxChat({
       const list = await listInboxCategoriesAction(businessId).catch(() => []);
       setCategories(list);
       setCategoryId((current) => current || list[0]?.id || '');
+    }
+    if (kind === 'order') {
+      const defaults = await getInboxOrderDefaultsAction(businessId, conversationId).catch(
+        () => null,
+      );
+      if (defaults) {
+        setOrderCount(String(defaults.count > 0 ? defaults.count : 1));
+        setOrderPhone(defaults.customerPhone);
+        setOrderAddress(defaults.customerAddress);
+      }
     }
   };
 
@@ -648,6 +663,16 @@ export function InboxChat({
       )}
 
       <form onSubmit={submit} className="shrink-0 border-t border-border/70 bg-card p-3 sm:px-5 sm:py-4">
+        {suggesting && !autoPilot && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-2 flex items-center gap-2 rounded-xl border border-[#5B3DF5]/30 bg-[#5B3DF5]/10 px-3 py-2 text-[11px] font-semibold text-[#5B3DF5] dark:text-indigo-300"
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            AI is suggesting a reply… you can keep typing.
+          </div>
+        )}
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-background p-1.5 pl-3 shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
           <div className="relative shrink-0">
             <button

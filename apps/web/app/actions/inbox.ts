@@ -11,6 +11,7 @@ import {
   generateInboxSuggestions,
   sendInboxSuggestion,
   createConversationOrder,
+  getConversationOrderDefaults,
   listProducts,
   listCategories,
   getProduct,
@@ -135,6 +136,11 @@ export async function listInboxCategoriesAction(businessId: string) {
 export async function getInboxProductAction(businessId: string, productId: string) {
   const token = await requireAuth();
   return getProduct(token, businessId, productId);
+}
+
+export async function getInboxOrderDefaultsAction(businessId: string, conversationId: string) {
+  const token = await requireAuth();
+  return getConversationOrderDefaults(token, businessId, conversationId);
 }
 
 export async function createInboxOrderAction(

@@ -50,7 +50,7 @@ async function InboxContent({
   const resolved = state === 'done';
 
   return (
-    <div className="flex h-[min(76dvh,680px)] min-h-[440px] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111427] lg:fixed lg:inset-y-0 lg:left-[252px] lg:right-0 lg:z-20 lg:h-dvh lg:min-h-0 lg:flex-row lg:rounded-none lg:border-0 lg:shadow-none">
+    <div className="flex h-[min(84dvh,760px)] min-h-[460px] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111427] lg:fixed lg:inset-y-0 lg:left-[252px] lg:right-0 lg:z-20 lg:h-dvh lg:min-h-0 lg:flex-row lg:rounded-none lg:border-0 lg:shadow-none">
       <div
         className={cn(
           'min-h-0 border-b border-slate-200/80 bg-white dark:border-slate-800 dark:bg-[#0F1123] lg:w-[320px] lg:shrink-0 lg:border-b-0 lg:border-r',

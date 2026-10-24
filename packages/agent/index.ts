@@ -7,5 +7,9 @@ export {
 } from '@agent/guidance';
 export type { AgentConfig, SseEmitter, AgentRunResult, TokenUsageMetrics } from '@agent/Agent';
 export { cardsAsText } from '@agent/tools';
-export { createSuggestionTools, SUGGESTION_GUIDANCE } from '@agent/suggestions';
+export {
+  createSuggestionTools,
+  SUGGESTION_GUIDANCE,
+  stripDisallowedSuggestionWords,
+} from '@agent/suggestions';
 export type { InboxSuggestion, SuggestionProduct } from '@agent/suggestions';

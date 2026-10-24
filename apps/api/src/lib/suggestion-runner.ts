@@ -13,7 +13,8 @@ export async function runSuggestionAgent(
 ): Promise<{ forMessageId: string | null; suggestions: InboxSuggestion[] }> {
   const { getConversationWithHistory } = await import('@repo/db/crud/conversation');
   const { resolveAnsweringAgent } = await import('@repo/db/crud/default-agent');
-  const { Agent, createSuggestionTools, SUGGESTION_GUIDANCE } = await import('@repo/agent');
+  const { Agent, createSuggestionTools, SUGGESTION_GUIDANCE, stripDisallowedSuggestionWords } =
+    await import('@repo/agent');
   const { buildCatalogSummary } = await import('./catalog-summary');
 
   const conv = await getConversationWithHistory(conversationId);
@@ -33,6 +34,8 @@ export async function runSuggestionAgent(
   const businessId = conv.businessId;
   const answering = await resolveAnsweringAgent(conv.channel.agent);
   const catalog = await buildCatalogSummary(businessId);
+  const { getConversationOrderDefaults } = await import('./order-defaults');
+  const orderDefaults = await getConversationOrderDefaults(businessId, conv.id);
   const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   const history = [...conv.messages]
@@ -57,7 +60,7 @@ export async function runSuggestionAgent(
     customerName: conv.customerName,
     platform,
     catalogSummary: catalog.summary,
-    tools: createSuggestionTools(businessId, conv.customerPlatformId, sink),
+    tools: createSuggestionTools(businessId, conv.customerPlatformId, sink, orderDefaults),
     replyGuidance: SUGGESTION_GUIDANCE,
     validationChannel: 'messenger',
     // A suggestion panel is read, not heard: the faster effort keeps it cheap enough to
@@ -105,7 +108,11 @@ export async function runSuggestionAgent(
   for (const suggestion of sink) {
     if (seen.has(suggestion.id)) continue;
     seen.add(suggestion.id);
-    suggestions.push(suggestion);
+    suggestions.push(
+      suggestion.kind === 'text'
+        ? { ...suggestion, text: stripDisallowedSuggestionWords(suggestion.text) }
+        : suggestion,
+    );
   }
 
   // The model's closing text is a usable reply when it chose not to call suggest_text.
@@ -114,7 +121,11 @@ export async function runSuggestionAgent(
     replyText.trim() &&
     replyText.trim().toUpperCase() !== 'SILENT'
   ) {
-    suggestions.unshift({ id: 'text:fallback', kind: 'text', text: replyText.trim() });
+    suggestions.unshift({
+      id: 'text:fallback',
+      kind: 'text',
+      text: stripDisallowedSuggestionWords(replyText),
+    });
   }
 
   return { forMessageId: latest.id, suggestions: suggestions.slice(0, 6) };

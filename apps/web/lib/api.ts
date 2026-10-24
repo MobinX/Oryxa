@@ -738,6 +738,9 @@ export type InboxSuggestion =
       title: string;
       price: number;
       imageUrl?: string | null;
+      count?: number;
+      customerPhone?: string;
+      customerAddress?: string;
     }
   | {
       id: string;
@@ -781,6 +784,16 @@ export const sendInboxSuggestion = (
   apiFetch<{ sent: boolean; cards: number }>(
     `/api/v1/${businessId}/conversations/${conversationId}/suggestions/send`,
     { method: 'POST', token, body: JSON.stringify(input) },
+  );
+
+export const getConversationOrderDefaults = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+) =>
+  apiFetch<{ count: number; customerPhone: string; customerAddress: string }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/order-defaults`,
+    { token },
   );
 
 export const createConversationOrder = (

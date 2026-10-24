@@ -66,6 +66,10 @@ export type InboxSuggestion =
       title: string;
       price: number;
       imageUrl: string | null;
+      /** Prefills for the merchant's order form; every one stays editable. */
+      count: number;
+      customerPhone: string;
+      customerAddress: string;
     }
   | {
       id: string;
@@ -121,14 +125,34 @@ function subtitle(product: SearchedProduct): string | null {
  * The tools the suggestion agent may call. They record what the merchant could send;
  * nothing here talks to Meta, so a suggestion turn can never message the customer.
  */
+export type SuggestionOrderDefaults = {
+  count: number;
+  customerPhone: string;
+  customerAddress: string;
+};
+
+/**
+ * The customer has no order form — only the merchant does. Strip the word from anything
+ * written for the customer so a model slip never ships advice that cannot be followed.
+ */
+export function stripDisallowedSuggestionWords(text: string): string {
+  return text
+    .replace(/\border\s+form\b/gi, 'order')
+    .replace(/\bfill(?:ing)?\s+(?:out|in)\s+(?:the\s+)?form\b/gi, 'share the details')
+    .replace(/\bform\b/gi, 'details')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function createSuggestionTools(
   businessId: string,
   customerPlatformId: string,
   sink: InboxSuggestion[],
+  orderDefaults: SuggestionOrderDefaults = { count: 1, customerPhone: '', customerAddress: '' },
 ): StructuredTool[] {
   const suggestText = tool(
     async ({ text }) => {
-      const clean = text.trim();
+      const clean = stripDisallowedSuggestionWords(text);
       if (!clean) return JSON.stringify({ recorded: false, reason: 'the reply is empty' });
       sink.push({ id: `text:${sink.length}`, kind: 'text', text: clean });
       return JSON.stringify({ recorded: true, kind: 'text' });
@@ -380,7 +404,7 @@ export function createSuggestionTools(
   );
 
   const suggestOrder = tool(
-    async ({ query, variant }) => {
+    async ({ query, variant, count, customerPhone, customerAddress }) => {
       const product = (await searchProducts(businessId, query, 5)).find(sellable);
       if (!product) {
         return JSON.stringify({
@@ -429,6 +453,9 @@ export function createSuggestionTools(
         title: product.name.slice(0, 60),
         price,
         imageUrl,
+        count: count && count > 0 ? count : orderDefaults.count,
+        customerPhone: customerPhone?.trim() || orderDefaults.customerPhone,
+        customerAddress: customerAddress?.trim() || orderDefaults.customerAddress,
       });
       return JSON.stringify({
         recorded: true,
@@ -440,10 +467,13 @@ export function createSuggestionTools(
     {
       name: 'suggest_order',
       description:
-        'Suggest creating an order for a product (and a variant when the product has them). The merchant still confirms quantity, payment and address in the order form.',
+        'Suggest creating an order for a product (and a variant when the product has them). The merchant confirms it in their own order form. Never tell the customer to use an order form; the suggested text asks for missing details in chat.',
       schema: z.object({
         query: z.string().min(1).describe('Product name or the words the customer used.'),
         variant: z.string().min(1).optional().describe('Variant word when the customer named one.'),
+        count: z.number().int().positive().optional().describe('Quantity the customer asked for.'),
+        customerPhone: z.string().optional().describe('Phone the customer gave in the thread.'),
+        customerAddress: z.string().optional().describe('Address the customer gave in the thread.'),
       }),
     },
   );
@@ -512,8 +542,9 @@ You are preparing suggestions for the merchant, not answering the customer. Noth
 - If the customer asks about a product, call suggest_product_card. If they ask for a kind of product or collection, call suggest_category.
 - If they want to see the sizes or choose one, call suggest_product_info (all in-stock variants with their first photo).
 - If they ask to see one particular size/colour from all sides, call suggest_variant_photos.
-- If they want to buy, call suggest_order so the merchant can open the order form prefilled.
+- If they want to buy, call suggest_order so the merchant can open the order form prefilled. Pass the quantity, phone and address the customer stated. The order form belongs to the merchant only: never tell the customer to fill, use, or give details "for the order form" — the suggested text asks for missing details naturally in the chat.
 - If they ask about an existing order or tracking, call suggest_order_card for their latest order.
 - You may combine a text reply with one or two cards. Never use quick replies or chips.
+- Never use the word "form" in a suggestion; the customer orders by chatting, not by filling anything.
 - Do not call the same tool twice. End your turn with the single word SILENT.
 `.trim();

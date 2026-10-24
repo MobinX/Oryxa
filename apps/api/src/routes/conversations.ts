@@ -16,10 +16,12 @@ import {
   sendSuggestionOutputSchema,
   createConversationOrderInputSchema,
   createConversationOrderOutputSchema,
+  conversationOrderDefaultsSchema,
 } from '@repo/shared';
 import { createOrder } from '@repo/db/crud/order';
 import { runSuggestionAgent } from '@api/lib/suggestion-runner';
 import { sendSuggestionAsCards } from '@api/lib/suggestion-sender';
+import { getConversationOrderDefaults } from '@api/lib/order-defaults';
 import {
   listConversations,
   listMessages,
@@ -294,6 +296,34 @@ conversationsRouter.openapi(sendSuggestionRoute, async (c) => {
     const message = err instanceof Error ? err.message : 'Could not send the suggestion';
     return c.json({ error: message }, 400);
   }
+});
+
+const conversationOrderDefaultsRoute = createRoute({
+  method: 'get',
+  path: '/{businessId}/conversations/{conversationId}/order-defaults',
+  tags: ['Conversations'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), conversationId: z.string().uuid() }),
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: conversationOrderDefaultsSchema } },
+      description: 'Quantity, phone and address already known for this customer',
+    },
+    404: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Conversation not found',
+    },
+  },
+});
+
+conversationsRouter.openapi(conversationOrderDefaultsRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const conversationId = c.req.param('conversationId');
+  const conv = await getConversationForBusiness(conversationId, businessId);
+  if (!conv) return c.json({ error: 'Conversation not found' }, 404);
+  return c.json(await getConversationOrderDefaults(businessId, conversationId), 200);
 });
 
 const createConversationOrderRoute = createRoute({
