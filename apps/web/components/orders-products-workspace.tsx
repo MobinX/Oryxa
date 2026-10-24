@@ -410,17 +410,26 @@ export function OrdersProductsWorkspace({
                     {activeOrder.orderNo}
                   </h3>
                 </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    activeOrder.state === 'done'
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                      : activeOrder.state === 'pending'
-                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                      : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'
-                  }`}
-                >
-                  {STATE_LABEL[activeOrder.state] || activeOrder.state}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      activeOrder.state === 'done'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        : activeOrder.state === 'pending'
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                        : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'
+                    }`}
+                  >
+                    {STATE_LABEL[activeOrder.state] || activeOrder.state}
+                  </span>
+                  <Link
+                    href={`/b/${businessId}/orders/${activeOrder.id}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Full details
+                  </Link>
+                </div>
               </div>
 
               <div>

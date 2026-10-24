@@ -178,6 +178,9 @@ async function History({
           <DataTable
             headers={orderHeaders}
             hasRowActions
+            rowHrefs={Object.fromEntries(
+              orders.map((order) => [order.id, `/b/${businessId}/orders/${order.id}`]),
+            )}
             rows={orders.map((order) => ({
               id: order.id,
               cells: [
@@ -206,7 +209,7 @@ async function History({
                   href={`/b/${businessId}/orders/${order.id}`}
                   className="text-sm text-[var(--primary)] hover:underline"
                 >
-                  Open
+                  View order
                 </Link>
               ),
             }))}

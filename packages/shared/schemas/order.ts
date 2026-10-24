@@ -89,9 +89,12 @@ export const getOrderOutputSchema = z.object({
   variantId: uuidSchema.nullable(),
   productName: z.string().nullable().optional(),
   variantName: z.string().nullable().optional(),
+  /** The five-character shelf label printed on the variant photo and the parcel. */
+  variantShortId: z.string().nullable().optional(),
   variantImageUrl: z.string().nullable().optional(),
   count: z.number().int(),
   variantPrice: z.number(),
+  customerId: uuidSchema.nullable().optional(),
   customerName: z.string(),
   customerPhone: z.string().nullable().optional(),
   customerAddress: z.string().nullable().optional(),

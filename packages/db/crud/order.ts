@@ -148,6 +148,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     variantImageUrl,
     count: order.count,
     variantPrice: parseFloat(order.variantPrice),
+    customerId: order.customerId,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     customerAddress: order.customerAddress,

@@ -695,9 +695,11 @@ export type OrderDetail = {
   variantId: string | null;
   productName?: string | null;
   variantName?: string | null;
+  variantShortId?: string | null;
   variantImageUrl?: string | null;
   count: number;
   variantPrice: number;
+  customerId?: string | null;
   customerName: string;
   customerPhone?: string | null;
   customerAddress?: string | null;
