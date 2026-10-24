@@ -563,9 +563,6 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
-    const rateIn = provider === 'openai' ? 0.15 : 0.075;
-    const rateOut = provider === 'openai' ? 0.60 : 0.30;
-    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
 
     const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
     await recordTokenUsage({
@@ -582,7 +579,6 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
       cacheMissTokens,
       cacheHitPercent,
       latencyMs,
-      estimatedCostUsd,
     });
   } catch (metricErr) {
     console.error('[posts-router] failed to record token metrics for generatePost:', metricErr);
@@ -681,9 +677,6 @@ Output only the revised post content. Do not add any conversational text or wrap
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
-    const rateIn = provider === 'openai' ? 0.15 : 0.075;
-    const rateOut = provider === 'openai' ? 0.60 : 0.30;
-    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
 
     const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
     await recordTokenUsage({
@@ -700,7 +693,6 @@ Output only the revised post content. Do not add any conversational text or wrap
       cacheMissTokens,
       cacheHitPercent,
       latencyMs,
-      estimatedCostUsd,
     });
   } catch (metricErr) {
     console.error('[posts-router] failed to record token metrics for tunePost:', metricErr);

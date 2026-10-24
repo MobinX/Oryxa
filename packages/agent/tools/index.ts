@@ -470,9 +470,31 @@ export function createCatalogTools(context: {
   );
 
   const createOrderTool = tool(
-    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod }) => {
-      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod } });
+    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId }) => {
+      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
+
+      const paymentNeedsTransaction = /bkash|nagad|বিকাশ|নগদ/i.test(paymentMethod ?? '');
+      const paidTransactionId = transactionId?.trim() || null;
+
+      /** A payment already moved; a failed order is the owner's problem right now, not later. */
+      const notifyPaidOrderFailure = async (reason: string) => {
+        if (!paidTransactionId) return;
+        try {
+          const product = await getProductById(context.businessId, productId).catch(() => null);
+          await createBusinessNotification({
+            businessId: context.businessId,
+            kind: 'payment_order_failed',
+            title: 'Payment received but order failed',
+            body: `${count ?? 1} × ${product?.name ?? 'an item'} — ${paymentMethod?.trim() || 'mobile payment'} (TrxID ${paidTransactionId}). ${reason}`,
+            link: context.conversationId
+              ? `/b/${context.businessId}/inbox?c=${context.conversationId}`
+              : `/b/${context.businessId}/orders`,
+          });
+        } catch (err) {
+          console.error('[agent-tool] paid order failed but the owner could not be notified:', err);
+        }
+      };
 
       // A retry of the SAME order seconds later is a duplicate; anything the customer actually
       // wants next is a new sale. The window is short and the match is product+variant, because
@@ -511,9 +533,28 @@ export function createCatalogTools(context: {
        * show the customer later, and nothing for the merchant to pick off the shelf. One size left in
        * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
        */
-      if (!count || !customerAddress?.trim() || !customerPhone?.trim()) {
-        const missing = [!count ? 'quantity' : null, !customerPhone?.trim() ? 'phone' : null, !customerAddress?.trim() ? 'delivery address' : null].filter(Boolean);
-        const result = JSON.stringify({ created: false, missing });
+      if (
+        !count ||
+        !customerAddress?.trim() ||
+        !customerPhone?.trim() ||
+        (paymentNeedsTransaction && !paidTransactionId)
+      ) {
+        const missing = [
+          !count ? 'quantity' : null,
+          !customerPhone?.trim() ? 'phone' : null,
+          !customerAddress?.trim() ? 'delivery address' : null,
+          paymentNeedsTransaction && !paidTransactionId ? 'payment transaction id' : null,
+        ].filter(Boolean);
+        const result = JSON.stringify({
+          created: false,
+          missing,
+          ...(paymentNeedsTransaction && !paidTransactionId
+            ? {
+                instruction:
+                  'The customer chose bKash or Nagad, so a transaction id is required before ordering. Ask them to send the TrxID from their payment SMS, then call create_order again with it. Do not invent or reuse an id.',
+              }
+            : {}),
+        });
         context.emitSse?.('tool_result', { name: 'create_order', result });
         return result;
       }
@@ -535,6 +576,9 @@ export function createCatalogTools(context: {
               + 'not call create_order again until one is known.',
           });
           console.log(`[agent-tool] create_order refused — no variant chosen for ${product.name}`);
+          await notifyPaidOrderFailure(
+            `No variant was chosen for ${product.name}, so the paid order was not created.`,
+          );
           context.emitSse?.('tool_result', { name: 'create_order', result });
           return result;
         }
@@ -554,6 +598,7 @@ export function createCatalogTools(context: {
           // method nobody named are absences, and the confirmation card says nothing about them.
           shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
           paymentMethod: paymentMethod?.trim() ? paymentMethod.trim() : undefined,
+          transactionId: paidTransactionId ?? undefined,
           conversationId: context.conversationId,
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
@@ -563,6 +608,7 @@ export function createCatalogTools(context: {
         });
       } catch (err) {
         result = err instanceof Error ? err.message : 'Failed to create order.';
+        await notifyPaidOrderFailure(`The order could not be created: ${result}`);
       }
 
       console.log(`[agent-tool] create_order result: ${result}`);
@@ -585,6 +631,9 @@ export function createCatalogTools(context: {
         ),
         paymentMethod: z.string().max(40).nullable().optional().describe(
           'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
+        ),
+        transactionId: z.string().max(120).nullable().optional().describe(
+          'The bKash/Nagad transaction id from the customer. Required before ordering when paymentMethod is bKash or Nagad; never invent, guess or reuse one.',
         ),
       }),
     },
@@ -865,6 +914,7 @@ export function createAgentTools(
         `Total ${money(orderDetails.totalPrice)}`,
         orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
         orderDetails.paymentMethod,
+        orderDetails.transactionId ? `TrxID ${orderDetails.transactionId}` : null,
       ].filter(Boolean).join(' · '),
       80,
     );
@@ -1553,18 +1603,27 @@ export function createAgentTools(
         ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
       ].slice(0, 10);
       const askedForChips = cleaned.length >= 2;
+      // Same chips, same set: the second identical row is redundant even when the customer
+      // typed something in between. One suppression per repeat, so a third attempt can ask
+      // again if the model really needs to.
+      const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const setKey = (options: string[]) => options.map(normalize).sort().join('\u0000');
+      const previous = context.agentState?.lastSentSuggestions ?? [];
+      const repeated =
+        askedForChips && previous.length >= 2 && setKey(cleaned) === setKey(previous);
+      const suppressRepeated = repeated && !context.agentState?.suggestionRepeatSkipped;
       // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
       // the old one on screen (most visibly in the Android Messenger client), so this turn
       // answers in one plain message with the choices written out instead.
-      const withChips = askedForChips && !context.suppressSuggestions;
-      const suppressedChips = askedForChips && !withChips;
+      const withChips = askedForChips && !context.suppressSuggestions && !suppressRepeated;
+      const suppressedChips = askedForChips && !withChips && !suppressRepeated;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
       }
 
-      const said = askedForChips ? `${text} (${cleaned.join(' / ')})` : text;
+      const said = askedForChips && !suppressRepeated ? `${text} (${cleaned.join(' / ')})` : text;
       try {
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
@@ -1584,6 +1643,10 @@ export function createAgentTools(
 
       if (withChips && context.agentState) {
         context.agentState.lastSuggestions = cleaned;
+        context.agentState.lastSentSuggestions = cleaned;
+        context.agentState.suggestionRepeatSkipped = false;
+      } else if (suppressRepeated && context.agentState) {
+        context.agentState.suggestionRepeatSkipped = true;
       }
 
       await createMessage({
@@ -1597,13 +1660,18 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         ...(withChips ? { suggestions: cleaned } : {}),
+        ...(suppressRepeated
+          ? { suggestionsSuppressed: true, suggestionsRepeated: true, suggestions: cleaned }
+          : {}),
         ...(suppressedChips ? { suggestionsSuppressed: true, suggestions: cleaned } : {}),
         ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
         instruction: withChips
           ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
-          : suppressedChips
-            ? 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.'
-            : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
+          : suppressRepeated
+            ? 'The same chip row was already offered, so this copy went out without it. End your turn with SILENT; do not send the same choices again in another message.'
+            : suppressedChips
+              ? 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.'
+              : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
       }));
     },
     {

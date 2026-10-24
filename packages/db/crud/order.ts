@@ -78,6 +78,7 @@ export async function createOrder(input: unknown) {
       totalPrice: totalPrice.toFixed(2),
       shippingCost: (parsed.shippingCost ?? 0).toFixed(2),
       paymentMethod: parsed.paymentMethod?.trim() ? parsed.paymentMethod.trim() : null,
+      transactionId: parsed.transactionId?.trim() ? parsed.transactionId.trim() : null,
       state: 'pending',
     })
     .returning();
@@ -113,6 +114,7 @@ export async function createOrder(input: unknown) {
     totalPrice,
     shippingCost: parsed.shippingCost ?? 0,
     paymentMethod: parsed.paymentMethod ?? null,
+    transactionId: parsed.transactionId?.trim() || null,
     state: order.state,
     customerId: order.customerId,
   };
@@ -153,6 +155,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     totalPrice: parseFloat(order.totalPrice),
     shippingCost: parseFloat(order.shippingCost),
     paymentMethod: order.paymentMethod,
+    transactionId: order.transactionId,
     conversationId: order.conversationId,
     createdAt: order.createdAt,
   };
@@ -176,6 +179,9 @@ export async function listOrders(
     id: o.id,
     customerName: o.customerName,
     totalPrice: parseFloat(o.totalPrice),
+    shippingCost: parseFloat(o.shippingCost),
+    paymentMethod: o.paymentMethod,
+    transactionId: o.transactionId,
     state: o.state,
     createdAt: o.createdAt.toISOString(),
   }));

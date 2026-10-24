@@ -2,12 +2,13 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth';
 import { cachedBusiness, cachedProducts } from '@/app/_cache/queries';
-import { applyPresetAction } from '@/app/actions/business';
+import { applyPresetAction, updateStoreAction } from '@/app/actions/business';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { StorefrontPreview } from '@/components/storefront/storefront-preview';
 import { buildPreviewStore } from '@/lib/storefront-preview-data';
-import { STORE_STRUCTURES } from '@/lib/storefront';
+import { STORE_STRUCTURES, type StoreStructure } from '@/lib/storefront';
 import {
   STORE_PRESETS,
   isStorePresetId,
@@ -16,6 +17,15 @@ import {
   type StorePresetDef,
 } from '@/lib/storefront-presets';
 import { cn } from '@/lib/utils';
+
+/** The five templates, named the way the preset tiles name them. */
+const TEMPLATE_OPTIONS: [StoreStructure, string][] = [
+  ['classic', 'Classic gallery — warm paper, black ink, square cards'],
+  ['editorial', 'Editorial — olive paper, serif masthead, ruled cards'],
+  ['market', 'Market — cream and clay, rounded tiles, centred hero'],
+  ['terminal', 'Terminal — dark ink, boxed square tiles, uppercase'],
+  ['atelier', 'Atelier — espresso and gold, centred captions'],
+];
 
 const ERROR_COPY: Record<string, string> = {
   'unknown-theme': 'That theme is not one of the five we offer.',
@@ -50,6 +60,150 @@ export default function StorefrontPage({
       >
         <Studio params={params} searchParams={searchParams} />
       </Suspense>
+
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--muted)]" />}>
+        <StorefrontContent params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function StorefrontContent({ params }: { params: Promise<{ businessId: string }> }) {
+  const { businessId } = await params;
+  const token = await requireAuth();
+  let business: Awaited<ReturnType<typeof cachedBusiness>>;
+  try {
+    business = await cachedBusiness(token, businessId);
+  } catch {
+    return (
+      <Card className="py-10 text-center">
+        <p className="text-[var(--muted-foreground)]">
+          Your storefront content could not be read right now. Try again shortly.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div id="storefront-content">
+      <Card>
+      <h2 className="text-lg font-semibold">Storefront content</h2>
+      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+        The link, wording and imagery customers see. Theme presets live above; these details
+        survive a theme change.
+      </p>
+      <form action={updateStoreAction.bind(null, businessId)} className="mt-4 space-y-4">
+        <div>
+          <label className="text-sm font-medium">Store link</label>
+          <div className="mt-1 flex items-center gap-1 text-sm">
+            <span className="text-[var(--muted-foreground)]">/store/</span>
+            <Input
+              name="slug"
+              defaultValue={business.slug ?? ''}
+              placeholder="my-book-store"
+              className="flex-1"
+              pattern="[a-z0-9-]*"
+            />
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium">Template</label>
+            <input type="hidden" name="preset" defaultValue={business.storeTheme?.preset ?? ''} />
+            <select
+              name="structure"
+              defaultValue={business.storeTheme?.structure ?? 'classic'}
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900"
+            >
+              {TEMPLATE_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium">Tagline</label>
+            <Input
+              name="tagline"
+              defaultValue={business.storeTheme?.tagline ?? ''}
+              placeholder="Quality books, delivered fast"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Accent color</label>
+            <Input
+              name="accentColor"
+              type="color"
+              defaultValue={business.storeTheme?.accentColor ?? '#111111'}
+              className="mt-1 h-10 p-1"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Font</label>
+            <select
+              name="font"
+              defaultValue={business.storeTheme?.font ?? 'sans'}
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900"
+            >
+              <option value="sans">Sans (modern)</option>
+              <option value="serif">Serif (elegant)</option>
+              <option value="mono">Mono</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Layout</label>
+            <select
+              name="layout"
+              defaultValue={business.storeTheme?.layout ?? 'grid'}
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-neutral-900"
+            >
+              <option value="grid">Grid</option>
+              <option value="featured">Featured</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Hero image URL</label>
+            <Input
+              name="heroImageUrl"
+              defaultValue={business.storeTheme?.heroImageUrl ?? ''}
+              placeholder="https://…"
+              className="mt-1"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium">Logo image URL</label>
+            <Input
+              name="logoUrl"
+              defaultValue={business.storeTheme?.logoUrl ?? ''}
+              placeholder="https://…"
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            name="storePublished"
+            defaultChecked={business.storePublished}
+            className="h-4 w-4"
+          />
+          Publish my storefront (make it visible to customers)
+        </label>
+        {business.slug && business.storePublished && (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)] p-3 text-sm">
+            <span className="text-[var(--muted-foreground)]">Live at: </span>
+            <Link href={`/store/${business.slug}`} className="font-medium text-[var(--primary)] underline">
+              /store/{business.slug}
+            </Link>
+          </div>
+        )}
+        <div className="flex justify-end border-t border-border pt-4">
+          <Button type="submit">Save storefront</Button>
+        </div>
+      </form>
+      </Card>
     </div>
   );
 }
@@ -66,7 +220,7 @@ async function Notice({ searchParams }: { searchParams: Promise<{ saved?: string
   if (!saved) return null;
   return (
     <Card className="border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-      Theme saved. Your store shows it within a few seconds.
+      Storefront saved. Your store shows it within a few seconds.
     </Card>
   );
 }
@@ -195,11 +349,11 @@ async function Studio({
         </form>
 
         <p className="mt-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
-          Tagline, hero photo and logo are edited on the{' '}
-          <Link href={`/b/${businessId}/settings`} className="text-[var(--primary)] hover:underline">
-            Settings
-          </Link>{' '}
-          page and survive a theme change.
+          Tagline, hero photo, logo and the public link are edited in{' '}
+          <a href="#storefront-content" className="text-[var(--primary)] hover:underline">
+            Storefront content
+          </a>{' '}
+          below and survive a theme change.
         </p>
 
         {business.slug && business.storePublished ? (
@@ -215,11 +369,11 @@ async function Studio({
           </p>
         ) : (
           <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-            Your store is not public yet — set a link and publish it on{' '}
-            <Link href={`/b/${businessId}/settings`} className="text-[var(--primary)] hover:underline">
-              Settings
-            </Link>
-            .
+            Your store is not public yet — set a link and publish it in{' '}
+            <a href="#storefront-content" className="text-[var(--primary)] hover:underline">
+              Storefront content
+            </a>{' '}
+            below.
           </p>
         )}
       </div>

@@ -78,7 +78,13 @@ export function photoBlock(contentType: string, base64: string, asUrlPart: boole
 
 export interface AgentConfig {
   systemPrompt: string;
-  business: { id: string; name: string; description?: string | null };
+  business: {
+    id: string;
+    name: string;
+    description?: string | null;
+    agentProductGuidance?: string | null;
+    agentBargainGuidance?: string | null;
+  };
   /**
    * The thread the model is about to read. `imageKeys` are the bucket keys of the pictures the
    * runner decided this run should show as pixels — the ones being answered now plus the most
@@ -362,6 +368,12 @@ export class Agent {
     const dynamicContent = [
       `You are a sales rep for ${this.config.business.name}.`,
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
+      this.config.business.agentProductGuidance
+        ? `How to answer questions about products: ${this.config.business.agentProductGuidance}`
+        : '',
+      this.config.business.agentBargainGuidance
+        ? `When a customer wants to bargain: ${this.config.business.agentBargainGuidance}`
+        : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
       compactState ? `Conversation state (verified facts):\n${JSON.stringify(compactState)}` : '',

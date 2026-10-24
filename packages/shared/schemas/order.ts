@@ -16,6 +16,8 @@ export const createOrderInputSchema = z.object({
   shippingCost: z.number().min(0).optional(),
   /** In the buyer's own words — "Cash on delivery", "bKash" — not a code, so the card reads as speech. */
   paymentMethod: z.string().min(1).max(40).optional(),
+  /** Required for bKash/Nagad before the agent may create the order. */
+  transactionId: z.string().min(1).max(120).optional(),
   conversationId: uuidSchema.optional(),
   /**
    * The Messenger id of the buyer, so their own order history is findable later. Optional because an
@@ -31,6 +33,7 @@ export const createOrderOutputSchema = z.object({
   totalPrice: z.number(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   state: orderStateSchema,
   /** The card this order matched by phone; null when the buyer gave no number to match. */
   customerId: uuidSchema.nullable(),
@@ -45,6 +48,9 @@ export const orderListItemSchema = z.object({
   id: uuidSchema,
   customerName: z.string(),
   totalPrice: z.number(),
+  shippingCost: z.number().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   state: orderStateSchema,
   createdAt: timestampSchema,
 });
@@ -91,6 +97,9 @@ export const getOrderOutputSchema = z.object({
   customerAddress: z.string().nullable().optional(),
   state: orderStateSchema,
   totalPrice: z.number(),
+  shippingCost: z.number().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   conversationId: uuidSchema.nullable().optional(),
   createdAt: timestampSchema,
 });

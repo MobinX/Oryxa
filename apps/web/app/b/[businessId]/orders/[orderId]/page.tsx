@@ -140,6 +140,18 @@ async function OrderDetail({
           <span className="text-[var(--muted-foreground)]">Created: </span>
           {new Date(order.createdAt).toLocaleString()}
         </div>
+        {order.paymentMethod && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Payment: </span>
+            <span className="font-medium">{order.paymentMethod}</span>
+          </div>
+        )}
+        {order.transactionId && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Transaction ID: </span>
+            <span className="font-mono font-medium">{order.transactionId}</span>
+          </div>
+        )}
       </div>
 
       {nextState[order.state] && (

@@ -5,6 +5,10 @@ import { storeThemeSchema } from '@shared/schemas/store';
 export const createBusinessInputSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'Acme Store' }),
   description: z.string().optional(),
+  /** Added to the Messenger/Instagram agent prompt: how to answer product questions. */
+  agentProductGuidance: z.string().max(4000).nullable().optional(),
+  /** Added to the Messenger/Instagram agent prompt: what to do when a customer bargains. */
+  agentBargainGuidance: z.string().max(4000).nullable().optional(),
   employeeCount: z.number().int().positive().optional(),
   type: z.string().max(100).optional(),
   hasTradeLicense: z.boolean().default(false),
@@ -27,6 +31,8 @@ export const selectBusinessSchema = z.object({
   storePublished: z.boolean().default(false),
   storeTheme: storeThemeSchema.nullable().optional(),
   description: z.string().nullable().optional(),
+  agentProductGuidance: z.string().nullable().optional(),
+  agentBargainGuidance: z.string().nullable().optional(),
   employeeCount: z.number().nullable().optional(),
   type: z.string().nullable().optional(),
   foundedDate: timestampSchema.nullable().optional(),

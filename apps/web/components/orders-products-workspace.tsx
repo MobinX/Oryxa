@@ -67,7 +67,8 @@ export function OrdersProductsWorkspace({
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
     amount: formatTaka(o.totalPrice),
     state: normalizeOrderState(o.state) as string,
-    paymentReference: o.paymentReference || o.txId || null,
+    paymentMethod: o.paymentMethod || null,
+    paymentReference: o.transactionId || o.paymentReference || o.txId || null,
     createdAt: o.createdAt ? new Date(o.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
   }));
 
@@ -449,7 +450,7 @@ export function OrdersProductsWorkspace({
                 </div>
                 {activeOrder.paymentReference && (
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                    Ref/TrxID: {activeOrder.paymentReference}
+                    {activeOrder.paymentMethod ? `${activeOrder.paymentMethod} · ` : ''}Ref/TrxID: {activeOrder.paymentReference}
                   </p>
                 )}
               </div>

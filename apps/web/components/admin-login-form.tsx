@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { logout, signInWithEmail, signInWithGoogle, sendPasswordReset } from '@/lib/firebase';
 import { operatorSignInAction } from '@/app/actions/logs-auth';
 
@@ -38,14 +39,15 @@ function messageFor(code: string): string {
 export function AdminLoginForm({ user }: { user: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<'google' | 'password' | 'reset' | null>(null);
+  const busy = pending !== null;
   // Start empty: the operator types the full address they want to sign in with. The configured
   // account is only a placeholder, never a value appended to or forced into the field.
   const [typedUser, setTypedUser] = useState('');
 
   async function handleGoogle() {
-    if (busy) return;
-    setBusy(true);
+    if (pending) return;
+    setPending('google');
     setError(null);
     setNotice(null);
     try {
@@ -65,14 +67,14 @@ export function AdminLoginForm({ user }: { user: string }) {
       }
       await logout().catch(() => {});
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
   async function resetPassword() {
     const login = typedUser.trim() || user.trim();
     if (!login) { setError('Enter your operator email first.'); return; }
-    setBusy(true);
+    setPending('reset');
     setError(null);
     setNotice(null);
     try {
@@ -83,16 +85,16 @@ export function AdminLoginForm({ user }: { user: string }) {
       if (failure.code === 'auth/network-request-failed') setError('The browser could not reach Firebase. Check your connection and try again.');
       else setError(failure.code === 'auth/invalid-email' ? 'The operator email address is invalid.' : 'Could not start password recovery. Please try again.');
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
   async function submit(formData: FormData) {
     const typed = String(formData.get('user') ?? '');
     const password = String(formData.get('password') ?? '');
-    if (busy) return;
+    if (pending) return;
 
-    setBusy(true);
+    setPending('password');
     setError(null);
     setNotice(null);
     try {
@@ -107,7 +109,7 @@ export function AdminLoginForm({ user }: { user: string }) {
       // next attempt starts where the first one did.
       await logout().catch(() => {});
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -120,14 +122,15 @@ export function AdminLoginForm({ user }: { user: string }) {
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
       >
         <GoogleIcon />
-        <span>Continue with Google</span>
+        <span>{pending === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
+        {pending === 'google' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
       </button>
 
       <div className="relative my-2 text-center text-xs after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
         <span className="relative z-10 bg-card px-2 text-muted-foreground">Or sign in with operator id</span>
       </div>
 
-      <form action={submit} className="space-y-4">
+      <form action={submit} aria-busy={busy} className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Email</span>
           <input
@@ -143,7 +146,7 @@ export function AdminLoginForm({ user }: { user: string }) {
         </label>
         <div className="-mt-2 text-right">
           <button type="button" onClick={resetPassword} disabled={busy} className="text-xs font-medium text-primary hover:underline disabled:opacity-50">
-            {busy ? 'Sending…' : 'Forgot password?'}
+            {pending === 'reset' ? 'Sending…' : 'Forgot password?'}
           </button>
         </div>
         <label className="block space-y-1.5">
@@ -167,9 +170,11 @@ export function AdminLoginForm({ user }: { user: string }) {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+          aria-busy={pending === 'password'}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
         >
-          {busy ? 'Signing in…' : 'Sign in'}
+          {pending === 'password' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+          {pending === 'password' ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </div>

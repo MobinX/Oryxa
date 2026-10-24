@@ -341,7 +341,6 @@ export async function runAgentCore(
         cacheMissTokens: metrics.cacheMissTokens,
         cacheHitPercent: metrics.cacheHitPercent,
         latencyMs: metrics.latencyMs,
-        estimatedCostUsd: metrics.estimatedCostUsd,
       });
     } catch (metricErr) {
       console.error('[agent-runner-core] failed to record token metrics:', metricErr);

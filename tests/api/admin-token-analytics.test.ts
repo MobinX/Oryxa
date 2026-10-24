@@ -212,9 +212,10 @@ describe('admin token analytics', () => {
       runCount: 6,
     });
     expect(aa.avgTokensPerRun).toBeCloseTo(350, 2);
-    // Cached reads are billed as input, so the denominator is input and not total tokens.
+    // Cached reads are a subset of input tokens. At the seeded rates (0.15 input,
+    // 0.075 cached, 0.60 output), 600 uncached + 900 cached + 600 out = $0.0005175.
     expect(aa.cacheHitPercent).toBeCloseTo(60, 2);
-    expect(aa.estimatedCostUsd).toBeCloseTo(0.025, 6);
+    expect(aa.estimatedCostUsd).toBeCloseTo(0.000517, 6);
 
     expect(body.businesses[1]).toMatchObject({
       totalTokens: 150,

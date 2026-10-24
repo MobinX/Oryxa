@@ -18,6 +18,7 @@ import type {
   AdminTopBusiness,
   AdminWindowMetrics,
 } from '@repo/shared';
+import { getModelBilling, ratesOf, tokenCostUsd } from './model-billing';
 
 /**
  * Platform-wide analytics for the operator console. These are the merchant queries
@@ -159,6 +160,7 @@ export async function getAdminSnapshot(): Promise<AdminSnapshot> {
 export async function getAdminWindowMetrics(range: AdminRange): Promise<AdminWindowMetrics> {
   const { start, end } = range;
   const liveConversation = isNull(conversations.deletedAt);
+  const rates = ratesOf(await getModelBilling());
 
   const [conversationsRow, messageRows, ordersRow, visitsRow, tokenRow] = await Promise.all([
     db
@@ -192,7 +194,9 @@ export async function getAdminWindowMetrics(range: AdminRange): Promise<AdminWin
     db
       .select({
         tokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalTokens}), 0)::int`,
-        cost: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalEstimatedCostUsd}), 0)::float`,
+        inputTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalInputTokens}), 0)::int`,
+        outputTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalOutputTokens}), 0)::int`,
+        cacheHitTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalCacheHitTokens}), 0)::int`,
         runs: sql<number>`coalesce(sum(${hourlyTokenAnalytics.runCount}), 0)::int`,
       })
       .from(hourlyTokenAnalytics)
@@ -218,7 +222,16 @@ export async function getAdminWindowMetrics(range: AdminRange): Promise<AdminWin
     // The hourly rollup is what the merchant dashboard already reports. It has known
     // pre-existing gaps, so this is a floor on spend, not an audit of it.
     llmTokens: tokenRow[0]?.tokens ?? 0,
-    estimatedCostUsd: tokenRow[0]?.cost ?? 0,
+    estimatedCostUsd: tokenRow[0]
+      ? tokenCostUsd(
+          {
+            inputTokens: tokenRow[0].inputTokens,
+            outputTokens: tokenRow[0].outputTokens,
+            cacheHitTokens: tokenRow[0].cacheHitTokens,
+          },
+          rates,
+        )
+      : 0,
     agentRuns: tokenRow[0]?.runs ?? 0,
   };
 }
@@ -227,6 +240,7 @@ export async function getAdminDailySeries(range: AdminRange): Promise<AdminDaily
   const { start, end, tz } = range;
   const liveConversation = isNull(conversations.deletedAt);
   const day = (col: Column) => dayInZone(col, tz);
+  const rates = ratesOf(await getModelBilling());
 
   // Grouped by output-column ordinal, never by repeating `day(...)`: the zone arrives
   // as a bound parameter, so a second copy of the expression is a *different*
@@ -271,7 +285,9 @@ export async function getAdminDailySeries(range: AdminRange): Promise<AdminDaily
       .select({
         date: day(hourlyTokenAnalytics.hourBucket),
         tokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalTokens}), 0)::int`,
-        cost: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalEstimatedCostUsd}), 0)::float`,
+        inputTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalInputTokens}), 0)::int`,
+        outputTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalOutputTokens}), 0)::int`,
+        cacheHitTokens: sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalCacheHitTokens}), 0)::int`,
       })
       .from(hourlyTokenAnalytics)
       .where(and(gte(hourlyTokenAnalytics.hourBucket, start), lt(hourlyTokenAnalytics.hourBucket, end)))
@@ -318,7 +334,14 @@ export async function getAdminDailySeries(range: AdminRange): Promise<AdminDaily
     const point = at(row.date);
     if (point) {
       point.tokens = row.tokens;
-      point.costUsd = row.cost;
+      point.costUsd = tokenCostUsd(
+        {
+          inputTokens: row.inputTokens,
+          outputTokens: row.outputTokens,
+          cacheHitTokens: row.cacheHitTokens,
+        },
+        rates,
+      );
     }
   }
 

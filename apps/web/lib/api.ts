@@ -99,6 +99,8 @@ export type Business = {
     structure?: 'classic' | 'editorial' | 'market' | 'terminal' | 'atelier';
   } | null;
   description?: string | null;
+  agentProductGuidance?: string | null;
+  agentBargainGuidance?: string | null;
   employeeCount?: number | null;
   type?: string | null;
   foundedDate?: string | null;
@@ -679,6 +681,9 @@ export type OrderListItem = {
   id: string;
   customerName: string;
   totalPrice: number;
+  shippingCost?: number;
+  paymentMethod?: string | null;
+  transactionId?: string | null;
   state: string;
   createdAt: string;
 };
@@ -698,6 +703,9 @@ export type OrderDetail = {
   customerAddress?: string | null;
   state: string;
   totalPrice: number;
+  shippingCost?: number;
+  paymentMethod?: string | null;
+  transactionId?: string | null;
   conversationId?: string | null;
   createdAt: string;
 };
@@ -1271,6 +1279,35 @@ export const markNotificationsRead = (
 
 // The operator surface. Every call below carries the log console's bearer, exactly like
 // /api2/admin/stats, so a merchant's own token is never what authorises a plan edit.
+export type ModelBilling = {
+  provider: string;
+  model: string;
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  cachedInputUsdPerMillion: number;
+  updatedAt: string;
+};
+
+export const getAdminModelBilling = (token: string) =>
+  apiFetch<ModelBilling>('/api2/admin/model-billing', { token, signInPath: null });
+
+export const saveAdminModelBilling = (
+  token: string,
+  input: {
+    provider: string;
+    model: string;
+    inputUsdPerMillion: number;
+    outputUsdPerMillion: number;
+    cachedInputUsdPerMillion: number;
+  },
+) =>
+  apiFetch<ModelBilling>('/api2/admin/model-billing', {
+    method: 'PUT',
+    token,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
 export const adminListPlans = (token: string) =>
   apiFetch<AdminPlanRow[]>('/api2/admin/plans', { token, signInPath: null });
 

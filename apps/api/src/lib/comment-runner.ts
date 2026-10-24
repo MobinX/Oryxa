@@ -277,7 +277,6 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
           cacheMissTokens: metrics.cacheMissTokens,
           cacheHitPercent: metrics.cacheHitPercent,
           latencyMs: metrics.latencyMs,
-          estimatedCostUsd: metrics.estimatedCostUsd,
         });
       } catch (metricErr) {
         console.error('[comment-runner] failed to record token metrics:', metricErr);

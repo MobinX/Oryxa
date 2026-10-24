@@ -11,6 +11,7 @@ export * from '@shared/schemas/conversation';
 export * from '@shared/schemas/conversation-agent-state';
 export * from '@shared/schemas/post';
 export * from '@shared/schemas/token-analytics';
+export * from '@shared/schemas/model-billing';
 export * from '@shared/schemas/admin-analytics';
 export * from '@shared/schemas/logs';
 export * from '@shared/schemas/official';

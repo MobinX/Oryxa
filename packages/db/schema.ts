@@ -470,6 +470,13 @@ export const businesses = pgTable('businesses', {
   storePublished: boolean('store_published').default(false).notNull(),
   storeTheme: jsonb('store_theme').$type<StoreTheme>(),
   description: text('description'),
+  /**
+   * Merchant-authored sales rules for the answering agent, kept with the business rather than
+   * one agent row so every channel (Messenger and comments) reads the same words. Blank is
+   * absent, not an instruction to say nothing.
+   */
+  agentProductGuidance: text('agent_product_guidance'),
+  agentBargainGuidance: text('agent_bargain_guidance'),
   employeeCount: integer('employee_count'),
   type: varchar('type', { length: 100 }),
   foundedDate: timestamp('founded_date'),
@@ -640,6 +647,8 @@ export const orders = pgTable('orders', {
   shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
   /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
   paymentMethod: varchar('payment_method', { length: 40 }),
+  /** The bKash/Nagad transaction id the buyer gave before the order was placed. */
+  transactionId: varchar('transaction_id', { length: 120 }),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
@@ -1008,6 +1017,23 @@ export const hourlyTokenAnalytics = pgTable('hourly_token_analytics', {
 }, (t) => ({
   uniqHourlyBucket: uniqueIndex('hourly_token_analytics_uniq_idx').on(t.businessId, t.integrationType, t.hourBucket),
   businessBucketIdx: index('hourly_token_analytics_business_bucket_idx').on(t.businessId, t.hourBucket),
+}));
+
+/**
+ * One operator-editable rate card for the model the agent runs. The agent currently uses
+ * one model at a time, so a single row is enough to price every rollup bucket; the provider
+ * and model names are stored so the console says which deployment these rates belong to.
+ */
+export const modelBilling = pgTable('model_billing', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  provider: varchar('provider', { length: 50 }).default('openai').notNull(),
+  model: varchar('model', { length: 100 }).default('gpt-6-luna').notNull(),
+  inputUsdPerMillion: numeric('input_usd_per_million', { precision: 12, scale: 6 }).default('0.150000').notNull(),
+  outputUsdPerMillion: numeric('output_usd_per_million', { precision: 12, scale: 6 }).default('0.600000').notNull(),
+  cachedInputUsdPerMillion: numeric('cached_input_usd_per_million', { precision: 12, scale: 6 }).default('0.075000').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  singletonUniq: uniqueIndex('model_billing_singleton_idx').on(sql`true`),
 }));
 
 export const llmTokenLogRelations = relations(llmTokenLogs, ({ one }) => ({

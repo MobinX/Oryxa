@@ -25,6 +25,8 @@ export const cacheTags = {
   adminTokenUsage: (month: string) => `admin-token-usage-${month}`,
   adminTokenUsageBusiness: (businessId: string, month: string) =>
     `admin-token-usage-${businessId}-${month}`,
+  // Rate edits reprice every cached month, so those caches carry this tag too.
+  modelBilling: () => 'model-billing',
 } as const;
 
 export function expireBusinesses() {
@@ -92,6 +94,10 @@ export function expireBilling(businessId: string) {
 
 export function expireNotifications(businessId: string) {
   updateTag(cacheTags.notifications(businessId));
+}
+
+export function expireModelBilling() {
+  updateTag(cacheTags.modelBilling());
 }
 
 export function expireCustomers(businessId: string) {

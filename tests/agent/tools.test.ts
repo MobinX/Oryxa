@@ -1,10 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { createAgentTools } from '@repo/agent/tools';
-import { updateOrderState } from '@repo/db/crud/order';
+import { getOrderById, updateOrderState } from '@repo/db/crud/order';
 import { createProduct } from '@repo/db/crud/product';
 import { listMessages } from '@repo/db/crud/conversation';
+import { parseConversationAgentState } from '@repo/shared';
+import { db } from '@db/client';
+import { notifications } from '@db/schema';
 import type { MessengerCard } from '@repo/integrations/facebook';
 
 const orderDefaults = {
@@ -91,6 +95,78 @@ describe('Agent Tools', () => {
       customerPhone: '555-0001',
     });
     expect(result).toContain('"id"');
+  });
+
+  it('requires a bKash/Nagad transaction id and stores it on the order', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'create_order')!;
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+      paymentMethod: 'bKash',
+    };
+
+    const missing = JSON.parse(await tool.invoke(base));
+    expect(missing.created).toBe(false);
+    expect(missing.missing).toContain('payment transaction id');
+
+    const created = JSON.parse(await tool.invoke({ ...base, transactionId: 'TRX123' }));
+    expect(created.id).toBeTruthy();
+    const order = await getOrderById(seed.business.id, created.id);
+    expect(order?.transactionId).toBe('TRX123');
+  });
+
+  it('notifies the owner when money moved but order creation fails', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'create_order')!;
+
+    const result = await tool.invoke({
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+      count: 999,
+      paymentMethod: 'Nagad',
+      transactionId: 'TRX999',
+    });
+    expect(result).toContain('Insufficient stock');
+
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.businessId, seed.business.id));
+    const failed = rows.find((row) => row.kind === 'payment_order_failed');
+    expect(failed).toBeTruthy();
+    expect(failed?.body).toContain('TRX999');
+  });
+
+  it('suppresses an identical suggestion row once, then allows it again', async () => {
+    const seed = await seedTestWorld();
+    const state = parseConversationAgentState({});
+    const sent: string[] = [];
+    const tool = createAgentTools({
+      ...agentContext(seed, async (_pageToken, _psid, text) => {
+        sent.push(text);
+      }),
+      agentState: state,
+    }).find((t) => t.name === 'send_message')!;
+    const suggestions = ['A', 'B', 'S'];
+
+    const first = JSON.parse(await tool.invoke({ message: 'Pick one', suggestions }));
+    expect(first.suggestions).toEqual(suggestions);
+
+    const second = JSON.parse(await tool.invoke({ message: 'Pick one', suggestions }));
+    expect(second.suggestionsRepeated).toBe(true);
+    expect(sent[sent.length - 1]).toBe('Pick one');
+    expect(state.suggestionRepeatSkipped).toBe(true);
+
+    const third = JSON.parse(await tool.invoke({ message: 'Pick one', suggestions }));
+    expect(third.suggestions).toEqual(suggestions);
+    expect(state.suggestionRepeatSkipped).toBe(false);
+
+    await tool.invoke({ message: 'Pick another', suggestions: ['D', 'F', 'G'] });
+    const afterDifferent = JSON.parse(await tool.invoke({ message: 'Pick one', suggestions }));
+    expect(afterDifferent.suggestions).toEqual(suggestions);
   });
 
   it('update_order tool tells the agent when the order is not pending', async () => {

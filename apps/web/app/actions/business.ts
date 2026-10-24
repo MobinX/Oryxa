@@ -34,6 +34,8 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
   const token = await requireAuth();
   const name = String(formData.get('name') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
+  const agentProductGuidance = String(formData.get('agentProductGuidance') ?? '').trim();
+  const agentBargainGuidance = String(formData.get('agentBargainGuidance') ?? '').trim();
   const type = String(formData.get('type') ?? '').trim();
   const phone = String(formData.get('phone') ?? '').trim();
   const employeeCount = parseInt(String(formData.get('employeeCount') ?? ''), 10);
@@ -41,6 +43,8 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
   await updateBusiness(token, businessId, {
     name: name || undefined,
     description: description || undefined,
+    agentProductGuidance: agentProductGuidance || null,
+    agentBargainGuidance: agentBargainGuidance || null,
     type: type || undefined,
     phone: phone || undefined,
     employeeCount: Number.isFinite(employeeCount) && employeeCount > 0 ? employeeCount : undefined,
@@ -86,9 +90,9 @@ export async function updateStoreAction(businessId: string, formData: FormData) 
 
   await updateBusiness(token, businessId, payload);
 
-  revalidatePath(`/b/${businessId}/settings`);
+  revalidatePath(`/b/${businessId}/storefront`);
   expireBusiness(businessId);
-  redirect(`/b/${businessId}/settings?saved=1`);
+  redirect(`/b/${businessId}/storefront?saved=1`);
 }
 
 export async function deleteBusinessAction(businessId: string) {

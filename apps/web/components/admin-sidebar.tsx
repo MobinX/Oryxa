@@ -15,6 +15,7 @@ import {
   LifeBuoy,
   PanelRightOpen,
   Radio,
+  Receipt,
   ScrollText,
   Settings,
   Users,
@@ -34,6 +35,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/admin/token-analytics', label: 'Tokens', icon: Cpu },
+      { href: '/admin/model-billing', label: 'Model billing', icon: Receipt },
     ],
   },
   {

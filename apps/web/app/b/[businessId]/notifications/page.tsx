@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 
 function noticeTitle(kind: string): string {
   if (kind === 'order_placed') return 'New order received';
+  if (kind === 'payment_order_failed') return 'Payment received but order failed';
   const unit = kind.startsWith('comment') ? 'comment' : 'messenger';
   return kind.endsWith('_100')
     ? `Your ${unit} replies are used up`
@@ -132,7 +133,7 @@ export default async function NotificationsPage({
                     >
                       {notice.kind === 'order_placed'
                         ? 'Open order'
-                        : notice.kind === 'human_help'
+                        : notice.kind === 'payment_order_failed' || notice.kind === 'human_help'
                           ? 'Open Inbox'
                           : 'Open billing'}
                     </Link>
