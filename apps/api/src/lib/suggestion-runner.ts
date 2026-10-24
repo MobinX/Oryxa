@@ -1,4 +1,4 @@
-import type { InboxSuggestion } from '@repo/agent';
+import type { InboxSuggestion, TokenUsageMetrics } from '@repo/agent';
 
 /**
  * Builds the merchant-facing suggestions for a thread whose auto-pilot is off.
@@ -66,11 +66,38 @@ export async function runSuggestionAgent(
   });
 
   let replyText = '';
+  let metrics: TokenUsageMetrics | undefined;
   try {
     const run = await agent.run();
     replyText = run.replyText;
+    metrics = run.metrics;
   } catch (err) {
     console.error('[suggestion-runner] agent run failed:', err);
+  }
+
+  // Suggestions cost tokens like any other turn, so they land in the same business
+  // token table under their own lane instead of disappearing from the bill.
+  if (metrics) {
+    try {
+      const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
+      await recordTokenUsage({
+        businessId,
+        channelId: conv.channelId,
+        conversationId: conv.id,
+        integrationType: 'inbox_suggestion',
+        provider: metrics.provider,
+        model: metrics.model,
+        inputTokens: metrics.inputTokens,
+        outputTokens: metrics.outputTokens,
+        totalTokens: metrics.totalTokens,
+        cacheHitTokens: metrics.cacheHitTokens,
+        cacheMissTokens: metrics.cacheMissTokens,
+        cacheHitPercent: metrics.cacheHitPercent,
+        latencyMs: metrics.latencyMs,
+      });
+    } catch (err) {
+      console.error('[suggestion-runner] failed to record token usage:', err);
+    }
   }
 
   const seen = new Set<string>();

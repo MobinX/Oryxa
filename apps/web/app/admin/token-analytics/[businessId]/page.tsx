@@ -38,6 +38,7 @@ const INTEGRATION_LABELS: Record<string, string> = {
   instagram_comment: 'Instagram comment',
   ai_post_generation: 'AI post generation',
   ai_post_tuning: 'AI post tuning',
+  inbox_suggestion: 'Inbox AI suggestions',
 };
 
 type RawParams = Record<string, string | string[] | undefined>;

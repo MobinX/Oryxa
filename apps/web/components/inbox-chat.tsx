@@ -70,6 +70,10 @@ export function InboxChat({
 
   const latestCustomerId =
     [...messages].reverse().find((message) => message.from === 'customer')?.id ?? null;
+  // Only an unanswered customer turn deserves suggestions; once the merchant speaks,
+  // polling keeps the old customer id and must not start another model call.
+  const lastMessageFromCustomer =
+    messages.length > 0 && messages[messages.length - 1]?.from === 'customer';
 
   const refresh = useCallback(
     async (manual = false) => {
@@ -101,13 +105,13 @@ export function InboxChat({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, suggesting]);
 
-  const suggestionKey = `${autoPilot}:${latestCustomerId ?? ''}`;
+  const suggestionKey = `${autoPilot}:${lastMessageFromCustomer ? latestCustomerId ?? '' : ''}`;
 
-  // A new customer turn while auto pilot is off asks the suggestion agent once.
+  // A new, unanswered customer turn while auto pilot is off asks the suggestion agent once.
   useEffect(() => {
-    if (autoPilot || !latestCustomerId) {
+    if (autoPilot || !latestCustomerId || !lastMessageFromCustomer) {
       setSuggestions([]);
       setSuggesting(false);
       setSuggestionError(null);
@@ -136,7 +140,7 @@ export function InboxChat({
     return () => {
       cancelled = true;
     };
-  }, [autoPilot, businessId, conversationId, latestCustomerId, suggestionKey]);
+  }, [autoPilot, businessId, conversationId, latestCustomerId, lastMessageFromCustomer, suggestionKey]);
 
   const toggleAutoPilot = async () => {
     if (savingToggle) return;
@@ -242,6 +246,12 @@ export function InboxChat({
           <span className="text-[10px] text-slate-400">
             {autoPilot ? 'The AI answers this customer' : 'Messages wait for you; AI suggests replies'}
           </span>
+          {suggesting && !autoPilot && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#5B3DF5] dark:text-indigo-300">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" />
+              AI is suggesting…
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -322,6 +332,23 @@ export function InboxChat({
             </div>
           );
         })}
+        {suggesting && !autoPilot && (
+          <div className="flex items-end justify-end gap-2.5">
+            <div className="max-w-[88%] rounded-2xl rounded-br-xs bg-[#5B3DF5]/85 px-4 py-2.5 text-xs text-white shadow-xs sm:max-w-[75%]">
+              <span className="flex items-center gap-2">
+                <span className="flex items-end gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/90 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/90 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/90" />
+                </span>
+                AI is suggesting a reply… you can keep typing.
+              </span>
+            </div>
+            <div className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5B3DF5] text-[10px] font-bold text-white shadow-xs">
+              AI
+            </div>
+          </div>
+        )}
         {messages.length === 0 && (
           <p className="m-auto text-xs text-slate-400">No messages in this conversation yet.</p>
         )}

@@ -26,6 +26,7 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'whatsapp',
   'ai_post_generation',
   'ai_post_tuning',
+  'inbox_suggestion',
 ]);
 export const planActorKindEnum = pgEnum('plan_actor_kind', ['operator', 'merchant', 'system']);
 
