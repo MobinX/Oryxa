@@ -241,7 +241,7 @@ describe('Official Channels admin API', () => {
     vi.mocked(getPageIdForToken).mockResolvedValue(channelId);
 
     const verify = await app.request(`/api2/admin/official/channels/${id}/verify`, { headers: OPERATOR });
-    expect(await verify.json()).toEqual({ verified: true });
+    expect(await verify.json() as any).toEqual({ verified: true });
 
     const disconnect = await app.request(`/api2/admin/official/channels/${id}/disconnect`, {
       method: 'POST',

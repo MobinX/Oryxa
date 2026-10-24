@@ -33,7 +33,7 @@ describe('migration 0036 + official crud', () => {
     db = (await setupPgliteDatabase()) as Database;
   });
 
-  async function adminChannel(platform = 'facebook'): Promise<string> {
+  async function adminChannel(platform: typeof channels.$inferInsert.platform = 'facebook'): Promise<string> {
     const [row] = await db
       .insert(channels)
       .values({ platform, apiToken: 'irrelevant-in-crud-tests', platformChannelId: ' adm-ch-' + Math.random().toString(36).slice(2), isAdminOnly: true, businessId: null })

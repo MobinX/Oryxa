@@ -14,7 +14,7 @@ describe('Businesses API', () => {
       body: JSON.stringify({ name: 'Second Shop', hasTradeLicense: false, hasTaxLicense: false }),
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe('Second Shop');
   });
 
@@ -22,7 +22,7 @@ describe('Businesses API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe(business.name);
   });
 
@@ -34,7 +34,7 @@ describe('Businesses API', () => {
       body: JSON.stringify({ description: 'Updated desc' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.success).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('Businesses API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/businesses/${business.id}/stats`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body).toMatchObject({
       products: expect.any(Number),
       orders: expect.any(Number),

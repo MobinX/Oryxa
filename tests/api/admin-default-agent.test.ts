@@ -61,7 +61,8 @@ describe('the platform default agent', () => {
     expect(row.guidanceDefaults.commentReplyGuidance).toBe(COMMENT_REPLY_GUIDANCE);
 
     // Read twice, still one row: every reader takes the oldest, so a racing first read is inert.
-    expect(((await getAs(bearer(OPERATOR)).then((r) => r.json())) as PlatformRow).id).toBe(row.id);
+    const reread = await getAs(bearer(OPERATOR));
+    expect(((await reread.json()) as PlatformRow).id).toBe(row.id);
     expect(await db.select({ id: defaultAgents.id }).from(defaultAgents)).toHaveLength(1);
     expect((await getPlatformAgent()).id).toBe(row.id);
   });
@@ -69,7 +70,7 @@ describe('the platform default agent', () => {
   it('saves an operator edit and answers with it on the next read', async () => {
     expect((await putAs({ systemPrompt: 'Answer in one line.', replyGuidance: 'Be brief.' }, bearer(OPERATOR))).status).toBe(200);
 
-    const row = (await getAs(bearer(OPERATOR)).then((r) => r.json())) as PlatformRow;
+    const row = (await (await getAs(bearer(OPERATOR))).json()) as PlatformRow;
     expect(row.systemPrompt).toBe('Answer in one line.');
     expect(row.replyGuidance).toBe('Be brief.');
     // The row's own wording IS the fallback now, so the box must describe that, not the code block.

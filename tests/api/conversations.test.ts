@@ -5,7 +5,7 @@ import { createChannel } from '@repo/db/crud/channel';
 import { getOrCreateConversation } from '@repo/db/crud/conversation';
 import { app } from '@api/app';
 
-const sendMessageMock = vi.fn(async () => undefined);
+const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   getFacebookOAuthUrl: vi.fn(),
@@ -23,7 +23,7 @@ describe('Conversations API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/conversations`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).length).toBeGreaterThan(0);
+    expect((await res.json() as any).length).toBeGreaterThan(0);
   });
 
   /**
@@ -68,7 +68,7 @@ describe('Conversations API', () => {
       { headers: authHeaders() },
     );
     expect(res.status).toBe(200);
-    expect(Array.isArray(await res.json())).toBe(true);
+    expect(Array.isArray(await res.json() as any)).toBe(true);
   });
 
   it('POST /:businessId/conversations/:id/messages sends human reply', async () => {
@@ -108,7 +108,7 @@ describe('Conversations API', () => {
       },
     );
     expect(res.status).toBe(422);
-    expect((await res.json()).error).toMatch(/24 hours/);
+    expect((await res.json() as any).error).toMatch(/24 hours/);
   });
 
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {
@@ -122,6 +122,6 @@ describe('Conversations API', () => {
       },
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).updatedState).toBe('done');
+    expect((await res.json() as any).updatedState).toBe('done');
   });
 });

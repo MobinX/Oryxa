@@ -111,6 +111,10 @@ const createPostRoute = createRoute({
       content: { 'application/json': { schema: postListItemSchema } },
       description: 'Post created',
     },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Channel not found',
+    },
   },
 });
 
@@ -207,7 +211,7 @@ postsRouter.openapi(getPostRoute, async (c) => {
           syncedAt: latestSync.syncedAt.toISOString(),
         }
       : null,
-  });
+  }, 200);
 });
 
 // 4. Update Post
@@ -275,7 +279,7 @@ postsRouter.openapi(updatePostRoute, async (c) => {
     scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
     createdAt: resolvedUpdated.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 // 5. Delete Post
@@ -308,7 +312,7 @@ postsRouter.openapi(deletePostRoute, async (c) => {
   if (!deleted) {
     return c.json({ error: 'Post not found' }, 404);
   }
-  return c.json({ deleted: true });
+  return c.json({ deleted: true }, 200);
 });
 
 // 6. Publish Post
@@ -385,7 +389,7 @@ postsRouter.openapi(publishPostRoute, async (c) => {
     return c.json({
       platformPostId,
       publishedAt: publishedAt.toISOString(),
-    });
+    }, 200);
   } catch (err: any) {
     console.error(`[publish-post] FAILED postId=${postId} platform=${channel.platform}:`, err?.message ?? err);
     if (err?.cause) console.error('[publish-post] cause:', err.cause);
@@ -455,7 +459,7 @@ postsRouter.openapi(syncPostRoute, async (c) => {
       shareCount: sync.shareCount,
       reachCount: sync.reachCount,
       syncedAt: sync.syncedAt.toISOString(),
-    });
+    }, 200);
   } catch (err: any) {
     console.error(`[sync-post-route] error:`, err);
     return c.json({ error: err.message || 'Syncing stats failed' }, 400);
@@ -597,7 +601,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     scheduledAt: resolvedCreated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedCreated.publishedAt?.toISOString() || null,
     createdAt: resolvedCreated.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 // 9. AI-Tune Existing Draft
@@ -715,5 +719,5 @@ Output only the revised post content. Do not add any conversational text or wrap
     scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
     createdAt: resolvedUpdated.createdAt.toISOString(),
-  });
+  }, 200);
 });

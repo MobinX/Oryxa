@@ -361,7 +361,7 @@ export async function listMessages(conversationId: string, businessId: string, l
       id: m.id,
       from: m.from,
       /** AI vs human for `self` rows — the inbox marks who wrote a reply. */
-      sentBy: m.sentBy === 'human' ? 'human' : m.sentBy === 'ai' ? 'ai' : null,
+      sentBy: (m.sentBy === 'human' ? 'human' : m.sentBy === 'ai' ? 'ai' : null) as 'ai' | 'human' | null,
       content: m.content,
       contentType: m.contentType,
       time: m.time.toISOString(),

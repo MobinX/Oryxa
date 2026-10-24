@@ -6,7 +6,7 @@ import { authMiddleware, optionalAuthMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 
 describe('Auth Middleware', () => {
-  withPglite();
+  withPglite({ timeoutMs: 120_000 });
 
   beforeEach(() => {
     process.env.NODE_ENV = 'test';
@@ -33,7 +33,7 @@ describe('Auth Middleware', () => {
 
     const res = await app.request('/protected', { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).userId).toBeDefined();
+    expect((await res.json() as any).userId).toBeDefined();
   });
 
   it('refuses dev-test-token unless ALLOW_DEV_AUTH_BYPASS is explicitly true', async () => {

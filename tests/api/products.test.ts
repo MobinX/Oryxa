@@ -19,7 +19,7 @@ describe('Products API', () => {
       }),
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.slug).toBe('api-product');
   });
 
@@ -27,7 +27,7 @@ describe('Products API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/products`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.totalCount).toBeGreaterThan(0);
   });
 
@@ -37,7 +37,7 @@ describe('Products API', () => {
       headers: authHeaders(),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe('Test T-Shirt');
   });
 
@@ -48,7 +48,7 @@ describe('Products API', () => {
       { headers: authHeaders() },
     );
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.error).toBe('Product entity missing');
   });
 
@@ -97,7 +97,7 @@ describe('Products API', () => {
       body: JSON.stringify({ categoryId: '00000000-0000-0000-0000-000000000000' }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('Category not found');
+    expect((await res.json() as any).error).toBe('Category not found');
   });
 
   it('PUT /:businessId/products/:productId updates product', async () => {
@@ -108,7 +108,7 @@ describe('Products API', () => {
       body: JSON.stringify({ price: 39.99 }),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).updated).toBe(true);
+    expect((await res.json() as any).updated).toBe(true);
   });
 
   it('PUT /:businessId/products/:productId updates variants', async () => {
@@ -131,7 +131,7 @@ describe('Products API', () => {
     const getRes = await app.request(`/api/v1/${business.id}/products/${product.id}`, {
       headers: authHeaders(),
     });
-    const body = await getRes.json();
+    const body = await getRes.json() as any;
     expect(body.variants).toHaveLength(2);
     expect(body.variants.find((v: { id: string }) => v.id === variantId)?.stock).toBe(25);
     expect(body.variants.some((v: { name: string }) => v.name === 'Green L')).toBe(true);
@@ -144,7 +144,7 @@ describe('Products API', () => {
       headers: authHeaders(),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).deleted).toBe(true);
+    expect((await res.json() as any).deleted).toBe(true);
   });
 
   it('POST /:businessId/categories creates category', async () => {
@@ -155,14 +155,14 @@ describe('Products API', () => {
       body: JSON.stringify({ name: 'Books' }),
     });
     expect(res.status).toBe(201);
-    expect((await res.json()).slug).toBe('books');
+    expect((await res.json() as any).slug).toBe('books');
   });
 
   it('GET /:businessId/categories lists categories', async () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/categories`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(Array.isArray(body)).toBe(true);
   });
 });

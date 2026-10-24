@@ -115,6 +115,7 @@
         "@repo/shared": "workspace:*",
         "@repo/utils": "workspace:*",
         "drizzle-orm": "^0.39.1",
+        "sharp": "0.34.5",
       },
       "devDependencies": {
         "drizzle-kit": "^0.30.2",

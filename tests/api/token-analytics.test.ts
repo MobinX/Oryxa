@@ -31,7 +31,7 @@ describe('Token Analytics API', () => {
     });
 
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.totals).toBeDefined();
     expect(data.totals.totalTokens).toBe(600);
     expect(data.totals.totalInputTokens).toBe(500);
@@ -66,7 +66,7 @@ describe('Token Analytics API', () => {
     });
 
     expect(res.status).toBe(200);
-    const logs = await res.json();
+    const logs = await res.json() as any;
     expect(Array.isArray(logs)).toBe(true);
     expect(logs.length).toBe(1);
     expect(logs[0].integrationType).toBe('ai_post_generation');

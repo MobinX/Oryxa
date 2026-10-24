@@ -64,7 +64,7 @@ usersRouter.openapi(meRoute, async (c) => {
     name: user.name,
     email: user.email ?? null,
     phone: null,
-  });
+  }, 200);
 });
 
 const updateUserRoute = createRoute({
@@ -95,6 +95,7 @@ const deleteUserRoute = createRoute({
   security: [{ bearerAuth: [] }],
   responses: {
     200: { content: { 'application/json': { schema: deleteUserOutputSchema } }, description: 'Deleted' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
   },
 });
 
@@ -102,7 +103,7 @@ usersRouter.openapi(deleteUserRoute, async (c) => {
   const user = c.get('user');
   const result = await deleteUser(user.id);
   if (!result) return c.json({ error: 'User not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const getUserRoute = createRoute({
@@ -128,5 +129,5 @@ usersRouter.openapi(getUserRoute, async (c) => {
   return c.json({
     ...user,
     createdAt: user.createdAt.toISOString(),
-  });
+  }, 200);
 });

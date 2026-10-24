@@ -35,7 +35,7 @@ describe('Uploads API', () => {
       }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.key).toContain(`businesses/${business.id}/images/`);
     expect(body.key).toContain('shirt.png');
     expect(body.uploadUrl).toContain('sig=put');
@@ -51,7 +51,7 @@ describe('Uploads API', () => {
       body: JSON.stringify({ contentType: 'text/plain', size: 100, filename: 'a.txt' }),
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.error).toMatch(/Only JPEG/);
   });
 

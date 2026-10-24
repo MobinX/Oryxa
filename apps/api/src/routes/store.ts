@@ -35,7 +35,7 @@ storeRouter.openapi(getStoreRoute, async (c) => {
   const { q, category, sort, min, max } = c.req.valid('query');
   const store = await getPublicStore(slug, { q, category, sort, min, max });
   if (!store) return c.json({ error: 'Store not found' }, 404);
-  return c.json(store);
+  return c.json(store, 200);
 });
 
 const getProductRoute = createRoute({
@@ -54,7 +54,7 @@ storeRouter.openapi(getProductRoute, async (c) => {
   const productId = c.req.param('productId');
   const product = await getPublicProduct(slug, productId);
   if (!product) return c.json({ error: 'Product not found' }, 404);
-  return c.json(product);
+  return c.json(product, 200);
 });
 
 const checkoutRoute = createRoute({
@@ -69,6 +69,7 @@ const checkoutRoute = createRoute({
     201: { content: { 'application/json': { schema: checkoutOutputSchema } }, description: 'Order placed' },
     400: { content: { 'application/json': { schema: errorSchema } }, description: 'Checkout failed' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Store not found' },
+    429: { content: { 'application/json': { schema: errorSchema } }, description: 'Too many checkout attempts' },
   },
 });
 

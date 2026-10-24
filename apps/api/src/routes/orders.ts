@@ -109,7 +109,7 @@ ordersRouter.openapi(updateOrderStateRoute, async (c) => {
   try {
     const result = await updateOrderState(businessId, orderId, data);
     if (!result) return c.json({ error: 'Order not found' }, 404);
-    return c.json(result);
+    return c.json(result, 200);
   } catch (err) {
     if (err instanceof OrderStateTransitionError) {
       return c.json({ error: err.message, allowed: err.allowedStates }, 409);
@@ -140,7 +140,7 @@ ordersRouter.openapi(getOrderRoute, async (c) => {
   return c.json({
     ...order,
     createdAt: order.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 const updateOrderRoute = createRoute({
@@ -166,7 +166,7 @@ ordersRouter.openapi(updateOrderRoute, async (c) => {
   try {
     const result = await updateOrder(businessId, orderId, data);
     if (!result) return c.json({ error: 'Order not found' }, 404);
-    return c.json(result);
+    return c.json(result, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update order';
     if (message.includes('Insufficient stock') || message.includes('pending orders')) {
@@ -195,5 +195,5 @@ ordersRouter.openapi(deleteOrderRoute, async (c) => {
   const orderId = c.req.param('orderId');
   const result = await deleteOrder(businessId, orderId);
   if (!result) return c.json({ error: 'Order not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });

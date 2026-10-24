@@ -89,7 +89,7 @@ companiesRouter.openapi(getCompanyRoute, async (c) => {
   const id = c.req.param('id');
   const company = await getCompanyById(id);
   if (!company) return c.json({ error: 'Not found' }, 404);
-  return c.json(serializeCompany(company));
+  return c.json(serializeCompany(company), 200);
 });
 
 const updateCompanyRoute = createRoute({
@@ -113,7 +113,7 @@ companiesRouter.openapi(updateCompanyRoute, async (c) => {
   const data = c.req.valid('json');
   const result = await updateCompany(id, user.id, data);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const deleteCompanyRoute = createRoute({
@@ -133,7 +133,7 @@ companiesRouter.openapi(deleteCompanyRoute, async (c) => {
   const user = c.get('user');
   const result = await deleteCompany(id, user.id);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const companyBusinessesRoute = createRoute({
@@ -185,7 +185,7 @@ companiesRouter.openapi(assignBusinessRoute, async (c) => {
   if (result.error) {
     return c.json({ error: 'Business not found or access denied' }, 403);
   }
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const unassignBusinessRoute = createRoute({
@@ -207,5 +207,5 @@ companiesRouter.openapi(unassignBusinessRoute, async (c) => {
   const user = c.get('user');
   const result = await unassignBusiness(businessId, user.id);
   if (result.error) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });

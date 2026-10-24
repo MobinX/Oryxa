@@ -17,7 +17,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
     expect(order.state).toBe('pending');
 
     // pending -> acknowledged
@@ -27,7 +27,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'acknowledged' }),
     });
     expect(res.status).toBe(200);
-    const acked = await res.json();
+    const acked = await res.json() as any;
     expect(acked.newState).toBe('acknowledged');
 
     // acknowledged -> onDelivery
@@ -37,7 +37,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'onDelivery' }),
     });
     expect(res.status).toBe(200);
-    const delivery = await res.json();
+    const delivery = await res.json() as any;
     expect(delivery.newState).toBe('onDelivery');
 
     // onDelivery -> done
@@ -47,7 +47,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'done' }),
     });
     expect(res.status).toBe(200);
-    const done = await res.json();
+    const done = await res.json() as any;
     expect(done.newState).toBe('done');
   });
 
@@ -62,7 +62,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // First advance to done
     await app.request(`/api/v1/${seed.business.id}/orders/${order.id}/state`, {
@@ -78,7 +78,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'pending' }),
     });
     expect(res.status).toBe(409);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.error).toContain('Invalid state transition');
     expect(body.allowed).toEqual([]);
   });
@@ -91,7 +91,7 @@ describe('Order State Transitions', () => {
     const beforeCreate = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productBefore = await beforeCreate.json();
+    const productBefore = await beforeCreate.json() as any;
     const initialStock = productBefore.variants.find((v: any) => v.id === variantId)?.stock;
 
     // Create order
@@ -105,7 +105,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // Advance to onDelivery (not done)
     await app.request(`/api/v1/${business.id}/orders/${order.id}/state`, {
@@ -125,7 +125,7 @@ describe('Order State Transitions', () => {
     const afterDelete = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productAfter = await afterDelete.json();
+    const productAfter = await afterDelete.json() as any;
     const finalStock = productAfter.variants.find((v: any) => v.id === variantId)?.stock;
     expect(finalStock).toBe(initialStock - 2);
   });
@@ -138,7 +138,7 @@ describe('Order State Transitions', () => {
     const beforeRes = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productBefore = await beforeRes.json();
+    const productBefore = await beforeRes.json() as any;
     const initialStock = productBefore.variants.find((v: any) => v.id === variantId)?.stock;
 
     // Create order
@@ -152,7 +152,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // Delete while pending - SHOULD restock
     const deleteRes = await app.request(`/api/v1/${business.id}/orders/${order.id}`, {
@@ -172,7 +172,7 @@ describe('Order State Transitions', () => {
     const afterDelete = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productAfter = await afterDelete.json();
+    const productAfter = await afterDelete.json() as any;
     const finalStock = productAfter.variants.find((v: any) => v.id === variantId)?.stock;
     expect(finalStock).toBe(initialStock);
   });
@@ -184,7 +184,7 @@ describe('Order State Transitions', () => {
       headers: authHeaders(),
       body: JSON.stringify({ productId: productDetail.id, variantId: productDetail.variants[0]!.id, count: 1, customerName: 'Same' }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
     const res = await app.request(`/api/v1/${business.id}/orders/${order.id}/state`, {
       method: 'PATCH',
       headers: authHeaders(),
@@ -204,7 +204,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // pending -> acknowledged
     await app.request(`/api/v1/${seed.business.id}/orders/${order.id}/state`, {
@@ -220,7 +220,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'onDelivery' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.newState).toBe('onDelivery');
   });
 
@@ -235,7 +235,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // pending -> acknowledged
     await app.request(`/api/v1/${seed.business.id}/orders/${order.id}/state`, {
@@ -251,7 +251,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'pending' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.newState).toBe('pending');
   });
 
@@ -266,7 +266,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     // pending -> onDelivery (via acknowledged)
     await app.request(`/api/v1/${seed.business.id}/orders/${order.id}/state`, {
@@ -287,7 +287,7 @@ describe('Order State Transitions', () => {
       body: JSON.stringify({ state: 'acknowledged' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.newState).toBe('acknowledged');
   });
 
@@ -298,7 +298,7 @@ describe('Order State Transitions', () => {
     const beforeRes = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productBefore = await beforeRes.json();
+    const productBefore = await beforeRes.json() as any;
     const initialStock = productBefore.variants.find((v: any) => v.id === variantId)?.stock;
 
     // Create and acknowledge order
@@ -312,7 +312,7 @@ describe('Order State Transitions', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
 
     await app.request(`/api/v1/${business.id}/orders/${order.id}/state`, {
       method: 'PATCH',
@@ -331,7 +331,7 @@ describe('Order State Transitions', () => {
     const afterDelete = await app.request(`/api/v1/${business.id}/products/${productDetail.id}`, {
       headers: authHeaders(),
     });
-    const productAfter = await afterDelete.json();
+    const productAfter = await afterDelete.json() as any;
     const finalStock = productAfter.variants.find((v: any) => v.id === variantId)?.stock;
     expect(finalStock).toBe(initialStock);
   });

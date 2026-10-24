@@ -16,7 +16,7 @@ export const FIXTURE_METRICS: TokenUsageMetrics = {
 };
 
 export function agentRunResult(replyText: string, sentTexts: string[] = []): AgentRunResult {
-  return { replyText, sentTexts, metrics: FIXTURE_METRICS };
+  return { replyText, sentTexts, metrics: FIXTURE_METRICS, messages: [] };
 }
 
 /** Mock implementation for Agent.prototype.run with optional display-tool sends. */

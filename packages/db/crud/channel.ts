@@ -249,7 +249,7 @@ export async function findChannelByPlatformAccountId(
 
 export async function getChannelByBusinessPlatformChannelId(
   businessId: string,
-  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platform: ChannelPlatform,
   platformChannelId: string,
 ) {
   return db.query.channels.findFirst({
@@ -268,7 +268,7 @@ export async function getChannelByBusinessPlatformChannelId(
  * being taken is information a store needs; who took it is not theirs.
  */
 export async function getLiveChannelOwnerBusinessId(
-  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platform: ChannelPlatform,
   platformChannelId: string,
 ): Promise<string | null> {
   const row = await db.query.channels.findFirst({
@@ -285,7 +285,7 @@ export async function getLiveChannelOwnerBusinessId(
 /** Includes soft-deleted rows — used to restore a previously removed channel on reconnect. */
 export async function findChannelByBusinessPlatformChannelId(
   businessId: string,
-  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platform: ChannelPlatform,
   platformChannelId: string,
 ) {
   return db.query.channels.findFirst({
@@ -459,7 +459,7 @@ export async function listAdminChannels() {
 
 /** Who holds a live channel for this page, and whether that holder is the operator. */
 export async function getLiveChannelOwner(
-  platform: 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
+  platform: ChannelPlatform,
   platformChannelId: string,
 ) {
   return (

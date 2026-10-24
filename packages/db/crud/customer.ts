@@ -153,7 +153,7 @@ export type CustomerOrder = {
   count: number;
   unitPrice: number;
   totalPrice: number;
-  state: string;
+  state: 'pending' | 'acknowledged' | 'onDelivery' | 'done';
   createdAt: Date;
 };
 

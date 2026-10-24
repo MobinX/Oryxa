@@ -198,13 +198,13 @@ describe('GET /api2/logs', () => {
   it('rejects a cursor it did not issue', async () => {
     const res = await get(probe(), `${WINDOW}&cursor=not-a-cursor`);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Invalid cursor' });
+    expect(await res.json() as any).toEqual({ error: 'Invalid cursor' });
   });
 
   it('rejects an unrecordable type instead of returning everything', async () => {
     const res = await get(probe(), `${WINDOW}&type=password`);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
+    expect(await res.json() as any).toEqual({
       error: 'Invalid query — check type, start, end, limit and cursor',
     });
   });

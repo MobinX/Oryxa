@@ -196,7 +196,7 @@ export async function createPublicCheckout(
         customerAddress: input.customerAddress,
       });
       orderIds.push(order.id);
-      total += parseFloat(order.totalPrice);
+      total += parseFloat(order.totalPrice as unknown as string);
     } catch (e) {
       for (const id of orderIds) await deleteOrder(business.id, id).catch(() => undefined);
       throw new CheckoutError((e as Error).message);

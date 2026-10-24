@@ -30,14 +30,14 @@ describe('Channels & Agents API', () => {
       }),
     });
     expect(res.status).toBe(201);
-    expect((await res.json()).id).toBeDefined();
+    expect((await res.json() as any).id).toBeDefined();
   });
 
   it('GET /:businessId/agents lists agents', async () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/agents`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).length).toBeGreaterThan(0);
+    expect((await res.json() as any).length).toBeGreaterThan(0);
   });
 
   it('POST /:businessId/channels links channel', async () => {
@@ -52,7 +52,7 @@ describe('Channels & Agents API', () => {
       }),
     });
     expect(res.status).toBe(201);
-    expect((await res.json()).status).toBe('linked');
+    expect((await res.json() as any).status).toBe('linked');
   });
 
   it('POST /:businessId/channels refuses a page another store already holds', async () => {
@@ -75,7 +75,7 @@ describe('Channels & Agents API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/channels`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).length).toBeGreaterThan(0);
+    expect((await res.json() as any).length).toBeGreaterThan(0);
   });
 
   it('PATCH /:businessId/channels/:channelId/agent is gone — merchants no longer pick agents', async () => {
@@ -165,7 +165,7 @@ describe('Channels & Agents API', () => {
       headers: authHeaders(),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).url).toContain('facebook.com');
+    expect((await res.json() as any).url).toContain('facebook.com');
   });
 
   it('hands the portfolio choice to the OAuth url, and nothing when nobody chose', async () => {

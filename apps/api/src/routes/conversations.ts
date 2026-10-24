@@ -83,6 +83,7 @@ const listMessagesRoute = createRoute({
   responses: {
     200: { content: { 'application/json': { schema: z.array(messageSchema) } }, description: 'Messages' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
+    500: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Internal error' },
   },
 });
 
@@ -93,7 +94,7 @@ conversationsRouter.openapi(listMessagesRoute, async (c) => {
     const query = c.req.valid('query');
     const msgs = await listMessages(conversationId, businessId, query.limit);
     if (!msgs) return c.json({ error: 'Conversation not found' }, 404);
-    return c.json(msgs);
+    return c.json(msgs, 200);
   } catch (err) {
     console.error('[conversationsRouter] listMessages failed:', err);
     return c.json({ error: err instanceof Error ? err.message : 'Internal Server Error' }, 500);
@@ -167,6 +168,10 @@ const updateStateRoute = createRoute({
       content: { 'application/json': { schema: updateConversationStateOutputSchema } },
       description: 'State updated',
     },
+    404: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Conversation not found',
+    },
   },
 });
 
@@ -179,7 +184,7 @@ conversationsRouter.openapi(updateStateRoute, async (c) => {
   if (!conv) return c.json({ error: 'Conversation not found' }, 404);
 
   await updateConversationState(conversationId, state);
-  return c.json({ id: conversationId, updatedState: state });
+  return c.json({ id: conversationId, updatedState: state }, 200);
 });
 
 const deleteConversationRoute = createRoute({
@@ -201,5 +206,5 @@ conversationsRouter.openapi(deleteConversationRoute, async (c) => {
   const conversationId = c.req.param('conversationId');
   const result = await deleteConversation(businessId, conversationId);
   if (!result) return c.json({ error: 'Conversation not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
