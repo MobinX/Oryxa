@@ -7,7 +7,7 @@ import {
   updateOrderStateInputSchema,
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
-import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
+import { findOrCreateCustomerByPhone, ensureCompanyIdForBusiness, normalizePhone } from './customer';
 import { createBusinessNotification } from './notification';
 
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
@@ -49,7 +49,7 @@ export async function createOrder(input: unknown) {
   // that turns a typed phone number into the company's customer. A number nobody has
   // used yet writes a card; a number already in the book reuses it. No number, no card:
   // the order keeps the name it arrived with.
-  const companyId = await getCompanyIdForBusiness(parsed.businessId);
+  const companyId = await ensureCompanyIdForBusiness(parsed.businessId);
   const customerId = companyId
     ? await findOrCreateCustomerByPhone({
         companyId,
@@ -387,7 +387,7 @@ export async function updateOrder(businessId: string, orderId: string, input: un
     parsed.customerPhone !== undefined &&
     normalizePhone(parsed.customerPhone) !== normalizePhone(order.customerPhone)
   ) {
-    const companyId = await getCompanyIdForBusiness(businessId);
+    const companyId = await ensureCompanyIdForBusiness(businessId);
     fields.customerId = companyId
       ? await findOrCreateCustomerByPhone({
           companyId,

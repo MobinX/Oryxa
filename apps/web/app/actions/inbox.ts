@@ -10,6 +10,10 @@ import {
   updateConversationAutoPilot,
   generateInboxSuggestions,
   sendInboxSuggestion,
+  createConversationOrder,
+  listProducts,
+  listCategories,
+  getProduct,
 } from '@/lib/api';
 
 export type InboxMessage = Awaited<ReturnType<typeof listMessages>>[number];
@@ -104,7 +108,7 @@ export async function generateSuggestionsAction(
 export async function sendInboxSuggestionAction(
   businessId: string,
   conversationId: string,
-  input: { kind: 'product' | 'category'; productId?: string; categoryId?: string },
+  input: Parameters<typeof sendInboxSuggestion>[3],
 ): Promise<{ error: string | null }> {
   const token = await requireAuth();
   try {
@@ -114,6 +118,39 @@ export async function sendInboxSuggestionAction(
   } catch (err) {
     if (isControlFlow(err)) throw err;
     return { error: err instanceof Error ? err.message : 'Could not send this suggestion.' };
+  }
+}
+
+export async function searchInboxProductsAction(businessId: string, query: string) {
+  const token = await requireAuth();
+  const result = await listProducts(token, businessId, { q: query.trim() || undefined, limit: 20 });
+  return result.products;
+}
+
+export async function listInboxCategoriesAction(businessId: string) {
+  const token = await requireAuth();
+  return listCategories(token, businessId);
+}
+
+export async function getInboxProductAction(businessId: string, productId: string) {
+  const token = await requireAuth();
+  return getProduct(token, businessId, productId);
+}
+
+export async function createInboxOrderAction(
+  businessId: string,
+  conversationId: string,
+  input: Parameters<typeof createConversationOrder>[3],
+): Promise<{ error: string | null; id?: string; totalPrice?: number }> {
+  const token = await requireAuth();
+  try {
+    const order = await createConversationOrder(token, businessId, conversationId, input);
+    revalidatePath(`/b/${businessId}/inbox`);
+    revalidatePath(`/b/${businessId}/orders`);
+    return { error: null, id: order.id, totalPrice: order.totalPrice };
+  } catch (err) {
+    if (isControlFlow(err)) throw err;
+    return { error: err instanceof Error ? err.message : 'Could not create the order.' };
   }
 }
 

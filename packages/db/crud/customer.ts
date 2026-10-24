@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, ilike, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
-import { businesses, customers, orders, products, variants } from '@db/schema';
+import { businesses, companies, customers, orders, products, variants } from '@db/schema';
 import { createCustomerInputSchema, updateCustomerInputSchema } from '@repo/shared';
 import { getBusinessById } from './business';
 
@@ -129,6 +129,34 @@ export async function deleteCustomer(id: string, companyId: string) {
 export async function getCompanyIdForBusiness(businessId: string): Promise<string | null> {
   const business = await getBusinessById(businessId);
   return business?.companyId ?? null;
+}
+
+/**
+ * The company a store writes its customers under, creating the one-company owner record
+ * on first use. Stores made before companies existed (and the test seed) have none, and
+ * an order that cannot name a customer is not the association the merchant asked for.
+ */
+export async function ensureCompanyIdForBusiness(businessId: string): Promise<string | null> {
+  const business = await getBusinessById(businessId);
+  if (!business) return null;
+  if (business.companyId) return business.companyId;
+
+  const [company] = await db
+    .insert(companies)
+    .values({ userId: business.userId, name: business.name })
+    .returning({ id: companies.id });
+  if (!company) return null;
+
+  // Two orders can race here; only the first link wins and the loser re-reads it.
+  const [linked] = await db
+    .update(businesses)
+    .set({ companyId: company.id })
+    .where(and(eq(businesses.id, businessId), isNull(businesses.companyId)))
+    .returning({ companyId: businesses.companyId });
+  if (linked?.companyId) return linked.companyId;
+
+  const fresh = await getBusinessById(businessId);
+  return fresh?.companyId ?? company.id;
 }
 
 // Validates that a customer belongs to the company that owns the given business.

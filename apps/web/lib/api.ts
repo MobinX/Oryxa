@@ -319,10 +319,11 @@ export type UpdateProductInput = {
 export const listProducts = (
   token: string,
   businessId: string,
-  params?: { categoryId?: string; limit?: number; offset?: number },
+  params?: { categoryId?: string; q?: string; limit?: number; offset?: number },
 ) => {
   const search = new URLSearchParams();
   if (params?.categoryId) search.set('categoryId', params.categoryId);
+  if (params?.q) search.set('q', params.q);
   if (params?.limit != null) search.set('limit', String(params.limit));
   if (params?.offset != null) search.set('offset', String(params.offset));
   const qs = search.toString();
@@ -708,6 +709,45 @@ export type InboxSuggestion =
       name: string;
       productCount: number;
       products: Array<{ id: string; name: string; price: number; imageUrl?: string | null }>;
+    }
+  | {
+      id: string;
+      kind: 'product_info';
+      productId: string;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+      variantCount: number;
+    }
+  | {
+      id: string;
+      kind: 'variant';
+      productId: string;
+      variantId: string;
+      title: string;
+      variantName: string;
+      price: number;
+      imageUrl?: string | null;
+      photoCount: number;
+    }
+  | {
+      id: string;
+      kind: 'order';
+      productId: string;
+      variantId?: string | null;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+    }
+  | {
+      id: string;
+      kind: 'order_card';
+      orderId: string;
+      title: string;
+      subtitle: string;
+      imageUrl?: string | null;
+      state: string;
+      total: number;
     };
 
 export const generateInboxSuggestions = (
@@ -724,10 +764,43 @@ export const sendInboxSuggestion = (
   token: string,
   businessId: string,
   conversationId: string,
-  input: { kind: 'product' | 'category'; productId?: string; categoryId?: string },
+  input: {
+    kind:
+      | 'product'
+      | 'category'
+      | 'product_list'
+      | 'product_info'
+      | 'product_variant'
+      | 'order_card';
+    productId?: string;
+    variantId?: string;
+    categoryId?: string;
+    orderId?: string;
+  },
 ) =>
   apiFetch<{ sent: boolean; cards: number }>(
     `/api/v1/${businessId}/conversations/${conversationId}/suggestions/send`,
+    { method: 'POST', token, body: JSON.stringify(input) },
+  );
+
+export const createConversationOrder = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  input: {
+    productId: string;
+    variantId?: string;
+    count: number;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    shippingCost?: number;
+    paymentMethod?: string;
+    transactionId?: string;
+  },
+) =>
+  apiFetch<{ id: string; totalPrice: number; customerId: string | null; state: string }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/orders`,
     { method: 'POST', token, body: JSON.stringify(input) },
   );
 

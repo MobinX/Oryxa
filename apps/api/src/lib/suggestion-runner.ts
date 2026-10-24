@@ -57,7 +57,7 @@ export async function runSuggestionAgent(
     customerName: conv.customerName,
     platform,
     catalogSummary: catalog.summary,
-    tools: createSuggestionTools(businessId, sink),
+    tools: createSuggestionTools(businessId, conv.customerPlatformId, sink),
     replyGuidance: SUGGESTION_GUIDANCE,
     validationChannel: 'messenger',
     // A suggestion panel is read, not heard: the faster effort keeps it cheap enough to

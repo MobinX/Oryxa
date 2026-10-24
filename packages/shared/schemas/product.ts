@@ -118,6 +118,8 @@ export const getProductByIdOutputSchema = selectProductSchema.extend({
 
 export const listProductsQuerySchema = z.object({
   categoryId: uuidSchema.optional(),
+  /** Free text matched against the product name or SKU. */
+  q: z.string().max(120).optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });

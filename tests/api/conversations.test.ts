@@ -3,6 +3,7 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { createChannel } from '@repo/db/crud/channel';
 import { getOrCreateConversation } from '@repo/db/crud/conversation';
+import { getOrderById } from '@repo/db/crud/order';
 import { app } from '@api/app';
 
 const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
@@ -142,6 +143,36 @@ describe('Conversations API', () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ forMessageId: null, suggestions: [] });
+  });
+
+  it('POST /:businessId/conversations/:id/orders links the order to the conversation customer', async () => {
+    const seed = await seedTestWorld();
+    const variantId = seed.productDetail.variants[0]?.id;
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/orders`,
+      {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          productId: seed.productDetail.id,
+          variantId,
+          count: 2,
+          customerName: 'Chat Buyer',
+          customerPhone: '01712345678',
+          customerAddress: '12 Test Road, Dhaka',
+          paymentMethod: 'Cash on delivery',
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; customerId: string | null; totalPrice: number };
+    expect(body.id).toBeTruthy();
+    expect(body.customerId).toBeTruthy();
+    expect(body.totalPrice).toBeGreaterThan(0);
+
+    const order = await getOrderById(seed.business.id, body.id);
+    expect(order?.conversationId).toBe(seed.conversation.id);
+    expect(order?.customerId).toBe(body.customerId);
   });
 
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {

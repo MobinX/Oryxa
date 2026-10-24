@@ -14,7 +14,10 @@ import {
   generateSuggestionsOutputSchema,
   sendSuggestionInputSchema,
   sendSuggestionOutputSchema,
+  createConversationOrderInputSchema,
+  createConversationOrderOutputSchema,
 } from '@repo/shared';
+import { createOrder } from '@repo/db/crud/order';
 import { runSuggestionAgent } from '@api/lib/suggestion-runner';
 import { sendSuggestionAsCards } from '@api/lib/suggestion-sender';
 import {
@@ -289,6 +292,69 @@ conversationsRouter.openapi(sendSuggestionRoute, async (c) => {
     return c.json({ sent: true, cards: result.cards }, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not send the suggestion';
+    return c.json({ error: message }, 400);
+  }
+});
+
+const createConversationOrderRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/conversations/{conversationId}/orders',
+  tags: ['Conversations'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid(), conversationId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: createConversationOrderInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: createConversationOrderOutputSchema } },
+      description: 'Order created for the conversation customer',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'The order could not be created',
+    },
+    404: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Conversation not found',
+    },
+  },
+});
+
+conversationsRouter.openapi(createConversationOrderRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const conversationId = c.req.param('conversationId');
+  const input = c.req.valid('json');
+
+  const conv = await getConversationForBusiness(conversationId, businessId);
+  if (!conv) return c.json({ error: 'Conversation not found' }, 404);
+
+  try {
+    const order = await createOrder({
+      businessId,
+      productId: input.productId,
+      variantId: input.variantId,
+      count: input.count,
+      customerName: input.customerName.trim() || conv.customerName || 'Customer',
+      customerPhone: input.customerPhone,
+      customerAddress: input.customerAddress,
+      shippingCost: input.shippingCost,
+      paymentMethod: input.paymentMethod,
+      transactionId: input.transactionId,
+      conversationId,
+      customerPlatformId: conv.customerPlatformId,
+    });
+    return c.json(
+      {
+        id: order.id,
+        totalPrice: order.totalPrice,
+        customerId: order.customerId,
+        state: order.state,
+      },
+      200,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'The order could not be created';
     return c.json({ error: message }, 400);
   }
 });

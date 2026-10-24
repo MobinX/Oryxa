@@ -66,6 +66,45 @@ export const inboxSuggestionSchema = z.discriminatedUnion('kind', [
     productCount: z.number().int(),
     products: z.array(suggestionProductSchema),
   }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('product_info'),
+    productId: uuidSchema,
+    title: z.string(),
+    price: z.number(),
+    imageUrl: z.string().nullable().optional(),
+    variantCount: z.number().int(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('variant'),
+    productId: uuidSchema,
+    variantId: uuidSchema,
+    title: z.string(),
+    variantName: z.string(),
+    price: z.number(),
+    imageUrl: z.string().nullable().optional(),
+    photoCount: z.number().int(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('order'),
+    productId: uuidSchema,
+    variantId: uuidSchema.nullable().optional(),
+    title: z.string(),
+    price: z.number(),
+    imageUrl: z.string().nullable().optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal('order_card'),
+    orderId: uuidSchema,
+    title: z.string(),
+    subtitle: z.string(),
+    imageUrl: z.string().nullable().optional(),
+    state: z.string(),
+    total: z.number(),
+  }),
 ]);
 
 export const generateSuggestionsOutputSchema = z.object({
@@ -74,14 +113,43 @@ export const generateSuggestionsOutputSchema = z.object({
 });
 
 export const sendSuggestionInputSchema = z.object({
-  kind: z.enum(['product', 'category']),
+  kind: z.enum([
+    'product',
+    'category',
+    'product_list',
+    'product_info',
+    'product_variant',
+    'order_card',
+  ]),
   productId: uuidSchema.optional(),
+  variantId: uuidSchema.optional(),
   categoryId: uuidSchema.optional(),
+  orderId: uuidSchema.optional(),
 });
 
 export const sendSuggestionOutputSchema = z.object({
   sent: z.boolean(),
   cards: z.number().int(),
+});
+
+export const createConversationOrderInputSchema = z.object({
+  productId: uuidSchema,
+  variantId: uuidSchema.optional(),
+  count: z.number().int().positive().max(999).default(1),
+  customerName: z.string().min(1).max(255),
+  customerPhone: z.string().min(1).max(20),
+  customerAddress: z.string().min(1).max(1000),
+  shippingCost: z.number().min(0).optional(),
+  paymentMethod: z.string().min(1).max(40).optional(),
+  /** Required by the API when the payment method is bKash/Nagad. */
+  transactionId: z.string().min(1).max(120).optional(),
+});
+
+export const createConversationOrderOutputSchema = z.object({
+  id: uuidSchema,
+  totalPrice: z.number(),
+  customerId: uuidSchema.nullable(),
+  state: z.string(),
 });
 
 export const messageSchema = z.object({

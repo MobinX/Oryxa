@@ -5,7 +5,9 @@ import {
   searchProducts,
   findCategories,
   listCategories,
+  matchVariant,
 } from '@repo/db/crud/product';
+import { getOrdersByPlatformId } from '@repo/db/crud/order';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 
 /** One thing the merchant can send from the suggestion panel. */
@@ -35,6 +37,45 @@ export type InboxSuggestion =
       name: string;
       productCount: number;
       products: SuggestionProduct[];
+    }
+  | {
+      id: string;
+      kind: 'product_info';
+      productId: string;
+      title: string;
+      price: number;
+      imageUrl: string | null;
+      variantCount: number;
+    }
+  | {
+      id: string;
+      kind: 'variant';
+      productId: string;
+      variantId: string;
+      title: string;
+      variantName: string;
+      price: number;
+      imageUrl: string | null;
+      photoCount: number;
+    }
+  | {
+      id: string;
+      kind: 'order';
+      productId: string;
+      variantId: string | null;
+      title: string;
+      price: number;
+      imageUrl: string | null;
+    }
+  | {
+      id: string;
+      kind: 'order_card';
+      orderId: string;
+      title: string;
+      subtitle: string;
+      imageUrl: string | null;
+      state: string;
+      total: number;
     };
 
 type SearchedProduct = Awaited<ReturnType<typeof searchProducts>>[number];
@@ -82,6 +123,7 @@ function subtitle(product: SearchedProduct): string | null {
  */
 export function createSuggestionTools(
   businessId: string,
+  customerPlatformId: string,
   sink: InboxSuggestion[],
 ): StructuredTool[] {
   const suggestText = tool(
@@ -215,7 +257,248 @@ export function createSuggestionTools(
     },
   );
 
-  return [suggestText, suggestProduct, suggestCategory];
+  const suggestProductInfo = tool(
+    async ({ query }) => {
+      const product = (await searchProducts(businessId, query, 5)).find(
+        (item) => item.variants.length > 0 && sellable(item),
+      );
+      if (!product) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `no product with variants matches "${query}"`,
+          instruction: 'Do not invent a product. Use suggest_text instead.',
+        });
+      }
+      const onOffer = product.variants.filter((v) => v.isAvailable && v.stock > 0);
+      if (onOffer.length === 0) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `${product.name} is sold out in every variant`,
+          instruction: 'Use suggest_text and offer something else.',
+        });
+      }
+      const imageUrl = await photoUrl(product);
+      if (!imageUrl) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `${product.name} has no usable photo`,
+          instruction: 'Use suggest_text instead.',
+        });
+      }
+      sink.push({
+        id: `product_info:${product.id}`,
+        kind: 'product_info',
+        productId: product.id,
+        title: product.name.slice(0, 60),
+        price: fromPrice(product),
+        imageUrl,
+        variantCount: onOffer.length,
+      });
+      return JSON.stringify({
+        recorded: true,
+        kind: 'product_info',
+        productName: product.name,
+        variants: onOffer.length,
+      });
+    },
+    {
+      name: 'suggest_product_info',
+      description:
+        'Suggest sending every in-stock variant of a product as cards, each with its first photo. Use when the customer wants to see the sizes or choose one.',
+      schema: z.object({
+        query: z.string().min(1).describe('Product name or the words the customer used.'),
+      }),
+    },
+  );
+
+  const suggestVariant = tool(
+    async ({ query, variant }) => {
+      const product = (await searchProducts(businessId, query, 5)).find(sellable);
+      if (!product) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `no product matches "${query}"`,
+          instruction: 'Use suggest_text instead.',
+        });
+      }
+      const { matches } = matchVariant(product.variants, variant);
+      if (matches.length !== 1) {
+        return JSON.stringify({
+          recorded: false,
+          reason: matches.length === 0 ? 'no variant answers to that' : 'several variants answer to that',
+          variants: product.variants.map((v) => v.name),
+          instruction: 'Ask which variant, or use suggest_product_info for all of them.',
+        });
+      }
+      const chosen = matches[0]!;
+      const stored = chosen.imageUrls?.length
+        ? chosen.imageUrls
+        : chosen.imageUrl
+          ? [chosen.imageUrl]
+          : [];
+      const imageUrl = stored.length
+        ? await resolveStoredImageUrl(stored[0]!).catch(() => null)
+        : null;
+      if (!imageUrl) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `the ${chosen.name} variant has no usable photo`,
+          instruction: 'Use suggest_product_info or suggest_text instead.',
+        });
+      }
+      const price = Number.isFinite(parseFloat(String(chosen.price ?? '')))
+        ? parseFloat(String(chosen.price))
+        : fromPrice(product);
+      sink.push({
+        id: `variant:${chosen.id}`,
+        kind: 'variant',
+        productId: product.id,
+        variantId: chosen.id,
+        title: product.name.slice(0, 60),
+        variantName: chosen.name,
+        price,
+        imageUrl,
+        photoCount: stored.length,
+      });
+      return JSON.stringify({
+        recorded: true,
+        kind: 'variant',
+        productName: product.name,
+        variantName: chosen.name,
+        photos: stored.length,
+      });
+    },
+    {
+      name: 'suggest_variant_photos',
+      description:
+        'Suggest sending every photo of one chosen variant. Use when the customer asks to see a particular size/colour from all sides.',
+      schema: z.object({
+        query: z.string().min(1).describe('Product name or the words the customer used.'),
+        variant: z.string().min(1).describe('The variant word, e.g. "Red XL" or its label.'),
+      }),
+    },
+  );
+
+  const suggestOrder = tool(
+    async ({ query, variant }) => {
+      const product = (await searchProducts(businessId, query, 5)).find(sellable);
+      if (!product) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `no product matches "${query}"`,
+          instruction: 'Use suggest_text instead.',
+        });
+      }
+      let variantId: string | null = null;
+      let variantName: string | null = null;
+      if (variant) {
+        const { matches } = matchVariant(product.variants, variant);
+        if (matches.length !== 1) {
+          return JSON.stringify({
+            recorded: false,
+            reason: 'the variant is missing or ambiguous',
+            variants: product.variants.map((v) => v.name),
+            instruction: 'Ask which variant, or use suggest_product_info first.',
+          });
+        }
+        variantId = matches[0]!.id;
+        variantName = matches[0]!.name;
+      } else if (product.variants.length === 1) {
+        variantId = product.variants[0]!.id;
+        variantName = product.variants[0]!.name;
+      } else if (product.variants.length > 1) {
+        return JSON.stringify({
+          recorded: false,
+          reason: `${product.name} needs a variant before an order`,
+          variants: product.variants.map((v) => v.name),
+          instruction: 'Use suggest_product_info so the customer picks a variant, or ask which one.',
+        });
+      }
+      const imageUrl = await photoUrl(product);
+      const chosen = product.variants.find((v) => v.id === variantId);
+      const price = chosen
+        ? Number.isFinite(parseFloat(String(chosen.price ?? '')))
+          ? parseFloat(String(chosen.price))
+          : fromPrice(product)
+        : fromPrice(product);
+      sink.push({
+        id: `order:${product.id}:${variantId ?? ''}`,
+        kind: 'order',
+        productId: product.id,
+        variantId,
+        title: product.name.slice(0, 60),
+        price,
+        imageUrl,
+      });
+      return JSON.stringify({
+        recorded: true,
+        kind: 'order',
+        productName: product.name,
+        variantName,
+      });
+    },
+    {
+      name: 'suggest_order',
+      description:
+        'Suggest creating an order for a product (and a variant when the product has them). The merchant still confirms quantity, payment and address in the order form.',
+      schema: z.object({
+        query: z.string().min(1).describe('Product name or the words the customer used.'),
+        variant: z.string().min(1).optional().describe('Variant word when the customer named one.'),
+      }),
+    },
+  );
+
+  const suggestOrderCard = tool(
+    async () => {
+      const { orders } = await getOrdersByPlatformId(businessId, customerPlatformId, { limit: 1 });
+      const order = orders[0];
+      if (!order) {
+        return JSON.stringify({
+          recorded: false,
+          reason: 'this customer has no orders at this store',
+          instruction: 'Do not invent an order. Use suggest_text.',
+        });
+      }
+      if (!order.imageUrl) {
+        return JSON.stringify({
+          recorded: false,
+          reason: 'the order has no product photo, so it cannot be sent as a card',
+          instruction: 'Use suggest_text to describe the order instead.',
+        });
+      }
+      const stateLabel =
+        order.state === 'onDelivery'
+          ? 'On delivery'
+          : order.state.charAt(0).toUpperCase() + order.state.slice(1);
+      sink.push({
+        id: `order_card:${order.id}`,
+        kind: 'order_card',
+        orderId: order.id,
+        title: `${order.count} × ${order.productName ?? 'order'}`.slice(0, 60),
+        subtitle: `${stateLabel} · ৳${order.totalPrice.toFixed(0)} · ${order.createdAt.toISOString().slice(0, 10)}`,
+        imageUrl: order.imageUrl,
+        state: stateLabel,
+        total: order.totalPrice,
+      });
+      return JSON.stringify({ recorded: true, kind: 'order_card', orderId: order.id });
+    },
+    {
+      name: 'suggest_order_card',
+      description:
+        'Suggest sending the customer’s latest order as a card (status, total, date). Use for order-status or tracking questions.',
+      schema: z.object({}),
+    },
+  );
+
+  return [
+    suggestText,
+    suggestProduct,
+    suggestCategory,
+    suggestProductInfo,
+    suggestVariant,
+    suggestOrder,
+    suggestOrderCard,
+  ];
 }
 
 /**
@@ -226,8 +509,11 @@ export function createSuggestionTools(
 export const SUGGESTION_GUIDANCE = `
 You are preparing suggestions for the merchant, not answering the customer. Nothing you write is sent.
 - Read the thread, then call suggest_text with the reply the merchant could send now, in the customer's language.
-- If the customer asks about a product, also call suggest_product_card with the product name. If they ask for a kind of product, call suggest_category.
-- You may combine a text reply with one product or category card.
-- Never mention or suggest order cards, and never use quick replies or chips.
+- If the customer asks about a product, call suggest_product_card. If they ask for a kind of product or collection, call suggest_category.
+- If they want to see the sizes or choose one, call suggest_product_info (all in-stock variants with their first photo).
+- If they ask to see one particular size/colour from all sides, call suggest_variant_photos.
+- If they want to buy, call suggest_order so the merchant can open the order form prefilled.
+- If they ask about an existing order or tracking, call suggest_order_card for their latest order.
+- You may combine a text reply with one or two cards. Never use quick replies or chips.
 - Do not call the same tool twice. End your turn with the single word SILENT.
 `.trim();

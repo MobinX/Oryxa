@@ -1,22 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import {
   Check,
+  ChevronRight,
   Clock3,
+  Info,
+  Images,
+  List,
   Loader2,
+  Package,
+  Plus,
   RefreshCw,
+  Search,
   Send,
+  ShoppingCart,
   Sparkles,
+  X,
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertDialog } from '@/components/alert-dialog';
 import { Input } from '@/components/ui/input';
-import type { InboxSuggestion } from '@/lib/api';
+import type { Category, InboxSuggestion, ProductDetail, ProductListItem } from '@/lib/api';
 import {
+  createInboxOrderAction,
   generateSuggestionsAction,
+  getInboxProductAction,
+  listInboxCategoriesAction,
   pollInboxMessagesAction,
+  searchInboxProductsAction,
   sendInboxReplyAction,
   sendInboxSuggestionAction,
   setAutoPilotAction,
@@ -55,6 +69,26 @@ export function InboxChat({
   const [sendingSuggestion, setSendingSuggestion] = useState<string | null>(null);
   const [sentSuggestion, setSentSuggestion] = useState<string | null>(null);
   const [sendPending, startSend] = useTransition();
+
+  // Composer tools: the plus menu, its dialog and the order form.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [dialog, setDialog] = useState<'product_list' | 'product_info' | 'product_variant' | 'order' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [toolBusy, setToolBusy] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [orderCount, setOrderCount] = useState('1');
+  const [orderPayment, setOrderPayment] = useState('Cash on delivery');
+  const [orderTxn, setOrderTxn] = useState('');
+  const [orderName, setOrderName] = useState(customerName ?? '');
+  const [orderPhone, setOrderPhone] = useState('');
+  const [orderAddress, setOrderAddress] = useState('');
+  const [orderShipping, setOrderShipping] = useState('');
+  const [orderResult, setOrderResult] = useState<{ id: string; totalPrice: number } | null>(null);
+  const [orderCardBusy, setOrderCardBusy] = useState(false);
+  const [orderCardSent, setOrderCardSent] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -192,14 +226,29 @@ export function InboxChat({
 
   const sendCardSuggestion = async (suggestion: InboxSuggestion) => {
     if (suggestion.kind === 'text' || sendingSuggestion) return;
+    if (suggestion.kind === 'order') {
+      setDialog('order');
+      setMenuOpen(false);
+      await pickProduct(suggestion.productId, 'order');
+      if (suggestion.variantId) setSelectedVariantId(suggestion.variantId);
+      return;
+    }
     setSendingSuggestion(suggestion.id);
-    const result = await sendInboxSuggestionAction(
-      businessId,
-      conversationId,
+    const input: Parameters<typeof sendInboxSuggestionAction>[2] =
       suggestion.kind === 'product'
         ? { kind: 'product', productId: suggestion.productId }
-        : { kind: 'category', categoryId: suggestion.categoryId },
-    );
+        : suggestion.kind === 'category'
+          ? { kind: 'category', categoryId: suggestion.categoryId }
+          : suggestion.kind === 'product_info'
+            ? { kind: 'product_info', productId: suggestion.productId }
+            : suggestion.kind === 'variant'
+              ? {
+                  kind: 'product_variant',
+                  productId: suggestion.productId,
+                  variantId: suggestion.variantId,
+                }
+              : { kind: 'order_card', orderId: suggestion.orderId };
+    const result = await sendInboxSuggestionAction(businessId, conversationId, input);
     setSendingSuggestion(null);
     if (result.error) {
       setSuggestionError(result.error);
@@ -207,6 +256,108 @@ export function InboxChat({
     }
     setSentSuggestion(suggestion.id);
     setSuggestions((current) => current.filter((item) => item.id !== suggestion.id));
+    await refresh(false);
+  };
+
+  const toast = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(null), 2500);
+  };
+
+  const openTool = async (kind: 'product_list' | 'product_info' | 'product_variant' | 'order') => {
+    setMenuOpen(false);
+    setDialog(kind);
+    setSelectedProduct(null);
+    setSelectedVariantId('');
+    setOrderResult(null);
+    setOrderCardBusy(false);
+    setOrderCardSent(false);
+    setOrderTxn('');
+    setOrderCount('1');
+    setOrderPayment('Cash on delivery');
+    setOrderName(customerName ?? '');
+    setOrderPhone('');
+    setOrderAddress('');
+    setOrderShipping('');
+    if (kind === 'product_list' && categories.length === 0) {
+      const list = await listInboxCategoriesAction(businessId).catch(() => []);
+      setCategories(list);
+      setCategoryId((current) => current || list[0]?.id || '');
+    }
+  };
+
+  const sendToolCards = async (input: Parameters<typeof sendInboxSuggestionAction>[2]) => {
+    setToolBusy(true);
+    const result = await sendInboxSuggestionAction(businessId, conversationId, input);
+    setToolBusy(false);
+    if (result.error) {
+      setErrorTitle('Could not send');
+      setError(result.error);
+      setDialogOpen(true);
+      return;
+    }
+    setDialog(null);
+    toast(input.kind === 'product_info' || input.kind === 'product_variant'
+      ? 'Product cards sent'
+      : 'Sent to the customer');
+    await refresh(false);
+  };
+
+  const pickProduct = async (
+    productId: string,
+    next: 'product_info' | 'product_variant' | 'order',
+  ) => {
+    if (next === 'product_info') {
+      await sendToolCards({ kind: 'product_info', productId });
+      return;
+    }
+    setToolBusy(true);
+    const product = await getInboxProductAction(businessId, productId).catch(() => null);
+    setToolBusy(false);
+    if (!product) {
+      setErrorTitle('Could not load product');
+      setError('That product could not be loaded. Try another one.');
+      setDialogOpen(true);
+      return;
+    }
+    setSelectedProduct(product);
+    const first =
+      product.variants.find((variant) => variant.isAvailable && variant.stock > 0) ??
+      product.variants[0];
+    setSelectedVariantId(first?.id ?? '');
+  };
+
+  const submitOrder = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProduct) return;
+    const needsTransaction = /bkash|nagad/i.test(orderPayment);
+    if (needsTransaction && !orderTxn.trim()) {
+      setErrorTitle('Transaction id needed');
+      setError('bKash and Nagad orders need the TrxID from the customer.');
+      setDialogOpen(true);
+      return;
+    }
+    setToolBusy(true);
+    const result = await createInboxOrderAction(businessId, conversationId, {
+      productId: selectedProduct.id,
+      variantId: selectedVariantId || undefined,
+      count: parseInt(orderCount, 10) || 1,
+      customerName: orderName.trim() || customerName || 'Customer',
+      customerPhone: orderPhone.trim(),
+      customerAddress: orderAddress.trim(),
+      shippingCost: orderShipping.trim() ? Number(orderShipping) : undefined,
+      paymentMethod: orderPayment,
+      transactionId: needsTransaction ? orderTxn.trim() : undefined,
+    });
+    setToolBusy(false);
+    if (result.error) {
+      setErrorTitle('Could not create order');
+      setError(result.error);
+      setDialogOpen(true);
+      return;
+    }
+    setOrderResult({ id: result.id!, totalPrice: result.totalPrice ?? 0 });
+    toast('Order created');
     await refresh(false);
   };
 
@@ -250,6 +401,11 @@ export function InboxChat({
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#5B3DF5] dark:text-indigo-300">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" />
               AI is suggesting…
+            </span>
+          )}
+          {notice && (
+            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              {notice}
             </span>
           )}
         </div>
@@ -404,58 +560,67 @@ export function InboxChat({
 
                 const busy = sendingSuggestion === suggestion.id;
                 const sent = sentSuggestion === suggestion.id;
+                const imageUrl =
+                  suggestion.kind === 'category' ? null : suggestion.imageUrl ?? null;
+                const title =
+                  suggestion.kind === 'category' ? suggestion.name : suggestion.title;
+                const subtitle =
+                  suggestion.kind === 'product'
+                    ? suggestion.subtitle ?? money(suggestion.price)
+                    : suggestion.kind === 'category'
+                      ? `${suggestion.productCount} products`
+                      : suggestion.kind === 'product_info'
+                        ? `${suggestion.variantCount} variants · ${money(suggestion.price)}`
+                        : suggestion.kind === 'variant'
+                          ? `${suggestion.variantName} · ${suggestion.photoCount} photos · ${money(suggestion.price)}`
+                          : suggestion.kind === 'order'
+                            ? `Make an order · ${money(suggestion.price)}`
+                            : suggestion.subtitle;
+                const actionLabel =
+                  suggestion.kind === 'product'
+                    ? 'Send product card'
+                    : suggestion.kind === 'category'
+                      ? 'Send category'
+                      : suggestion.kind === 'product_info'
+                        ? 'Send variant cards'
+                        : suggestion.kind === 'variant'
+                          ? 'Send photos'
+                          : suggestion.kind === 'order'
+                            ? 'Make order'
+                            : 'Send order card';
                 return (
                   <div
                     key={suggestion.id}
                     className="min-w-[220px] max-w-[260px] shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs dark:border-slate-700 dark:bg-[#13172B]"
                   >
-                    {suggestion.kind === 'product' ? (
-                      <div className="flex gap-2">
-                        {suggestion.imageUrl ? (
-                          <img
-                            src={suggestion.imageUrl}
-                            alt={suggestion.title}
-                            className="h-14 w-14 shrink-0 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[9px] text-slate-400 dark:bg-slate-800">
-                            No img
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate text-[11px] font-bold text-slate-800 dark:text-slate-100">
-                            {suggestion.title}
-                          </p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {money(suggestion.price)}
-                          </p>
-                          {suggestion.subtitle && (
-                            <p className="line-clamp-2 text-[9px] text-slate-400">{suggestion.subtitle}</p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="truncate text-[11px] font-bold text-slate-800 dark:text-slate-100">
-                          {suggestion.name}
-                        </p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                          {suggestion.productCount} products
-                        </p>
-                        <div className="mt-1 flex gap-1">
+                    <div className="flex gap-2">
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={title}
+                          className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : suggestion.kind === 'category' ? (
+                        <div className="flex shrink-0 flex-wrap gap-1">
                           {suggestion.products.slice(0, 4).map((product) =>
                             product.imageUrl ? (
                               <img
                                 key={product.id}
                                 src={product.imageUrl}
                                 alt={product.name}
-                                className="h-8 w-8 rounded object-cover"
+                                className="h-6 w-6 rounded object-cover"
                               />
                             ) : null,
                           )}
                         </div>
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-bold text-slate-800 dark:text-slate-100">
+                          {title}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{subtitle}</p>
                       </div>
-                    )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => void sendCardSuggestion(suggestion)}
@@ -464,14 +629,14 @@ export function InboxChat({
                     >
                       {busy ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" /> Sending…
+                          <Loader2 className="h-3 w-3 animate-spin" /> Working…
                         </>
                       ) : sent ? (
                         <>
-                          <Check className="h-3 w-3" /> Sent
+                          <Check className="h-3 w-3" /> Done
                         </>
                       ) : (
-                        suggestion.kind === 'product' ? 'Send product card' : 'Send category'
+                        actionLabel
                       )}
                     </button>
                   </div>
@@ -484,6 +649,51 @@ export function InboxChat({
 
       <form onSubmit={submit} className="shrink-0 border-t border-border/70 bg-card p-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-background p-1.5 pl-3 shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              aria-label="Send a card or make an order"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+              disabled={toolBusy}
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-xl border transition',
+                menuOpen
+                  ? 'border-[#5B3DF5] bg-[#5B3DF5]/10 text-[#5B3DF5]'
+                  : 'border-border text-slate-500 hover:bg-muted dark:text-slate-400',
+              )}
+            >
+              {toolBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </button>
+            {menuOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+                <ToolMenuItem
+                  icon={<List className="h-4 w-4" />}
+                  label="Send product list"
+                  hint="Top 15 products by category"
+                  onClick={() => void openTool('product_list')}
+                />
+                <ToolMenuItem
+                  icon={<Info className="h-4 w-4" />}
+                  label="Send product info"
+                  hint="Every variant with its first photo"
+                  onClick={() => void openTool('product_info')}
+                />
+                <ToolMenuItem
+                  icon={<Images className="h-4 w-4" />}
+                  label="Send product variant"
+                  hint="All photos of one variant"
+                  onClick={() => void openTool('product_variant')}
+                />
+                <ToolMenuItem
+                  icon={<ShoppingCart className="h-4 w-4" />}
+                  label="Make order"
+                  hint="Create it for this customer"
+                  onClick={() => void openTool('order')}
+                />
+              </div>
+            )}
+          </div>
           <Input
             ref={inputRef}
             value={draft}
@@ -506,12 +716,474 @@ export function InboxChat({
         </p>
       </form>
 
+      {dialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
+          onClick={() => {
+            if (!toolBusy) setDialog(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:max-w-lg sm:rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold">
+                  {dialog === 'product_list'
+                    ? 'Send product list'
+                    : dialog === 'product_info'
+                      ? 'Send product info'
+                      : dialog === 'product_variant'
+                        ? 'Send product variant'
+                        : 'Make order'}
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {dialog === 'product_list'
+                    ? 'Choose a category; the first 15 products are sent as cards.'
+                    : dialog === 'product_info'
+                      ? 'Pick a product; every in-stock variant gets its first photo.'
+                      : dialog === 'product_variant'
+                        ? 'Pick a product, then a variant; all its photos are sent.'
+                        : 'Find the product, choose the variant and confirm the order details.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setDialog(null)}
+                disabled={toolBusy}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-muted disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {dialog === 'product_list' && (
+              <div className="space-y-3">
+                <label className="block text-[11px] font-semibold" htmlFor="inbox-category">
+                  Category
+                </label>
+                <select
+                  id="inbox-category"
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                >
+                  <option value="">All products</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                      {category.productCount != null ? ` (${category.productCount})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={toolBusy}
+                  onClick={() =>
+                    void sendToolCards({
+                      kind: 'product_list',
+                      categoryId: categoryId || undefined,
+                    })
+                  }
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#5B3DF5] py-2 text-xs font-bold text-white hover:bg-[#4C2EE0] disabled:opacity-50"
+                >
+                  {toolBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Send list
+                </button>
+              </div>
+            )}
+
+            {dialog !== 'product_list' && !selectedProduct && (
+              <ProductPicker
+                businessId={businessId}
+                disabled={toolBusy}
+                onPick={(id) =>
+                  void pickProduct(
+                    id,
+                    dialog === 'order'
+                      ? 'order'
+                      : dialog === 'product_variant'
+                        ? 'product_variant'
+                        : 'product_info',
+                  )
+                }
+              />
+            )}
+
+            {dialog === 'product_variant' && selectedProduct && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedProduct(null)}
+                  className="text-[11px] font-semibold text-[#5B3DF5] hover:underline"
+                >
+                  ← Choose another product
+                </button>
+                <p className="text-xs font-bold">{selectedProduct.name}</p>
+                <div className="max-h-[46dvh] space-y-1 overflow-y-auto">
+                  {selectedProduct.variants.map((variant) => {
+                    const photos = variant.imageUrls?.length || (variant.imageUrl ? 1 : 0);
+                    return (
+                      <button
+                        key={variant.id}
+                        type="button"
+                        disabled={toolBusy || !variant.isAvailable || variant.stock <= 0 || photos === 0}
+                        onClick={() =>
+                          void sendToolCards({
+                            kind: 'product_variant',
+                            productId: selectedProduct.id,
+                            variantId: variant.id,
+                          })
+                        }
+                        className="flex w-full items-center justify-between gap-2 rounded-lg border border-border p-2.5 text-left text-[11px] hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span className="font-semibold">{variant.name}</span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {money(variant.price ?? selectedProduct.price)} · {variant.stock} left · {photos} photo
+                          {photos === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {dialog === 'order' && selectedProduct && (
+              orderResult ? (
+                <div className="space-y-3 text-sm">
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">Order created</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Total {money(orderResult.totalPrice)} · linked to this conversation and customer.
+                  </p>
+
+                  {orderCardSent ? (
+                    <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      Track card sent to the customer.
+                    </p>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-muted/40 p-3">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                        Send the order track card to this customer?
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                        It shows the item photo, status, total and order date.
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={orderCardBusy}
+                          onClick={async () => {
+                            setOrderCardBusy(true);
+                            const result = await sendInboxSuggestionAction(
+                              businessId,
+                              conversationId,
+                              { kind: 'order_card', orderId: orderResult.id },
+                            );
+                            setOrderCardBusy(false);
+                            if (result.error) {
+                              setErrorTitle('Could not send the track card');
+                              setError(result.error);
+                              setDialogOpen(true);
+                              return;
+                            }
+                            setOrderCardSent(true);
+                            toast('Track card sent');
+                            await refresh(false);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#5B3DF5] px-3 py-2 text-[11px] font-bold text-white hover:bg-[#4C2EE0] disabled:opacity-60"
+                        >
+                          {orderCardBusy ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          Yes, send it
+                        </button>
+                        <button
+                          type="button"
+                          disabled={orderCardBusy}
+                          onClick={() => setDialog(null)}
+                          className="rounded-lg border border-border px-3 py-2 text-[11px] font-semibold disabled:opacity-60"
+                        >
+                          Don&apos;t send
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/b/${businessId}/orders/${orderResult.id}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted"
+                    >
+                      Open order
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDialog(null)}
+                      className="rounded-lg border border-border px-3 py-2 text-xs font-semibold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={submitOrder} className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProduct(null)}
+                    className="text-[11px] font-semibold text-[#5B3DF5] hover:underline"
+                  >
+                    ← Choose another product
+                  </button>
+                  <p className="text-xs font-bold">{selectedProduct.name}</p>
+                  {selectedProduct.variants.length > 0 && (
+                    <label className="block text-[11px] font-semibold">
+                      Variant
+                      <select
+                        value={selectedVariantId}
+                        onChange={(event) => setSelectedVariantId(event.target.value)}
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                      >
+                        {selectedProduct.variants.map((variant) => (
+                          <option
+                            key={variant.id}
+                            value={variant.id}
+                            disabled={!variant.isAvailable || variant.stock <= 0}
+                          >
+                            {variant.name} — {money(variant.price ?? selectedProduct.price)} · {variant.stock} left
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-[11px] font-semibold">
+                      Quantity
+                      <Input
+                        type="number"
+                        min="1"
+                        value={orderCount}
+                        onChange={(event) => setOrderCount(event.target.value)}
+                        className="mt-1 h-9"
+                      />
+                    </label>
+                    <label className="block text-[11px] font-semibold">
+                      Shipping (৳)
+                      <Input
+                        type="number"
+                        min="0"
+                        value={orderShipping}
+                        onChange={(event) => setOrderShipping(event.target.value)}
+                        className="mt-1 h-9"
+                        placeholder="0"
+                      />
+                    </label>
+                  </div>
+                  <label className="block text-[11px] font-semibold">
+                    Payment method
+                    <select
+                      value={orderPayment}
+                      onChange={(event) => setOrderPayment(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                    >
+                      <option>Cash on delivery</option>
+                      <option>bKash</option>
+                      <option>Nagad</option>
+                      <option>Bank transfer</option>
+                    </select>
+                  </label>
+                  {/bkash|nagad/i.test(orderPayment) && (
+                    <label className="block text-[11px] font-semibold">
+                      Transaction ID
+                      <Input
+                        value={orderTxn}
+                        onChange={(event) => setOrderTxn(event.target.value)}
+                        className="mt-1 h-9"
+                        placeholder="TrxID from the customer"
+                      />
+                    </label>
+                  )}
+                  <label className="block text-[11px] font-semibold">
+                    Customer name
+                    <Input
+                      value={orderName}
+                      onChange={(event) => setOrderName(event.target.value)}
+                      className="mt-1 h-9"
+                      required
+                    />
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="block text-[11px] font-semibold">
+                      Phone
+                      <Input
+                        value={orderPhone}
+                        onChange={(event) => setOrderPhone(event.target.value)}
+                        className="mt-1 h-9"
+                        placeholder="01XXXXXXXXX"
+                        required
+                      />
+                    </label>
+                    <label className="block text-[11px] font-semibold">
+                      Address
+                      <Input
+                        value={orderAddress}
+                        onChange={(event) => setOrderAddress(event.target.value)}
+                        className="mt-1 h-9"
+                        required
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={
+                      toolBusy ||
+                      (selectedProduct.variants.length > 0 && !selectedVariantId) ||
+                      !orderPhone.trim() ||
+                      !orderAddress.trim()
+                    }
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#5B3DF5] py-2 text-xs font-bold text-white hover:bg-[#4C2EE0] disabled:opacity-50"
+                  >
+                    {toolBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                    Create order
+                  </button>
+                </form>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
       <AlertDialog
         open={dialogOpen && Boolean(error)}
         title={errorTitle}
         description={error ?? ''}
         onClose={() => setDialogOpen(false)}
       />
+    </div>
+  );
+}
+
+function ToolMenuItem({
+  icon,
+  label,
+  hint,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/60"
+    >
+      <span className="mt-0.5 text-[#5B3DF5] dark:text-indigo-300">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-bold text-slate-800 dark:text-slate-100">{label}</span>
+        <span className="block text-[10px] text-slate-400">{hint}</span>
+      </span>
+    </button>
+  );
+}
+
+function ProductPicker({
+  businessId,
+  disabled,
+  onPick,
+}: {
+  businessId: string;
+  disabled: boolean;
+  onPick: (productId: string) => void;
+}) {
+  const [term, setTerm] = useState('');
+  const [items, setItems] = useState<ProductListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(
+    async (query: string) => {
+      setLoading(true);
+      const rows = await searchInboxProductsAction(businessId, query).catch(() => []);
+      setItems(rows);
+      setLoading(false);
+    },
+    [businessId],
+  );
+
+  useEffect(() => {
+    void load('');
+  }, [load]);
+
+  return (
+    <div className="space-y-3">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(term);
+        }}
+        className="flex gap-2"
+      >
+        <Input
+          value={term}
+          onChange={(event) => setTerm(event.target.value)}
+          placeholder="Search products by name or SKU..."
+          className="h-9"
+        />
+        <button
+          type="submit"
+          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-border px-3 text-[11px] font-semibold hover:bg-muted"
+        >
+          <Search className="h-3.5 w-3.5" />
+          Search
+        </button>
+      </form>
+      <div className="max-h-[46dvh] space-y-1 overflow-y-auto">
+        {loading ? (
+          <p className="flex items-center gap-2 py-6 text-xs text-slate-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+          </p>
+        ) : items.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-400">No products found.</p>
+        ) : (
+          items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onPick(item.id)}
+              className="flex w-full items-center gap-2.5 rounded-lg border border-border p-2 text-left transition hover:bg-muted/50 disabled:opacity-50"
+            >
+              {item.thumbnailUrl ? (
+                <img
+                  src={item.thumbnailUrl}
+                  alt={item.name}
+                  className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  <Package className="h-4 w-4 text-slate-400" />
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[11px] font-semibold">{item.name}</span>
+                <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                  {money(item.price)} · {item.variantCount ?? 0} variant
+                  {(item.variantCount ?? 0) === 1 ? '' : 's'}
+                </span>
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }
