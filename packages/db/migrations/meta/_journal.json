@@ -288,6 +288,13 @@
       "when": 1793593600000,
       "tag": "0040_inbox_suggestion_token_type",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793680000000,
+      "tag": "0041_business_cap_overrides",
+      "breakpoints": true
     }
   ]
 }

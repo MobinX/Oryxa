@@ -92,7 +92,9 @@ export async function quotaGate(
 
   if (read.failed || !read.status) return 'fail_open';
   const status = read.status;
-  if (!status.assigned || !blocked(status, kind)) return 'fired';
+  // A business with no plan is unlimited only while no custom cap is set: a limit of
+  // 2,123 on an unplanned business still has to stop at 2,123.
+  if (!blocked(status, kind)) return 'fired';
 
   // The merchant hears about it here as well as from the spend that crossed the line,
   // because that spend may have crashed before it wrote the notice and there is no cron

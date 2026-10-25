@@ -199,6 +199,44 @@ describe('the admin plan catalogue', () => {
     expect(rows.find((row) => row.id === plan.id)?.businessCount).toBe(2);
   });
 
+  it('gives one business a custom cap that wins over its plan, and clears it again', async () => {
+    const plan = await makePlan('custom-cap', 100, 100);
+    const businessId = await devBusiness('custom-cap');
+    const before = await putOnPlan(businessId, plan.id);
+    expect(before.messageLimit).toBe(100);
+
+    const capped = await adminJson<QuotaStatus>(`/admin/businesses/${businessId}/caps`, {
+      method: 'PUT',
+      body: JSON.stringify({ messageLimitOverride: 2123, commentLimitOverride: null }),
+    });
+    expect(capped.messageLimit).toBe(2123);
+    expect(capped.commentLimit).toBe(100);
+
+    const rows = await adminJson<AdminBusinessPlan[]>('/admin/plans/businesses');
+    const row = rows.find((item) => item.businessId === businessId);
+    expect(row?.messageLimit).toBe(2123);
+    expect(row?.messageLimitOverride).toBe(2123);
+    expect(row?.planMessageLimit).toBe(100);
+
+    const cleared = await adminJson<QuotaStatus>(`/admin/businesses/${businessId}/caps`, {
+      method: 'PUT',
+      body: JSON.stringify({ messageLimitOverride: null, commentLimitOverride: null }),
+    });
+    expect(cleared.messageLimit).toBe(100);
+  });
+
+  it('enforces a custom cap even on a business with no plan', async () => {
+    const businessId = await devBusiness('custom-cap-unplanned');
+    const frozen = await adminJson<QuotaStatus>(`/admin/businesses/${businessId}/caps`, {
+      method: 'PUT',
+      body: JSON.stringify({ messageLimitOverride: 0, commentLimitOverride: null }),
+    });
+    expect(frozen.assigned).toBe(false);
+    expect(frozen.messageLimit).toBe(0);
+    expect(frozen.messageBlocked).toBe(true);
+    expect(frozen.commentBlocked).toBe(false);
+  });
+
   it('refuses to delete a plan that holds businesses, then allows it once they move', async () => {
     const plan = await makePlan('deletable', 25, 25);
     const businessId = await devBusiness('deletable');

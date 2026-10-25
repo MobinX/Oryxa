@@ -44,8 +44,8 @@ export default async function AdminPlansPage() {
           a business — so an edit takes effect at the next inbound message for every business in the
           <em> Businesses</em> column, with no job to wait for. An empty limit means{' '}
           <strong>uncapped</strong>; a limit of <strong>0</strong> means <strong>no replies at all</strong>.
-          Setting 0 on a busy plan is the fastest kill switch in the system, and the number of businesses
-          it stops is the count on that row.
+          A business can also carry its own <strong>custom cap</strong> below, which wins over its plan
+          (blank follows the plan, 0 freezes) — useful for a one-off 2,123-reply allowance.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
           Deleting a plan is refused while any business sits on it, because releasing them to{' '}

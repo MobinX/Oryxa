@@ -488,6 +488,12 @@ export const businesses = pgTable('businesses', {
   /** NULL = no plan = unlimited. The operator's per-business escape hatch. */
   planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
   /**
+   * Per-business caps that sit above the plan. NULL follows the plan (or unlimited when
+   * there is none); 0 freezes that lane; any positive integer is a custom allowance.
+   */
+  messageLimitOverride: integer('message_limit_override'),
+  commentLimitOverride: integer('comment_limit_override'),
+  /**
    * The cycle anchor: 30-day allowances roll from this date, not from the 1st of a
    * month. Set once, at the first assignment, and deliberately never moved afterwards —
    * a re-anchor on plan switch would let a merchant zero their own counter by changing

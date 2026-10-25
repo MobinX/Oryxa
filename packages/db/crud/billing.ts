@@ -68,6 +68,8 @@ export async function resolvePlan(businessId: string, now: Date = new Date()): P
       planName: plans.name,
       messageLimit: plans.messageLimit,
       commentLimit: plans.commentLimit,
+      messageLimitOverride: businesses.messageLimitOverride,
+      commentLimitOverride: businesses.commentLimitOverride,
     })
     .from(businesses)
     // A soft-deleted plan must stop enforcing: the UI would say "no plan" while the caps
@@ -87,8 +89,9 @@ export async function resolvePlan(businessId: string, now: Date = new Date()): P
     assigned: row.livePlanId !== null,
     planId: row.livePlanId,
     planName: row.planName,
-    messageLimit: row.messageLimit,
-    commentLimit: row.commentLimit,
+    // A custom cap wins over the plan, including on a business with no plan at all.
+    messageLimit: row.messageLimitOverride ?? row.messageLimit,
+    commentLimit: row.commentLimitOverride ?? row.commentLimit,
     cycle: cycleOf(anchor, now),
   };
 }

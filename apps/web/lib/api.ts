@@ -1379,8 +1379,13 @@ export type AdminBusinessPlan = {
   period: string;
   messagesUsed: number;
   commentsUsed: number;
+  /** Effective limits, after an optional per-business override. */
   messageLimit: number | null;
   commentLimit: number | null;
+  messageLimitOverride: number | null;
+  commentLimitOverride: number | null;
+  planMessageLimit: number | null;
+  planCommentLimit: number | null;
 };
 
 export type PlanAssignment = {
@@ -1490,6 +1495,18 @@ export const adminDeletePlan = (token: string, id: string) =>
 
 export const adminListBusinessPlans = (token: string) =>
   apiFetch<AdminBusinessPlan[]>('/api2/admin/plans/businesses', { token, signInPath: null });
+
+export const adminSetBusinessCaps = (
+  token: string,
+  businessId: string,
+  caps: { messageLimitOverride: number | null; commentLimitOverride: number | null },
+) =>
+  apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/caps`, {
+    method: 'PUT',
+    token,
+    signInPath: null,
+    body: JSON.stringify(caps),
+  });
 
 export const adminAssignPlan = (token: string, businessId: string, planId: string | null) =>
   apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/plan`, {

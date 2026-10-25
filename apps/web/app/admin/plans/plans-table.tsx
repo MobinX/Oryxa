@@ -11,6 +11,7 @@ import {
   deletePlanAction,
   resetCycleAction,
   retirePlanAction,
+  setBusinessCapsAction,
   updatePlanAction,
   type AssignResult,
   type PlanDeleteResult,
@@ -527,6 +528,113 @@ function NewPlanCard({ defaultPosition }: { defaultPosition: number }) {
 }
 
 /**
+ * One store's own cap, independent of the plan. Blank follows the plan; 0 freezes;
+ * a whole number is the cap — the operator may want 2,123 without inventing a tier.
+ */
+function BusinessCapsEditor({ row }: { row: AdminBusinessPlan }) {
+  const initialMessage = row.messageLimitOverride === null ? '' : String(row.messageLimitOverride);
+  const initialComment = row.commentLimitOverride === null ? '' : String(row.commentLimitOverride);
+  const [message, setMessage] = useState(initialMessage);
+  const [comment, setComment] = useState(initialComment);
+  const [pending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const dirty = message !== initialMessage || comment !== initialComment;
+
+  const save = () => {
+    const parseCap = (value: string): number | null | typeof NaN => {
+      const text = value.trim();
+      if (text === '') return null;
+      const number = Number(text.replace(/[,\s]/g, ''));
+      return Number.isInteger(number) && number >= 0 ? number : NaN;
+    };
+    const messageCap = parseCap(message);
+    const commentCap = parseCap(comment);
+    if (Number.isNaN(messageCap) || Number.isNaN(commentCap)) {
+      setFeedback({ ok: false, text: 'Use whole numbers of 0 or more, or leave blank.' });
+      return;
+    }
+    startTransition(async () => {
+      const result = await setBusinessCapsAction(
+        row.businessId,
+        messageCap as number | null,
+        commentCap as number | null,
+      );
+      setFeedback(
+        result.ok
+          ? { ok: true, text: messageCap === null && commentCap === null
+              ? 'Custom caps cleared — following the plan.'
+              : 'Custom caps saved.' }
+          : { ok: false, text: result.error },
+      );
+    });
+  };
+
+  const capInput =
+    'mt-1 h-11 w-full rounded-element border border-border bg-background px-3 text-base tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-9 sm:text-sm';
+
+  return (
+    <div className="rounded-element border border-border/70 bg-muted/20 p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+          Custom caps
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          plan: {limitLabel(row.planMessageLimit)} msg · {limitLabel(row.planCommentLimit)} cmt
+        </p>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="text-[10px] font-semibold">
+          Messages
+          <input
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            inputMode="numeric"
+            placeholder="Follow plan"
+            aria-label="custom message cap"
+            className={capInput}
+          />
+        </label>
+        <label className="text-[10px] font-semibold">
+          Comments
+          <input
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            inputMode="numeric"
+            placeholder="Follow plan"
+            aria-label="custom comment cap"
+            className={capInput}
+          />
+        </label>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] leading-tight text-muted-foreground">
+          Blank = follow plan · 0 = freeze
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={pending || !dirty}
+          className="shrink-0"
+        >
+          {pending ? 'Saving…' : 'Save caps'}
+        </Button>
+      </div>
+      {feedback && (
+        <p
+          className={`mt-1 text-[10px] ${
+            feedback.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+          }`}
+        >
+          {feedback.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The roster. A business with no plan is unlimited by definition, so this is both the
  * place to assign one and the place to hand the escape hatch back (`planId: null`).
  */
@@ -621,15 +729,23 @@ export function BusinessPlansTable({
                   <dt className="text-muted-foreground">Messenger</dt>
                   <dd className="font-medium tabular-nums">
                     {row.messagesUsed.toLocaleString()} / {limitLabel(row.messageLimit)}
+                    {row.messageLimitOverride !== null && (
+                      <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
+                    )}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Comments</dt>
                   <dd className="font-medium tabular-nums">
                     {row.commentsUsed.toLocaleString()} / {limitLabel(row.commentLimit)}
+                    {row.commentLimitOverride !== null && (
+                      <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
+                    )}
                   </dd>
                 </div>
               </dl>
+              <BusinessCapsEditor row={row} />
+
               <label className="mt-3 block">
                 <Label>Assign plan</Label>
                 <select
@@ -663,7 +779,7 @@ export function BusinessPlansTable({
       </div>
 
       <div className="mt-4 hidden overflow-x-auto md:block">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1000px] text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border/50">
               <th className="pb-2 pr-3 font-semibold">Business</th>
@@ -671,6 +787,7 @@ export function BusinessPlansTable({
               <th className="pb-2 pr-3 font-semibold">Cycle</th>
               <th className="pb-2 pr-3 font-semibold">Messenger</th>
               <th className="pb-2 pr-3 font-semibold">Comments</th>
+              <th className="pb-2 pr-3 font-semibold">Custom caps</th>
               <th className="pb-2 font-semibold">Actions</th>
             </tr>
           </thead>
@@ -689,9 +806,18 @@ export function BusinessPlansTable({
                 <td className="py-2.5 pr-3 text-xs text-muted-foreground">{row.period}</td>
                 <td className="py-2.5 pr-3 tabular-nums">
                   {row.messagesUsed.toLocaleString()} / {limitLabel(row.messageLimit)}
+                  {row.messageLimitOverride !== null && (
+                    <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
+                  )}
                 </td>
                 <td className="py-2.5 pr-3 tabular-nums">
                   {row.commentsUsed.toLocaleString()} / {limitLabel(row.commentLimit)}
+                  {row.commentLimitOverride !== null && (
+                    <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
+                  )}
+                </td>
+                <td className="py-2.5 pr-3">
+                  <BusinessCapsEditor row={row} />
                 </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1.5">
