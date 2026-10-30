@@ -614,11 +614,17 @@ export function matchVariant<T extends { id: string; name: string; variantId?: s
 
 export async function listProducts(
   businessId: string,
-  options: { categoryId?: string; limit?: number; offset?: number } = {},
+  options: { categoryId?: string; q?: string; limit?: number; offset?: number } = {},
 ) {
-  const { categoryId, limit = 20, offset = 0 } = options;
+  const { categoryId, q, limit = 20, offset = 0 } = options;
   const conditions = [eq(products.businessId, businessId), isNull(products.deletedAt)];
   if (categoryId) conditions.push(eq(products.categoryId, categoryId));
+  const term = q?.trim();
+  if (term) {
+    conditions.push(
+      or(ilike(products.name, `%${term}%`), ilike(products.sku, `%${term}%`))!,
+    );
+  }
 
   const items = await db.query.products.findMany({
     where: and(...conditions),

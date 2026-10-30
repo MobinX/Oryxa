@@ -14,7 +14,7 @@ describe('Businesses API', () => {
       body: JSON.stringify({ name: 'Second Shop', hasTradeLicense: false, hasTaxLicense: false }),
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe('Second Shop');
   });
 
@@ -22,7 +22,7 @@ describe('Businesses API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe(business.name);
   });
 
@@ -34,15 +34,33 @@ describe('Businesses API', () => {
       body: JSON.stringify({ description: 'Updated desc' }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.success).toBe(true);
+  });
+
+  it('stores the merchant sales guidance with the business', async () => {
+    const { business } = await seedTestWorld();
+    const update = await app.request(`/api/v1/businesses/${business.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        agentProductGuidance: 'Mention the fabric and the wash care.',
+        agentBargainGuidance: 'Prices are fixed; offer free delivery above 2000 Taka.',
+      }),
+    });
+    expect(update.status).toBe(200);
+
+    const read = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
+    const body = await read.json() as any;
+    expect(body.agentProductGuidance).toBe('Mention the fabric and the wash care.');
+    expect(body.agentBargainGuidance).toBe('Prices are fixed; offer free delivery above 2000 Taka.');
   });
 
   it('GET /api/v1/businesses/:id/stats returns aggregate counts', async () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/businesses/${business.id}/stats`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body).toMatchObject({
       products: expect.any(Number),
       orders: expect.any(Number),

@@ -1,13 +1,17 @@
 import { KeyRound } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { logsBearer, operatorAccountEmail } from '@/lib/logs-session';
-import { COMPANY_NAME } from '@/lib/brand';
+import { AdminPageHeader } from '@/components/admin-page-header';
+import { getBrand } from '@/lib/brand-server';
 import { PasswordSettingsForm } from './password-form';
 
-export const metadata = {
-  title: 'Admin — settings',
-  description: `The ${COMPANY_NAME} console operator's account settings.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Admin — settings',
+    description: `The ${companyName} console operator's account settings.`,
+  };
+}
 
 /**
  * The one page that changes who can walk in, so it opens only behind the console session.
@@ -29,17 +33,17 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <KeyRound className="h-6 w-6 text-primary" />
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The operator account — <code>{operatorEmail}</code> — signs into this console and owns the
-          sandbox store. Changing its password changes what you type at the sign-in page; it does not
-          touch the session this browser is already holding.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={KeyRound}
+        title="Settings"
+        description={
+          <span>
+            The operator account — <code>{operatorEmail}</code> — signs into this console and owns
+            the sandbox store. Changing its password changes what you type at the sign-in page; it
+            does not touch the session this browser is already holding.
+          </span>
+        }
+      />
 
       <PasswordSettingsForm operatorEmail={operatorEmail} />
 

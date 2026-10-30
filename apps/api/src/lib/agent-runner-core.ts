@@ -78,6 +78,23 @@ export async function runAgentCore(
     return;
   }
 
+  // Official-channel conversations belong to the operator, not a store: they carry no
+  // business_id, so the store agent (catalog, orders, business quota) has nothing to run
+  // against. Store conversations always keep their business_id — behaviour unchanged.
+  if (conv.businessId == null) {
+    console.log(`[agent-runner-core] conversation ${conversationId} has no business — skipping store run`);
+    emitAnomaly('store_run_without_business', { detail: conversationId });
+    return;
+  }
+  const businessId: string = conv.businessId;
+
+  // Defence in depth: the webhook checks this before scheduling a run, but a stale
+  // recovery or an internal call must not answer a thread the merchant switched off.
+  if (!conv.autoPilot) {
+    console.log(`[agent-runner-core] auto pilot off for conversation ${conversationId} — skipping run`);
+    return;
+  }
+
   const answering = await resolveAnsweringAgent(conv.channel.agent);
   const platform = conv.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
@@ -100,7 +117,7 @@ export async function runAgentCore(
 
   console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
 
-  tagContext({ conversationId: conv.id, businessId: conv.businessId, channelId: conv.channelId });
+  tagContext({ conversationId: conv.id, businessId, channelId: conv.channelId });
   const runDepth = currentContext()?.runDepth ?? 0;
   if (runDepth >= RUN_LOOP_DEPTH_THRESHOLD) {
     emitAnomaly('run_loop_depth', { count: runDepth });
@@ -156,16 +173,41 @@ export async function runAgentCore(
 
   const agentState = parseConversationAgentState(conv.agentState);
   const latestCustomerText = [...pendingMsgs].reverse().find((m) => m.content.trim())?.content ?? '';
+
+  // A chip row is dismissed by a tap, but not by a typed answer. If the customer ignored the
+  // last row by typing, this turn writes the choices into the message instead of attaching a
+  // second row under the first one.
+  const normalizeSuggestion = (value: string): string =>
+    value.trim().toLowerCase().replace(/\s+/g, ' ');
+  let suppressSuggestions = false;
+  if (pendingMsgs.length > 0 && (agentState.lastSuggestions ?? []).length > 0) {
+    const offered = agentState.lastSuggestions ?? [];
+    const tapped = pendingMsgs.some(
+      (message) =>
+        message.contentType === 'quick_reply' ||
+        message.contentType === 'postback' ||
+        offered.some(
+          (option) => normalizeSuggestion(option) === normalizeSuggestion(message.content),
+        ),
+    );
+    agentState.lastSuggestions = [];
+    if (!tapped) {
+      suppressSuggestions = true;
+      console.log(
+        '[agent-runner-core] customer typed instead of tapping the suggestions — no new chip row this turn',
+      );
+    }
+  }
   const orderTap = latestCustomerText.match(/^place order with ([\da-f-]{36}) and (.*?)(?: variant ([\da-f-]{36}))?$/i);
 
   const [productFromTap, latestOrderRes, catalog] = await Promise.all([
     orderTap
-      ? import('@repo/db/crud/product').then(({ getProductById }) => getProductById(conv.businessId, orderTap[1]).catch(() => null))
+      ? import('@repo/db/crud/product').then(({ getProductById }) => getProductById(businessId, orderTap[1]).catch(() => null))
       : Promise.resolve(null),
     !agentState.lastOrder
-      ? import('@repo/db/crud/order').then(({ getOrdersByPlatformId }) => getOrdersByPlatformId(conv.businessId, conv.customerPlatformId, { limit: 1 }).catch(() => ({ orders: [] })))
+      ? import('@repo/db/crud/order').then(({ getOrdersByPlatformId }) => getOrdersByPlatformId(businessId, conv.customerPlatformId, { limit: 1 }).catch(() => ({ orders: [] })))
       : Promise.resolve(null),
-    buildCatalogSummary(conv.businessId),
+    buildCatalogSummary(businessId),
   ]);
 
   if (productFromTap) {
@@ -231,7 +273,7 @@ export async function runAgentCore(
 
   const agent = new Agent({
     systemPrompt: answering.systemPrompt,
-    business: conv.business ?? { id: conv.businessId, name: 'Store' },
+    business: conv.business ?? { id: businessId, name: 'Store' },
     history,
     conversationId: conv.id,
     pageToken: conv.channel.apiToken,
@@ -241,6 +283,7 @@ export async function runAgentCore(
     emitSse,
     sendMessageOverride,
     platform,
+    suppressSuggestions,
     // Already resolved: the store's own block, else the platform default's, else the channel's
     // reviewed text in @agent/guidance.
     replyGuidance:
@@ -250,7 +293,7 @@ export async function runAgentCore(
     persistAgentState: (state) => updateConversationAgentState(conv.id, state),
     onOrderCreated: async (orderId) => {
       const { getOrderById } = await import('@repo/db/crud/order');
-      const order = await getOrderById(conv.businessId, orderId);
+      const order = await getOrderById(businessId, orderId);
       if (!order?.productId) return;
       const stateWords = { pending: 'Pending', acknowledged: 'Acknowledged', on_delivery: 'On delivery', done: 'Done' } as const;
       agentState.currentProduct = { id: order.productId, name: order.productName ?? 'Order', price: order.variantPrice.toFixed(2) };
@@ -292,7 +335,7 @@ export async function runAgentCore(
     try {
       const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
       await recordTokenUsage({
-        businessId: conv.businessId,
+        businessId,
         channelId: conv.channelId,
         conversationId: conv.id,
         integrationType: platform === 'instagram' ? 'instagram_messenger' : 'facebook_messenger',
@@ -305,7 +348,6 @@ export async function runAgentCore(
         cacheMissTokens: metrics.cacheMissTokens,
         cacheHitPercent: metrics.cacheHitPercent,
         latencyMs: metrics.latencyMs,
-        estimatedCostUsd: metrics.estimatedCostUsd,
       });
     } catch (metricErr) {
       console.error('[agent-runner-core] failed to record token metrics:', metricErr);
@@ -339,7 +381,7 @@ export async function runAgentCore(
       let allowed = true;
       if (chargeable) {
         try {
-          const budget = await spendQuotaUnit(conv.businessId, 'message');
+          const budget = await spendQuotaUnit(businessId, 'message');
           if (budget.spent) chargedPeriod = budget.period;
           else allowed = false;
         } catch (err) {
@@ -350,7 +392,7 @@ export async function runAgentCore(
 
       if (!allowed) {
         console.log(`[agent-runner-core] fallback not sent — the message allowance is used up`);
-        emitAnomaly('quota_exhausted', { detail: conv.businessId });
+        emitAnomaly('quota_exhausted', { detail: businessId });
       } else {
         emitSse('message_sent', { text: replyText, fallback: true });
         try {
@@ -362,7 +404,7 @@ export async function runAgentCore(
         } catch (err) {
           if (chargedPeriod) {
             try {
-              await refundQuotaUnit(conv.businessId, 'message', chargedPeriod);
+              await refundQuotaUnit(businessId, 'message', chargedPeriod);
             } catch (refundErr) {
               console.error('[agent-runner-core] quota refund failed:', refundErr);
             }
@@ -453,7 +495,7 @@ export async function runAgentCore(
     const { triggerAgentRun } = await import('@api/lib/agent-runner');
     // No `quota` here on purpose: this run has just spent part of the allowance, so the
     // next one is gated on a fresh read rather than on whatever was known when it started.
-    await triggerAgentRun(conversationId, { businessId: conv.businessId });
+    await triggerAgentRun(conversationId, { businessId: businessId });
   }
 
   // Undefined on a failed run: the caller streaming a playground gets the error event instead of

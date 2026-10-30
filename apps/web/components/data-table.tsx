@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 export type DataTableHeader = {
   key: string;
@@ -28,6 +29,8 @@ type DataTableProps = {
   emptyMessage?: string;
   /** When true, the last column header gets "Actions" label automatically. */
   hasRowActions?: boolean;
+  /** Optional destination per row; clicking the row (outside its controls) opens it. */
+  rowHrefs?: Record<string, string>;
 };
 
 /**
@@ -42,7 +45,9 @@ export function DataTable({
   bulkDeleteMeta,
   emptyMessage = 'No records found.',
   hasRowActions,
+  rowHrefs,
 }: DataTableProps) {
+  const router = useRouter();
   const ids = rows.map((row) => row.id);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
@@ -153,7 +158,29 @@ export function DataTable({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30">
+                <tr
+                  key={row.id}
+                  onClick={(event) => {
+                    const href = rowHrefs?.[row.id];
+                    if (!href) return;
+                    // Controls inside the row keep their own behaviour.
+                    if ((event.target as HTMLElement).closest('a,button,input,select,textarea,label')) return;
+                    router.push(href);
+                  }}
+                  onKeyDown={(event) => {
+                    const href = rowHrefs?.[row.id];
+                    if (!href) return;
+                    if ((event.target as HTMLElement).closest('a,button,input,select,textarea,label')) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      router.push(href);
+                    }
+                  }}
+                  tabIndex={rowHrefs?.[row.id] ? 0 : undefined}
+                  className={`border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30 focus:outline-none focus-visible:bg-muted/40 ${
+                    rowHrefs?.[row.id] ? 'cursor-pointer' : ''
+                  }`}
+                >
                   {bulkDeleteAction && (
                     <td className="px-5 py-4">
                       <input

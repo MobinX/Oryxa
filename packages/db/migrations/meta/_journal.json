@@ -246,6 +246,55 @@
       "when": 1793075200000,
       "tag": "0034_admin_channels_and_messenger_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793161600000,
+      "tag": "0035_admin_ai_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793248000000,
+      "tag": "0036_official_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793334400000,
+      "tag": "0037_model_billing_agent_guidance_and_order_transactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793420800000,
+      "tag": "0038_default_agent_separate_suggestion_tool",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793507200000,
+      "tag": "0039_conversation_auto_pilot",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793593600000,
+      "tag": "0040_inbox_suggestion_token_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793680000000,
+      "tag": "0041_business_cap_overrides",
+      "breakpoints": true
     }
   ]
 }

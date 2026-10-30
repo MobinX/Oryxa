@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { ArrowLeft, Check, Clock3, Trash2, UserRound, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, MessageSquare } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
 import { listConversations, listMessages } from '@/lib/api';
 import {
@@ -8,10 +8,13 @@ import {
   deleteConversationsBulkAction,
   updateConversationStateAction,
 } from '@/app/actions/inbox';
-import { InboxReplyForm } from '@/components/inbox-reply-form';
+import { InboxChat } from '@/components/inbox-chat';
 import { ConversationList } from '@/components/conversation-list';
 import { cn } from '@/lib/utils';
 import InboxSkeleton from './skeleton';
+
+// Suggestion turns run an LLM inside a server action; give them room on Vercel.
+export const maxDuration = 60;
 
 export default function InboxPage({
   params,
@@ -47,7 +50,7 @@ async function InboxContent({
   const resolved = state === 'done';
 
   return (
-    <div className="flex h-[min(76dvh,680px)] min-h-[440px] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111427] lg:fixed lg:inset-y-0 lg:left-[252px] lg:right-0 lg:z-20 lg:h-dvh lg:min-h-0 lg:flex-row lg:rounded-none lg:border-0 lg:shadow-none">
+    <div className="flex h-[min(84dvh,760px)] min-h-[460px] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111427] lg:fixed lg:inset-y-0 lg:left-[252px] lg:right-0 lg:z-20 lg:h-dvh lg:min-h-0 lg:flex-row lg:rounded-none lg:border-0 lg:shadow-none">
       <div
         className={cn(
           'min-h-0 border-b border-slate-200/80 bg-white dark:border-slate-800 dark:bg-[#0F1123] lg:w-[320px] lg:shrink-0 lg:border-b-0 lg:border-r',
@@ -142,72 +145,14 @@ async function InboxContent({
               </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
-              <div className="mx-auto mb-1 flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-3 py-1 text-[11px] text-slate-500 shadow-2xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                <Clock3 className="h-3.5 w-3.5" />
-                Conversation started {new Date(selected.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-              </div>
-              {messages.map((message) => {
-                const fromCustomer = message.from === 'customer';
-                return (
-                  <div
-                    key={message.id}
-                    className={cn('flex items-end gap-2.5', fromCustomer ? 'justify-start' : 'justify-end')}
-                  >
-                    {fromCustomer && (
-                      <div className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5B3DF5]/15 text-[10px] font-bold text-[#5B3DF5]">
-                        {(selected.customerName || 'C')
-                          .split(/\s+/)
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join('')
-                          .toUpperCase()}
-                      </div>
-                    )}
-                    <div className="max-w-[88%] space-y-1.5 sm:max-w-[75%] lg:max-w-[68%]">
-                      <div
-                        className={cn(
-                          'space-y-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-xs',
-                          fromCustomer
-                            ? 'rounded-bl-xs border border-slate-200/80 bg-white text-slate-900 dark:border-slate-800 dark:bg-[#13172B] dark:text-slate-100'
-                            : 'rounded-br-xs bg-[#5B3DF5] text-white',
-                        )}
-                      >
-                        {message.images?.length ? (
-                          <div className="flex flex-wrap gap-2">
-                            {message.images.map((url, index) => (
-                              <a key={`${message.id}-${url}`} href={url} target="_blank" rel="noreferrer">
-                                <img
-                                  src={url}
-                                  alt={`Attachment ${index + 1}`}
-                                  className="max-h-64 w-auto max-w-full rounded-xl object-cover"
-                                />
-                              </a>
-                            ))}
-                          </div>
-                        ) : null}
-                        {message.content && <p className="whitespace-pre-wrap break-words">{message.content}</p>}
-                      </div>
-                      <time
-                        className={cn('block px-1 text-[10px] text-slate-400', fromCustomer ? 'text-left' : 'text-right')}
-                        dateTime={message.time}
-                      >
-                        {new Date(message.time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                      </time>
-                    </div>
-                    {!fromCustomer && (
-                      <div className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5B3DF5] text-[10px] font-bold text-white shadow-xs">
-                        AI
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {messages.length === 0 && (
-                <p className="m-auto text-xs text-slate-400">No messages in this conversation yet.</p>
-              )}
-            </div>
-            <InboxReplyForm businessId={businessId} conversationId={selected.id} />
+            <InboxChat
+              businessId={businessId}
+              conversationId={selected.id}
+              customerName={selected.customerName}
+              createdAt={selected.createdAt}
+              initialMessages={messages}
+              initialAutoPilot={selected.autoPilot ?? true}
+            />
           </>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-slate-400">

@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const idToken = await firebaseUser.getIdToken();
         setToken(idToken);
         try {
-          await syncUserApi({
+          await syncUserApi(idToken, {
             firebaseUid: firebaseUser.uid,
             name: firebaseUser.displayName ?? 'User',
             email: firebaseUser.email ?? undefined,

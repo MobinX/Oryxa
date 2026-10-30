@@ -31,7 +31,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SignOutForm } from '@/components/sign-out-button';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 const primaryNav: Array<{
   href: string;
@@ -65,6 +65,7 @@ const primaryNav: Array<{
 ];
 
 export function OnlyOrdesLogo({ className, lightText = false }: { className?: string; lightText?: boolean }) {
+  const { companyName } = useBrand();
   return (
     <div className={cn('inline-flex items-center gap-2.5 select-none', className)}>
       <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#5B3DF5] to-[#7C3AED] text-white shadow-md shadow-[#5B3DF5]/30">
@@ -80,7 +81,7 @@ export function OnlyOrdesLogo({ className, lightText = false }: { className?: st
           lightText ? 'text-white' : 'text-slate-900 dark:text-white',
         )}
       >
-        {COMPANY_NAME}
+        {companyName}
       </span>
     </div>
   );

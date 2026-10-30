@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Facebook, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { ApiError, listAdminChannels, type AdminChannel } from '@/lib/api';
 import { connectAdminFacebookAction } from '@/app/actions/admin-channels';
@@ -35,24 +36,19 @@ export default async function AdminChannelsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <Radio className="h-6 w-6 text-primary" />
-            Admin channels
-          </h1>
-          <p className="mt-1 max-w-2xl text-muted-foreground">
-            Pages that answer no customers. Their DMs only redeem a business&apos;s notification
-            code; every notice a business stores is also sent to those Messenger accounts.
-          </p>
-        </div>
-        <form action={connectAdminFacebookAction}>
-          <Button type="submit">
-            <Facebook className="mr-2 h-4 w-4" />
-            Connect Facebook Page
-          </Button>
-        </form>
-      </div>
+      <AdminPageHeader
+        icon={Radio}
+        title="Admin channels"
+        description="Pages that answer no customers. Their DMs only redeem a business's notification code; every notice a business stores is also sent to those Messenger accounts."
+        actions={
+          <form action={connectAdminFacebookAction}>
+            <Button type="submit">
+              <Facebook className="mr-2 h-4 w-4" />
+              Connect Facebook Page
+            </Button>
+          </form>
+        }
+      />
 
       {error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">

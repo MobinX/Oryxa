@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
@@ -20,8 +20,11 @@ type PlatformRow = {
   guidanceDefaults: { replyGuidance: string; commentReplyGuidance: string };
 };
 
-/** The bearer the test environment hands out when `LOGS_UI_PASSWORD` is unset. */
-const OPERATOR = logsOperatorPassword();
+/** There is no default console password, so the suite configures one for every test. */
+const OPERATOR = 'operator-console-test-secret';
+beforeEach(() => {
+  process.env.LOGS_UI_PASSWORD = OPERATOR;
+});
 const bearer = (token: string) => `Bearer ${token}`;
 
 const getAs = (auth?: string) =>
@@ -58,7 +61,8 @@ describe('the platform default agent', () => {
     expect(row.guidanceDefaults.commentReplyGuidance).toBe(COMMENT_REPLY_GUIDANCE);
 
     // Read twice, still one row: every reader takes the oldest, so a racing first read is inert.
-    expect(((await getAs(bearer(OPERATOR)).then((r) => r.json())) as PlatformRow).id).toBe(row.id);
+    const reread = await getAs(bearer(OPERATOR));
+    expect(((await reread.json()) as PlatformRow).id).toBe(row.id);
     expect(await db.select({ id: defaultAgents.id }).from(defaultAgents)).toHaveLength(1);
     expect((await getPlatformAgent()).id).toBe(row.id);
   });
@@ -66,7 +70,7 @@ describe('the platform default agent', () => {
   it('saves an operator edit and answers with it on the next read', async () => {
     expect((await putAs({ systemPrompt: 'Answer in one line.', replyGuidance: 'Be brief.' }, bearer(OPERATOR))).status).toBe(200);
 
-    const row = (await getAs(bearer(OPERATOR)).then((r) => r.json())) as PlatformRow;
+    const row = (await (await getAs(bearer(OPERATOR))).json()) as PlatformRow;
     expect(row.systemPrompt).toBe('Answer in one line.');
     expect(row.replyGuidance).toBe('Be brief.');
     // The row's own wording IS the fallback now, so the box must describe that, not the code block.
@@ -118,7 +122,6 @@ describe('the gate in front of the fleet-wide write', () => {
     process.env.NODE_ENV = 'production';
     delete process.env.LOGS_UI_PASSWORD;
 
-    // The default that answers in a dev box is deliberately not reachable from a production deploy.
     expect(logsOperatorPassword()).toBeUndefined();
   });
 });

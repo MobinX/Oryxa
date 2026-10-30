@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { connectFacebookAction } from '@/app/actions/channels';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 interface FacebookConnectButtonProps {
   businessId: string;
@@ -20,6 +20,7 @@ export function FacebookConnectButton({
   businessId,
   portfolioAvailable = false,
 }: FacebookConnectButtonProps) {
+  const { companyName: COMPANY_NAME } = useBrand();
   const [step, setStep] = useState<Step>('closed');
   const [source, setSource] = useState<PageSource>('personal');
   const [isPending, startTransition] = useTransition();

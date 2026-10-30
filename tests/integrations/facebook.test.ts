@@ -31,7 +31,7 @@ describe('Facebook Integration', () => {
   it('exchangeCodeForToken calls Graph API', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ access_token: 'user-access-token' }), { status: 200 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const { exchangeCodeForToken } = await import('@repo/integrations/facebook');
     const token = await exchangeCodeForToken('auth-code');
@@ -39,13 +39,13 @@ describe('Facebook Integration', () => {
   });
 
   it('sendMessage posts to Graph API', async () => {
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as unknown as typeof fetch;
 
     const { sendMessage } = await import('@repo/integrations/facebook');
     await sendMessage('page-token', 'recipient-1', 'Hello');
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const call = fetchMock.mock.calls.at(-1);
+    const call = fetchMock.mock.calls.at(-1)!;
     expect(call[0]).toContain('/me/messages');
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body.message.text).toBe('Hello');
@@ -88,11 +88,11 @@ describe('Facebook Integration', () => {
   });
 
   it('senderAction posts a sender_action without a message', async () => {
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as unknown as typeof fetch;
 
     const { senderAction } = await import('@repo/integrations/facebook');
     await senderAction('page-token', 'recipient-1', 'typing_on');
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.sender_action).toBe('typing_on');
@@ -100,18 +100,18 @@ describe('Facebook Integration', () => {
   });
 
   it('sendMessage throws on API error', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('error', { status: 400 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response('error', { status: 400 })) as unknown as typeof fetch;
     const { sendMessage } = await import('@repo/integrations/facebook');
     await expect(sendMessage('bad-token', 'r', 'hi')).rejects.toThrow();
   });
 
   it('sendMessage uses HUMAN_AGENT for every UI/human send', async () => {
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })) as unknown as typeof fetch;
 
     const { sendMessage } = await import('@repo/integrations/facebook');
     await sendMessage('page-token', 'recipient-1', 'Inbox reply', { humanAgent: true });
 
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.messaging_type).toBe('MESSAGE_TAG');
@@ -123,7 +123,7 @@ describe('Facebook Integration', () => {
     const windowErr = JSON.stringify({
       error: { message: 'outside window', type: 'OAuthException', code: 10, error_subcode: 2018278 },
     });
-    globalThis.fetch = vi.fn(async () => new Response(windowErr, { status: 400 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response(windowErr, { status: 400 })) as unknown as typeof fetch;
 
     const { sendMessage } = await import('@repo/integrations/facebook');
     await expect(sendMessage('page-token', 'recipient-1', 'Bot reply')).rejects.toThrow(
@@ -246,13 +246,13 @@ describe('Facebook Integration', () => {
   });
 
   it('exchangeCodeForToken throws on API error', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('bad request', { status: 400 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response('bad request', { status: 400 })) as unknown as typeof fetch;
     const { exchangeCodeForToken } = await import('@repo/integrations/facebook');
     await expect(exchangeCodeForToken('bad-code')).rejects.toThrow('Facebook token exchange failed');
   });
 
   it('getUserPages throws on API error', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as unknown as typeof fetch;
     const { getUserPages } = await import('@repo/integrations/facebook');
     await expect(getUserPages('bad-token')).rejects.toThrow('Failed to fetch pages');
   });
@@ -280,7 +280,7 @@ describe('Facebook Integration', () => {
         JSON.stringify({ data: [{ id: 'p1', name: 'Page', access_token: 'tok' }] }),
         { status: 200 },
       ),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
     const { getUserPages } = await import('@repo/integrations/facebook');
     const pages = await getUserPages('user-token');
     expect(pages[0].id).toBe('p1');
@@ -329,14 +329,14 @@ describe('Facebook Integration', () => {
         JSON.stringify({ data: [{ permission: 'pages_show_list' }, { permission: 'email' }] }),
         { status: 200 },
       ),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const { getGrantedPermissions } = await import('@repo/integrations/facebook');
     expect(await getGrantedPermissions('user-token')).toEqual(['pages_show_list', 'email']);
   });
 
   it('getGrantedPermissions throws when Graph refuses', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as unknown as typeof fetch;
     const { getGrantedPermissions } = await import('@repo/integrations/facebook');
     await expect(getGrantedPermissions('bad-token')).rejects.toThrow('Failed to fetch permissions');
   });
@@ -384,13 +384,13 @@ describe('Facebook Integration', () => {
   it('subscribeFacebookPageToWebhooks posts subscribed_fields to Graph API', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ success: true }), { status: 200 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const { subscribeFacebookPageToWebhooks, FACEBOOK_PAGE_WEBHOOK_FIELDS } =
       await import('@repo/integrations/facebook');
     await subscribeFacebookPageToWebhooks('page-123', 'page-token');
 
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[0]).toContain('/page-123/subscribed_apps');
     expect(call[0]).toContain('messages');
     expect(call[0]).toContain('messaging_postbacks');
@@ -400,7 +400,7 @@ describe('Facebook Integration', () => {
   });
 
   it('subscribeFacebookPageToWebhooks throws on API error', async () => {
-    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    globalThis.fetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as unknown as typeof fetch;
     const { subscribeFacebookPageToWebhooks } = await import('@repo/integrations/facebook');
     await expect(subscribeFacebookPageToWebhooks('page-123', 'bad-token')).rejects.toThrow(
       'Facebook page webhook subscription failed',

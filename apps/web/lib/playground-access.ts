@@ -4,6 +4,17 @@ import { getOperatorAuthToken } from '@/lib/admin-access';
 export type PlaygroundAuth = { status: number; error: string } | null;
 
 /**
+ * Cheap presence check for the routes' first line of defence: no signed-in session of either kind
+ * means the run is refused before the request body is even read. The full ownership check
+ * (`authorizePlaygroundRun`) still runs afterwards — this is the gate, not the proof.
+ */
+export async function hasPlaygroundToken(): Promise<boolean> {
+  const opToken = await getOperatorAuthToken();
+  if (opToken) return true;
+  return Boolean(await getAuthToken());
+}
+
+/**
  * Who may drive a playground run: the signed-in account that owns the store being driven, and no
  * further. This route was built as an admin tool and used to demand the operator's own sign-in,
  * which locked every store out of the playground page the app ships to them at

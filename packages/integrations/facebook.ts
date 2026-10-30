@@ -908,6 +908,11 @@ export async function createOAuthState(
     portfolio?: boolean;
     /** Instagram rides the same Facebook Login; the flag only changes the scopes and the picker. */
     platform?: MessagingPlatform;
+    /**
+     * The web origin the merchant started from. It is signed with the rest of the state so the
+     * callback returns them to the same brand domain instead of the deployment's default.
+     */
+    returnOrigin?: string;
   },
   ttlSeconds = 600,
 ): Promise<string> {
@@ -916,9 +921,17 @@ export async function createOAuthState(
   const exp = Date.now() + ttlSeconds * 1000;
   const flags =
     `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}` || null;
-  const body = [payload.businessId, payload.userId, exp, flags]
-    .filter((part) => part !== null)
-    .join('.');
+  const origin = payload.returnOrigin
+    ? toBase64Url(encoder.encode(payload.returnOrigin))
+    : null;
+
+  // A return origin keeps the flags slot even when it is empty, so the last three segments
+  // stay `exp.flags.origin.sig` and an old 4/5-part token still parses unambiguously.
+  const body = origin
+    ? [payload.businessId, payload.userId, exp, flags ?? '', origin].join('.')
+    : [payload.businessId, payload.userId, exp, flags]
+        .filter((part) => part !== null)
+        .join('.');
   const sig = await hmacHex(secret, body);
   return `${body}.${sig}`;
 }
@@ -937,28 +950,41 @@ export async function verifyOAuthState(
   userId: string;
   portfolio: boolean;
   platform: MessagingPlatform;
+  /** The signed origin the flow started from, when the caller supplied one. */
+  returnOrigin?: string;
 } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !state) return null;
   const parts = state.split('.');
-  if (parts.length !== 4 && parts.length !== 5) return null;
+  if (parts.length !== 4 && parts.length !== 5 && parts.length !== 6) return null;
   const [businessId, userId, expStr] = parts;
-  // Old tokens carry no flags at all; new ones carry `p`, `i`, or both, in that order.
-  const flags = parts.length === 5 ? parts[3] : '';
+  // 4 parts: no flags, no origin. 5: flags + signature. 6: flags + origin + signature.
+  const flags = parts.length >= 5 ? parts[3]! : '';
   if (flags !== '' && !/^(?:p|i|pi)$/.test(flags)) return null;
-  const sig = parts.length === 5 ? parts[4] : (parts[3] ?? '');
+  const originB64 = parts.length === 6 ? parts[4]! : '';
+  const sig = parts[parts.length - 1]!;
   const exp = Number(expStr);
   if (!businessId || !userId || !Number.isFinite(exp) || exp < Date.now()) return null;
-  const expected = await hmacHex(
-    secret,
-    flags ? `${businessId}.${userId}.${expStr}.${flags}` : `${businessId}.${userId}.${expStr}`,
-  );
+
+  const expected = await hmacHex(secret, parts.slice(0, -1).join('.'));
   if (!timingSafeEqual(sig, expected)) return null;
+
+  let returnOrigin: string | undefined;
+  if (originB64) {
+    try {
+      returnOrigin = new TextDecoder().decode(fromBase64Url(originB64));
+      new URL(returnOrigin);
+    } catch {
+      return null;
+    }
+  }
+
   return {
     businessId,
     userId,
     portfolio: flags.includes('p'),
     platform: flags.includes('i') ? 'instagram' : 'facebook',
+    ...(returnOrigin ? { returnOrigin } : {}),
   };
 }
 

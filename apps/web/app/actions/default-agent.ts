@@ -25,11 +25,15 @@ function written(raw: FormDataEntryValue | null): string | null {
  * rewritten every bot on the platform with it.
  */
 export async function updateDefaultAgentAction(formData: FormData): Promise<DefaultAgentSaveResult> {
+  // Outside the try: with no console session this throws Next's redirect, and the catch below
+  // would swallow it into a save-failure notice instead of sending the reader to the sign-in.
+  const bearer = await requireConsoleBearer();
+
   const systemPrompt = String(formData.get('systemPrompt') ?? '').trim();
   if (!systemPrompt) return { ok: false, error: 'The default agent needs a system prompt.' };
 
   try {
-    await adminUpdatePlatformAgent(await requireConsoleBearer(), {
+    await adminUpdatePlatformAgent(bearer, {
       systemPrompt,
       replyGuidance: written(formData.get('replyGuidance')),
       commentReplyGuidance: written(formData.get('commentReplyGuidance')),
@@ -53,11 +57,12 @@ export async function updateDefaultAgentAction(formData: FormData): Promise<Defa
  * nothing that cannot be undone by clicking the store back into an override with its next save.
  */
 export async function followDefaultAgentAction(formData: FormData): Promise<DefaultAgentSaveResult> {
+  const bearer = await requireConsoleBearer();
   const agentId = String(formData.get('agentId') ?? '');
   if (!agentId) return { ok: false, error: 'No store was named.' };
 
   try {
-    await adminMakeAgentFollowDefault(await requireConsoleBearer(), agentId);
+    await adminMakeAgentFollowDefault(bearer, agentId);
   } catch (err) {
     return {
       ok: false,

@@ -1,18 +1,30 @@
 import type { Metadata, Viewport } from 'next';
-import { COMPANY_NAME } from '@/lib/brand';
+import { BrandProvider } from '@/components/brand-provider';
+import { getBrand } from '@/lib/brand-server';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: `${COMPANY_NAME} — AI Commerce`,
-  description: 'Multi-channel AI auto-reply for e-commerce',
-};
+/**
+ * The brand comes from request headers, so the shell cannot paint before that read. Opting the
+ * root segment out of instant-navigation blocking is the price of host-based branding.
+ */
+export const instant = false;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { companyName } = await getBrand();
+  return {
+    title: `${companyName} — AI Commerce`,
+    description: 'Multi-channel AI auto-reply for e-commerce',
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const brand = await getBrand();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -30,7 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <BrandProvider brand={brand}>{children}</BrandProvider>
+      </body>
     </html>
   );
 }

@@ -65,7 +65,7 @@ describe('Posts API', () => {
       }),
     });
     expect(createRes.status).toBe(201);
-    const created = await createRes.json();
+    const created = await createRes.json() as any;
     expect(created.id).toBeDefined();
     expect(created.content).toBe('Original draft');
     expect(created.postState).toBe('draft');
@@ -77,7 +77,7 @@ describe('Posts API', () => {
       headers: authHeaders(),
     });
     expect(getRes.status).toBe(200);
-    const detail = await getRes.json();
+    const detail = await getRes.json() as any;
     expect(detail.id).toBe(postId);
     expect(detail.content).toBe('Original draft');
 
@@ -90,7 +90,7 @@ describe('Posts API', () => {
       }),
     });
     expect(patchRes.status).toBe(200);
-    const updated = await patchRes.json();
+    const updated = await patchRes.json() as any;
     expect(updated.content).toBe('Updated draft content');
 
     // 4. List posts
@@ -98,7 +98,7 @@ describe('Posts API', () => {
       headers: authHeaders(),
     });
     expect(listRes.status).toBe(200);
-    const list = await listRes.json();
+    const list = await listRes.json() as any;
     expect(list).toHaveLength(1);
     expect(list[0].id).toBe(postId);
 
@@ -114,7 +114,7 @@ describe('Posts API', () => {
       }),
     });
     expect(generateRes.status).toBe(200);
-    const generated = await generateRes.json();
+    const generated = await generateRes.json() as any;
     expect(typeof generated.content).toBe('string');
     expect(generated.content.length).toBeGreaterThan(0);
     // Guards the prototype patch above: if it ever stops applying (two module
@@ -132,7 +132,7 @@ describe('Posts API', () => {
       }),
     });
     expect(tuneRes.status).toBe(200);
-    const tuned = await tuneRes.json();
+    const tuned = await tuneRes.json() as any;
     expect(typeof tuned.content).toBe('string');
     expect(tuned.content.length).toBeGreaterThan(0);
     expect(tuned.id).toBe(postId);
@@ -145,7 +145,7 @@ describe('Posts API', () => {
       headers: authHeaders(),
     });
     expect(publishRes.status).toBe(200);
-    const publishResult = await publishRes.json();
+    const publishResult = await publishRes.json() as any;
     expect(publishResult.platformPostId).toBe('FB_POST_123');
     expect(publishMock).toHaveBeenCalled();
 
@@ -153,7 +153,7 @@ describe('Posts API', () => {
     const getResPublished = await app.request(`/api/v1/${seed.business.id}/posts/${postId}`, {
       headers: authHeaders(),
     });
-    const detailPublished = await getResPublished.json();
+    const detailPublished = await getResPublished.json() as any;
     expect(detailPublished.postState).toBe('published');
     expect(detailPublished.platformPostId).toBe('FB_POST_123');
 
@@ -164,7 +164,7 @@ describe('Posts API', () => {
       headers: authHeaders(),
     });
     expect(syncRes.status).toBe(200);
-    const syncResult = await syncRes.json();
+    const syncResult = await syncRes.json() as any;
     expect(syncResult.likeCount).toBe(42);
     expect(syncResult.commentCount).toBe(7);
     expect(syncStatsMock).toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe('Posts API', () => {
     const getResSynced = await app.request(`/api/v1/${seed.business.id}/posts/${postId}`, {
       headers: authHeaders(),
     });
-    const detailSynced = await getResSynced.json();
+    const detailSynced = await getResSynced.json() as any;
     expect(detailSynced.latestSync).toBeDefined();
     expect(detailSynced.latestSync.likeCount).toBe(42);
 
@@ -183,7 +183,7 @@ describe('Posts API', () => {
       headers: authHeaders(),
     });
     expect(deleteRes.status).toBe(200);
-    const deleteResult = await deleteRes.json();
+    const deleteResult = await deleteRes.json() as any;
     expect(deleteResult.deleted).toBe(true);
   });
 });

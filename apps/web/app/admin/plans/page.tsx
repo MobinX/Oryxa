@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { AlertTriangle, CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin-page-header';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { cachedAdminBusinessPlans, cachedPlans } from '@/app/_cache/queries';
 import { ApiError } from '@/lib/api';
@@ -26,18 +27,12 @@ export default async function AdminPlansPage() {
   const businesses = 'value' in businessesRead ? businessesRead.value : [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <CreditCard className="h-6 w-6 text-primary" />
-            Plans
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            What each plan allows, who is on it, and what happens to them the moment you change it.
-          </p>
-        </div>
-      </div>
+    <div className="mx-auto w-full max-w-5xl space-y-4 sm:space-y-6">
+      <AdminPageHeader
+        icon={CreditCard}
+        title="Plans"
+        description="What each plan allows, who is on it, and what happens to them the moment you change it."
+      />
 
       <Card className="border-amber-500/40 hover:shadow-card">
         <p className="flex items-center gap-2 font-semibold">
@@ -49,8 +44,8 @@ export default async function AdminPlansPage() {
           a business — so an edit takes effect at the next inbound message for every business in the
           <em> Businesses</em> column, with no job to wait for. An empty limit means{' '}
           <strong>uncapped</strong>; a limit of <strong>0</strong> means <strong>no replies at all</strong>.
-          Setting 0 on a busy plan is the fastest kill switch in the system, and the number of businesses
-          it stops is the count on that row.
+          A business can also carry its own <strong>custom cap</strong> below, which wins over its plan
+          (blank follows the plan, 0 freezes) — useful for a one-off 2,123-reply allowance.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
           Deleting a plan is refused while any business sits on it, because releasing them to{' '}

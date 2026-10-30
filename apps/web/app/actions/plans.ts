@@ -6,6 +6,7 @@ import { requireConsoleBearer } from '@/lib/admin-access';
 import {
   ApiError,
   adminAssignPlan,
+  adminSetBusinessCaps,
   adminCreatePlan,
   adminDeletePlan,
   adminListBusinessPlans,
@@ -135,6 +136,32 @@ export async function assignPlanAction(businessId: string, planId: string | null
     await adminAssignPlan(bearer, businessId, planId);
   } catch (err) {
     return { ok: false, error: err instanceof ApiError ? err.message : 'The plan could not be assigned' };
+  }
+  revalidatePath('/admin/plans');
+  expirePlans([businessId]);
+  return { ok: true };
+}
+
+/**
+ * Give one business a cap of its own, independent of its plan. `null` clears the override
+ * and follows the plan again; 0 still freezes that lane.
+ */
+export async function setBusinessCapsAction(
+  businessId: string,
+  messageLimitOverride: number | null,
+  commentLimitOverride: number | null,
+): Promise<AssignResult> {
+  const bearer = await requireConsoleBearer();
+  try {
+    await adminSetBusinessCaps(bearer, businessId, {
+      messageLimitOverride,
+      commentLimitOverride,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof ApiError ? err.message : 'The custom caps could not be saved',
+    };
   }
   revalidatePath('/admin/plans');
   expirePlans([businessId]);

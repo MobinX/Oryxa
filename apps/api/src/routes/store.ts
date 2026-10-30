@@ -1,3 +1,4 @@
+import { createRateLimiter } from '@api/lib/rate-limit';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   publicStoreSchema,
@@ -34,7 +35,7 @@ storeRouter.openapi(getStoreRoute, async (c) => {
   const { q, category, sort, min, max } = c.req.valid('query');
   const store = await getPublicStore(slug, { q, category, sort, min, max });
   if (!store) return c.json({ error: 'Store not found' }, 404);
-  return c.json(store);
+  return c.json(store, 200);
 });
 
 const getProductRoute = createRoute({
@@ -53,7 +54,7 @@ storeRouter.openapi(getProductRoute, async (c) => {
   const productId = c.req.param('productId');
   const product = await getPublicProduct(slug, productId);
   if (!product) return c.json({ error: 'Product not found' }, 404);
-  return c.json(product);
+  return c.json(product, 200);
 });
 
 const checkoutRoute = createRoute({
@@ -68,11 +69,22 @@ const checkoutRoute = createRoute({
     201: { content: { 'application/json': { schema: checkoutOutputSchema } }, description: 'Order placed' },
     400: { content: { 'application/json': { schema: errorSchema } }, description: 'Checkout failed' },
     404: { content: { 'application/json': { schema: errorSchema } }, description: 'Store not found' },
+    429: { content: { 'application/json': { schema: errorSchema } }, description: 'Too many checkout attempts' },
   },
 });
 
+const checkoutRateLimited = createRateLimiter(Number(process.env.CHECKOUT_RATE_LIMIT_PER_MIN || 10), 60_000);
+
 storeRouter.openapi(checkoutRoute, async (c) => {
   const slug = c.req.param('slug');
+  const ip =
+    c.req.header('cf-connecting-ip') ||
+    c.req.header('x-real-ip') ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
+  if (checkoutRateLimited(`${ip}|${slug}`)) {
+    return c.json({ error: 'Too many checkout attempts, try again in a minute' }, 429);
+  }
   const body = c.req.valid('json');
   try {
     const result = await createPublicCheckout(slug, body);

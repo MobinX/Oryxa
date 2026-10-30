@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatTaka } from '@/lib/order-state';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
@@ -90,18 +91,23 @@ async function OrderDetail({
   return (
     <Card className="mt-4 sm:mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Order {order.id.slice(0, 8)}</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold">Order {order.id.slice(0, 8)}</h1>
+          <p className="mt-1 break-all font-mono text-xs text-[var(--muted-foreground)]">
+            {order.id}
+          </p>
+        </div>
         <Badge variant={stateVariant[order.state] ?? 'default'}>{order.state}</Badge>
       </div>
 
       <div className="mt-4 grid gap-3 rounded-lg bg-[var(--muted)] p-4 text-sm sm:grid-cols-2">
         <div>
           <span className="text-[var(--muted-foreground)]">Total: </span>
-          <strong>${order.totalPrice.toFixed(2)}</strong>
+          <strong>{formatTaka(order.totalPrice)}</strong>
         </div>
         <div>
           <span className="text-[var(--muted-foreground)]">Unit price: </span>
-          ${order.variantPrice.toFixed(2)} × {order.count}
+          {formatTaka(order.variantPrice)} × {order.count}
         </div>
         <div className="sm:col-span-2 flex items-start gap-3">
           {order.variantImageUrl ? (
@@ -132,13 +138,75 @@ async function OrderDetail({
             <div>
               <span className="text-[var(--muted-foreground)]">Variant: </span>
               <span className="font-medium">{order.variantName ?? '—'}</span>
+              {order.variantShortId && (
+                <span className="ml-2 font-mono text-xs text-[var(--muted-foreground)]">
+                  #{order.variantShortId}
+                </span>
+              )}
             </div>
           </div>
         </div>
+        {order.shippingCost !== undefined && order.shippingCost > 0 && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Shipping: </span>
+            {formatTaka(order.shippingCost)}
+          </div>
+        )}
         <div className="sm:col-span-2">
           <span className="text-[var(--muted-foreground)]">Created: </span>
           {new Date(order.createdAt).toLocaleString()}
         </div>
+        {order.paymentMethod && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Payment: </span>
+            <span className="font-medium">{order.paymentMethod}</span>
+          </div>
+        )}
+        {order.transactionId && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Transaction ID: </span>
+            <span className="font-mono font-medium">{order.transactionId}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-[var(--border)] p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Customer</h2>
+          {order.customerId && (
+            <Link
+              href={`/b/${businessId}/customers/${order.customerId}`}
+              className="text-sm text-[var(--primary)] hover:underline"
+            >
+              View customer
+            </Link>
+          )}
+        </div>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-[var(--muted-foreground)]">Name</dt>
+            <dd className="font-medium">{order.customerName}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--muted-foreground)]">Phone</dt>
+            <dd className="font-medium">
+              {order.customerPhone ? (
+                <a
+                  href={`tel:${order.customerPhone}`}
+                  className="text-[var(--primary)] hover:underline"
+                >
+                  {order.customerPhone}
+                </a>
+              ) : (
+                '—'
+              )}
+            </dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-[var(--muted-foreground)]">Delivery address</dt>
+            <dd className="whitespace-pre-line font-medium">{order.customerAddress || '—'}</dd>
+          </div>
+        </dl>
       </div>
 
       {nextState[order.state] && (

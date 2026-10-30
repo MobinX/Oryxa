@@ -8,6 +8,7 @@ export const integrationTypeSchema = z.enum([
   'whatsapp',
   'ai_post_generation',
   'ai_post_tuning',
+  'inbox_suggestion',
 ]);
 
 export const tokenUsageTotalsSchema = z.object({

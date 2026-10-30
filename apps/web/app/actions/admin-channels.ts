@@ -3,11 +3,12 @@
 import { redirect } from 'next/navigation';
 import { requireConsoleBearer } from '@/lib/admin-access';
 import { ApiError, connectAdminFacebookPages, getAdminFacebookAuthUrl } from '@/lib/api';
+import { currentWebOrigin } from '@/lib/request-origin';
 
 /** Starts the operator's own Facebook OAuth; the callback lands on /admin/channels/connect-facebook. */
 export async function connectAdminFacebookAction() {
   const bearer = await requireConsoleBearer();
-  const { url } = await getAdminFacebookAuthUrl(bearer);
+  const { url } = await getAdminFacebookAuthUrl(bearer, await currentWebOrigin());
   redirect(url);
 }
 

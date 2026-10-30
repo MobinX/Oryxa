@@ -3,9 +3,12 @@ import 'dotenv/config';
 // Test env overrides — .env may set production values that break unit tests
 process.env.NODE_ENV = 'test';
 process.env.INTERNAL_KEY = 'test-internal-key';
+process.env.ALLOW_DEV_AUTH_BYPASS = 'true';
 process.env.META_VERIFY_TOKEN = 'test-token';
 process.env.META_APP_SECRET = process.env.META_APP_SECRET ?? 'test-app-secret';
 process.env.WEB_URL = 'http://localhost:3400';
+// No default console password exists; give the suite a test-only one (tests that need it unset delete it).
+process.env.LOGS_UI_PASSWORD = process.env.LOGS_UI_PASSWORD_TEST || 'test-operator-console-password';
 process.env.AGENT_RUNNER_URL = process.env.AGENT_RUNNER_URL ?? 'http://localhost:3001';
 
 // Mirror DATABASE_URL into NEON_DATABASE_URL for neon suites; the default

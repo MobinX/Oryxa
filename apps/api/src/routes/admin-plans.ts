@@ -4,6 +4,7 @@ import {
   adminPlanEditResultSchema,
   adminPlanRowSchema,
   assignPlanInputSchema,
+  businessCapsInputSchema,
   createPlanInputSchema,
   deletePlanConflictSchema,
   errorSchema,
@@ -27,6 +28,7 @@ import {
   listAdminPlans,
   listAssignments,
   resetCycle,
+  setBusinessCapOverrides,
   updatePlan,
 } from '@repo/db/crud/plans';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
@@ -227,6 +229,53 @@ adminPlansRouter.openapi(assignBusinessPlanRoute, async (c) => {
 
   const assigned = await assignPlan(businessId, target?.id ?? null, { actorKind: 'operator' });
   if (!assigned) return c.json({ error: 'Business not found' }, 404);
+
+  const status = await getQuotaStatus(businessId);
+  if (!status) return c.json({ error: 'Business not found' }, 404);
+
+  if (status.messageLimit !== null) {
+    await ensureQuotaNotice(
+      businessId, 'message', status.cycle.period, status.messagesUsed, status.messageLimit, status.cycle.resetsAt,
+    );
+  }
+  if (status.commentLimit !== null) {
+    await ensureQuotaNotice(
+      businessId, 'comment', status.cycle.period, status.commentsUsed, status.commentLimit, status.cycle.resetsAt,
+    );
+  }
+
+  return c.json(status, 200);
+});
+
+const setBusinessCapsRoute = createRoute({
+  method: 'put',
+  path: '/admin/businesses/{businessId}/caps',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: businessParams,
+    body: { content: { 'application/json': { schema: businessCapsInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: quotaStatusSchema } },
+      description: 'The effective limits and counters after the override',
+    },
+    404: { content: { 'application/json': { schema: errorSchema } }, description: 'No such business' },
+  },
+});
+
+/**
+ * The per-business override, independent of the plan. Sending null clears it back to the
+ * plan's number; 0 is still the freeze. Notices are written here because the operator can
+ * put a store below what it has already spent.
+ */
+adminPlansRouter.openapi(setBusinessCapsRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const input = c.req.valid('json');
+
+  const updated = await setBusinessCapOverrides(businessId, input);
+  if (!updated) return c.json({ error: 'Business not found' }, 404);
 
   const status = await getQuotaStatus(businessId);
   if (!status) return c.json({ error: 'Business not found' }, 404);

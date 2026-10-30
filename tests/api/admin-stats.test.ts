@@ -287,7 +287,7 @@ describe('GET /api2/admin/stats', () => {
         headers: { Authorization: `Bearer ${logsOperatorPassword()}` },
       });
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: 'Invalid days — expected a positive integer' });
+      expect(await res.json() as any).toEqual({ error: 'Invalid days — expected a positive integer' });
     }
   });
 

@@ -43,7 +43,7 @@ describe('Public Storefront API', () => {
     await makePublishedStore('shop-a');
     const res = await app.request('/api/v1/store/shop-a');
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe('Book Nook');
     expect(body.products.map((p: { name: string }) => p.name).sort()).toEqual(['Dune', 'Hamlet']);
     expect(body.categories.sort()).toEqual(['Fiction', 'Plays']);
@@ -59,7 +59,7 @@ describe('Public Storefront API', () => {
     // tolerate, since deleteCategory itself would have taken the product down with it.
     await db.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, fiction.id));
 
-    const body = await (await app.request('/api/v1/store/shop-soft')).json();
+    const body = await (await app.request('/api/v1/store/shop-soft')).json() as any;
     const dune = body.products.find((p: { name: string }) => p.name === 'Dune');
     expect(dune).toBeTruthy();
     expect(dune.categoryName).toBeNull();
@@ -68,17 +68,17 @@ describe('Public Storefront API', () => {
 
   it('search, category, price filter and sort', async () => {
     await makePublishedStore('shop-b');
-    const q = await (await app.request('/api/v1/store/shop-b?q=dune')).json();
+    const q = await (await app.request('/api/v1/store/shop-b?q=dune')).json() as any;
     expect(q.products).toHaveLength(1);
     expect(q.products[0].name).toBe('Dune');
 
-    const cat = await (await app.request('/api/v1/store/shop-b?category=Plays')).json();
+    const cat = await (await app.request('/api/v1/store/shop-b?category=Plays')).json() as any;
     expect(cat.products.map((p: { name: string }) => p.name)).toEqual(['Hamlet']);
 
-    const max = await (await app.request('/api/v1/store/shop-b?max=10')).json();
+    const max = await (await app.request('/api/v1/store/shop-b?max=10')).json() as any;
     expect(max.products.map((p: { name: string }) => p.name)).toEqual(['Hamlet']);
 
-    const asc = await (await app.request('/api/v1/store/shop-b?sort=price_asc')).json();
+    const asc = await (await app.request('/api/v1/store/shop-b?sort=price_asc')).json() as any;
     expect(asc.products[0].name).toBe('Hamlet');
   });
 
@@ -86,7 +86,7 @@ describe('Public Storefront API', () => {
     const { dune } = await makePublishedStore('shop-c');
     const res = await app.request(`/api/v1/store/shop-c/products/${dune.id}`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.name).toBe('Dune');
     expect(body.variants).toHaveLength(1);
   });
@@ -114,7 +114,7 @@ describe('Public Storefront API', () => {
       }),
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.total).toBe(40); // 20 * 2, computed server-side
     expect(body.status).toBe('pending');
     expect(body.orderIds).toHaveLength(1);
@@ -128,7 +128,7 @@ describe('Public Storefront API', () => {
       body: JSON.stringify({ customerName: 'B', items: [{ productId: hamlet.id, quantity: 5 }] }),
     });
     expect(stock.status).toBe(400);
-    expect((await stock.json()).error).toMatch(/stock/i);
+    expect((await stock.json() as any).error).toMatch(/stock/i);
 
     const unknown = await app.request('/api/v1/store/shop-e/checkout', {
       method: 'POST',
@@ -151,6 +151,6 @@ describe('Public Storefront API', () => {
       body: JSON.stringify({ customerName: 'B', items: [{ productId: a.dune.id, quantity: 1 }] }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/not found/i);
+    expect((await res.json() as any).error).toMatch(/not found/i);
   });
 });

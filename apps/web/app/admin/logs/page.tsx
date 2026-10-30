@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
-import { AlertTriangle, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { AlertTriangle, HardDrive, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { requireConsoleBearer } from '@/lib/admin-access';
 
 export const instant = false;
@@ -20,13 +20,16 @@ import {
   ApiError,
   getLogEvents,
   getLogEventTypes,
+  getLogStorage,
+  type AxiomStorage,
   type LogEventTypeOption,
   type LogFilter,
   type LogQueryResult,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { COMPANY_NAME } from '@/lib/brand';
+import { AdminPageHeader } from '@/components/admin-page-header';
+import { getBrand } from '@/lib/brand-server';
 
 const LIMITS = [25, 50, 100, 200];
 const HOURS = [1, 6, 24, 72, 168];
@@ -35,10 +38,13 @@ type PageOrError = { page?: LogQueryResult; error?: string; status?: number };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
-export const metadata = {
-  title: 'Event log — admin',
-  description: `Every request, webhook, agent run and error the ${COMPANY_NAME} API recorded.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Event log — admin',
+    description: `Every request, webhook, agent run and error the ${companyName} API recorded.`,
+  };
+}
 
 function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -117,7 +123,12 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
         ? { error: `${err.status}: ${err.message}`, status: err.status }
         : { error: 'The API could not be reached' },
   );
-  const [types, result] = await Promise.all([typesOrNone, pageOrError]);
+  // A storage read that fails must not hide the log list, so it degrades to no panel.
+  const storageOrNone: Promise<AxiomStorage | null> = getLogStorage(bearer).then(
+    (storage) => storage,
+    () => null,
+  );
+  const [types, result, storage] = await Promise.all([typesOrNone, pageOrError, storageOrNone]);
 
   if (result.status === 401) redirect('/admin/login');
 
@@ -127,26 +138,21 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
   return (
     <div className="space-y-6">
       <TzProbe expected={zone} />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-            <ScrollText className="h-6 w-6 text-primary" />
-            Event log
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            One row per fact the API recorded: requests, webhooks, agent runs, tool calls,
-            database outcomes and the invariants they broke.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <AdminPageHeader
+        icon={ScrollText}
+        title="Event log"
+        description="One row per fact the API recorded: requests, webhooks, agent runs, tool calls, database outcomes and the invariants they broke."
+        actions={
           <Link href={hrefFor(filter)}>
             <Button variant="outline" size="sm">
               <RefreshCw className="mr-2 h-4 w-4" />
               Reload
             </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
+
+      {storage && <StoragePanel storage={storage} zone={zone} />}
 
       <Card className="hover:shadow-card">
         <form method="get" action="/admin/logs" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -304,6 +310,113 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
 /** The shortcut ranges are anchored on now, so the newest page is what they show. */
 function lastHours(hours: number, zone: string): string {
   return zoneWallClock(new Date(Date.now() - hours * 3_600_000).toISOString(), zone);
+}
+
+function formatGb(value: number | null): string {
+  if (value === null) return '—';
+  return `${value.toLocaleString('en-US', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })} GB`;
+}
+
+/**
+ * Axiom bills storage across every dataset while retention is a property of the
+ * one this console reads, so the panel keeps those two facts apart on purpose.
+ */
+function StoragePanel({ storage, zone }: { storage: AxiomStorage; zone: string }) {
+  const retention = retentionCopy(storage, zone);
+  const measured = storage.measuredAt ? clockInZone(storage.measuredAt, zone) : null;
+  const storedDetail =
+    storage.usedBytes === null
+      ? 'Axiom has not reported storage usage yet.'
+      : `${storage.usedBytes.toLocaleString('en-US')} bytes across ${storage.datasets.length} dataset${
+          storage.datasets.length === 1 ? '' : 's'
+        }.`;
+
+  return (
+    <Card className="hover:shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 font-semibold">
+            <HardDrive className="h-4 w-4 text-primary" />
+            Axiom storage
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {storage.source === 'axiom'
+              ? `Usage from Axiom's daily calculation${measured ? `, last measured ${measured}` : ''}. The allowance is the ${
+                  storage.limitConfigured ? 'configured' : 'always-free'
+                } ${storage.limitGb.toLocaleString('en-US')} GB.`
+              : 'Logs are held by this API process, so Axiom storage does not apply.'}
+          </p>
+        </div>
+        <span className="rounded-full border border-border/50 bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
+          {storage.available ? 'axiom' : 'unavailable'}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <StorageStat label="Stored" value={formatGb(storage.usedGb)} detail={storedDetail} />
+        <StorageStat
+          label="Left"
+          value={formatGb(storage.remainingGb)}
+          detail={`of ${storage.limitGb.toLocaleString('en-US')} GB ${
+            storage.limitConfigured ? 'configured allowance' : 'Axiom always-free allowance'
+          }`}
+        />
+        <StorageStat label="Retention" value={retention.value} detail={retention.detail} />
+      </div>
+
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${Math.min(100, storage.percentUsed ?? 0)}%` }}
+        />
+      </div>
+
+      {storage.note && <p className="mt-3 text-xs text-muted-foreground">{storage.note}</p>}
+    </Card>
+  );
+}
+
+function StorageStat({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-element border border-border/50 bg-muted/30 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function retentionCopy(storage: AxiomStorage, zone: string): { value: string; detail: string } {
+  const dataset = storage.logDataset;
+  if (!dataset.retentionKnown) {
+    return { value: 'Unknown', detail: `Retention on ${dataset.name} could not be read.` };
+  }
+  if (!dataset.retentionEnabled) {
+    return {
+      value: 'No expiry',
+      detail: `Retention is off on ${dataset.name}; Axiom keeps events until they are deleted or the allowance runs out.`,
+    };
+  }
+
+  const rolling = `Every event is deleted ${dataset.retentionDays} day${
+    dataset.retentionDays === 1 ? '' : 's'
+  } after it is written.`;
+  if (!dataset.expiresAt || !dataset.oldestEventAt) {
+    return {
+      value: `${dataset.retentionDays} days`,
+      detail: `${rolling} The oldest stored event could not be read.`,
+    };
+  }
+  return {
+    value: `${dataset.retentionDays} days`,
+    detail: `${rolling} The oldest event still stored, written ${clockInZone(
+      dataset.oldestEventAt,
+      zone,
+    )}, leaves ${clockInZone(dataset.expiresAt, zone)}.`,
+  };
 }
 
 function LogsSkeleton() {

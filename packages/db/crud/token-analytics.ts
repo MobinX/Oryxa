@@ -2,6 +2,7 @@ import { and, eq, gte, sql, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { llmTokenLogs, hourlyTokenAnalytics } from '@db/schema';
 import type { IntegrationType } from '@repo/shared';
+import { getModelBilling, ratesOf, tokenCostUsd } from './model-billing';
 
 export interface RecordTokenUsageInput {
   businessId: string;
@@ -20,10 +21,25 @@ export interface RecordTokenUsageInput {
   cacheMissTokens: number;
   cacheHitPercent: number;
   latencyMs: number;
-  estimatedCostUsd: number;
+  /**
+   * Omit to price the run with the console's model-billing rates. A caller that already
+   * knows the price (tests, imports) can still pass one.
+   */
+  estimatedCostUsd?: number;
 }
 
 export async function recordTokenUsage(input: RecordTokenUsageInput) {
+  const estimatedCostUsd =
+    input.estimatedCostUsd ??
+    tokenCostUsd(
+      {
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        cacheHitTokens: input.cacheHitTokens,
+      },
+      ratesOf(await getModelBilling()),
+    );
+
   // 1. Log granular event record
   const [log] = await db
     .insert(llmTokenLogs)
@@ -44,7 +60,7 @@ export async function recordTokenUsage(input: RecordTokenUsageInput) {
       cacheMissTokens: input.cacheMissTokens,
       cacheHitPercent: input.cacheHitPercent.toFixed(2),
       latencyMs: input.latencyMs,
-      estimatedCostUsd: input.estimatedCostUsd.toFixed(6),
+      estimatedCostUsd: estimatedCostUsd.toFixed(6),
     })
     .returning();
 
@@ -54,7 +70,7 @@ export async function recordTokenUsage(input: RecordTokenUsageInput) {
 
   // 3. Perform atomic upsert into hourly_token_analytics
   const cacheHitPercentStr = input.cacheHitPercent.toFixed(2);
-  const estimatedCostStr = input.estimatedCostUsd.toFixed(6);
+  const estimatedCostStr = estimatedCostUsd.toFixed(6);
 
   await db.execute(sql`
     INSERT INTO hourly_token_analytics (
@@ -86,6 +102,7 @@ export async function recordTokenUsage(input: RecordTokenUsageInput) {
 
 export async function getBusinessTokenAnalytics(businessId: string, hours: number = 24) {
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const rates = ratesOf(await getModelBilling());
 
   // 1. Cumulative totals for the business
   const [totalsRow] = await db
@@ -148,17 +165,29 @@ export async function getBusinessTokenAnalytics(businessId: string, hours: numbe
     .groupBy(sql`to_char(${hourlyTokenAnalytics.hourBucket}, 'YYYY-MM-DD HH24:00')`, hourlyTokenAnalytics.integrationType)
     .orderBy(sql`to_char(${hourlyTokenAnalytics.hourBucket}, 'YYYY-MM-DD HH24:00')`);
 
+  const totals = totalsRow ?? {
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalTokens: 0,
+    totalCacheHitTokens: 0,
+    totalCacheMissTokens: 0,
+    totalRuns: 0,
+    avgTokensPerMessage: 0,
+    overallCacheHitPercent: 0,
+    totalEstimatedCostUsd: 0,
+  };
+
   return {
-    totals: totalsRow ?? {
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalTokens: 0,
-      totalCacheHitTokens: 0,
-      totalCacheMissTokens: 0,
-      totalRuns: 0,
-      avgTokensPerMessage: 0,
-      overallCacheHitPercent: 0,
-      totalEstimatedCostUsd: 0,
+    totals: {
+      ...totals,
+      totalEstimatedCostUsd: tokenCostUsd(
+        {
+          inputTokens: totals.totalInputTokens,
+          outputTokens: totals.totalOutputTokens,
+          cacheHitTokens: totals.totalCacheHitTokens,
+        },
+        rates,
+      ),
     },
     byIntegration,
     hourlyGraphData,

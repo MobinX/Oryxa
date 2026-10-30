@@ -12,7 +12,9 @@ const SESSION_MS = 8 * 60 * 60 * 1000;
  * larger risk than repeating four lines of env parsing.
  */
 export function logsOperatorUser(): string {
-  return process.env.LOGS_UI_USER?.trim() || 'admin123';
+  // A label, never a credential — the legacy default was a guessable
+  // 'admin123', which also made the operator email guessable.
+  return process.env.LOGS_UI_USER?.trim() || 'operator';
 }
 
 /**
@@ -40,11 +42,12 @@ export function isOperatorEmail(email?: string | null): boolean {
   return allowed.includes(normalized);
 }
 
-/** Undefined in production unless `LOGS_UI_PASSWORD` is set — no guessable default. */
+/** Undefined unless `LOGS_UI_PASSWORD` is set — no default password in any environment. */
 export function logsOperatorPassword(): string | undefined {
   const configured = process.env.LOGS_UI_PASSWORD?.trim();
   if (configured) return configured;
-  return process.env.NODE_ENV === 'production' ? undefined : 'admin123';
+  // No default in any environment: the console is closed until LOGS_UI_PASSWORD is set.
+  return undefined;
 }
 
 function sameSecret(candidate: string, expected: string): boolean {

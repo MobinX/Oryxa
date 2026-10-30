@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { updateDefaultAgentAction } from '@/app/actions/default-agent';
 import type { PlatformAgent } from '@/lib/api';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 /** The limits `updatePlatformAgentInputSchema` enforces, spelled here so a long paste fails in the browser, not as a 400. */
 const PROMPT_LIMIT = 40_000;
@@ -17,12 +17,16 @@ const WORDING_LIMIT = 12_000;
  * shipped first said "empty right now" unconditionally, which told an operator who had already written here
  * that nothing was written.
  */
-function wordingState(written: string | null, reviewed: string | undefined) {
+function wordingState(
+  written: string | null,
+  reviewed: string | undefined,
+  companyName: string,
+) {
   const reviewedChars = reviewed?.trim().length ?? 0;
   if (written?.trim()) {
-    return `Answering with this text (${written.trim().length} chars) for every store still following the default. Emptying the box hands the wording back to ${COMPANY_NAME}'s reviewed block.`;
+    return `Answering with this text (${written.trim().length} chars) for every store still following the default. Emptying the box hands the wording back to ${companyName}'s reviewed block.`;
   }
-  return `Empty, so every following store answers with ${COMPANY_NAME}'s reviewed block (${reviewedChars} chars, shown greyed below) — it carries the rule that keeps replies in শুদ্ধ বাংলা and the send-message-once rule. Anything typed here replaces that whole block for every one of them.`;
+  return `Empty, so every following store answers with ${companyName}'s reviewed block (${reviewedChars} chars, shown greyed below) — it carries the rule that keeps replies in শুদ্ধ বাংলা and the send-message-once rule. Anything typed here replaces that whole block for every one of them.`;
 }
 
 /**
@@ -31,6 +35,7 @@ function wordingState(written: string | null, reviewed: string | undefined) {
  * to Oryxa's reviewed text in code, which is why each box shows that text as its placeholder.
  */
 export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
+  const { companyName } = useBrand();
   const [isPending, startTransition] = useTransition();
   const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
@@ -72,7 +77,7 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
         <label className="block text-sm font-medium" htmlFor="replyGuidance">
           Messenger wording
         </label>
-        <p className="text-xs text-[var(--muted-foreground)]">{wordingState(agent.replyGuidance, agent.guidanceDefaults?.replyGuidance)}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{wordingState(agent.replyGuidance, agent.guidanceDefaults?.replyGuidance, companyName)}</p>
         <Textarea
           id="replyGuidance"
           name="replyGuidance"
@@ -90,7 +95,7 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
         </label>
         <p className="text-xs text-[var(--muted-foreground)]">
           The block a comment reply answers with, including which things go to Messenger instead of the
-          thread. {wordingState(agent.commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance)}
+          thread. {wordingState(agent.commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance, companyName)}
         </p>
         <Textarea
           id="commentReplyGuidance"

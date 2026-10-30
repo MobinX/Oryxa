@@ -470,9 +470,31 @@ export function createCatalogTools(context: {
   );
 
   const createOrderTool = tool(
-    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod }) => {
-      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod } });
+    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId }) => {
+      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
+
+      const paymentNeedsTransaction = /bkash|nagad|বিকাশ|নগদ/i.test(paymentMethod ?? '');
+      const paidTransactionId = transactionId?.trim() || null;
+
+      /** A payment already moved; a failed order is the owner's problem right now, not later. */
+      const notifyPaidOrderFailure = async (reason: string) => {
+        if (!paidTransactionId) return;
+        try {
+          const product = await getProductById(context.businessId, productId).catch(() => null);
+          await createBusinessNotification({
+            businessId: context.businessId,
+            kind: 'payment_order_failed',
+            title: 'Payment received but order failed',
+            body: `${count ?? 1} × ${product?.name ?? 'an item'} — ${paymentMethod?.trim() || 'mobile payment'} (TrxID ${paidTransactionId}). ${reason}`,
+            link: context.conversationId
+              ? `/b/${context.businessId}/inbox?c=${context.conversationId}`
+              : `/b/${context.businessId}/orders`,
+          });
+        } catch (err) {
+          console.error('[agent-tool] paid order failed but the owner could not be notified:', err);
+        }
+      };
 
       // A retry of the SAME order seconds later is a duplicate; anything the customer actually
       // wants next is a new sale. The window is short and the match is product+variant, because
@@ -511,9 +533,28 @@ export function createCatalogTools(context: {
        * show the customer later, and nothing for the merchant to pick off the shelf. One size left in
        * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
        */
-      if (!count || !customerAddress?.trim() || !customerPhone?.trim()) {
-        const missing = [!count ? 'quantity' : null, !customerPhone?.trim() ? 'phone' : null, !customerAddress?.trim() ? 'delivery address' : null].filter(Boolean);
-        const result = JSON.stringify({ created: false, missing });
+      if (
+        !count ||
+        !customerAddress?.trim() ||
+        !customerPhone?.trim() ||
+        (paymentNeedsTransaction && !paidTransactionId)
+      ) {
+        const missing = [
+          !count ? 'quantity' : null,
+          !customerPhone?.trim() ? 'phone' : null,
+          !customerAddress?.trim() ? 'delivery address' : null,
+          paymentNeedsTransaction && !paidTransactionId ? 'payment transaction id' : null,
+        ].filter(Boolean);
+        const result = JSON.stringify({
+          created: false,
+          missing,
+          ...(paymentNeedsTransaction && !paidTransactionId
+            ? {
+                instruction:
+                  'The customer chose bKash or Nagad, so a transaction id is required before ordering. Ask them to send the TrxID from their payment SMS, then call create_order again with it. Do not invent or reuse an id.',
+              }
+            : {}),
+        });
         context.emitSse?.('tool_result', { name: 'create_order', result });
         return result;
       }
@@ -535,6 +576,9 @@ export function createCatalogTools(context: {
               + 'not call create_order again until one is known.',
           });
           console.log(`[agent-tool] create_order refused — no variant chosen for ${product.name}`);
+          await notifyPaidOrderFailure(
+            `No variant was chosen for ${product.name}, so the paid order was not created.`,
+          );
           context.emitSse?.('tool_result', { name: 'create_order', result });
           return result;
         }
@@ -554,6 +598,7 @@ export function createCatalogTools(context: {
           // method nobody named are absences, and the confirmation card says nothing about them.
           shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
           paymentMethod: paymentMethod?.trim() ? paymentMethod.trim() : undefined,
+          transactionId: paidTransactionId ?? undefined,
           conversationId: context.conversationId,
           customerPlatformId: context.customerPlatformId ?? undefined,
         });
@@ -563,6 +608,7 @@ export function createCatalogTools(context: {
         });
       } catch (err) {
         result = err instanceof Error ? err.message : 'Failed to create order.';
+        await notifyPaidOrderFailure(`The order could not be created: ${result}`);
       }
 
       console.log(`[agent-tool] create_order result: ${result}`);
@@ -585,6 +631,9 @@ export function createCatalogTools(context: {
         ),
         paymentMethod: z.string().max(40).nullable().optional().describe(
           'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
+        ),
+        transactionId: z.string().max(120).nullable().optional().describe(
+          'The bKash/Nagad transaction id from the customer. Required before ordering when paymentMethod is bKash or Nagad; never invent, guess or reuse one.',
         ),
       }),
     },
@@ -725,6 +774,8 @@ export function createAgentTools(
     emitSse?: SseEmitter;
     /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
     platform?: MessagingPlatform;
+    /** Set for the one turn after a typed reply ignored the previous chips. */
+    suppressSuggestions?: boolean;
     /** Override the Facebook send function (e.g. no-op in test mode). */
     sendMessageOverride?: (pageToken: string, psid: string, text: string) => Promise<void>;
     onOrderCreated?: (orderId: string) => Promise<void>;
@@ -863,6 +914,7 @@ export function createAgentTools(
         `Total ${money(orderDetails.totalPrice)}`,
         orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
         orderDetails.paymentMethod,
+        orderDetails.transactionId ? `TrxID ${orderDetails.transactionId}` : null,
       ].filter(Boolean).join(' · '),
       80,
     );
@@ -1531,13 +1583,11 @@ export function createAgentTools(
   );
 
   /**
-   * One message, optionally with tappable answers. A plain question and its chips travel in a
-   * single tool call, so the model pays for one call instead of a message plus a suggestions
-   * call. The question and its options land in the conversation record; the model then ends its
-   * turn with SILENT so the automatically-delivered final text cannot repeat it.
+   * Plain text only. Suggestions are their own tool so a text reply can never
+   * accidentally carry a chip row from an earlier question.
    */
   const sendMessageTool = tool(
-    async ({ message, suggestions }) => {
+    async ({ message }) => {
       const logResult = (result: string) => {
         context.emitSse?.('tool_result', { name: 'send_message', result });
         return result;
@@ -1547,17 +1597,98 @@ export function createAgentTools(
       if (!text) {
         return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
       }
-      const cleaned = [
-        ...new Set((suggestions ?? []).map((option) => option.trim()).filter(Boolean)),
-      ].slice(0, 10);
-      const withChips = cleaned.length >= 2;
 
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
       }
 
-      const said = withChips ? `${text} (${cleaned.join(' / ')})` : text;
+      try {
+        if (context.sendMessageOverride) {
+          await context.sendMessageOverride(context.pageToken, context.customerPlatformId, text);
+        } else {
+          await fbSendMessage(context.pageToken, context.customerPlatformId, text, {
+            platform: context.platform,
+          });
+        }
+      } catch (err) {
+        await returnMessageUnit(budget.period);
+        throw err;
+      }
+
+      await createMessage({
+        conversationId: context.conversationId,
+        from: 'self',
+        content: text,
+        state: 'done',
+      });
+      onSent?.(text, 'reply');
+
+      return logResult(JSON.stringify({
+        sent: true,
+        instruction:
+          'The plain message is delivered. End your turn with the single word SILENT; do not send the same text again. Use send_suggestions instead when you want tappable choices.',
+      }));
+    },
+    {
+      name: 'send_message',
+      description:
+        `Send the customer one plain ${inbox} message. This tool takes no suggestions: when the next answer is one choice from a short list — color, size, quantity, category, yes/no, delivery or payment preference — call send_suggestions instead. After a successful send, end your turn with SILENT so nothing is sent twice.`,
+      schema: z.object({
+        message: z.string().min(1).max(1000).describe(
+          'The message text in the customer’s language, e.g. "Your order is confirmed."',
+        ),
+      }),
+    },
+  );
+
+  /**
+   * One question and its tappable answers travel together. The question and options land in the
+   * conversation record; the model then ends its turn with SILENT so the automatically-delivered
+   * final text cannot repeat it.
+   */
+  const sendSuggestionsTool = tool(
+    async ({ message, suggestions }) => {
+      const logResult = (result: string) => {
+        context.emitSse?.('tool_result', { name: 'send_suggestions', result });
+        return result;
+      };
+
+      const text = message.trim();
+      if (!text) {
+        return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
+      }
+      const cleaned = [
+        ...new Set(suggestions.map((option) => option.trim()).filter(Boolean)),
+      ].slice(0, 10);
+      if (cleaned.length < 2) {
+        return logResult(JSON.stringify({
+          sent: false,
+          reason: 'send_suggestions needs at least two distinct options',
+          instruction: 'Use send_message for a plain reply, or pass 2 to 10 real choices.',
+        }));
+      }
+
+      // Same chips, same set: the second identical row is redundant even when the customer
+      // typed something in between. One suppression per repeat, so a third attempt can ask
+      // again if the model really needs to.
+      const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const setKey = (options: string[]) => options.map(normalize).sort().join('\u0000');
+      const previous = context.agentState?.lastSentSuggestions ?? [];
+      const repeated = previous.length >= 2 && setKey(cleaned) === setKey(previous);
+      const suppressRepeated = repeated && !context.agentState?.suggestionRepeatSkipped;
+      // A typed answer is how a customer ignores a chip row. Attaching another row here keeps
+      // the old one on screen (most visibly in the Android Messenger client), so this turn
+      // answers in one plain message with the choices written out instead.
+      const withChips = !context.suppressSuggestions && !suppressRepeated;
+      const suppressedChips = !withChips && !suppressRepeated;
+
+      const budget = await takeMessageUnit(!context.sendMessageOverride);
+      if (!budget.allowed) {
+        return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
+      }
+
+      const said = suppressRepeated ? text : `${text} (${cleaned.join(' / ')})`;
       try {
         if (context.sendMessageOverride) {
           await context.sendMessageOverride(context.pageToken, context.customerPlatformId, said);
@@ -1575,6 +1706,14 @@ export function createAgentTools(
         throw err;
       }
 
+      if (withChips && context.agentState) {
+        context.agentState.lastSuggestions = cleaned;
+        context.agentState.lastSentSuggestions = cleaned;
+        context.agentState.suggestionRepeatSkipped = false;
+      } else if (suppressRepeated && context.agentState) {
+        context.agentState.suggestionRepeatSkipped = true;
+      }
+
       await createMessage({
         conversationId: context.conversationId,
         from: 'self',
@@ -1586,28 +1725,31 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         ...(withChips ? { suggestions: cleaned } : {}),
-        ...(cleaned.length === 1 ? { suggestionsIgnored: cleaned[0] } : {}),
+        ...(suppressRepeated
+          ? { suggestionsSuppressed: true, suggestionsRepeated: true, suggestions: cleaned }
+          : {}),
+        ...(suppressedChips ? { suggestionsSuppressed: true, suggestions: cleaned } : {}),
         instruction: withChips
           ? 'The message and its tappable chips are on the customer’s screen. End your turn with the single word SILENT; do not repeat the message or the options.'
-          : 'The message is delivered. End your turn with the single word SILENT; do not send the same text again.',
+          : suppressRepeated
+            ? 'The same chip row was already offered, so this copy went out without it. End your turn with SILENT; do not send the same choices again in another message.'
+            : 'The choices were written in the message text instead of chips, because the customer typed their reply instead of tapping. End your turn with the single word SILENT.',
       }));
     },
     {
-      name: 'send_message',
+      name: 'send_suggestions',
       description:
-        `Send the customer one ${inbox} message, optionally with tappable answer chips (suggestions). Use this whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing; pass 2 to 10 short options and check the real values first (get_product_options, find_variant, Catalog Summary). Pass suggestions as null for a plain message. Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT so nothing is sent twice.`,
+        `Send one ${inbox} message with 2 to 10 tappable answer chips. Use this instead of send_message whenever the next answer is one choice from a short list you can name — color, size, quantity, category, yes/no, delivery or payment preference — so the customer taps instead of typing. Check the real values first (get_product_options, find_variant, Catalog Summary). Never invent options and never include open answers (name, address, phone, order id) as suggestions. After a successful send, end your turn with SILENT.`,
       schema: z.object({
         message: z.string().min(1).max(1000).describe(
-          'The message text in the customer’s language, e.g. "Which color would you like?"',
+          'The question or sentence shown above the chips, in the customer’s language, e.g. "Which color would you like?"',
         ),
         suggestions: z
           .array(z.string().min(1).max(80))
           .min(2)
           .max(10)
-          .nullable()
-          .optional()
           .describe(
-            'Optional tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers; null or omitted for a plain message.',
+            'Tappable answers, 2 to 10 short options exactly as the customer would say them, e.g. ["Red", "Green", "Blue"]. Only values the store actually offers.',
           ),
       }),
     },
@@ -1689,6 +1831,7 @@ export function createAgentTools(
     showVariantPhotosTool,
     suggestAlternativesTool,
     sendMessageTool,
+    sendSuggestionsTool,
     reportHumanInterveneTool,
   ];
 }

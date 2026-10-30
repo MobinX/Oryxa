@@ -20,7 +20,7 @@ describe('Orders API', () => {
       }),
     });
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = await res.json() as any;
     expect(body.state).toBe('pending');
     expect(body.totalPrice).toBeGreaterThan(0);
   });
@@ -29,7 +29,7 @@ describe('Orders API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/orders`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect(Array.isArray(await res.json())).toBe(true);
+    expect(Array.isArray(await res.json() as any)).toBe(true);
   });
 
   it('PATCH /:businessId/orders/:orderId/state updates state', async () => {
@@ -43,13 +43,13 @@ describe('Orders API', () => {
         customerName: 'Buyer',
       }),
     });
-    const order = await createRes.json();
+    const order = await createRes.json() as any;
     const res = await app.request(`/api/v1/${seed.business.id}/orders/${order.id}/state`, {
       method: 'PATCH',
       headers: authHeaders(),
       body: JSON.stringify({ state: 'acknowledged' }),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()).newState).toBe('acknowledged');
+    expect((await res.json() as any).newState).toBe('acknowledged');
   });
 });

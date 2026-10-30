@@ -78,7 +78,13 @@ export function photoBlock(contentType: string, base64: string, asUrlPart: boole
 
 export interface AgentConfig {
   systemPrompt: string;
-  business: { id: string; name: string; description?: string | null };
+  business: {
+    id: string;
+    name: string;
+    description?: string | null;
+    agentProductGuidance?: string | null;
+    agentBargainGuidance?: string | null;
+  };
   /**
    * The thread the model is about to read. `imageKeys` are the bucket keys of the pictures the
    * runner decided this run should show as pixels — the ones being answered now plus the most
@@ -97,6 +103,8 @@ export interface AgentConfig {
   customerName?: string | null;
   /** Which inbox this token answers as; tools use it for the platform's text limit and wording. */
   platform?: 'facebook' | 'instagram';
+  /** True on the turn right after a customer typed instead of tapping the offered chips. */
+  suppressSuggestions?: boolean;
   catalogSummary?: string;
   /** Per-thread facts, kept after the stable prompt prefix for cache reuse. */
   agentState?: ConversationAgentState;
@@ -112,6 +120,11 @@ export interface AgentConfig {
   tools?: StructuredTool[];
   /** Override the default Messenger reply guidance in the system prompt. */
   replyGuidance?: string;
+  /**
+   * Which wording rules the final text is validated against. Defaults to 'comment' when
+   * custom tools are supplied (the comment runner), 'messenger' otherwise.
+   */
+  validationChannel?: 'comment' | 'messenger';
   promptCacheKey?: string;
   /** Reasoning effort for OpenAI reasoning deployments (defaults to 'low' for text, 'medium' for photos). */
   reasoningEffort?: 'low' | 'medium' | 'high';
@@ -331,6 +344,7 @@ export class Agent {
           customerPlatformId: this.config.customerPlatformId,
           customerName: this.config.customerName,
           platform: this.config.platform,
+          suppressSuggestions: this.config.suppressSuggestions,
           emitSse,
           sendMessageOverride,
           onOrderCreated: this.config.onOrderCreated,
@@ -359,6 +373,12 @@ export class Agent {
     const dynamicContent = [
       `You are a sales rep for ${this.config.business.name}.`,
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
+      this.config.business.agentProductGuidance
+        ? `How to answer questions about products: ${this.config.business.agentProductGuidance}`
+        : '',
+      this.config.business.agentBargainGuidance
+        ? `When a customer wants to bargain: ${this.config.business.agentBargainGuidance}`
+        : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
       compactState ? `Conversation state (verified facts):\n${JSON.stringify(compactState)}` : '',
@@ -395,7 +415,7 @@ export class Agent {
     // Post-generation validation & sanitization
     const validation = validateAndSanitizeReply(replyText, {
       expectedLanguage: turnLanguage,
-      channel: this.config.tools ? 'comment' : 'messenger',
+      channel: this.config.validationChannel ?? (this.config.tools ? 'comment' : 'messenger'),
       isSilentExpected: turnIntent === 'comment_silent',
     });
     replyText = validation.sanitizedText;

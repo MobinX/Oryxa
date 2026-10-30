@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 import type { Tiktoken } from 'js-tiktoken/lite';
 import {
   getDefaultAgent,
@@ -186,6 +186,7 @@ export function PlaygroundClient({
   /** Only the operator console passes this: the prompt and guidance editors exist for it alone. */
   canEditPrompt?: boolean;
 }) {
+  const { companyName: COMPANY_NAME } = useBrand();
   // State
   const [agent, setAgent] = useState<Agent | null>(preload?.agent ?? null);
   const [systemPrompt, setSystemPrompt] = useState<string>(preload?.agent?.systemPrompt ?? '');

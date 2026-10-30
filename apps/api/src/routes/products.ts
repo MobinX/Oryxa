@@ -162,7 +162,7 @@ productsRouter.openapi(listProductsRoute, async (c) => {
       createdAt: p.createdAt.toISOString(),
     })),
     totalCount: result.totalCount,
-  });
+  } as unknown as z.infer<typeof listProductsOutputSchema>, 200);
 });
 
 const getProductRoute = createRoute({
@@ -187,7 +187,7 @@ productsRouter.openapi(getProductRoute, async (c) => {
   return c.json({
     ...product,
     createdAt: product.createdAt.toISOString(),
-  });
+  } as unknown as z.infer<typeof getProductByIdOutputSchema>, 200);
 });
 
 /**
@@ -222,7 +222,7 @@ productsRouter.openapi(getProductByVariantRoute, async (c) => {
   return c.json({
     ...product,
     createdAt: product.createdAt.toISOString(),
-  });
+  } as unknown as z.infer<typeof getProductByIdOutputSchema>, 200);
 });
 
 const updateProductRoute = createRoute({
@@ -251,7 +251,7 @@ productsRouter.openapi(updateProductRoute, async (c) => {
   try {
     const result = await updateProduct(businessId, productId, data);
     if (!result) return c.json({ error: 'Product entity missing' }, 404);
-    return c.json(result);
+    return c.json(result, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update product';
     if (message.includes('Category not found')) {
@@ -280,7 +280,7 @@ productsRouter.openapi(deleteProductRoute, async (c) => {
   const productId = c.req.param('productId');
   const result = await deleteProduct(businessId, productId);
   if (!result) return c.json({ error: 'Product entity missing' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const updateCategoryRoute = createRoute({
@@ -304,7 +304,7 @@ productsRouter.openapi(updateCategoryRoute, async (c) => {
   const { name } = c.req.valid('json');
   const result = await updateCategory(businessId, categoryId, { name });
   if (!result) return c.json({ error: 'Category not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const deleteCategoryRoute = createRoute({
@@ -326,5 +326,5 @@ productsRouter.openapi(deleteCategoryRoute, async (c) => {
   const categoryId = c.req.param('categoryId');
   const result = await deleteCategory(businessId, categoryId);
   if (!result) return c.json({ error: 'Category not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });

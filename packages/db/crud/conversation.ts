@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { conversations, messages } from '@db/schema';
 import type { ConversationAgentState } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
+import { decryptChannelToken } from '@repo/db/crud/channel';
 
 export async function getOrCreateConversation(
   businessId: string,
@@ -35,7 +36,7 @@ export async function getOrCreateConversation(
 }
 
 export async function getConversationWithHistory(conversationId: string) {
-  return db.query.conversations.findFirst({
+  const row = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)),
     with: {
       messages: {
@@ -52,6 +53,8 @@ export async function getConversationWithHistory(conversationId: string) {
       business: true,
     },
   });
+  if (row?.channel) row.channel.apiToken = decryptChannelToken(row.channel.apiToken);
+  return row;
 }
 
 export async function createMessage(data: {
@@ -61,6 +64,12 @@ export async function createMessage(data: {
   contentType?: string;
   state?: 'pending' | 'working' | 'done';
   imageKeys?: string[];
+  /**
+   * Who actually wrote a `self` row: `ai` when the agent produced it, `human` when an
+   * operator sent it from the inbox. Null only on legacy rows — the inbox filter reads
+   * that as "written before the marking existed".
+   */
+  sentBy?: 'ai' | 'human';
 }) {
   const [message] = await db
     .insert(messages)
@@ -71,6 +80,7 @@ export async function createMessage(data: {
       contentType: data.contentType ?? 'text',
       state: data.state ?? (data.from === 'customer' ? 'pending' : 'done'),
       imageKeys: data.imageKeys ?? [],
+      sentBy: data.sentBy ?? null,
     })
     .returning();
 
@@ -102,6 +112,71 @@ export async function updateConversationAgentState(
     .update(conversations)
     .set({ agentState })
     .where(eq(conversations.id, conversationId));
+}
+
+/**
+ * Human takeover (spec E): pausing keeps every gate in the runner off (the AI NEVER
+ * replies after a takeover) until an operator resumes it. Un-pausing is explicit —
+ * nothing resumes on its own.
+ */
+export async function setConversationAiPaused(
+  businessId: string,
+  conversationId: string,
+  aiPaused: boolean,
+) {
+  const [row] = await db
+    .update(conversations)
+    .set({ aiPaused })
+    .where(
+      and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
+    )
+    .returning({ id: conversations.id, aiPaused: conversations.aiPaused });
+  return row ?? null;
+}
+
+/**
+ * The official-inbox twin of the store claim, made atomic over the takeover flag: a
+ * conversation that is paused or already claimed cannot be claimed again, and a claim
+ * won before the human paused still keeps the AI out because `ai_paused` is read inside
+ * this one statement. Idle means the same thing the store side found safe: freshly
+ * created ('done' default) and 'pending' (the just-inserted customer turn) are clean
+ * start points; a stale 'working' claim needs the age test, exactly as the store claim.
+ */
+export async function claimOfficialConversationForAgentRun(
+  conversationId: string,
+  staleBefore?: Date,
+) {
+  const idle = and(
+    inArray(conversations.lastMessageState, ['done', 'pending']),
+    eq(conversations.aiPaused, false),
+  );
+  const abandoned =
+    staleBefore === undefined
+      ? undefined
+      : and(
+          eq(conversations.lastMessageState, 'working'),
+          eq(conversations.aiPaused, false),
+          lt(conversations.lastStateAt, staleBefore),
+        );
+  const claimed = await db
+    .update(conversations)
+    .set({ lastMessageState: 'working', lastStateAt: new Date() })
+    .where(and(eq(conversations.id, conversationId), or(idle, abandoned)))
+    .returning({ id: conversations.id });
+  return claimed.length > 0 ? claimed[0] : null;
+}
+
+/**
+ * The official twin of the business-scoped pause above: official conversations have
+ * businessId NULL, so the store variant can never find them.
+ */
+export async function setOfficialConversationAiPaused(conversationId: string, aiPaused: boolean) {
+  const [row] = await db
+    .update(conversations)
+    .set({ aiPaused })
+    .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)))
+    .returning({ id: conversations.id, aiPaused: conversations.aiPaused });
+  return row ?? null;
 }
 
 export async function checkPendingMessages(conversationId: string) {
@@ -246,8 +321,41 @@ export async function listConversations(
     // moves, so ordering by it buries the threads an agent has just replied to under whatever
     // happened to be created most recently.
     orderBy: [desc(conversations.lastStateAt), desc(conversations.createdAt)],
-    with: { channel: { columns: { extraInfo: true } } },
+    with: {
+      channel: { columns: { extraInfo: true } },
+    },
+    columns: {
+      id: true,
+      customerName: true,
+      lastMessageState: true,
+      channelId: true,
+      customerPlatformId: true,
+      createdAt: true,
+      businessId: true,
+      aiPaused: true,
+      autoPilot: true,
+      lastStateAt: true,
+    },
   });
+}
+
+export async function setConversationAutoPilot(
+  conversationId: string,
+  businessId: string,
+  autoPilot: boolean,
+) {
+  const [row] = await db
+    .update(conversations)
+    .set({ autoPilot })
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.businessId, businessId),
+        isNull(conversations.deletedAt),
+      ),
+    )
+    .returning({ id: conversations.id, autoPilot: conversations.autoPilot });
+  return row ?? null;
 }
 
 export async function listMessages(conversationId: string, businessId: string, limit = 50) {
@@ -272,6 +380,8 @@ export async function listMessages(conversationId: string, businessId: string, l
     msgs.reverse().map(async (m) => ({
       id: m.id,
       from: m.from,
+      /** AI vs human for `self` rows — the inbox marks who wrote a reply. */
+      sentBy: (m.sentBy === 'human' ? 'human' : m.sentBy === 'ai' ? 'ai' : null) as 'ai' | 'human' | null,
       content: m.content,
       contentType: m.contentType,
       time: m.time.toISOString(),
@@ -285,10 +395,12 @@ export async function listMessages(conversationId: string, businessId: string, l
 }
 
 export async function getConversationForBusiness(conversationId: string, businessId: string) {
-  return db.query.conversations.findFirst({
+  const row = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
     with: { channel: true },
   });
+  if (row?.channel) row.channel.apiToken = decryptChannelToken(row.channel.apiToken);
+  return row;
 }
 
 export async function deleteConversation(businessId: string, conversationId: string) {
@@ -319,11 +431,15 @@ export async function deleteMessage(conversationId: string, messageId: string) {
  * the conversation with its whole history — would not.
  */
 export async function processInboundMessage(
-  channel: { id: string; businessId: string },
+  // Official Channels conversations run on the operator's own accounts with no business
+  // behind them; the column (and this type) allows NULL.
+  channel: { id: string; businessId: string | null },
   senderId: string,
   text: string,
   externalId?: string,
   imageKeys?: string[],
+  /** `quick_reply` / `postback` when the turn was a tap rather than typed text. */
+  messageKind?: string,
 ): Promise<{
   conversationId: string;
   messageId: string | null;
@@ -331,6 +447,7 @@ export async function processInboundMessage(
   inserted: boolean;
   needsProfile: boolean;
   priorStateAt: Date;
+  autoPilot: boolean;
 }> {
   let conv = await db.query.conversations.findFirst({
     where: and(
@@ -370,8 +487,9 @@ export async function processInboundMessage(
   const priorStatus = conv.lastMessageState;
   const photos = imageKeys ?? [];
   // The pictures are what the customer sent, so they name the turn: a photo with a caption is
-  // an image message, and the caption rides in `content` beside it.
-  const contentType = photos.length > 0 ? 'image' : 'text';
+  // an image message, and the caption rides in `content` beside it. A chip or button tap is
+  // named too, so the runner can tell it apart from a typed answer on the next turn.
+  const contentType = photos.length > 0 ? 'image' : (messageKind ?? 'text');
   let messageId: string | null = null;
 
   if (externalId) {
@@ -397,6 +515,7 @@ export async function processInboundMessage(
         inserted: false,
         needsProfile: false,
         priorStateAt: conv.lastStateAt,
+        autoPilot: conv.autoPilot,
       };
     }
 
@@ -436,6 +555,7 @@ export async function processInboundMessage(
     inserted: true,
     needsProfile,
     priorStateAt: conv.lastStateAt,
+    autoPilot: conv.autoPilot,
   };
 }
 

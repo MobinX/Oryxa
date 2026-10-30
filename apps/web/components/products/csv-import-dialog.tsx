@@ -99,7 +99,7 @@ export function ProductCsvImport({ businessId }: { businessId: string }) {
                   <p className="font-semibold">Only two formats are supported</p>
                   <p className="mt-1 text-[var(--muted-foreground)]">
                     A Shopify product export (a <code>Handle</code> or <code>URL handle</code>{' '}
-                    column) or the compact Oryxa template below (a <code>Product Name</code>{' '}
+                    column) or the compact template below (a <code>Product Name</code>{' '}
                     column). Any other CSV is rejected.
                   </p>
                 </div>

@@ -8,7 +8,9 @@ import { redirect } from 'next/navigation';
  * hands them to the API — the same route a server render already takes.
  */
 const API_URL =
-  typeof window === 'undefined' ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001' : '';
+  typeof (globalThis as { window?: unknown }).window === 'undefined'
+    ? process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001'
+    : '';
 
 export class ApiError extends Error {
   constructor(
@@ -64,12 +66,16 @@ export async function apiFetch<T>(
 }
 
 // User
-export const syncUser = (data: {
-  firebaseUid: string;
-  name: string;
-  email?: string;
-  signInMethod: string;
-}) => apiFetch('/api/v1/users/sync', { method: 'POST', body: JSON.stringify(data) });
+/** The sync route now authorises on the Firebase bearer itself; uid/email come from the token. */
+export const syncUser = (
+  token: string,
+  data: {
+    firebaseUid: string;
+    name: string;
+    email?: string;
+    signInMethod: string;
+  },
+) => apiFetch('/api/v1/users/sync', { method: 'POST', token, signInPath: null, body: JSON.stringify(data) });
 
 export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
@@ -93,6 +99,8 @@ export type Business = {
     structure?: 'classic' | 'editorial' | 'market' | 'terminal' | 'atelier';
   } | null;
   description?: string | null;
+  agentProductGuidance?: string | null;
+  agentBargainGuidance?: string | null;
   employeeCount?: number | null;
   type?: string | null;
   foundedDate?: string | null;
@@ -311,10 +319,11 @@ export type UpdateProductInput = {
 export const listProducts = (
   token: string,
   businessId: string,
-  params?: { categoryId?: string; limit?: number; offset?: number },
+  params?: { categoryId?: string; q?: string; limit?: number; offset?: number },
 ) => {
   const search = new URLSearchParams();
   if (params?.categoryId) search.set('categoryId', params.categoryId);
+  if (params?.q) search.set('q', params.q);
   if (params?.limit != null) search.set('limit', String(params.limit));
   if (params?.offset != null) search.set('offset', String(params.offset));
   const qs = search.toString();
@@ -372,7 +381,7 @@ export async function uploadVariantImage(
     // B2 not configured — return null so the product can
     // still be saved without the image instead of failing the whole request.
     if (res.status === 503) return null;
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
     throw new ApiError(err.error ?? 'Upload failed', res.status);
   }
 
@@ -436,11 +445,13 @@ export const deleteChannel = (token: string, businessId: string, channelId: stri
 export const getFacebookAuthUrl = (
   token: string,
   businessId: string,
-  options?: { portfolio?: boolean },
+  options?: { portfolio?: boolean; returnOrigin?: string },
 ) => {
-  const choice =
-    options?.portfolio === undefined ? '' : `?portfolio=${String(options.portfolio)}`;
-  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${choice}`, {
+  const query = new URLSearchParams();
+  if (options?.portfolio !== undefined) query.set('portfolio', String(options.portfolio));
+  if (options?.returnOrigin) query.set('returnOrigin', options.returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${suffix}`, {
     token,
   });
 };
@@ -477,8 +488,18 @@ export const connectFacebookPages = (
     { method: 'POST', token, body: JSON.stringify(data) },
   );
 
-export const getInstagramAuthUrl = (token: string, businessId: string) =>
-  apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth`, { token });
+export const getInstagramAuthUrl = (
+  token: string,
+  businessId: string,
+  options?: { returnOrigin?: string },
+) => {
+  const query = new URLSearchParams();
+  if (options?.returnOrigin) query.set('returnOrigin', options.returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/instagram/auth${suffix}`, {
+    token,
+  });
+};
 
 export type InstagramPendingAccount = {
   id: string;
@@ -527,8 +548,12 @@ export type AdminChannel = {
 export const listAdminChannels = (token: string) =>
   apiFetch<{ channels: AdminChannel[] }>('/api2/admin/channels', { token });
 
-export const getAdminFacebookAuthUrl = (token: string) =>
-  apiFetch<{ url: string }>('/api2/admin/channels/facebook/auth', { token });
+export const getAdminFacebookAuthUrl = (token: string, returnOrigin?: string) => {
+  const query = new URLSearchParams();
+  if (returnOrigin) query.set('returnOrigin', returnOrigin);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ url: string }>(`/api2/admin/channels/facebook/auth${suffix}`, { token });
+};
 
 export type AdminPendingPage = {
   id: string;
@@ -586,6 +611,8 @@ export type Conversation = {
   customerPlatformId: string;
   createdAt: string;
   pageName?: string | null;
+  /** False when the merchant turned the AI auto reply off for this thread. */
+  autoPilot?: boolean;
 };
 
 export const listConversations = (
@@ -652,11 +679,162 @@ export const sendMessage = (
     { method: 'POST', token, body: JSON.stringify({ content, contentType: 'text' }) },
   );
 
+export const updateConversationAutoPilot = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  autoPilot: boolean,
+) =>
+  apiFetch<{ id: string; autoPilot: boolean }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/auto-pilot`,
+    { method: 'PATCH', token, body: JSON.stringify({ autoPilot }) },
+  );
+
+export type InboxSuggestion =
+  | { id: string; kind: 'text'; text: string }
+  | {
+      id: string;
+      kind: 'product';
+      productId: string;
+      variantId?: string | null;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+      subtitle?: string | null;
+    }
+  | {
+      id: string;
+      kind: 'category';
+      categoryId: string;
+      name: string;
+      productCount: number;
+      products: Array<{ id: string; name: string; price: number; imageUrl?: string | null }>;
+    }
+  | {
+      id: string;
+      kind: 'product_info';
+      productId: string;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+      variantCount: number;
+    }
+  | {
+      id: string;
+      kind: 'variant';
+      productId: string;
+      variantId: string;
+      title: string;
+      variantName: string;
+      price: number;
+      imageUrl?: string | null;
+      photoCount: number;
+    }
+  | {
+      id: string;
+      kind: 'order';
+      productId: string;
+      variantId?: string | null;
+      title: string;
+      price: number;
+      imageUrl?: string | null;
+      count?: number;
+      customerPhone?: string;
+      customerAddress?: string;
+    }
+  | {
+      id: string;
+      kind: 'order_card';
+      orderId: string;
+      title: string;
+      subtitle: string;
+      imageUrl?: string | null;
+      state: string;
+      total: number;
+    };
+
+export const generateInboxSuggestions = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+) =>
+  apiFetch<{ forMessageId: string | null; suggestions: InboxSuggestion[] }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/suggestions`,
+    { method: 'POST', token },
+  );
+
+export const sendInboxSuggestion = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  input: {
+    kind:
+      | 'product'
+      | 'category'
+      | 'product_list'
+      | 'product_info'
+      | 'product_variant'
+      | 'order_card';
+    productId?: string;
+    variantId?: string;
+    categoryId?: string;
+    orderId?: string;
+  },
+) =>
+  apiFetch<{ sent: boolean; cards: number }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/suggestions/send`,
+    { method: 'POST', token, body: JSON.stringify(input) },
+  );
+
+export const getConversationOrderDefaults = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+) =>
+  apiFetch<{ count: number; customerPhone: string; customerAddress: string }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/order-defaults`,
+    { token },
+  );
+
+export const createConversationOrder = (
+  token: string,
+  businessId: string,
+  conversationId: string,
+  input: {
+    productId: string;
+    variantId?: string;
+    count: number;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    shippingCost?: number;
+    paymentMethod?: string;
+    transactionId?: string;
+  },
+) =>
+  apiFetch<{ id: string; totalPrice: number; customerId: string | null; state: string }>(
+    `/api/v1/${businessId}/conversations/${conversationId}/orders`,
+    { method: 'POST', token, body: JSON.stringify(input) },
+  );
+
 // Orders
 export type OrderListItem = {
   id: string;
+  productId?: string | null;
+  variantId?: string | null;
+  productName?: string | null;
+  variantName?: string | null;
+  variantShortId?: string | null;
+  variantImageUrl?: string | null;
+  count?: number;
+  variantPrice?: number;
   customerName: string;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
   totalPrice: number;
+  shippingCost?: number;
+  paymentMethod?: string | null;
+  transactionId?: string | null;
   state: string;
   createdAt: string;
 };
@@ -668,14 +846,19 @@ export type OrderDetail = {
   variantId: string | null;
   productName?: string | null;
   variantName?: string | null;
+  variantShortId?: string | null;
   variantImageUrl?: string | null;
   count: number;
   variantPrice: number;
+  customerId?: string | null;
   customerName: string;
   customerPhone?: string | null;
   customerAddress?: string | null;
   state: string;
   totalPrice: number;
+  shippingCost?: number;
+  paymentMethod?: string | null;
+  transactionId?: string | null;
   conversationId?: string | null;
   createdAt: string;
 };
@@ -937,6 +1120,32 @@ export const getLogEvents = (token: string, filter: LogFilter) => {
 export const getLogEventTypes = (token: string) =>
   apiFetch<{ types: LogEventTypeOption[] }>('/api2/logs/types', { token, signInPath: null });
 
+export type AxiomStorage = {
+  source: 'axiom' | 'memory';
+  available: boolean;
+  note?: string;
+  usedBytes: number | null;
+  usedGb: number | null;
+  limitGb: number;
+  limitConfigured: boolean;
+  remainingGb: number | null;
+  percentUsed: number | null;
+  measuredAt: string | null;
+  datasets: { name: string; bytes: number; measuredAt: string }[];
+  logDataset: {
+    name: string;
+    bytes: number | null;
+    retentionDays: number;
+    retentionEnabled: boolean;
+    retentionKnown: boolean;
+    oldestEventAt: string | null;
+    expiresAt: string | null;
+  };
+};
+
+export const getLogStorage = (token: string) =>
+  apiFetch<AxiomStorage>('/api2/logs/storage', { token, signInPath: null });
+
 // Admin — the operator dashboard read, on /api2 beside the log query.
 export type AdminWindowMetrics = {
   conversations: number;
@@ -1170,8 +1379,13 @@ export type AdminBusinessPlan = {
   period: string;
   messagesUsed: number;
   commentsUsed: number;
+  /** Effective limits, after an optional per-business override. */
   messageLimit: number | null;
   commentLimit: number | null;
+  messageLimitOverride: number | null;
+  commentLimitOverride: number | null;
+  planMessageLimit: number | null;
+  planCommentLimit: number | null;
 };
 
 export type PlanAssignment = {
@@ -1223,6 +1437,35 @@ export const markNotificationsRead = (
 
 // The operator surface. Every call below carries the log console's bearer, exactly like
 // /api2/admin/stats, so a merchant's own token is never what authorises a plan edit.
+export type ModelBilling = {
+  provider: string;
+  model: string;
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  cachedInputUsdPerMillion: number;
+  updatedAt: string;
+};
+
+export const getAdminModelBilling = (token: string) =>
+  apiFetch<ModelBilling>('/api2/admin/model-billing', { token, signInPath: null });
+
+export const saveAdminModelBilling = (
+  token: string,
+  input: {
+    provider: string;
+    model: string;
+    inputUsdPerMillion: number;
+    outputUsdPerMillion: number;
+    cachedInputUsdPerMillion: number;
+  },
+) =>
+  apiFetch<ModelBilling>('/api2/admin/model-billing', {
+    method: 'PUT',
+    token,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
 export const adminListPlans = (token: string) =>
   apiFetch<AdminPlanRow[]>('/api2/admin/plans', { token, signInPath: null });
 
@@ -1252,6 +1495,18 @@ export const adminDeletePlan = (token: string, id: string) =>
 
 export const adminListBusinessPlans = (token: string) =>
   apiFetch<AdminBusinessPlan[]>('/api2/admin/plans/businesses', { token, signInPath: null });
+
+export const adminSetBusinessCaps = (
+  token: string,
+  businessId: string,
+  caps: { messageLimitOverride: number | null; commentLimitOverride: number | null },
+) =>
+  apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/caps`, {
+    method: 'PUT',
+    token,
+    signInPath: null,
+    body: JSON.stringify(caps),
+  });
 
 export const adminAssignPlan = (token: string, businessId: string, planId: string | null) =>
   apiFetch<QuotaStatus>(`/api2/admin/businesses/${businessId}/plan`, {
@@ -1326,38 +1581,216 @@ export const adminMakeAgentFollowDefault = (bearer: string, agentId: string) =>
     body: JSON.stringify({ agentId }),
   });
 
-/**
- * The two names a brand swap moves, as the API read them off Vercel just before writing the other
- * pair. `from` is what the project said, not what this app is printing — the console keeps the old
- * name until the rebuilt deployment takes over, and a result that echoed the local name would
- * report a swap that had not happened.
- */
-export type BrandSwapResult = {
-  from: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string; WEB_URL: string };
-  to: { COMPANY_NAME: string; PARENT_COMPANY_NAME: string; WEB_URL: string };
-  /** One per project the swap rebuilt — the web app that prints the name, and the API whose links follow it. */
-  builds: {
-    project: string;
-    projectId: string;
-    redeployedFrom: string;
-    deploymentId: string;
-    deploymentUrl: string;
-    readyState: string;
-  }[];
-  dryRun: boolean;
+/* Official Channels (spec Official): the console's own channels, inbox, tickets, prospects. */
+
+export type OfficialSettings = {
+  availability: string;
+  availabilityNote: string | null;
+  aiEnabled: boolean;
+  autoReply: boolean;
+  tone: string | null;
+  language: string | null;
+  instructions: string | null;
+  updatedAt: string;
 };
 
-/**
- * Hands the other brand to Vercel and starts the build that makes it live. Not `/api2` like the
- * rest of the console: this one is a plain route handler in api2 rather than a Hono route, because
- * it holds the Vercel token and has no business being compiled into `apps/api`, which is deployed
- * on its own without the console at all.
- */
-export const adminSwapBrand = (bearer: string, { dryRun = false }: { dryRun?: boolean } = {}) =>
-  apiFetch<BrandSwapResult>(`/api/brand/toggle${dryRun ? '?dryRun=1' : ''}`, {
+export type OfficialChannel = {
+  id: string;
+  platform: string;
+  platformChannelId: string;
+  label: string;
+  createdAt: string;
+};
+
+export type OfficialChannelResult = {
+  id: string;
+  created?: boolean;
+  verified?: boolean;
+  error?: string;
+};
+
+export type OfficialConversation = {
+  id: string;
+  channelId: string;
+  platform: string;
+  customerPlatformId: string;
+  customerName: string | null;
+  aiPaused: boolean;
+  status: string;
+  stateAt: string;
+  createdAt: string;
+};
+
+export type OfficialThreadMessage = {
+  id: string;
+  from: 'customer' | 'self';
+  sentBy: string | null;
+  state: string;
+  content: string;
+  time: string;
+};
+
+export type OfficialTicket = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  customerPlatformId: string;
+  customerName: string | null;
+  type: 'support' | 'security';
+  subject: string | null;
+  summary: string | null;
+  status: string;
+  priority: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OfficialProspect = {
+  id: string;
+  channelId: string;
+  conversationId: string | null;
+  platform: string;
+  contactPlatformId: string;
+  name: string | null;
+  country: string | null;
+  businessType: string | null;
+  employeesEstimate: string | null;
+  budget: string | null;
+  needs: string | null;
+  consent: boolean | null;
+  score: number;
+  scoreBreakdown: Record<string, number>;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const adminOfficialSettings = (bearer: string) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', { token: bearer, signInPath: null });
+
+export const adminOfficialSaveSettings = (bearer: string, input: Partial<OfficialSettings>) =>
+  apiFetch<OfficialSettings>('/api2/admin/official/settings', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialChannels = (bearer: string) =>
+  apiFetch<{ channels: OfficialChannel[] }>('/api2/admin/official/channels', {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialVerifyChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ verified: boolean; error?: string }>(`/api2/admin/official/channels/${channelId}/verify`, {
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConnectWhatsApp = (bearer: string, input: { token: string; phoneNumberId: string }) =>
+  apiFetch<OfficialChannelResult>('/api2/admin/official/channels/whatsapp/connect', {
     method: 'POST',
     token: bearer,
     signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialDisconnectChannel = (bearer: string, channelId: string) =>
+  apiFetch<{ id: string; disconnected: boolean }>(`/api2/admin/official/channels/${channelId}/disconnect`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+  });
+
+export const adminOfficialConversations = (bearer: string, params: { platform?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.platform) query.set('platform', params.platform);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ conversations: OfficialConversation[] }>(`/api2/admin/official/conversations${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialThread = (bearer: string, conversationId: string) =>
+  apiFetch<{
+    conversation: OfficialConversation;
+    messages: OfficialThreadMessage[];
+    tickets: OfficialTicket[];
+  }>(`/api2/admin/official/conversations/${conversationId}`, { token: bearer, signInPath: null });
+
+export const adminOfficialReply = (bearer: string, conversationId: string, content: string, paused?: boolean) =>
+  apiFetch<{ sent: boolean; conversationId: string }>(`/api2/admin/official/conversations/${conversationId}/reply`, {
+    method: 'POST',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify({ content, ...(paused !== undefined ? { paused } : {}) }),
+  });
+
+export const adminOfficialTakeover = (bearer: string, conversationId: string, paused: boolean) =>
+  apiFetch<{ conversationId: string; aiPaused: boolean }>(
+    `/api2/admin/official/conversations/${conversationId}/takeover`,
+    { method: 'POST', token: bearer, signInPath: null, body: JSON.stringify({ paused }) },
+  );
+
+export const adminOfficialTickets = (bearer: string, params: { type?: string; status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.type) query.set('type', params.type);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ tickets: OfficialTicket[] }>(`/api2/admin/official/tickets${suffix}`, {
+    token: bearer,
+    signInPath: null,
+  });
+};
+
+export const adminOfficialPatchTicket = (
+  bearer: string,
+  ticketId: string,
+  input: { status?: string; priority?: string; notes?: string | null },
+) =>
+  apiFetch<{ ticket: OfficialTicket }>(`/api2/admin/official/tickets/${ticketId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialProspects = (bearer: string, params: { status?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiFetch<{ prospects: OfficialProspect[]; weights: Record<string, number> }>(
+    `/api2/admin/official/prospects${suffix}`,
+    { token: bearer, signInPath: null },
+  );
+};
+
+export const adminOfficialPatchProspect = (
+  bearer: string,
+  prospectId: string,
+  input: { status?: string; notes?: string | null },
+) =>
+  apiFetch<{ prospect: OfficialProspect }>(`/api2/admin/official/prospects/${prospectId}`, {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
+  });
+
+export const adminOfficialWeights = (
+  bearer: string,
+  input: { name?: number; country?: number; businessType?: number; employeesEstimate?: number; budget?: number; needs?: number },
+) =>
+  apiFetch<{ weights: Record<string, number>; rescanned: number }>('/api2/admin/official/prospect-weights', {
+    method: 'PATCH',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify(input),
   });
 
 // Customers (scoped through the business's company)
@@ -1457,3 +1890,4 @@ export type CustomerHistory = {
 
 export const getCustomer = (token: string, businessId: string, customerId: string) =>
   apiFetch<CustomerHistory>(`/api/v1/${businessId}/customers/${customerId}`, { token });
+

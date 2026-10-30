@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { logout, signInWithEmail, signInWithGoogle, sendPasswordReset } from '@/lib/firebase';
 import { operatorSignInAction } from '@/app/actions/logs-auth';
 
@@ -34,19 +35,19 @@ function messageFor(code: string): string {
   return 'Sign-in failed.';
 }
 
-/**
- * `user` is what the console has always asked for; `domain` comes from the server, so the address
- * the account actually lives at is never typed and never guessed.
- */
-export function AdminLoginForm({ user, domain }: { user: string; domain: string }) {
+/** `user` is the full operator email, prefilled so the account is visible but still editable. */
+export function AdminLoginForm({ user }: { user: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [typedUser, setTypedUser] = useState(user);
+  const [pending, setPending] = useState<'google' | 'password' | 'reset' | null>(null);
+  const busy = pending !== null;
+  // Start empty: the operator types the full address they want to sign in with. The configured
+  // account is only a placeholder, never a value appended to or forced into the field.
+  const [typedUser, setTypedUser] = useState('');
 
   async function handleGoogle() {
-    if (busy) return;
-    setBusy(true);
+    if (pending) return;
+    setPending('google');
     setError(null);
     setNotice(null);
     try {
@@ -66,38 +67,40 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
       }
       await logout().catch(() => {});
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
   async function resetPassword() {
-    const login = typedUser.trim();
-    if (!login) { setError('Enter your operator user id first.'); return; }
-    setBusy(true);
+    const login = typedUser.trim() || user.trim();
+    if (!login) { setError('Enter your operator email first.'); return; }
+    setPending('reset');
     setError(null);
     setNotice(null);
     try {
-      await sendPasswordReset(login.includes('@') ? login : `${login}@${domain}`);
+      await sendPasswordReset(login);
       setNotice('If that operator account exists, Firebase will send password reset instructions to its email address.');
     } catch (err) {
       const failure = err as { code?: string; message?: string };
       if (failure.code === 'auth/network-request-failed') setError('The browser could not reach Firebase. Check your connection and try again.');
       else setError(failure.code === 'auth/invalid-email' ? 'The operator email address is invalid.' : 'Could not start password recovery. Please try again.');
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
-  async function submit(formData: FormData) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     const typed = String(formData.get('user') ?? '');
     const password = String(formData.get('password') ?? '');
-    if (busy) return;
+    if (pending) return;
 
-    setBusy(true);
+    setPending('password');
     setError(null);
     setNotice(null);
     try {
-      const credential = await signInWithEmail(typed.includes('@') ? typed : `${typed}@${domain}`, password);
+      const credential = await signInWithEmail(typed, password);
       // Throws NEXT_REDIRECT on success, and on the failure redirects below — both must escape.
       await operatorSignInAction(await credential.user.getIdToken());
     } catch (err) {
@@ -108,7 +111,7 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
       // next attempt starts where the first one did.
       await logout().catch(() => {});
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -121,20 +124,23 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
       >
         <GoogleIcon />
-        <span>Continue with Google</span>
+        <span>{pending === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
+        {pending === 'google' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
       </button>
 
       <div className="relative my-2 text-center text-xs after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
         <span className="relative z-10 bg-card px-2 text-muted-foreground">Or sign in with operator id</span>
       </div>
 
-      <form action={submit} className="space-y-4">
+      <form onSubmit={submit} aria-busy={busy} className="space-y-4">
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">User id</span>
+          <span className="text-sm font-medium">Email</span>
           <input
             name="user"
+            type="email"
             value={typedUser}
             onChange={(event) => setTypedUser(event.target.value)}
+            placeholder={user}
             autoComplete="username"
             required
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
@@ -142,7 +148,7 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
         </label>
         <div className="-mt-2 text-right">
           <button type="button" onClick={resetPassword} disabled={busy} className="text-xs font-medium text-primary hover:underline disabled:opacity-50">
-            {busy ? 'Sending…' : 'Forgot password?'}
+            {pending === 'reset' ? 'Sending…' : 'Forgot password?'}
           </button>
         </div>
         <label className="block space-y-1.5">
@@ -166,9 +172,11 @@ export function AdminLoginForm({ user, domain }: { user: string; domain: string 
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+          aria-busy={pending === 'password'}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
         >
-          {busy ? 'Signing in…' : 'Sign in'}
+          {pending === 'password' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+          {pending === 'password' ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </div>

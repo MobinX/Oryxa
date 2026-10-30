@@ -56,7 +56,7 @@ customersRouter.openapi(listCustomersRoute, async (c) => {
   return c.json({
     customers: result.customers.map(serializeCustomer),
     totalCount: result.totalCount,
-  });
+  }, 200);
 });
 
 const createCustomerRoute = createRoute({
@@ -134,7 +134,7 @@ customersRouter.openapi(getCustomerRoute, async (c) => {
       firstOrderedAt: history.stats.firstOrderedAt?.toISOString() ?? null,
       lastOrderedAt: history.stats.lastOrderedAt?.toISOString() ?? null,
     },
-  });
+  }, 200);
 });
 
 const updateCustomerRoute = createRoute({
@@ -162,7 +162,7 @@ customersRouter.openapi(updateCustomerRoute, async (c) => {
 
   const result = await updateCustomer(customerId, companyId, data);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const deleteCustomerRoute = createRoute({
@@ -186,5 +186,5 @@ customersRouter.openapi(deleteCustomerRoute, async (c) => {
 
   const result = await deleteCustomer(customerId, companyId);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });

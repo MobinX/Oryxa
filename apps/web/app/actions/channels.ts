@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { currentWebOrigin } from '@/lib/request-origin';
 import { expireChannelPage } from '@/app/_cache/tags';
 import { requireAuth } from '@/lib/auth';
 import {
@@ -34,7 +35,10 @@ export async function deleteChannelsBulkAction(businessId: string, formData: For
 
 export async function connectFacebookAction(businessId: string, portfolio?: boolean) {
   const token = await requireAuth();
-  const { url } = await getFacebookAuthUrl(token, businessId, { portfolio });
+  const { url } = await getFacebookAuthUrl(token, businessId, {
+    portfolio,
+    returnOrigin: await currentWebOrigin(),
+  });
   redirect(url);
 }
 
@@ -85,7 +89,9 @@ export async function connectSelectedFacebookPagesAction(
 
 export async function connectInstagramAction(businessId: string) {
   const token = await requireAuth();
-  const { url } = await getInstagramAuthUrl(token, businessId);
+  const { url } = await getInstagramAuthUrl(token, businessId, {
+    returnOrigin: await currentWebOrigin(),
+  });
   redirect(url);
 }
 

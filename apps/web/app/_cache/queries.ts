@@ -69,6 +69,7 @@ export async function cachedAdminTokenUsage(token: string, month: string) {
   'use cache';
   cacheLife('minutes');
   cacheTag(cacheTags.adminTokenUsage(month));
+  cacheTag(cacheTags.modelBilling());
   return getAdminTokenUsage(token, month);
 }
 
@@ -80,6 +81,7 @@ export async function cachedAdminTokenUsageDetail(
   'use cache';
   cacheLife('minutes');
   cacheTag(cacheTags.adminTokenUsageBusiness(businessId, month));
+  cacheTag(cacheTags.modelBilling());
   return getAdminTokenUsageDetail(token, businessId, month);
 }
 

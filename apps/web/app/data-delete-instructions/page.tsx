@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { ArrowLeft, Trash2, ShieldAlert, Mail, Settings, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { COMPANY_NAME, PARENT_COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 export default function DataDeleteInstructionsPage() {
+  const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-inter flex flex-col justify-between">
       {/* Navbar */}

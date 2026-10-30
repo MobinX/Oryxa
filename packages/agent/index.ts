@@ -6,3 +6,10 @@ export {
   INSTAGRAM_COMMENT_AGENT_GUIDANCE,
 } from '@agent/guidance';
 export type { AgentConfig, SseEmitter, AgentRunResult, TokenUsageMetrics } from '@agent/Agent';
+export { cardsAsText } from '@agent/tools';
+export {
+  createSuggestionTools,
+  SUGGESTION_GUIDANCE,
+  stripDisallowedSuggestionWords,
+} from '@agent/suggestions';
+export type { InboxSuggestion, SuggestionProduct } from '@agent/suggestions';

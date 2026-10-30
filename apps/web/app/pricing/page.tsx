@@ -1,13 +1,20 @@
 import Link from 'next/link';
 import { Check, ArrowRight, ChevronDown, Lock, ShieldCheck, Server, Headphones } from 'lucide-react';
 import { cachedPublicPlans } from '@/app/_cache/queries';
-import { COMPANY_NAME } from '@/lib/brand';
+import { toCompareRows, toDisplayPlans } from '@/lib/plan-display';
+import { getBrand } from '@/lib/brand-server';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 
-export const metadata = { title: `Pricing — ${COMPANY_NAME}` };
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return { title: `Pricing — ${companyName}` };
+}
 
 export default async function PricingPage() {
-  await cachedPublicPlans().catch(() => null);
+  const { plans, unavailable } = await cachedPublicPlans();
+  const displayPlans = toDisplayPlans(plans);
+  const compareRows = toCompareRows(plans);
+  const { companyName } = await getBrand();
 
   return (
     <div className="min-h-screen bg-[#F8F9FC] font-inter text-slate-900">
@@ -63,240 +70,134 @@ export default async function PricingPage() {
             All plans include core automation features. Upgrade anytime as your business grows.
           </p>
 
-          <div className="pt-3 flex items-center justify-center gap-3">
-            <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-2xs">
-              <span className="rounded-full bg-[#5B3DF5] px-5 py-1.5 text-xs font-bold text-white">
-                Monthly
-              </span>
-              <span className="rounded-full px-5 py-1.5 text-xs font-semibold text-slate-600">
-                Yearly
-              </span>
-            </div>
-            <span className="rounded-full bg-emerald-500/12 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-              Save up to 20%
+          <div className="pt-3 flex justify-center">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-2xs">
+              Live monthly pricing from the {companyName} admin catalogue
             </span>
           </div>
         </div>
 
-        {/* 4 Plan Cards Grid */}
-        <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {/* Free */}
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-            <div>
-              <span className="inline-block rounded-md bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                Free
-              </span>
-              <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">Get Started</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Perfect for trying out {COMPANY_NAME} with basic features.
-              </p>
-              <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
-                <span className="font-geist text-4xl font-extrabold text-slate-950">$0</span>
-                <span className="text-xs text-slate-500">/ month</span>
+        {/* Plan cards from the admin catalogue */}
+        {displayPlans.length === 0 ? (
+          <div className="mt-12 rounded-2xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-xs">
+            {unavailable
+              ? 'Pricing is temporarily unavailable. Please check back shortly.'
+              : 'No plans are published yet.'}
+          </div>
+        ) : (
+          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {displayPlans.map((plan) => (
+              <div
+                key={plan.slug}
+                className={`flex flex-col justify-between rounded-2xl bg-white p-6 ${
+                  plan.featured
+                    ? 'relative border-2 border-[#5B3DF5] shadow-xl shadow-[#5B3DF5]/10'
+                    : 'border border-slate-200/90 shadow-xs'
+                }`}
+              >
+                {plan.featured ? (
+                  <span className="absolute right-4 top-4 rounded-full bg-[#5B3DF5] px-3 py-1 text-[10px] font-bold text-white">
+                    {plan.badge}
+                  </span>
+                ) : null}
+                <div>
+                  <span
+                    className={`inline-block rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${
+                      plan.featured
+                        ? 'bg-[#5B3DF5]/10 text-[#5B3DF5]'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {plan.priceCents === 0 ? 'Free' : 'Paid'}
+                  </span>
+                  <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">{plan.name}</h2>
+                  <p className="mt-1 text-xs text-slate-500">{plan.copy}</p>
+                  <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
+                    <span className="font-geist text-4xl font-extrabold text-slate-950">
+                      {plan.priceLabel}
+                    </span>
+                    {plan.priceCents > 0 ? (
+                      <span className="text-xs text-slate-500">/ month</span>
+                    ) : null}
+                  </div>
+                  <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-[#5B3DF5]" /> {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Link
+                  href="/login"
+                  className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold ${
+                    plan.featured
+                      ? 'bg-[#5B3DF5] text-white shadow-md shadow-[#5B3DF5]/25 hover:bg-[#4C2EE0]'
+                      : 'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  {plan.cta}
+                </Link>
               </div>
-              <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> 50 AI replies per month</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> 1 Facebook page</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Inbox &amp; comment management</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Basic order management</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> AI auto-reply</li>
-                <li className="flex items-center gap-2 text-slate-300"><Check className="h-4 w-4" /> AI post generation</li>
-                <li className="flex items-center gap-2 text-slate-300"><Check className="h-4 w-4" /> Advanced analytics</li>
-                <li className="flex items-center gap-2 text-slate-300"><Check className="h-4 w-4" /> Priority support</li>
-              </ul>
-            </div>
-            <Link
-              href="/login"
-              className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50"
-            >
-              Get started free
-            </Link>
+            ))}
           </div>
+        )}
 
-          {/* Starter */}
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-            <div>
-              <span className="inline-block rounded-md bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-[#5B3DF5]">
-                Starter
-              </span>
-              <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">For Small Businesses</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Essential features for growing online stores.
-              </p>
-              <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
-                <span className="font-geist text-4xl font-extrabold text-slate-950">$29</span>
-                <span className="text-xs text-slate-500">/ month</span>
+        {/* Compare plans, generated from the saved plan features */}
+        {displayPlans.length > 0 && compareRows.length > 0 ? (
+          <div className="mt-12 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs lg:p-8">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="lg:col-span-3">
+                <h3 className="font-geist text-xl font-bold text-slate-950">Compare Plans</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  See what is included in each plan and choose what fits your business.
+                </p>
               </div>
-              <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> 500 AI replies per month</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> 3 social channels</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Order management</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> AI auto-reply &amp; smart suggestions</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> AI post generation (basic)</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Customer tags &amp; notes</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Basic analytics</li>
-                <li className="flex items-center gap-2 text-slate-300"><Check className="h-4 w-4" /> Priority support</li>
-              </ul>
-            </div>
-            <Link
-              href="/login"
-              className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50"
-            >
-              Get started
-            </Link>
-          </div>
-
-          {/* Pro */}
-          <div className="relative flex flex-col justify-between rounded-2xl border-2 border-[#5B3DF5] bg-white p-6 shadow-xl shadow-[#5B3DF5]/10">
-            <span className="absolute right-4 top-4 rounded-full bg-[#5B3DF5] px-3 py-1 text-[10px] font-bold text-white">
-              Most Popular
-            </span>
-            <div>
-              <span className="inline-block rounded-md bg-[#5B3DF5]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#5B3DF5]">
-                Pro
-              </span>
-              <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">For Growing Businesses</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                More automation, more channels and advanced features.
-              </p>
-              <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
-                <span className="font-geist text-4xl font-extrabold text-slate-950">$79</span>
-                <span className="text-xs text-slate-500">/ month</span>
+              <div className="overflow-x-auto lg:col-span-9">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 font-bold text-slate-900">
+                      <th className="py-2.5 pr-4">Feature</th>
+                      {displayPlans.map((plan) => (
+                        <th
+                          key={plan.slug}
+                          className={`px-4 py-2.5 text-center ${
+                            plan.featured ? 'text-[#5B3DF5]' : ''
+                          }`}
+                        >
+                          {plan.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                    {compareRows.map((row) => (
+                      <tr key={row.label}>
+                        <td className="py-2.5 pr-4 font-medium text-slate-800">{row.label}</td>
+                        {row.cells.map((cell, ci) => (
+                          <td
+                            key={ci}
+                            className={`px-4 py-2.5 text-center ${
+                              cell === '✓'
+                                ? 'text-emerald-600'
+                                : cell === '—'
+                                  ? 'text-slate-300'
+                                  : displayPlans[ci]?.featured
+                                    ? 'font-semibold text-slate-900'
+                                    : ''
+                            }`}
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> 2,000 AI replies per month</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> All social channels</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Advanced order management</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> AI post generation (advanced)</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Payment verification (bKash, Nagad, etc)</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Courier integration</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Advanced analytics</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Priority support</li>
-              </ul>
-            </div>
-            <Link
-              href="/login"
-              className="mt-7 flex h-10 w-full items-center justify-center rounded-xl bg-[#5B3DF5] text-xs font-bold text-white shadow-md shadow-[#5B3DF5]/25 hover:bg-[#4C2EE0]"
-            >
-              Get started
-            </Link>
-          </div>
-
-          {/* Enterprise */}
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-            <div>
-              <span className="inline-block rounded-md bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                Enterprise
-              </span>
-              <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">For Large Businesses</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Custom solutions for high volume stores and agencies.
-              </p>
-              <div className="mt-5 flex items-baseline gap-1 border-b border-slate-100 pb-5">
-                <span className="font-geist text-2xl font-extrabold text-slate-950">Custom pricing</span>
-              </div>
-              <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Unlimited replies</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> All channels</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Advanced automation</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Custom integrations</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Dedicated account manager</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Advanced analytics &amp; reporting</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> SLA &amp; onboarding support</li>
-                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-[#5B3DF5]" /> Custom features</li>
-              </ul>
-            </div>
-            <Link
-              href="/login"
-              className="mt-7 flex h-10 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50"
-            >
-              Contact sales
-            </Link>
-          </div>
-        </div>
-
-        {/* Compare Plans Matrix */}
-        <div className="mt-12 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs lg:p-8">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-3">
-              <h3 className="font-geist text-xl font-bold text-slate-950">Compare Plans</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                See what&apos;s included in each plan and choose what fits your business.
-              </p>
-            </div>
-            <div className="lg:col-span-9 overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 font-bold text-slate-900">
-                    <th className="py-2.5 pr-4">Feature</th>
-                    <th className="py-2.5 px-4 text-center">Free</th>
-                    <th className="py-2.5 px-4 text-center">Starter</th>
-                    <th className="py-2.5 px-4 text-center text-[#5B3DF5]">Pro</th>
-                    <th className="py-2.5 pl-4 text-center">Enterprise</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-600">
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">AI replies per month</td>
-                    <td className="py-2.5 px-4 text-center">50</td>
-                    <td className="py-2.5 px-4 text-center">500</td>
-                    <td className="py-2.5 px-4 text-center font-semibold text-slate-900">2,000</td>
-                    <td className="py-2.5 pl-4 text-center font-semibold text-slate-900">Unlimited</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Social channels</td>
-                    <td className="py-2.5 px-4 text-center">1 page</td>
-                    <td className="py-2.5 px-4 text-center">3 channels</td>
-                    <td className="py-2.5 px-4 text-center">All channels</td>
-                    <td className="py-2.5 pl-4 text-center">All channels</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">AI post generation</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">Basic</td>
-                    <td className="py-2.5 px-4 text-center">Advanced</td>
-                    <td className="py-2.5 pl-4 text-center">Advanced + custom</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Order management</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 pl-4 text-center">✓</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Payment verification</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 pl-4 text-center">✓</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Courier integration</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 pl-4 text-center">✓</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Analytics &amp; reporting</td>
-                    <td className="py-2.5 px-4 text-center">Basic</td>
-                    <td className="py-2.5 px-4 text-center">Basic</td>
-                    <td className="py-2.5 px-4 text-center">Advanced</td>
-                    <td className="py-2.5 pl-4 text-center">Advanced + custom</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">Priority support</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">—</td>
-                    <td className="py-2.5 px-4 text-center">✓</td>
-                    <td className="py-2.5 pl-4 text-center">✓</td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Data Control Footer Strip */}
         <div className="mt-12 grid grid-cols-1 gap-6 border-t border-slate-200/80 pt-10 lg:grid-cols-12">

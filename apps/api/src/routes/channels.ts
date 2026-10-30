@@ -17,6 +17,7 @@ import {
   facebookPendingPageSchema,
   facebookConnectPagesInputSchema,
   facebookConnectPagesOutputSchema,
+  oauthReturnQuerySchema,
   instagramPendingAccountSchema,
   instagramConnectAccountsInputSchema,
   instagramConnectAccountsOutputSchema,
@@ -65,6 +66,7 @@ import {
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 import { emit } from '@api/lib/log';
+import { safeReturnOrigin } from '@api/lib/return-origin';
 
 export const channelsRouter = new OpenAPIHono();
 
@@ -112,10 +114,11 @@ channelsRouter.openapi(listAgentsRoute, async (c) => {
     agents.map((a) => ({
       id: a.id,
       name: a.name,
-      platformType: a.platformType,
+      platformType: a.platformType as 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
       systemPrompt: a.systemPrompt,
       createdAt: a.createdAt.toISOString(),
     })),
+    200,
   );
 });
 
@@ -155,7 +158,7 @@ channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
   return c.json({
     id: agent.id,
     name: agent.name,
-    platformType: agent.platformType,
+    platformType: agent.platformType as 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
     systemPrompt: answering.systemPrompt,
     replyGuidance: answering.replyGuidance,
     commentReplyGuidance: answering.commentReplyGuidance,
@@ -165,7 +168,7 @@ channelsRouter.openapi(getDefaultAgentRoute, async (c) => {
       replyGuidance: platform.replyGuidance ?? DEFAULT_REPLY_GUIDANCE,
       commentReplyGuidance: platform.commentReplyGuidance ?? COMMENT_REPLY_GUIDANCE,
     },
-  });
+  }, 200);
 });
 
 const getAgentRoute = createRoute({
@@ -188,10 +191,10 @@ channelsRouter.openapi(getAgentRoute, async (c) => {
   return c.json({
     id: agent.id,
     name: agent.name,
-    platformType: agent.platformType,
+    platformType: agent.platformType as 'facebook' | 'instagram' | 'whatsapp' | 'telegram' | 'twitter',
     systemPrompt: agent.systemPrompt,
     createdAt: agent.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 const updateAgentRoute = createRoute({
@@ -215,7 +218,7 @@ channelsRouter.openapi(updateAgentRoute, async (c) => {
   const data = c.req.valid('json');
   const result = await updateAgent(businessId, agentId, data);
   if (!result) return c.json({ error: 'Agent not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const deleteAgentRoute = createRoute({
@@ -235,7 +238,7 @@ channelsRouter.openapi(deleteAgentRoute, async (c) => {
   const agentId = c.req.param('agentId');
   const result = await deleteAgent(businessId, agentId);
   if (!result) return c.json({ error: 'Agent not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const createChannelRoute = createRoute({
@@ -250,6 +253,7 @@ const createChannelRoute = createRoute({
   responses: {
     201: { content: { 'application/json': { schema: createChannelOutputSchema } }, description: 'Channel linked' },
     409: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Already connected to another store' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid agent' },
   },
 });
 
@@ -333,6 +337,7 @@ const updateChannelRoute = createRoute({
     200: { content: { 'application/json': { schema: updateChannelOutputSchema } }, description: 'Updated' },
     404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
     409: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Already connected to another store' },
+    400: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Invalid agent' },
   },
 });
 
@@ -344,7 +349,7 @@ channelsRouter.openapi(updateChannelRoute, async (c) => {
     const agent = await ensureDefaultAgent(businessId);
     const result = await updateChannel(businessId, channelId, { ...data, agentId: agent.id });
     if (!result) return c.json({ error: 'Channel not found' }, 404);
-    return c.json(result);
+    return c.json(result, 200);
   } catch (err) {
     if (err instanceof ChannelTakenError) return c.json({ error: err.message }, 409);
     if (err instanceof ChannelAgentError) return c.json({ error: err.message }, 400);
@@ -444,7 +449,7 @@ channelsRouter.openapi(deleteChannelRoute, async (c) => {
 
   const result = await deleteChannel(businessId, channelId);
   if (!result) return c.json({ error: 'Channel not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 // Facebook OAuth
@@ -465,7 +470,7 @@ const fbAuthRoute = createRoute({
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
-  const { portfolio } = c.req.valid('query');
+  const { portfolio, returnOrigin } = c.req.valid('query');
   // Meta echoes `state` back verbatim, so the user's answer survives the round trip inside
   // the same signed token that binds the flow to this business — no second token, and a
   // client cannot relabel someone else's flow as portfolio-aware.
@@ -473,7 +478,12 @@ channelsRouter.openapi(fbAuthRoute, async (c) => {
   // state is a signed, short-lived token bound to this user + business, so the
   // OAuth callback can't be replayed to attach a page to a business the caller
   // doesn't own.
-  const state = await createOAuthState({ businessId, userId: user.id, portfolio: choice });
+  const state = await createOAuthState({
+    businessId,
+    userId: user.id,
+    portfolio: choice,
+    returnOrigin: safeReturnOrigin(returnOrigin),
+  });
   const url = getFacebookOAuthUrl(state, choice);
   return c.json({ url });
 });
@@ -519,7 +529,7 @@ channelsRouter.openapi(fbPendingPagesRoute, async (c) => {
       };
     }),
   );
-  return c.json(pages);
+  return c.json(pages, 200);
 });
 
 const fbConnectPagesRoute = createRoute({
@@ -642,7 +652,7 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
     }
   }
 
-  return c.json({ connected, skipped, failed });
+  return c.json({ connected, skipped, failed }, 200);
 });
 
 // Instagram OAuth — the same Facebook Login, with the Instagram permissions and picker.
@@ -651,7 +661,10 @@ const igAuthRoute = createRoute({
   path: '/{businessId}/channels/instagram/auth',
   tags: ['Channels'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: oauthReturnQuerySchema,
+  },
   responses: {
     200: { content: { 'application/json': { schema: z.object({ url: z.string() }) } }, description: 'OAuth URL' },
   },
@@ -660,6 +673,7 @@ const igAuthRoute = createRoute({
 channelsRouter.openapi(igAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
+  const { returnOrigin } = c.req.valid('query');
   const portfolio = process.env.META_BUSINESS_MANAGEMENT === 'true';
   const state = await createOAuthState({
     businessId,
@@ -668,6 +682,7 @@ channelsRouter.openapi(igAuthRoute, async (c) => {
     // Same deployment switch as the Page flow: portfolio Pages are merged only when the app has
     // been granted `business_management`, because asking for an unapproved scope fails the login.
     portfolio,
+    returnOrigin: safeReturnOrigin(returnOrigin),
   });
   return c.json({ url: getInstagramOAuthUrl(state, portfolio) });
 });
@@ -722,7 +737,7 @@ channelsRouter.openapi(igPendingAccountsRoute, async (c) => {
       };
     }),
   );
-  return c.json(rows);
+  return c.json(rows, 200);
 });
 
 const igConnectAccountsRoute = createRoute({
@@ -893,7 +908,7 @@ channelsRouter.openapi(igConnectAccountsRoute, async (c) => {
     }
   }
 
-  return c.json({ connected, skipped, failed });
+  return c.json({ connected, skipped, failed }, 200);
 });
 
 export const facebookCallbackRouter = new OpenAPIHono();
@@ -908,17 +923,20 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   const verified = await verifyOAuthState(state);
   if (!verified) return c.text('Invalid or expired state', 400);
 
-  const webUrl = process.env.WEB_URL ?? 'http://localhost:3400';
+  const webUrl = (process.env.WEB_URL ?? 'http://localhost:3400').replace(/\/+$/, '');
+  // The signed origin is where this particular merchant started (Oryxa or OnlyOrders). Validate
+  // it again at the redirect site; the fallback keeps old links and admin flows working.
+  const webOrigin = safeReturnOrigin(verified.returnOrigin) ?? webUrl;
   const platform = verified.platform;
   // The same signed flow serves the admin console: only the picker's home changes. Instagram
   // has its own picker because it shows accounts rather than Pages.
   const adminFlow = platform === 'facebook' && verified.businessId === ADMIN_FACEBOOK_FLOW;
   const pickerUrl =
     platform === 'instagram'
-      ? `${webUrl}/b/${verified.businessId}/channels/connect-instagram`
+      ? `${webOrigin}/b/${verified.businessId}/channels/connect-instagram`
       : adminFlow
-        ? `${webUrl}/admin/channels/connect-facebook`
-        : `${webUrl}/b/${verified.businessId}/channels/connect-facebook`;
+        ? `${webOrigin}/admin/channels/connect-facebook`
+        : `${webOrigin}/b/${verified.businessId}/channels/connect-facebook`;
   const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,

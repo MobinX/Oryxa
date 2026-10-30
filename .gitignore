@@ -77,3 +77,7 @@ backups/
 readme.file
 README.file
 
+
+# Playwright
+test-results/
+playwright-report/

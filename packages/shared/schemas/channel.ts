@@ -117,6 +117,12 @@ export const facebookAuthQuerySchema = z.object({
    * an old link, or an entry point without the choice — and the deployment decides instead.
    */
   portfolio: z.enum(['true', 'false']).optional(),
+  /** The web origin the merchant started from, so OAuth returns to the same brand domain. */
+  returnOrigin: z.string().max(200).optional(),
+});
+
+export const oauthReturnQuerySchema = z.object({
+  returnOrigin: z.string().max(200).optional(),
 });
 
 export const facebookPendingPageSchema = z.object({

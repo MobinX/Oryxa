@@ -1,4 +1,6 @@
-/** Builds one analysis-friendly CSV with a row type and the union of record fields. */
+/**
+ * Builds one analysis-friendly CSV with a row type and the union of record fields.
+ */
 export function toRecordsCsv(groups: { type: string; rows: unknown[] }[]): string {
   const records: Record<string, unknown>[] = [];
   for (const group of groups) {

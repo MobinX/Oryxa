@@ -5,7 +5,7 @@ export const createOrderInputSchema = z.object({
   businessId: uuidSchema,
   productId: uuidSchema,
   variantId: uuidSchema.optional(),
-  count: z.number().int().positive().default(1),
+  count: z.number().int().positive().max(999).default(1),
   customerName: z.string().min(1).max(255),
   customerPhone: z.string().max(20).optional(),
   customerAddress: z.string().optional(),
@@ -16,6 +16,8 @@ export const createOrderInputSchema = z.object({
   shippingCost: z.number().min(0).optional(),
   /** In the buyer's own words — "Cash on delivery", "bKash" — not a code, so the card reads as speech. */
   paymentMethod: z.string().min(1).max(40).optional(),
+  /** Required for bKash/Nagad before the agent may create the order. */
+  transactionId: z.string().min(1).max(120).optional(),
   conversationId: uuidSchema.optional(),
   /**
    * The Messenger id of the buyer, so their own order history is findable later. Optional because an
@@ -31,6 +33,7 @@ export const createOrderOutputSchema = z.object({
   totalPrice: z.number(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   state: orderStateSchema,
   /** The card this order matched by phone; null when the buyer gave no number to match. */
   customerId: uuidSchema.nullable(),
@@ -43,8 +46,21 @@ export const listOrdersQuerySchema = z.object({
 
 export const orderListItemSchema = z.object({
   id: uuidSchema,
+  productId: uuidSchema.nullable().optional(),
+  variantId: uuidSchema.nullable().optional(),
+  productName: z.string().nullable().optional(),
+  variantName: z.string().nullable().optional(),
+  variantShortId: z.string().nullable().optional(),
+  variantImageUrl: z.string().nullable().optional(),
+  count: z.number().int().optional(),
+  variantPrice: z.number().optional(),
   customerName: z.string(),
+  customerPhone: z.string().nullable().optional(),
+  customerAddress: z.string().nullable().optional(),
   totalPrice: z.number(),
+  shippingCost: z.number().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   state: orderStateSchema,
   createdAt: timestampSchema,
 });
@@ -83,14 +99,20 @@ export const getOrderOutputSchema = z.object({
   variantId: uuidSchema.nullable(),
   productName: z.string().nullable().optional(),
   variantName: z.string().nullable().optional(),
+  /** The five-character shelf label printed on the variant photo and the parcel. */
+  variantShortId: z.string().nullable().optional(),
   variantImageUrl: z.string().nullable().optional(),
   count: z.number().int(),
   variantPrice: z.number(),
+  customerId: uuidSchema.nullable().optional(),
   customerName: z.string(),
   customerPhone: z.string().nullable().optional(),
   customerAddress: z.string().nullable().optional(),
   state: orderStateSchema,
   totalPrice: z.number(),
+  shippingCost: z.number().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  transactionId: z.string().nullable().optional(),
   conversationId: uuidSchema.nullable().optional(),
   createdAt: timestampSchema,
 });

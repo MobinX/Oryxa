@@ -3,9 +3,10 @@ import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { createChannel } from '@repo/db/crud/channel';
 import { getOrCreateConversation } from '@repo/db/crud/conversation';
+import { getOrderById } from '@repo/db/crud/order';
 import { app } from '@api/app';
 
-const sendMessageMock = vi.fn(async () => undefined);
+const sendMessageMock = vi.fn(async (..._args: unknown[]) => undefined);
 vi.mock('@repo/integrations/facebook', () => ({
   sendMessage: (...args: unknown[]) => sendMessageMock(...args),
   getFacebookOAuthUrl: vi.fn(),
@@ -23,7 +24,7 @@ describe('Conversations API', () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/${business.id}/conversations`, { headers: authHeaders() });
     expect(res.status).toBe(200);
-    expect((await res.json()).length).toBeGreaterThan(0);
+    expect((await res.json() as any).length).toBeGreaterThan(0);
   });
 
   /**
@@ -68,7 +69,7 @@ describe('Conversations API', () => {
       { headers: authHeaders() },
     );
     expect(res.status).toBe(200);
-    expect(Array.isArray(await res.json())).toBe(true);
+    expect(Array.isArray(await res.json() as any)).toBe(true);
   });
 
   it('POST /:businessId/conversations/:id/messages sends human reply', async () => {
@@ -108,7 +109,101 @@ describe('Conversations API', () => {
       },
     );
     expect(res.status).toBe(422);
-    expect((await res.json()).error).toMatch(/24 hours/);
+    expect((await res.json() as any).error).toMatch(/24 hours/);
+  });
+
+  it('PATCH /:businessId/conversations/:id/auto-pilot switches the thread', async () => {
+    const seed = await seedTestWorld();
+    const off = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: false }) },
+    );
+    expect(off.status).toBe(200);
+    expect((await off.json() as any).autoPilot).toBe(false);
+
+    const list = await app.request(
+      `/api/v1/${seed.business.id}/conversations?limit=100`,
+      { headers: authHeaders() },
+    );
+    const rows = (await list.json()) as Array<{ id: string; autoPilot: boolean }>;
+    expect(rows.find((row) => row.id === seed.conversation.id)?.autoPilot).toBe(false);
+
+    const on = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: true }) },
+    );
+    expect((await on.json() as any).autoPilot).toBe(true);
+  });
+
+  it('POST suggestions answers empty without running the model while auto pilot is on', async () => {
+    const seed = await seedTestWorld();
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/suggestions`,
+      { method: 'POST', headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ forMessageId: null, suggestions: [] });
+  });
+
+  it('POST /:businessId/conversations/:id/orders links the order to the conversation customer', async () => {
+    const seed = await seedTestWorld();
+    const variantId = seed.productDetail.variants[0]?.id;
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/orders`,
+      {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          productId: seed.productDetail.id,
+          variantId,
+          count: 2,
+          customerName: 'Chat Buyer',
+          customerPhone: '01712345678',
+          customerAddress: '12 Test Road, Dhaka',
+          paymentMethod: 'Cash on delivery',
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; customerId: string | null; totalPrice: number };
+    expect(body.id).toBeTruthy();
+    expect(body.customerId).toBeTruthy();
+    expect(body.totalPrice).toBeGreaterThan(0);
+
+    const order = await getOrderById(seed.business.id, body.id);
+    expect(order?.conversationId).toBe(seed.conversation.id);
+    expect(order?.customerId).toBe(body.customerId);
+  });
+
+  it('GET /:businessId/conversations/:id/order-defaults prefills from the last order', async () => {
+    const seed = await seedTestWorld();
+    const created = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/orders`,
+      {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          productId: seed.productDetail.id,
+          variantId: seed.productDetail.variants[0]?.id,
+          count: 3,
+          customerName: 'Chat Buyer',
+          customerPhone: '01712345678',
+          customerAddress: '12 Test Road, Dhaka',
+        }),
+      },
+    );
+    expect(created.status).toBe(200);
+
+    const res = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/order-defaults`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      count: 3,
+      customerPhone: '01712345678',
+      customerAddress: '12 Test Road, Dhaka',
+    });
   });
 
   it('PATCH /:businessId/conversations/:id/state updates state', async () => {
@@ -122,6 +217,6 @@ describe('Conversations API', () => {
       },
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).updatedState).toBe('done');
+    expect((await res.json() as any).updatedState).toBe('done');
   });
 });

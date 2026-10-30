@@ -50,6 +50,22 @@ export const conversationAgentStateSchema = z.object({
   }).nullable().default(null),
   languageOverride: z.enum(['bn', 'en']).nullable().optional().default(null),
   lastReplyLanguage: z.enum(['bn', 'en']).nullable().optional().default(null),
+  /**
+   * The chips on the most recent question. Kept so the next turn can tell a tap (which dismisses
+   * them) from a typed answer that ignored them, and avoid putting a second chip row on screen.
+   */
+  lastSuggestions: z.array(z.string()).default([]),
+  /**
+   * The last set of chips that actually reached the customer. Separate from
+   * `lastSuggestions`, which is cleared whenever the customer answers: a duplicate row is
+   * still a duplicate even if the customer typed something in between.
+   */
+  lastSentSuggestions: z.array(z.string()).default([]),
+  /**
+   * True after an identical chip set was suppressed once. The next identical set is then
+   * allowed through, so the agent can repeat a question when it really needs to.
+   */
+  suggestionRepeatSkipped: z.boolean().default(false),
 });
 
 export type ConversationAgentState = z.infer<typeof conversationAgentStateSchema>;

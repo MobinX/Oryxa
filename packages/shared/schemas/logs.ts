@@ -13,6 +13,7 @@ export const LOG_EVENT_TYPES = [
   'webhook',
   'webhook_item',
   'instagram',
+  'official',
   'http_out',
   'db',
   'db_summary',
@@ -33,6 +34,7 @@ export const LOG_EVENT_LABELS: Record<(typeof LOG_EVENT_TYPES)[number], string> 
   webhook: 'Webhook delivery',
   webhook_item: 'Webhook item',
   instagram: 'Instagram webhook',
+  official: 'Official Channels turn',
   http_out: 'Outbound call',
   db: 'Database query',
   db_summary: 'Database rollup',
@@ -90,9 +92,57 @@ export const logQueryResponseSchema = z
   })
   .openapi('LogQueryResponse');
 
+export const axiomStorageDatasetSchema = z
+  .object({
+    name: z.string(),
+    bytes: z.number(),
+    measuredAt: z.string(),
+  })
+  .openapi('AxiomStorageDataset');
+
+export const axiomLogRetentionSchema = z
+  .object({
+    name: z.string(),
+    bytes: z.number().nullable(),
+    retentionDays: z.number().int(),
+    retentionEnabled: z.boolean(),
+    /** False when the dataset metadata could not be read. */
+    retentionKnown: z.boolean(),
+    /** Oldest event still stored, or null when it could not be read. */
+    oldestEventAt: z.string().nullable(),
+    /**
+     * When that oldest event is due to be deleted. Null when retention is off,
+     * where Axiom keeps the dataset until it is deleted by hand.
+     */
+    expiresAt: z.string().nullable(),
+  })
+  .openapi('AxiomLogRetention');
+
+export const axiomStorageResponseSchema = z
+  .object({
+    source: logQuerySourceSchema,
+    available: z.boolean(),
+    note: z.string().optional(),
+    usedBytes: z.number().nullable(),
+    usedGb: z.number().nullable(),
+    limitGb: z.number(),
+    /** False when the 100 GB Axiom always-free allowance is the default. */
+    limitConfigured: z.boolean(),
+    remainingGb: z.number().nullable(),
+    percentUsed: z.number().nullable(),
+    /** When Axiom last calculated storage usage; it does so once a day. */
+    measuredAt: z.string().nullable(),
+    datasets: z.array(axiomStorageDatasetSchema),
+    logDataset: axiomLogRetentionSchema,
+  })
+  .openapi('AxiomStorageResponse');
+
 export type LogEventType = (typeof LOG_EVENT_TYPES)[number];
 export type LogTypeOption = z.infer<typeof logTypeOptionSchema>;
 export type LogTypesResponse = z.infer<typeof logTypesResponseSchema>;
 export type LogQuerySource = z.infer<typeof logQuerySourceSchema>;
 export type LogEventRow = z.infer<typeof logEventRowSchema>;
 export type LogQueryResponse = z.infer<typeof logQueryResponseSchema>;
+export type AxiomStorageDataset = z.infer<typeof axiomStorageDatasetSchema>;
+export type AxiomLogRetention = z.infer<typeof axiomLogRetentionSchema>;
+export type AxiomStorageResponse = z.infer<typeof axiomStorageResponseSchema>;

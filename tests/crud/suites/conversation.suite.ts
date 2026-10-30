@@ -47,7 +47,7 @@ export function registerConversationCrudTests() {
   it('updateConversationState changes state', async () => {
     const { conversation } = await seedTestWorld();
     await updateConversationState(conversation.id, 'working');
-    const conv = await getConversationForBusiness(conversation.id, conversation.businessId);
+    const conv = await getConversationForBusiness(conversation.id, conversation.businessId!);
     expect(conv?.lastMessageState).toBe('working');
   });
 

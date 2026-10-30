@@ -289,6 +289,8 @@ export async function listAdminBusinessPlans(now: Date = new Date()): Promise<Ad
         planId: businesses.planId,
         planStartedAt: businesses.planStartedAt,
         createdAt: businesses.createdAt,
+        messageLimitOverride: businesses.messageLimitOverride,
+        commentLimitOverride: businesses.commentLimitOverride,
       })
       .from(businesses)
       .where(isNull(businesses.deletedAt)),
@@ -322,11 +324,34 @@ export async function listAdminBusinessPlans(now: Date = new Date()): Promise<Ad
         period: cycle.period,
         messagesUsed: usage?.messagesUsed ?? 0,
         commentsUsed: usage?.commentsUsed ?? 0,
-        messageLimit: plan?.messageLimit ?? null,
-        commentLimit: plan?.commentLimit ?? null,
+        messageLimit: b.messageLimitOverride ?? plan?.messageLimit ?? null,
+        commentLimit: b.commentLimitOverride ?? plan?.commentLimit ?? null,
+        messageLimitOverride: b.messageLimitOverride,
+        commentLimitOverride: b.commentLimitOverride,
+        planMessageLimit: plan?.messageLimit ?? null,
+        planCommentLimit: plan?.commentLimit ?? null,
       };
     })
     .sort((a, b) => a.businessName.localeCompare(b.businessName));
+}
+
+/**
+ * Give one business its own cap, or clear it back to the plan's number. NULL on both
+ * columns means "follow the plan"; 0 still freezes; any positive integer is the cap.
+ */
+export async function setBusinessCapOverrides(
+  businessId: string,
+  overrides: { messageLimitOverride: number | null; commentLimitOverride: number | null },
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .update(businesses)
+    .set({
+      messageLimitOverride: overrides.messageLimitOverride,
+      commentLimitOverride: overrides.commentLimitOverride,
+    })
+    .where(and(eq(businesses.id, businessId), isNull(businesses.deletedAt)))
+    .returning({ id: businesses.id });
+  return row ?? null;
 }
 
 /** How many live businesses are on each of these plans — the warning an edit needs first. */

@@ -110,9 +110,21 @@ export const adminBusinessPlanSchema = z.object({
   period: z.string(),
   messagesUsed: z.number().int().nonnegative(),
   commentsUsed: z.number().int().nonnegative(),
+  /** Effective limits, after a custom cap replaces the plan's number. */
   messageLimit: limitSchema,
   commentLimit: limitSchema,
+  /** NULL follows the plan; 0 freezes; a positive number is the store's own cap. */
+  messageLimitOverride: limitSchema,
+  commentLimitOverride: limitSchema,
+  /** What the plan alone would allow, so the console can say what the override replaces. */
+  planMessageLimit: limitSchema,
+  planCommentLimit: limitSchema,
 }).openapi('AdminBusinessPlan');
+
+export const businessCapsInputSchema = z.object({
+  messageLimitOverride: limitSchema,
+  commentLimitOverride: limitSchema,
+}).openapi('BusinessCapsInput');
 
 export type PlanFeatures = z.infer<typeof planFeaturesSchema>;
 export type PublicPlan = z.infer<typeof publicPlanSchema>;

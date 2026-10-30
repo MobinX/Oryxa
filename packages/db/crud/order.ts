@@ -7,7 +7,7 @@ import {
   updateOrderStateInputSchema,
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
-import { findOrCreateCustomerByPhone, getCompanyIdForBusiness, normalizePhone } from './customer';
+import { findOrCreateCustomerByPhone, ensureCompanyIdForBusiness, normalizePhone } from './customer';
 import { createBusinessNotification } from './notification';
 
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
@@ -49,7 +49,7 @@ export async function createOrder(input: unknown) {
   // that turns a typed phone number into the company's customer. A number nobody has
   // used yet writes a card; a number already in the book reuses it. No number, no card:
   // the order keeps the name it arrived with.
-  const companyId = await getCompanyIdForBusiness(parsed.businessId);
+  const companyId = await ensureCompanyIdForBusiness(parsed.businessId);
   const customerId = companyId
     ? await findOrCreateCustomerByPhone({
         companyId,
@@ -78,6 +78,7 @@ export async function createOrder(input: unknown) {
       totalPrice: totalPrice.toFixed(2),
       shippingCost: (parsed.shippingCost ?? 0).toFixed(2),
       paymentMethod: parsed.paymentMethod?.trim() ? parsed.paymentMethod.trim() : null,
+      transactionId: parsed.transactionId?.trim() ? parsed.transactionId.trim() : null,
       state: 'pending',
     })
     .returning();
@@ -113,6 +114,7 @@ export async function createOrder(input: unknown) {
     totalPrice,
     shippingCost: parsed.shippingCost ?? 0,
     paymentMethod: parsed.paymentMethod ?? null,
+    transactionId: parsed.transactionId?.trim() || null,
     state: order.state,
     customerId: order.customerId,
   };
@@ -146,6 +148,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     variantImageUrl,
     count: order.count,
     variantPrice: parseFloat(order.variantPrice),
+    customerId: order.customerId,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     customerAddress: order.customerAddress,
@@ -153,6 +156,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     totalPrice: parseFloat(order.totalPrice),
     shippingCost: parseFloat(order.shippingCost),
     paymentMethod: order.paymentMethod,
+    transactionId: order.transactionId,
     conversationId: order.conversationId,
     createdAt: order.createdAt,
   };
@@ -170,15 +174,48 @@ export async function listOrders(
     where: and(...conditions),
     limit,
     orderBy: [desc(orders.createdAt)],
+    with: {
+      product: { with: { variants: { where: isNull(variants.deletedAt) } } },
+      variant: true,
+    },
   });
 
-  return items.map((o) => ({
-    id: o.id,
-    customerName: o.customerName,
-    totalPrice: parseFloat(o.totalPrice),
-    state: o.state,
-    createdAt: o.createdAt.toISOString(),
-  }));
+  // The list panel shows what was bought, so the item and its photo travel with it — signed
+  // together, because a page of twenty sequential bucket calls would outlast the reader's patience.
+  return Promise.all(
+    items.map(async (o) => {
+      const productActive = o.product && !o.product.deletedAt ? o.product : null;
+      const variantActive = o.variant && !o.variant.deletedAt ? o.variant : null;
+      const storedImage =
+        variantActive?.imageUrl
+        ?? productActive?.variants.find((v) => v.imageUrl)?.imageUrl
+        ?? null;
+      const variantImageUrl = storedImage
+        ? await resolveStoredImageUrl(storedImage).catch(() => null)
+        : null;
+
+      return {
+        id: o.id,
+        productId: o.productId,
+        variantId: o.variantId,
+        productName: productActive?.name ?? null,
+        variantName: variantActive?.name ?? null,
+        variantShortId: variantActive?.variantId ?? null,
+        variantImageUrl,
+        count: o.count,
+        variantPrice: parseFloat(o.variantPrice),
+        customerName: o.customerName,
+        customerPhone: o.customerPhone,
+        customerAddress: o.customerAddress,
+        totalPrice: parseFloat(o.totalPrice),
+        shippingCost: parseFloat(o.shippingCost),
+        paymentMethod: o.paymentMethod,
+        transactionId: o.transactionId,
+        state: o.state,
+        createdAt: o.createdAt.toISOString(),
+      };
+    }),
+  );
 }
 
 /**
@@ -256,12 +293,42 @@ export async function getOrdersByPlatformId(
   return { orders: items, hasMore, offset, limit };
 }
 
+/** Allowed state transitions mapping from->to[] */
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending: ['acknowledged', 'onDelivery', 'done'],
+  acknowledged: ['onDelivery', 'pending'],
+  onDelivery: ['done', 'acknowledged'],
+  done: [],
+};
+
+/** OrderStateTransitionError with typed error mapped to 409 */
+export class OrderStateTransitionError extends Error {
+  constructor(message: string, readonly allowedStates?: string[]) {
+    super(message);
+    this.name = 'OrderStateTransitionError';
+  }
+}
+
+export function validateTransition(fromState: string, toState: string): void {
+  if (fromState === toState) return; // idempotent re-submit is a no-op, not an error
+  const allowed = ALLOWED_TRANSITIONS[fromState];
+  if (!allowed || !allowed.includes(toState)) {
+    throw new OrderStateTransitionError(
+      `Invalid state transition from ${fromState} to ${toState}`,
+      allowed,
+    );
+  }
+}
+
 export async function updateOrderState(businessId: string, orderId: string, input: unknown) {
   const parsed = updateOrderStateInputSchema.parse(input);
   const order = await db.query.orders.findFirst({
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
+
+  // Validate transition before applying
+  validateTransition(order.state, parsed.state);
 
   const [updated] = await db
     .update(orders)
@@ -278,6 +345,10 @@ export async function updateOrder(businessId: string, orderId: string, input: un
     where: and(eq(orders.id, orderId), eq(orders.businessId, businessId), isNull(orders.deletedAt)),
   });
   if (!order) return null;
+
+  if ((parsed as { state?: string }).state !== undefined) {
+    validateTransition(order.state, (parsed as { state: string }).state);
+  }
 
   const fields: Record<string, unknown> = { ...parsed };
   if (parsed.count !== undefined && parsed.count !== order.count) {
@@ -316,7 +387,7 @@ export async function updateOrder(businessId: string, orderId: string, input: un
     parsed.customerPhone !== undefined &&
     normalizePhone(parsed.customerPhone) !== normalizePhone(order.customerPhone)
   ) {
-    const companyId = await getCompanyIdForBusiness(businessId);
+    const companyId = await ensureCompanyIdForBusiness(businessId);
     fields.customerId = companyId
       ? await findOrCreateCustomerByPhone({
           companyId,
@@ -350,18 +421,24 @@ export async function deleteOrder(businessId: string, orderId: string) {
   });
   if (!order) return null;
 
-  // Only unfulfilled orders still hold reserved stock. `done` orders already
-  // consumed those units, so deleting the record must not put them back.
-  if (order.variantId && order.state !== 'done') {
+  // Only unfulfilled orders (pending/acknowledged) still hold reserved stock; onDelivery/done
+  // units are already gone. neon-http has no interactive transactions, so the soft-delete is a
+  // guarded UPDATE first and stock is returned only by the request that actually deleted the row:
+  // a concurrent or repeated delete cannot restock twice.
+  const canRestock = ['pending', 'acknowledged'].includes(order.state);
+
+  const [deleted] = await db
+    .update(orders)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(orders.id, orderId), isNull(orders.deletedAt)))
+    .returning({ id: orders.id });
+  if (!deleted) return null;
+
+  if (canRestock && order.variantId) {
     await db
       .update(variants)
       .set({ stock: sql`${variants.stock} + ${order.count}` })
       .where(eq(variants.id, order.variantId));
   }
-
-  await db
-    .update(orders)
-    .set({ deletedAt: new Date() })
-    .where(eq(orders.id, orderId));
   return { deleted: true };
 }

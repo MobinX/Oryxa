@@ -27,7 +27,8 @@
     "test:neon": "vitest run tests/neon",
     "test:neon:crud": "vitest run tests/neon/crud.test.ts",
     "test:behaviour": "vitest run tests/agent/behaviour",
-    "test:behaviour:watch": "vitest tests/agent/behaviour"
+    "test:behaviour:watch": "vitest tests/agent/behaviour",
+    "seed:sandbox:catalog": "bun --env-file=.env packages/db/scripts/seed-sandbox-catalog.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.3",
@@ -35,6 +36,7 @@
     "@langchain/google-genai": "^2.2.0",
     "@langchain/openai": "^1.5.3",
     "@neondatabase/serverless": "^0.10.4",
+    "@playwright/test": "1.64.1",
     "@types/bun": "1.4.2",
     "@vitest/coverage-v8": "^3.0.5",
     "dotenv": "^16.4.7",

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Instagram, Lock, MessageCircle, MessageSquare, ShieldCheck } from 'lucide-react';
 import { connectInstagramAction } from '@/app/actions/channels';
-import { COMPANY_NAME } from '@/lib/brand';
+import { useBrand } from '@/components/brand-provider';
 
 const PERMISSIONS = [
   {
@@ -25,6 +25,7 @@ const PERMISSIONS = [
 
 /** The consent screen for an Instagram connection, then the same Facebook Login the Page uses. */
 export function InstagramConnectButton({ businessId }: { businessId: string }) {
+  const { companyName: COMPANY_NAME } = useBrand();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 

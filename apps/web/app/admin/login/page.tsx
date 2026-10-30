@@ -2,16 +2,21 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdminLoginForm } from '@/components/admin-login-form';
-import { hasLogsSession, logsOperatorUser, operatorAccountEmail } from '@/lib/logs-session';
-import { COMPANY_NAME } from '@/lib/brand';
+import { hasLogsSession, operatorAccountEmail } from '@/lib/logs-session';
+import { getBrand } from '@/lib/brand-server';
 
-export const metadata = {
-  title: 'Admin — sign in',
-  description: `Sign in to the ${COMPANY_NAME} admin console.`,
-};
+export async function generateMetadata() {
+  const { companyName } = await getBrand();
+  return {
+    title: 'Admin — sign in',
+    description: `Sign in to the ${companyName} admin console.`,
+  };
+}
 
 const MESSAGES: Record<string, string> = {
   invalid: 'That user id and password do not match.',
+  rate_limited:
+    'Too many sign-in attempts from this address — wait a few minutes and try again.',
   disabled:
     'This deployment has no console secret. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
   notoperator:
@@ -57,10 +62,7 @@ async function AdminLoginContent({
           </p>
         </div>
 
-        <AdminLoginForm
-          user={logsOperatorUser()}
-          domain={operatorAccountEmail().split('@')[1] ?? 'oryxa.app'}
-        />
+        <AdminLoginForm user={operatorAccountEmail()} />
 
         {message ? (
           <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

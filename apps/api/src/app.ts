@@ -1,3 +1,4 @@
+import { allowedOrigin } from '@api/lib/cors-origins';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { cors } from 'hono/cors';
@@ -17,10 +18,13 @@ import { billingRouter } from '@api/routes/billing';
 import { pushRouter } from '@api/routes/push';
 import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
 import { adminChannelsRouter } from '@api/routes/admin-channels';
+import { adminOfficialRouter } from '@api/routes/admin-official';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
+import { adminModelBillingRouter } from '@api/routes/admin-model-billing';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
+import { waWebhookRouter } from '@api/webhooks/whatsapp';
 import { internalRouter } from '@api/routes/internal/run';
 import { audioCheckRouter } from '@api/routes/internal/audio-check';
 import { companiesRouter } from '@api/routes/companies';
@@ -63,7 +67,7 @@ wireDatabaseLogging();
 app.use(
   '*',
   cors({
-    origin: (origin) => origin || '*',
+    origin: (origin) => allowedOrigin(origin),
     allowHeaders: ['Content-Type', 'Authorization', 'x-internal-key'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
@@ -103,12 +107,24 @@ app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
 app.route('/api2', adminChannelsRouter);
+app.route('/api2', adminOfficialRouter);
 app.route('/api2', logsRouter);
 app.route('/api2', adminRouter);
 app.route('/api2', adminPlansRouter);
+app.route('/api2', adminModelBillingRouter);
 app.route('/webhooks', fbWebhookRouter);
+app.route('/webhooks', waWebhookRouter);
 app.route('/internal', internalRouter);
 app.route('/internal', audioCheckRouter);
+
+function apiDocsEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true';
+}
+
+// The contract is useful to developers and noise to an attacker mapping the API. It is
+// on outside production, and in production only when explicitly asked for.
+app.use('/doc', async (c, next) => (apiDocsEnabled() ? next() : c.notFound()));
+app.use('/ui', async (c, next) => (apiDocsEnabled() ? next() : c.notFound()));
 
 // app.doc() config accepts no `components` key, so security schemes must be
 // registered on the registry or every `security: [{ bearerAuth: [] }]` route

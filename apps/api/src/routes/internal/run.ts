@@ -4,15 +4,13 @@ import { runAgentForConversation } from '@api/lib/agent-runner';
 import { runAgentForCommentThread } from '@api/lib/comment-runner';
 import { awaitOnVercel } from '@api/lib/background';
 import { testRunRouter } from '@api/routes/internal/test-run';
+import { internalAuthMiddleware } from '@api/middleware/internal-auth';
 
 export const internalRouter = new Hono();
 
-internalRouter.post('/run', async (c) => {
-  const internalKey = c.req.header('x-internal-key');
-  if (internalKey !== process.env.INTERNAL_KEY) {
-    return c.text('Unauthorized', 401);
-  }
+internalRouter.use('*', internalAuthMiddleware);
 
+internalRouter.post('/run', async (c) => {
   const body = await c.req.json();
   const parsed = internalRunInputSchema.safeParse(body);
   if (!parsed.success) {
@@ -30,11 +28,6 @@ internalRouter.post('/run', async (c) => {
 });
 
 internalRouter.post('/run-comment', async (c) => {
-  const internalKey = c.req.header('x-internal-key');
-  if (internalKey !== process.env.INTERNAL_KEY) {
-    return c.text('Unauthorized', 401);
-  }
-
   const body = await c.req.json();
   const parsed = internalRunCommentInputSchema.safeParse(body);
   if (!parsed.success) {

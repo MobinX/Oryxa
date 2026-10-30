@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset } from '@/lib/firebase';
 import { setAuthSession } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
@@ -133,10 +134,11 @@ export function AuthForm() {
       <button
         type="button"
         disabled={loading !== null}
+        aria-busy={loading === 'google'}
         onClick={handleGoogle}
         className="w-full flex items-center justify-center gap-3 h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <GoogleIcon />
+        {loading === 'google' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <GoogleIcon />}
         {loading === 'google' ? 'Connecting...' : 'Continue with Google'}
       </button>
 
@@ -151,7 +153,7 @@ export function AuthForm() {
       </div>
 
       {/* Email/Password Form */}
-      <form onSubmit={handleEmailSubmit} className="space-y-4">
+      <form onSubmit={handleEmailSubmit} aria-busy={loading !== null} className="space-y-4">
         {mode === 'signup' && (
           <div>
             <label className="block text-sm font-medium text-[var(--foreground)] mb-1.5">Full name</label>
@@ -224,7 +226,9 @@ export function AuthForm() {
           className="w-full"
           size="lg"
           disabled={loading !== null}
+          aria-busy={loading === 'email'}
         >
+          {loading === 'email' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
           {loading === 'email'
             ? mode === 'signup' ? 'Creating account...' : 'Signing in...'
             : mode === 'signup' ? 'Create account' : 'Sign in'}

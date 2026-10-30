@@ -123,7 +123,7 @@ async function vercel<T = Record<string, unknown>>(
       ...(init.headers as Record<string, string> | undefined),
     },
     cache: 'no-store',
-  });
+  } as RequestInit);
 
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {

@@ -1,6 +1,7 @@
 import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, hourlyTokenAnalytics } from '@db/schema';
+import { getModelBilling, ratesOf, tokenCostUsd } from './model-billing';
 
 /**
  * Per-business LLM usage for the operator console, read from the hourly rollup the agent
@@ -19,12 +20,10 @@ const totalTokens = sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalTokens}
 const cacheHitTokens = sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalCacheHitTokens}), 0)::int`;
 const cacheMissTokens = sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalCacheMissTokens}), 0)::int`;
 const runCount = sql<number>`coalesce(sum(${hourlyTokenAnalytics.runCount}), 0)::int`;
-const costUsd = sql<number>`coalesce(sum(${hourlyTokenAnalytics.totalEstimatedCostUsd}), 0)::float`;
 
 /**
- * Tokens that a run read from the model's prompt cache, as a share of what it sent. This is
- * the merchant page's formula kept in one place: cached reads are billed as input tokens, so
- * the denominator is input, not total.
+ * Tokens that a run read from the model's prompt cache, as a share of what it sent. Cached
+ * reads are a subset of input tokens, so the denominator is input, not total.
  */
 const cacheHitPercent = sql<number>`coalesce(round((${cacheHitTokens}::numeric / nullif(${inputTokens}, 0)) * 100, 2), 0)::float`;
 
@@ -68,6 +67,7 @@ export async function listBusinessTokenUsage(
   start: Date,
   end: Date,
 ): Promise<AdminBusinessTokenUsage[]> {
+  const rates = ratesOf(await getModelBilling());
   const rows = await db
     .select({
       businessId: hourlyTokenAnalytics.businessId,
@@ -81,16 +81,20 @@ export async function listBusinessTokenUsage(
       runCount,
       avgTokensPerRun,
       cacheHitPercent,
-      estimatedCostUsd: costUsd,
     })
     .from(hourlyTokenAnalytics)
     .innerJoin(businesses, eq(businesses.id, hourlyTokenAnalytics.businessId))
     .where(and(bucketWindow(start, end), isNull(businesses.deletedAt)))
     .groupBy(hourlyTokenAnalytics.businessId, businesses.name, businesses.slug);
 
-  // Sorted here, not in SQL: the ranking column is an aggregate alias, and saying
-  // "biggest spender first" should not depend on getting an ordinal reference right.
-  return rows.sort((a, b) => b.totalTokens - a.totalTokens || a.name.localeCompare(b.name));
+  // The dollars are derived from the token counts at read time, so changing the rate card
+  // reprices every month already on this page instead of only runs recorded afterwards.
+  return rows
+    .map((row) => ({
+      ...row,
+      estimatedCostUsd: tokenCostUsd(row, rates),
+    }))
+    .sort((a, b) => b.totalTokens - a.totalTokens || a.name.localeCompare(b.name));
 }
 
 export type AdminTokenTotals = Omit<AdminBusinessTokenUsage, 'businessId' | 'name' | 'slug'> & {
@@ -102,6 +106,7 @@ export type AdminTokenIntegrationUsage = {
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
+  cacheHitTokens: number;
   runCount: number;
   avgTokensPerRun: number;
   cacheHitPercent: number;
@@ -142,6 +147,7 @@ export async function getBusinessTokenUsageDetail(
     lt(hourlyTokenAnalytics.hourBucket, end),
   );
   const byDay = sql`1`;
+  const rates = ratesOf(await getModelBilling());
 
   const [businessRow, totalsRow, integrationRows, dailyRows] = await Promise.all([
     db
@@ -160,7 +166,6 @@ export async function getBusinessTokenUsageDetail(
         avgTokensPerRun,
         avgLatencyMs,
         cacheHitPercent,
-        estimatedCostUsd: costUsd,
       })
       .from(hourlyTokenAnalytics)
       .where(inWindow),
@@ -170,10 +175,10 @@ export async function getBusinessTokenUsageDetail(
         totalTokens,
         inputTokens,
         outputTokens,
+        cacheHitTokens,
         runCount,
         avgTokensPerRun,
         cacheHitPercent,
-        estimatedCostUsd: costUsd,
       })
       .from(hourlyTokenAnalytics)
       .where(inWindow)
@@ -186,7 +191,6 @@ export async function getBusinessTokenUsageDetail(
         outputTokens,
         cacheHitTokens,
         runCount,
-        estimatedCostUsd: costUsd,
       })
       .from(hourlyTokenAnalytics)
       .where(inWindow)
@@ -211,12 +215,19 @@ export async function getBusinessTokenUsageDetail(
     estimatedCostUsd: 0,
   };
 
+  const totals = totalsRow[0] ?? zero;
   return {
     business,
-    totals: { ...(totalsRow[0] ?? zero) },
+    totals: { ...totals, estimatedCostUsd: tokenCostUsd(totals, rates) },
     byIntegration: integrationRows
-      .map((row) => ({ ...row, integrationType: String(row.integrationType) }))
+      .map((row) => ({
+        ...row,
+        integrationType: String(row.integrationType),
+        estimatedCostUsd: tokenCostUsd(row, rates),
+      }))
       .sort((a, b) => b.totalTokens - a.totalTokens),
-    daily: dailyRows.sort((a, b) => a.date.localeCompare(b.date)),
+    daily: dailyRows
+      .map((row) => ({ ...row, estimatedCostUsd: tokenCostUsd(row, rates) }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
   };
 }

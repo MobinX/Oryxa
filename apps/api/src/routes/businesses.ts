@@ -1,3 +1,4 @@
+import { isOperatorEmail } from '@api/lib/operators';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   createBusinessInputSchema,
@@ -46,9 +47,9 @@ businessesRouter.openapi(listRoute, async (c) => {
 
   // Operators always have access to the sandbox store
   const userEmail = user.email?.toLowerCase().trim();
-  const isOperator = userEmail === 'admin123@oryxa.app' || userEmail === 'mobin.devx@gmail.com' || Boolean(process.env.ADMIN_EMAILS?.includes(userEmail ?? ''));
+  const isOperator = isOperatorEmail(userEmail);
   if (isOperator && !rows.some((b) => b.slug === 'oryxa-sandbox')) {
-    const { getBusinessBySlug } = await import('@repo/db/crud/business');
+    const { getBusinessBySlug } = await import('@repo/db/crud/store');
     const sandbox = await getBusinessBySlug('oryxa-sandbox');
     if (sandbox) rows.push(sandbox);
   }
@@ -143,7 +144,7 @@ businessesRouter.openapi(getRoute, async (c) => {
     ...business,
     createdAt: business.createdAt.toISOString(),
     foundedDate: business.foundedDate?.toISOString() ?? null,
-  });
+  }, 200);
 });
 
 const updateRoute = createRoute({
@@ -157,6 +158,7 @@ const updateRoute = createRoute({
   },
   responses: {
     200: { content: { 'application/json': { schema: updateBusinessOutputSchema } }, description: 'Updated' },
+    404: { content: { 'application/json': { schema: z.object({ error: z.string() }) } }, description: 'Not found' },
   },
 });
 
@@ -166,7 +168,7 @@ businessesRouter.openapi(updateRoute, async (c) => {
   const data = c.req.valid('json');
   const result = await updateBusiness(id, user.id, data);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const deleteRoute = createRoute({
@@ -186,7 +188,7 @@ businessesRouter.openapi(deleteRoute, async (c) => {
   const id = c.req.param('id');
   const result = await deleteBusiness(id, user.id);
   if (!result) return c.json({ error: 'Not found' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const hardDeleteRoute = createRoute({
@@ -206,7 +208,7 @@ businessesRouter.openapi(hardDeleteRoute, async (c) => {
   const id = c.req.param('id');
   const result = await hardDeleteBusiness(id, user.id);
   if (!result) return c.json({ error: 'Not found or not authorized' }, 404);
-  return c.json(result);
+  return c.json(result, 200);
 });
 
 const analyticsRoute = createRoute({

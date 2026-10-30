@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   Clock,
@@ -20,25 +20,17 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { advanceOrderStateAction, deleteOrderAction } from '@/app/actions/orders';
+import { ORDER_STATES, ORDER_STATE_LABEL, normalizeOrderState, nextOrderState, prevOrderState, canTransition, formatTaka, type OrderState } from '@/lib/order-state';
 
-const NEXT_STATE: Record<string, string> = {
-  pending: 'acknowledged',
-  acknowledged: 'onDelivery',
-  onDelivery: 'done',
-};
+const NEXT_STATE: Record<string, string> = Object.fromEntries(
+  ORDER_STATES.map((st) => [st, nextOrderState(st)]).filter(([, v]) => v),
+) as Record<string, string>;
 
-const PREV_STATE: Record<string, string> = {
-  done: 'onDelivery',
-  onDelivery: 'acknowledged',
-  acknowledged: 'pending',
-};
+const PREV_STATE: Record<string, string> = Object.fromEntries(
+  ORDER_STATES.map((st) => [st, prevOrderState(st)]).filter(([, v]) => v),
+) as Record<string, string>;
 
-const STATE_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  acknowledged: 'Confirmed',
-  onDelivery: 'On Delivery',
-  done: 'Delivered',
-};
+const STATE_LABEL: Record<string, string> = ORDER_STATE_LABEL;
 
 const ORDER_STAGES: Array<{ id: 'pending' | 'acknowledged' | 'onDelivery' | 'done'; title: string; desc: string }> = [
   { id: 'pending', title: 'Order Placed', desc: 'Awaiting merchant review' },
@@ -63,6 +55,10 @@ export function OrdersProductsWorkspace({
   const [productSearch, setProductSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  // A successful transition shows before the server refresh lands, so the panel never
+  // keeps the old state next to a finished progress bar.
+  const [stateOverrides, setStateOverrides] = useState<Record<string, string>>({});
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   // Map real database orders
   const ordersList = initialOrders.map((o: any, idx: number) => ({
@@ -71,11 +67,19 @@ export function OrdersProductsWorkspace({
     customer: o.customerName || 'Customer',
     phone: o.customerPhone || 'Not provided',
     email: o.customerEmail || '',
-    address: o.customerAddress || 'Delivery address on file',
+    address: o.customerAddress || 'No delivery address on file',
+    productName: o.productName || null,
+    variantName: o.variantName || null,
+    variantShortId: o.variantShortId || null,
+    variantImageUrl: o.variantImageUrl || null,
+    count: Number.isFinite(Number(o.count)) ? Number(o.count) : 0,
+    unitPrice: Number.isFinite(Number(o.variantPrice)) ? Number(o.variantPrice) : 0,
+    shippingCost: Number.isFinite(Number(o.shippingCost)) ? Number(o.shippingCost) : 0,
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
-    amount: `৳${typeof o.totalPrice === 'number' ? o.totalPrice.toFixed(0) : (parseFloat(o.totalPrice || '0')).toFixed(0)}`,
-    state: (o.state || 'pending').toLowerCase(),
-    paymentReference: o.paymentReference || o.txId || null,
+    amount: formatTaka(o.totalPrice),
+    state: stateOverrides[o.id] ?? (normalizeOrderState(o.state) as string),
+    paymentMethod: o.paymentMethod || null,
+    paymentReference: o.transactionId || o.paymentReference || o.txId || null,
     createdAt: o.createdAt ? new Date(o.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently',
   }));
 
@@ -89,7 +93,7 @@ export function OrdersProductsWorkspace({
   const totalOrdersCount = ordersList.length;
   const pendingCount = ordersList.filter((o) => o.state === 'pending').length;
   const processingCount = ordersList.filter((o) => o.state === 'acknowledged').length;
-  const deliveredCount = ordersList.filter((o) => o.state === 'done' || o.state === 'ondelivery').length;
+  const deliveredCount = ordersList.filter((o) => o.state === 'done' || o.state === 'onDelivery').length;
 
   const filteredOrders = ordersList.filter((o) => {
     const matchesTab = orderFilterTab === 'all' || o.state === orderFilterTab;
@@ -107,9 +111,18 @@ export function OrdersProductsWorkspace({
 
   const handleSetState = (orderId: string, targetState: string) => {
     if (!targetState) return;
+    const current = ordersList.find((o) => o.id === orderId);
+    if (current && !canTransition(current.state as OrderState, targetState as OrderState)) {
+      setActionMessage(
+        `Cannot move from ${STATE_LABEL[current.state] || current.state} to ${STATE_LABEL[targetState] || targetState}`,
+      );
+      setTimeout(() => setActionMessage(null), 3500);
+      return;
+    }
     startTransition(async () => {
       try {
         await advanceOrderStateAction(businessId, orderId, targetState);
+        setStateOverrides((prev) => ({ ...prev, [orderId]: targetState }));
         setActionMessage(`Order updated to ${STATE_LABEL[targetState] || targetState}`);
         setTimeout(() => setActionMessage(null), 3000);
       } catch (err: any) {
@@ -164,10 +177,10 @@ export function OrdersProductsWorkspace({
         {
           title: 'Handed to Courier',
           subtitle:
-            activeOrder.state === 'ondelivery' || activeOrder.state === 'done'
+            activeOrder.state === 'onDelivery' || activeOrder.state === 'done'
               ? 'Dispatched for delivery'
               : 'Pending dispatch',
-          done: activeOrder.state === 'ondelivery' || activeOrder.state === 'done',
+          done: activeOrder.state === 'onDelivery' || activeOrder.state === 'done',
         },
         {
           title: 'Delivered & Completed',
@@ -310,7 +323,7 @@ export function OrdersProductsWorkspace({
               </span>
             </div>
             <div className="flex gap-1 text-[10px]">
-              {(['all', 'pending', 'acknowledged', 'done'] as const).map((t) => (
+              {(['all', 'pending', 'acknowledged', 'onDelivery', 'done'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -364,24 +377,48 @@ export function OrdersProductsWorkspace({
                   <button
                     key={o.id}
                     type="button"
-                    onClick={() => setSelectedOrderId(o.id)}
+                    onClick={() => {
+                      setSelectedOrderId(o.id);
+                      // Below lg the summary is stacked under the list, so bring it into view.
+                      if (window.matchMedia('(max-width: 1023px)').matches) {
+                        summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
                     className={`flex w-full items-center justify-between rounded-xl p-2.5 text-left transition ${
                       isSelected
                         ? 'bg-[#5B3DF5]/10 border border-[#5B3DF5]/30 dark:bg-[#5B3DF5]/20'
                         : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                     }`}
                   >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-900 dark:text-white">{o.orderNo}</span>
-                        <span className="text-[10px] text-slate-400">{o.createdAt}</span>
-                      </div>
-                      <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                        {o.customer}
-                      </p>
-                      {o.phone && o.phone !== 'Not provided' && (
-                        <p className="text-[10px] text-slate-400">{o.phone}</p>
+                    <div className="flex min-w-0 items-center gap-2 pr-2">
+                      {o.variantImageUrl ? (
+                        <img
+                          src={o.variantImageUrl}
+                          alt={o.productName ?? 'Order item'}
+                          className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                          <Package className="h-4 w-4 text-slate-400" />
+                        </div>
                       )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 dark:text-white">{o.orderNo}</span>
+                          <span className="text-[10px] text-slate-400">{o.createdAt}</span>
+                        </div>
+                        <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          {o.customer}
+                        </p>
+                        <p className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                          {o.productName ?? 'Item removed'}
+                          {o.variantName ? ` · ${o.variantName}` : ''}
+                          {o.count ? ` · Qty ${o.count}` : ''}
+                        </p>
+                        {o.phone && o.phone !== 'Not provided' && (
+                          <p className="truncate text-[10px] text-slate-400">{o.phone}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <span className="font-bold text-slate-900 dark:text-white">{o.amount}</span>
@@ -407,7 +444,19 @@ export function OrdersProductsWorkspace({
         </div>
 
         {/* Real Order Details Drawer (Col-span-4) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-2xs dark:border-slate-800 dark:bg-[#13172B] lg:col-span-4 text-xs">
+        <div
+          ref={summaryRef}
+          className="scroll-mt-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-2xs dark:border-slate-800 dark:bg-[#13172B] lg:col-span-4 text-xs"
+        >
+          {isPending && (
+            <div
+              role="progressbar"
+              aria-label="Updating order"
+              className="h-1 w-full overflow-hidden rounded-full bg-[#5B3DF5]/15"
+            >
+              <div className="h-full w-1/3 animate-order-progress rounded-full bg-[#5B3DF5]" />
+            </div>
+          )}
           {activeOrder ? (
             <>
               <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
@@ -417,17 +466,53 @@ export function OrdersProductsWorkspace({
                     {activeOrder.orderNo}
                   </h3>
                 </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    activeOrder.state === 'done'
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                      : activeOrder.state === 'pending'
-                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                      : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'
-                  }`}
-                >
-                  {STATE_LABEL[activeOrder.state] || activeOrder.state}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      activeOrder.state === 'done'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        : activeOrder.state === 'pending'
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                        : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'
+                    }`}
+                  >
+                    {STATE_LABEL[activeOrder.state] || activeOrder.state}
+                  </span>
+                  <Link
+                    href={`/b/${businessId}/orders/${activeOrder.id}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Full details
+                  </Link>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                {activeOrder.variantImageUrl ? (
+                  <img
+                    src={activeOrder.variantImageUrl}
+                    alt={activeOrder.productName ?? 'Order item'}
+                    className="h-16 w-16 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[9px] text-slate-400 dark:bg-slate-800">
+                    No img
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {activeOrder.productName ?? 'Item removed'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {activeOrder.variantName ?? 'No variant'}
+                    {activeOrder.variantShortId ? ` · #${activeOrder.variantShortId}` : ''}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                    Qty {activeOrder.count} × {formatTaka(activeOrder.unitPrice)} ={' '}
+                    {activeOrder.amount}
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -455,11 +540,30 @@ export function OrdersProductsWorkspace({
                     {activeOrder.amount}
                   </span>
                 </div>
-                {activeOrder.paymentReference && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                    Ref/TrxID: {activeOrder.paymentReference}
-                  </p>
+                {activeOrder.count > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Item {activeOrder.count} × {formatTaka(activeOrder.unitPrice)}</span>
+                    <span>{formatTaka(activeOrder.unitPrice * activeOrder.count)}</span>
+                  </div>
                 )}
+                {activeOrder.shippingCost > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Shipping</span>
+                    <span>{formatTaka(activeOrder.shippingCost)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[11px] dark:border-slate-800">
+                  <span className="text-slate-400">Payment method</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    {activeOrder.paymentMethod || '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-400">Transaction</span>
+                  <span className="truncate font-mono text-slate-700 dark:text-slate-200">
+                    {activeOrder.paymentReference || '—'}
+                  </span>
+                </div>
               </div>
 
               {/* Order Status Stepper & Bidirectional Control */}
@@ -476,14 +580,20 @@ export function OrdersProductsWorkspace({
                     const currentIdx = stepStateOrder.indexOf(activeOrder.state);
                     const isPassed = idx <= currentIdx;
                     const isCurrent = activeOrder.state === stage.id;
+                    const allowed = canTransition(activeOrder.state as OrderState, stage.id);
 
                     return (
                       <button
                         key={stage.id}
                         type="button"
-                        disabled={isPending}
+                        disabled={isPending || !allowed}
+                        title={
+                          allowed
+                            ? undefined
+                            : `Cannot move from ${STATE_LABEL[activeOrder.state] || activeOrder.state} to ${stage.title}`
+                        }
                         onClick={() => handleSetState(activeOrder.id, stage.id)}
-                        className={`group relative block w-full text-left transition rounded-lg p-1.5 -ml-1.5 ${
+                        className={`group relative block w-full text-left transition rounded-lg p-1.5 -ml-1.5 disabled:cursor-not-allowed disabled:opacity-50 ${
                           isCurrent
                             ? 'bg-[#5B3DF5]/10 border border-[#5B3DF5]/30 dark:bg-[#5B3DF5]/20'
                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -534,13 +644,19 @@ export function OrdersProductsWorkspace({
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                     {ORDER_STAGES.map((s) => {
                       const isSelected = activeOrder.state === s.id;
+                      const allowed = canTransition(activeOrder.state as OrderState, s.id);
                       return (
                         <button
                           key={s.id}
                           type="button"
-                          disabled={isPending || isSelected}
+                          disabled={isPending || isSelected || !allowed}
+                          title={
+                            allowed
+                              ? undefined
+                              : `Cannot move from ${STATE_LABEL[activeOrder.state] || activeOrder.state} to ${STATE_LABEL[s.id]}`
+                          }
                           onClick={() => handleSetState(activeOrder.id, s.id)}
-                          className={`rounded-lg py-1.5 px-2 text-[11px] font-semibold text-center transition border ${
+                          className={`rounded-lg py-1.5 px-2 text-[11px] font-semibold text-center transition border disabled:cursor-not-allowed disabled:opacity-40 ${
                             isSelected
                               ? 'bg-[#5B3DF5] border-[#5B3DF5] text-white shadow-xs pointer-events-none'
                               : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'

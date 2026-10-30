@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { LOG_CORPUS, type Fields } from '../helpers/log-corpus';
 import { logsRouter } from '@api/routes/logs';
-import { logsAccessMiddleware, logsOperatorUser } from '@api/middleware/logs-access';
+import { logsAccessMiddleware, logsOperatorPassword, logsOperatorUser } from '@api/middleware/logs-access';
 import { logRequest } from '@api/lib/logmiddleware';
 import { emit, flush, storedEvents, __testOnly } from '@api/lib/log';
 import { startContext, withContext } from '@api/lib/ctx';
@@ -198,13 +198,13 @@ describe('GET /api2/logs', () => {
   it('rejects a cursor it did not issue', async () => {
     const res = await get(probe(), `${WINDOW}&cursor=not-a-cursor`);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Invalid cursor' });
+    expect(await res.json() as any).toEqual({ error: 'Invalid cursor' });
   });
 
   it('rejects an unrecordable type instead of returning everything', async () => {
     const res = await get(probe(), `${WINDOW}&type=password`);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
+    expect(await res.json() as any).toEqual({
       error: 'Invalid query — check type, start, end, limit and cursor',
     });
   });
@@ -333,10 +333,27 @@ describe('GET /api2/logs access control', () => {
     expect(res.ok).toBe(false);
   });
 
-  it('accepts the admin123 defaults outside production', async () => {
+  it('has no default console password outside production either', async () => {
     const res = await hit(probe(), withBearer('admin123'));
-    expect(res.status).toBe(200);
-    expect(storedEvents().find((event) => event.evt === 'auth')?.reason).toBe('logs_operator');
+    expect(storedEvents().some((event) => event.evt === 'auth' && event.reason === 'logs_operator')).toBe(false);
+    expect(logsOperatorPassword()).toBeUndefined();
+  });
+
+  it('refuses the example password and anything shorter than 12 characters', () => {
+    process.env.LOGS_UI_PASSWORD = 'change-me';
+    expect(logsOperatorPassword()).toBeUndefined();
+    process.env.LOGS_UI_PASSWORD = 'short-key';
+    expect(logsOperatorPassword()).toBeUndefined();
+  });
+
+  it('accepts a long non-example operator password', () => {
+    process.env.LOGS_UI_PASSWORD = 'a-real-operator-secret';
+    expect(logsOperatorPassword()).toBe('a-real-operator-secret');
+  });
+
+  it('has no admin123 operator-name default', () => {
+    delete process.env.LOGS_UI_USER;
+    expect(logsOperatorUser()).not.toBe('admin123');
   });
 
   it('reads the operator name from LOGS_UI_USER', () => {

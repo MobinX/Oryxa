@@ -111,6 +111,10 @@ const createPostRoute = createRoute({
       content: { 'application/json': { schema: postListItemSchema } },
       description: 'Post created',
     },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Channel not found',
+    },
   },
 });
 
@@ -207,7 +211,7 @@ postsRouter.openapi(getPostRoute, async (c) => {
           syncedAt: latestSync.syncedAt.toISOString(),
         }
       : null,
-  });
+  }, 200);
 });
 
 // 4. Update Post
@@ -275,7 +279,7 @@ postsRouter.openapi(updatePostRoute, async (c) => {
     scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
     createdAt: resolvedUpdated.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 // 5. Delete Post
@@ -308,7 +312,7 @@ postsRouter.openapi(deletePostRoute, async (c) => {
   if (!deleted) {
     return c.json({ error: 'Post not found' }, 404);
   }
-  return c.json({ deleted: true });
+  return c.json({ deleted: true }, 200);
 });
 
 // 6. Publish Post
@@ -385,7 +389,7 @@ postsRouter.openapi(publishPostRoute, async (c) => {
     return c.json({
       platformPostId,
       publishedAt: publishedAt.toISOString(),
-    });
+    }, 200);
   } catch (err: any) {
     console.error(`[publish-post] FAILED postId=${postId} platform=${channel.platform}:`, err?.message ?? err);
     if (err?.cause) console.error('[publish-post] cause:', err.cause);
@@ -455,7 +459,7 @@ postsRouter.openapi(syncPostRoute, async (c) => {
       shareCount: sync.shareCount,
       reachCount: sync.reachCount,
       syncedAt: sync.syncedAt.toISOString(),
-    });
+    }, 200);
   } catch (err: any) {
     console.error(`[sync-post-route] error:`, err);
     return c.json({ error: err.message || 'Syncing stats failed' }, 400);
@@ -559,9 +563,6 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
-    const rateIn = provider === 'openai' ? 0.15 : 0.075;
-    const rateOut = provider === 'openai' ? 0.60 : 0.30;
-    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
 
     const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
     await recordTokenUsage({
@@ -578,7 +579,6 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
       cacheMissTokens,
       cacheHitPercent,
       latencyMs,
-      estimatedCostUsd,
     });
   } catch (metricErr) {
     console.error('[posts-router] failed to record token metrics for generatePost:', metricErr);
@@ -597,7 +597,7 @@ Make the post punchy, call-to-action oriented, and format it nicely with emojis.
     scheduledAt: resolvedCreated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedCreated.publishedAt?.toISOString() || null,
     createdAt: resolvedCreated.createdAt.toISOString(),
-  });
+  }, 200);
 });
 
 // 9. AI-Tune Existing Draft
@@ -677,9 +677,6 @@ Output only the revised post content. Do not add any conversational text or wrap
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
     const cacheHitPercent = inputTokens > 0 ? parseFloat(((cacheHitTokens / inputTokens) * 100).toFixed(2)) : 0;
     const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
-    const rateIn = provider === 'openai' ? 0.15 : 0.075;
-    const rateOut = provider === 'openai' ? 0.60 : 0.30;
-    const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
 
     const { recordTokenUsage } = await import('@repo/db/crud/token-analytics');
     await recordTokenUsage({
@@ -696,7 +693,6 @@ Output only the revised post content. Do not add any conversational text or wrap
       cacheMissTokens,
       cacheHitPercent,
       latencyMs,
-      estimatedCostUsd,
     });
   } catch (metricErr) {
     console.error('[posts-router] failed to record token metrics for tunePost:', metricErr);
@@ -715,5 +711,5 @@ Output only the revised post content. Do not add any conversational text or wrap
     scheduledAt: resolvedUpdated.scheduledAt?.toISOString() || null,
     publishedAt: resolvedUpdated.publishedAt?.toISOString() || null,
     createdAt: resolvedUpdated.createdAt.toISOString(),
-  });
+  }, 200);
 });
