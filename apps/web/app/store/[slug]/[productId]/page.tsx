@@ -7,6 +7,7 @@ import { ProductGallery } from '@/components/storefront/product-gallery';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { ProductPurchase } from '@/components/storefront/product-purchase';
 import { ProductDetailSkeleton } from '@/components/storefront/storefront-skeleton';
+import { ProductJsonLd } from '@/components/storefront/product-json-ld';
 import { formatPrice, getProduct, getStore } from '@/lib/storefront';
 import type { PublicProduct } from '@/lib/storefront';
 
@@ -26,6 +27,7 @@ export async function generateMetadata({ params }: { params: ProductParams }): P
   return {
     title: `${product.name} — ${formatPrice(product.price)}`,
     description: product.description?.slice(0, 170) ?? undefined,
+    alternates: { canonical: `/store/${slug}/${product.id}` },
     openGraph: {
       type: 'website',
       title: product.name,
@@ -57,6 +59,7 @@ async function ProductView({ params }: { params: ProductParams }) {
 
   return (
     <>
+      <ProductJsonLd product={product} store={store} slug={slug} />
       <nav
         aria-label="Breadcrumb"
         className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center gap-x-2.5 gap-y-1 px-5 py-5 text-[10px] uppercase tracking-[0.22em] text-[var(--store-ink-3)] sm:px-8 lg:px-12"

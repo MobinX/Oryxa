@@ -39,10 +39,12 @@ export async function generateMetadata({
   return {
     title: tagline ? `${store.name} — ${tagline}` : store.name,
     description,
+    alternates: { canonical: `/store/${slug}` },
     openGraph: {
       type: 'website',
       title: store.name,
       description,
+      url: `/store/${slug}`,
       images: store.theme?.heroImageUrl ? [store.theme.heroImageUrl] : undefined,
     },
   };

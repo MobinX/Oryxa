@@ -3,6 +3,12 @@ import { LogOut } from 'lucide-react';
 import { SignOutForm } from '@/components/sign-out-button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { getBrand } from '@/lib/brand-server';
+import type { Metadata } from 'next';
+
+/** Account console: never indexed. */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function BusinessesLayout({ children }: { children: React.ReactNode }) {
   const { companyName } = await getBrand();

@@ -6,6 +6,7 @@ export async function generateMetadata() {
   return {
     title: `Sign in — ${companyName}`,
     description: 'Sign in or create an account to manage your AI-powered e-commerce store.',
+    robots: { index: false, follow: false },
   };
 }
 
