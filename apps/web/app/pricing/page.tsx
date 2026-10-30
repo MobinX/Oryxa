@@ -7,7 +7,11 @@ import { OnlyOrdesLogo } from '@/components/sidebar';
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
-  return { title: `Pricing — ${companyName}` };
+  return {
+    title: `Pricing — ${companyName}`,
+    description: `${companyName} plans for AI auto-reply, catalog and order management. Simple, transparent pricing that scales with your store.`,
+    alternates: { canonical: '/pricing' },
+  };
 }
 
 export default async function PricingPage() {

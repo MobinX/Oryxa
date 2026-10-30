@@ -1,0 +1,17 @@
+---
+description: Follow the local master prompt task spec
+alwaysApply: true
+---
+
+# Master Prompt
+
+If `master-prompt.md` exists at the repo root, read it at session start and
+follow its instructions for the task it describes.
+
+- It is local-only (gitignored). Never commit, print, or paste it elsewhere.
+- Its brand rules apply to any page work it covers: no hardcoded brand
+  names in visible copy; resolve names per request via `getBrand()` /
+  `useBrand()`; no company-name env vars; no hostname conditionals in pages.
+- Prefer server components; keep `/terms` and `/privacy` rendering directly.
+- Before finishing, verify its acceptance criteria (typecheck + grep proving
+  no hardcoded names) and report files changed, helpers used, and results.

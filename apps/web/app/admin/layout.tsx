@@ -6,6 +6,12 @@ import { SignOutForm } from '@/components/sign-out-button';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
 import { logsBearer } from '@/lib/logs-session';
 import { getBrand } from '@/lib/brand-server';
+import type { Metadata } from 'next';
+
+/** Operator console: never indexed. */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The rail is the chrome of a signed-in console, so the sign-in page does not offer a

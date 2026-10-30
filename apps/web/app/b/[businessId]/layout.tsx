@@ -1,5 +1,11 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import { BusinessSidebar, BusinessTopBar } from '@/components/business-sidebar';
+
+/** Merchant console: never indexed. */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 import { SidebarSkeleton } from '@/components/sidebar-skeleton';
 import { PushMessageListener } from '@/components/push-message-listener';
 

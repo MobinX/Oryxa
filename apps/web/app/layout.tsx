@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { BrandProvider } from '@/components/brand-provider';
+import { OrganizationJsonLd } from '@/components/seo/json-ld';
 import { getBrand } from '@/lib/brand-server';
+import { siteUrl } from '@/lib/seo';
 import './globals.css';
 
 /**
@@ -10,10 +12,30 @@ import './globals.css';
 export const instant = false;
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { companyName } = await getBrand();
+  const brand = await getBrand();
+  const { companyName } = brand;
+  const title = `${companyName} — AI Auto-Reply for Messenger & Instagram`;
+  const description = `${companyName} answers customer comments and messages with AI, manages catalog and orders, and runs your storefront — for Facebook, Instagram and WhatsApp commerce.`;
   return {
-    title: `${companyName} — AI Commerce`,
-    description: 'Multi-channel AI auto-reply for e-commerce',
+    metadataBase: new URL(siteUrl(brand.host)),
+    title,
+    description,
+    manifest: '/manifest.webmanifest',
+    alternates: { canonical: '/' },
+    openGraph: {
+      type: 'website',
+      siteName: companyName,
+      title,
+      description,
+      images: ['/og-default.png'],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: ['/og-default.png'],
+    },
+    icons: { icon: '/favicon.ico', apple: '/apple-touch-icon.png' },
   };
 }
 
@@ -44,6 +66,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <BrandProvider brand={brand}>{children}</BrandProvider>
+        <OrganizationJsonLd />
       </body>
     </html>
   );

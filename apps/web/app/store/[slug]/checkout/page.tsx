@@ -19,7 +19,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const store = await loadName(slug);
-  return { title: store ? `Checkout — ${store.name}` : 'Checkout' };
+  return {
+    title: store ? `Checkout — ${store.name}` : 'Checkout',
+    robots: { index: false, follow: false },
+  };
 }
 
 async function CheckoutView({ params }: { params: CheckoutParams }) {

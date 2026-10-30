@@ -311,6 +311,16 @@ export default function HomePageClient({
               </>
             )}
 
+            <Reveal delayMs={100} className="mt-10 flex justify-center">
+              <Link
+                href="/pricing"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-[#7C3AED]/50 hover:text-white"
+              >
+                See full pricing
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Reveal>
+
             {/* Trust grid */}
             <section aria-label="How your data stays yours" className="mt-14 border-t border-white/10 pt-12">
               <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
