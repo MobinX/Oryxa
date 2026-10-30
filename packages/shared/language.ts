@@ -29,20 +29,44 @@ export const TOOL_NARRATION_PATTERNS = [
 /**
  * Common Banglish (Bengali written in Latin letters) lexicon.
  * If these tokens appear in the customer query, it is Banglish input intended for Bangla response.
+ * NOTE: generic English words (please, order, price, color, size, etc.) are intentionally
+ * excluded — they appear in pure English messages and must not trigger 'bn' on their own.
  */
 export const BANGLISH_LEXICON = new Set([
   'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnader', 'amader', 'amar', 'tomar', 'apnar',
-  'koto', 'koto?', 'dam', 'daam', 'price', 'ache', 'ase', 'ase?', 'ache?', 'thakbe', 'thakbe?',
+  'amake', 'tomake', 'apnake',
+  'koto', 'koto?', 'dam', 'daam', 'ache', 'ase', 'ase?', 'ache?', 'thakbe', 'thakbe?',
   'ki', 'ki?', 'kire', 'kemon', 'kemon?', 'koyta', 'koita', 'koyta?', 'koita?',
-  'shob', 'shobgulo', 'sob', 'sobgulo', 'chobi', 'chobigulo', 'pic', 'picgulo', 'photo',
-  'dekhao', 'dekhan', 'dekhte', 'chai', 'dekte', 'dekhbo', 'lagbe', 'hobe', 'hobe?',
+  'shob', 'shobgulo', 'sob', 'sobgulo', 'chobi', 'chobigulo', 'picgulo',
+  'dekhao', 'dekhan', 'dekhte', 'chai', 'dekte', 'dekhbo', 'dekhi', 'dekho', 'dekhun',
+  'lagbe', 'hobe', 'hobe?',
   'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben', 'bodole', 'onno', 'arekta', 'ar',
-  'ei', 'oi', 'etar', 'otar', 'kache', 'thikana', 'thik', 'dhaka', 'chattogram',
-  'pathan', 'pathaben', 'order', 'korte', 'kore', 'koren', 'korbo', 'please', 'plz',
-  'khub', 'valo', 'bhalo', 'bhai', 'bhaiya', 'bro', 'apu', 'didi', 'dada', 'dost', 'dosto',
+  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'eita', 'oita', 'er', 'tar',
+  'kache', 'thikana', 'thik', 'dhaka', 'chattogram',
+  'pathan', 'pathaben', 'korte', 'kore', 'koren', 'korbo', 'koro', 'korun', 'korben',
+  'korechi', 'korchi', 'koreche', 'korechen', 'korechilam', 'korlam', 'kora',
+  'khub', 'valo', 'bhalo', 'bhai', 'bhaiya', 'apu', 'didi', 'dada', 'dost', 'dosto',
   'shundor', 'sundor', 'beshi', 'kom', 'kichu', 'akta', 'ekta', 'duita', 'tin ta', 'tinta',
-  'pice', 'piece', 'size', 'colour', 'color', 'stock', 'delivery', 'charge', 'advance',
-  'cash', 'cod', 'inbox', 'check', 'message', 'bolun', 'bolo', 'janan', 'parben', 'parben?'
+  'pice', 'bolun', 'bolo', 'janan', 'parben', 'parben?',
+  'kintu', 'jante', 'peyechi', 'diyechi', 'niyechi', 'keno', 'kothay', 'kivabe', 'kokhon',
+]);
+
+/**
+ * Distinctive Banglish markers — a single occurrence classifies the turn as 'bn',
+ * even in a longer message diluted with English loanwords (order, confirm, bKash, TrxID).
+ * Generic English words (please, order, price, delivery, etc.) are intentionally excluded.
+ */
+export const STRONG_BANGLISH_MARKERS = new Set([
+  'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnader', 'amader', 'amar', 'tomar', 'apnar',
+  'amake', 'tomake', 'apnake',
+  'korte', 'kore', 'koren', 'korbo', 'koro', 'korun', 'korben', 'korechi', 'korchi',
+  'koreche', 'korechen', 'korechilam', 'korlam',
+  'chai', 'ache', 'ase', 'thakbe', 'lagbe', 'hobe', 'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben',
+  'dekhao', 'dekhan', 'dekhte', 'dekhi', 'dekhbo', 'dekte', 'dekho', 'dekhun',
+  'koto', 'koyta', 'koita', 'kemon', 'dam', 'daam', 'thikana', 'chobi', 'bodole',
+  'kache', 'pathan', 'pathaben', 'parben', 'bolun', 'bolo', 'janan',
+  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'er', 'tar',
+  'kintu', 'jante', 'peyechi',
 ]);
 
 export interface LanguageDetectionContext {
@@ -117,6 +141,14 @@ export function detectTurnLanguage(
 
   // 5. Banglish token detection
   const words = lower.split(/[^a-zA-Z0-9?]+/).filter(Boolean);
+
+  // A single distinctive Banglish marker classifies as 'bn', even when diluted
+  // by English loanwords (order, confirm, bKash, TrxID). Strip trailing '?' so
+  // 'koto?' matches strong marker 'koto'.
+  if (words.some((w) => STRONG_BANGLISH_MARKERS.has(w) || STRONG_BANGLISH_MARKERS.has(w.replace(/\?+$/, '')))) {
+    return 'bn';
+  }
+
   let banglishTokenCount = 0;
   for (const w of words) {
     if (BANGLISH_LEXICON.has(w)) {
@@ -124,17 +156,8 @@ export function detectTurnLanguage(
     }
   }
 
-  // If words contain 2+ Banglish tokens or >30% of total tokens are Banglish, classify as Banglish -> 'bn'
+  // If words contain 2+ Banglish tokens or >=25% of total tokens are Banglish, classify as Banglish -> 'bn'
   if (banglishTokenCount >= 2 || (words.length > 0 && banglishTokenCount / words.length >= 0.25)) {
-    return 'bn';
-  }
-
-  // Single strong Banglish intent words
-  const strongBanglishSingles = new Set([
-    'koto', 'koyta', 'koita', 'dekhao', 'dekhan', 'apnader', 'thikana',
-    'chobi', 'bodole', 'lagbe', 'nibo', 'dibo', 'dao', 'den', 'ache', 'ase'
-  ]);
-  if (words.some((w) => strongBanglishSingles.has(w))) {
     return 'bn';
   }
 

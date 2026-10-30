@@ -23,6 +23,25 @@ describe('P1 Language Detection & Preservation', () => {
     expect(detectTurnLanguage('Is the Classic Oxford Shirt available in XL?')).toBe('en');
   });
 
+  it('does not classify pure English with generic words as Banglish', () => {
+    expect(detectTurnLanguage('I sent bKash money, TrxID 8XK2M4Q1, please confirm order')).toBe('en');
+    expect(detectTurnLanguage('what do you sell?')).toBe('en');
+    expect(detectTurnLanguage('is there a red t-shirt?')).toBe('en');
+    expect(detectTurnLanguage('What is the price and delivery charge?')).toBe('en');
+  });
+
+  it('still detects real Banglish as bn', () => {
+    expect(detectTurnLanguage('ami lal order korechilam kintu nil peyechi, refund chai')).toBe('bn');
+    expect(detectTurnLanguage('classic tee er dam koto? lal ache?')).toBe('bn');
+  });
+
+  it('classifies TrxID messages by language markers, not loanwords', () => {
+    // Pure English with generic loanwords stays 'en'
+    expect(detectTurnLanguage('I sent bKash money, TrxID 8XK2M4Q1, please confirm order')).toBe('en');
+    // Banglish with strong verb markers (korechi/korun) is 'bn' despite English loanwords
+    expect(detectTurnLanguage('ami bkash korechi, trxid 8XK2M4Q1, order confirm korun')).toBe('bn');
+  });
+
   it('preserves previous language on short turns like "ok" or numbers', () => {
     expect(detectTurnLanguage('ok', { lastReplyLanguage: 'en' })).toBe('en');
     expect(detectTurnLanguage('ok', { lastReplyLanguage: 'bn' })).toBe('bn');
