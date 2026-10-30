@@ -28,6 +28,10 @@ apps/api/public/index.js.map
 env.txt
 **/env.txt
 
+# OAuth / service-account secrets (e.g. Google client_secret*.json)
+client_secret*.json
+**/client_secret*.json
+
 # =========================
 # TypeScript
 # =========================
@@ -76,6 +80,7 @@ bug/
 backups/
 readme.file
 README.file
+master-prompt.md
 
 
 # Playwright
