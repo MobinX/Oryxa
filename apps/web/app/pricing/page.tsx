@@ -14,6 +14,9 @@ export async function generateMetadata() {
   };
 }
 
+/** Brand copy comes from request headers, so this route may block. */
+export const instant = false;
+
 export default async function PricingPage() {
   const { plans, unavailable } = await cachedPublicPlans();
   const displayPlans = toDisplayPlans(plans);

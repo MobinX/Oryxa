@@ -33,6 +33,9 @@ async function CheckoutView({ params }: { params: CheckoutParams }) {
   return <CheckoutFlow store={store} />;
 }
 
+/** Store data is fetched per request, so this route may block. */
+export const instant = false;
+
 export default function StorefrontCheckoutPage({ params }: { params: CheckoutParams }) {
   return (
     <Suspense fallback={<CheckoutSkeleton />}>
