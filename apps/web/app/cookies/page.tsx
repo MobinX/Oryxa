@@ -14,6 +14,7 @@ const UPDATED = '31 October 2026';
 
 export default function CookiesPage() {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+  const sameEntity = COMPANY_NAME === PARENT_COMPANY_NAME;
 
   return (
     <LegalPage
@@ -24,9 +25,14 @@ export default function CookiesPage() {
       current="/cookies"
     >
       <p>
-        This policy explains how {COMPANY_NAME}, a product of{' '}
-        <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong>, uses cookies and similar
-        browser storage. It should be read with our{' '}
+        This policy explains how {COMPANY_NAME} uses cookies and similar browser storage.{' '}
+        {sameEntity ? null : (
+          <>
+            {COMPANY_NAME} is a product of{' '}
+            <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong>.{' '}
+          </>
+        )}
+        It should be read with our{' '}
         <a href="/privacy" className="font-semibold text-primary hover:underline">Privacy Policy</a>.
         When you first visit the site, a banner asks whether you accept optional analytics. Necessary
         storage is used to run the Service you requested and does not depend on that choice.

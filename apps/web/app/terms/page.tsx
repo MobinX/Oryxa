@@ -13,11 +13,12 @@ const UPDATED = '31 October 2026';
 
 export default function TermsPage() {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+  const sameEntity = COMPANY_NAME === PARENT_COMPANY_NAME;
 
   return (
     <LegalPage
       title="Terms of Service"
-      subtitle={`These terms govern your use of ${COMPANY_NAME}, a product of ${PARENT_COMPANY_NAME}.`}
+      subtitle={`These terms govern your use of ${COMPANY_NAME}${sameEntity ? '.' : `, a product of ${PARENT_COMPANY_NAME}.`}`}
       updated={UPDATED}
       icon={Scale}
       current="/terms"

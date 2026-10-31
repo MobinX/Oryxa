@@ -13,6 +13,7 @@ const UPDATED = '31 October 2026';
 
 export default function PrivacyPage() {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+  const sameEntity = COMPANY_NAME === PARENT_COMPANY_NAME;
 
   return (
     <LegalPage
@@ -23,7 +24,7 @@ export default function PrivacyPage() {
       current="/privacy"
     >
       <p>
-        {COMPANY_NAME}, a product of <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong>{' '}
+        {COMPANY_NAME}{sameEntity ? '' : <>, a product of <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong></>}{' '}
         (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), provides AI-assisted messaging, catalog,
         storefront and order tools for merchants. This policy explains what personal data we process,
         why, who we share it with and the choices you have. It applies to our websites, the merchant

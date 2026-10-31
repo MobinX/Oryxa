@@ -30,6 +30,7 @@ export function LegalPage({
   children: React.ReactNode;
 }) {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+  const sameEntity = COMPANY_NAME === PARENT_COMPANY_NAME;
 
   return (
     <div className="flex min-h-screen flex-col justify-between bg-background font-inter text-foreground transition-colors duration-300">
@@ -79,7 +80,8 @@ export function LegalPage({
             <div className="min-w-0">
               <h1 className="font-geist text-3xl font-black tracking-tight text-foreground">{title}</h1>
               <p className="mt-1 text-xs text-muted-foreground">
-                Last updated: {updated} · {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
+                Last updated: {updated}
+                {sameEntity ? '' : ` · ${COMPANY_NAME} is a product of ${PARENT_COMPANY_NAME}`}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{subtitle}</p>
             </div>
@@ -108,8 +110,8 @@ export function LegalPage({
 
       <footer className="border-t border-border/40 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">
         <p>
-          © {new Date().getFullYear()} {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights
-          reserved.
+          © {new Date().getFullYear()} {COMPANY_NAME}.
+          {sameEntity ? '' : ` A product of ${PARENT_COMPANY_NAME}.`} All rights reserved.
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
           <Link href="/terms" className="hover:text-foreground hover:underline">Terms</Link>
