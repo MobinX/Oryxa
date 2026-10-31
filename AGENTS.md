@@ -31,8 +31,9 @@ Bun monorepo: apps/api (Hono), apps/web (Next.js 16), apps/api2, packages/{db,ag
 - Do not create accounts to get around quotas.
 
 ## Git rules
-- **NO `git push`, PRs, releases or deploys without the user's (Mazharul) explicit approval.**
+- Operator is Zul-Qarnain. Push, PRs, releases and deploys require his explicit instruction in that session — never push merely because it would be useful.
 - Local commits are OK, authored as `Zul-Qarnain <68942280+Zul-Qarnain@users.noreply.github.com>`. Friends may push to `main`, so `git fetch` and rebase before starting work.
 
 ## Docs
 `docs/project-assessment.md`, `docs/agent-benchmarks.md`, `docs/agent-prompt.md` (task template).
+Local-only spec (gitignored, never commit): if `master-prompt.md` exists at the repo root, read it at session start and follow its instructions; see `.cursor/rules/master-prompt.mdc`.
