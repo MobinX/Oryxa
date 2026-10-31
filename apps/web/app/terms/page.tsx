@@ -1,180 +1,241 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowLeft, Scale, Shield, AlertTriangle, FileCheck, HelpCircle } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { Scale } from 'lucide-react';
 import { useBrand } from '@/components/brand-provider';
+import {
+  LegalContact,
+  LegalList,
+  LegalPage,
+  LegalSection,
+} from '@/components/legal/legal-page';
+
+const UPDATED = '31 October 2026';
 
 export default function TermsPage() {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-inter flex flex-col justify-between">
-      {/* Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
-            <svg viewBox="0 0 32 32" className="w-8 h-8 select-none">
-              <defs>
-                <linearGradient id="logo-grad-terms" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#8B5CF6" />
-                  <stop offset="100%" stopColor="#6366F1" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M16 8C12 8 8 11.5 8 16s4 8 8 8c3 0 5-1.5 6.5-3.5L25 18c-2 2.5-5 4-9 4-6 0-11-4.5-11-10S10 2 16 2c4 0 7 1.5 9 4l-2.5 2.5C21 6.5 19 8 16 8zm0 16c4 0 8-3.5 8-8s-4-8-8-8c-3 0-5 1.5-6.5 3.5L11 14c2-2.5 5-4 9-4 6 0 11 4.5 11 10s-5 10-11 10c-4 0-7-1.5-9-4l2.5-2.5c1.5 2 3.5 3.5 6.5 3.5z"
-                fill="url(#logo-grad-terms)"
-              />
-            </svg>
-            <div className="flex flex-col">
-              <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                {COMPANY_NAME}
-              </span>
-              <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by {PARENT_COMPANY_NAME}
-              </span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link 
-              href="/login" 
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-geist font-bold text-sm px-4.5 py-2.5 rounded-element transition-all active:scale-95 shadow-sm"
-            >
-              Start Free
-            </Link>
-          </div>
-        </div>
-      </header>
+    <LegalPage
+      title="Terms of Service"
+      subtitle={`These terms govern your use of ${COMPANY_NAME}, a product of ${PARENT_COMPANY_NAME}.`}
+      updated={UPDATED}
+      icon={Scale}
+      current="/terms"
+    >
+      <p>
+        These Terms of Service (&quot;Terms&quot;) are a binding agreement between you and{' '}
+        <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong> (&quot;we&quot;, &quot;us&quot;,
+        &quot;our&quot;) for the {COMPANY_NAME} service, including this website, the merchant console,
+        the AI agents, storefronts and connected messaging features (together, the &quot;Service&quot;).
+        By creating an account, connecting a channel, or using the Service you accept these Terms. If
+        you do not accept them, do not use the Service.
+      </p>
 
-      {/* Main Content */}
-      <main className="relative min-h-[calc(100vh-8rem)] flex-1 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Glows */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none -z-10" />
-        
-        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-card shadow-card p-6 sm:p-10 relative z-10 space-y-8">
-          
-          {/* Header section */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 border-b border-border/40 pb-6">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
-              <Scale className="h-6 w-6 stroke-[2]" />
-            </div>
-            <div className="text-center sm:text-left">
-              <h1 className="font-geist font-black text-3xl tracking-tight text-foreground">
-                Terms &amp; Conditions
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
-              </p>
-            </div>
-          </div>
+      <LegalSection title="1. Definitions">
+        <LegalList>
+          <li><strong className="text-foreground">Merchant</strong> means the business that creates an account and uses the Service.</li>
+          <li><strong className="text-foreground">Customer</strong> means a person who messages, comments on, or purchases from a Merchant through a connected platform.</li>
+          <li><strong className="text-foreground">Connected Platform</strong> means a third-party service such as Facebook Messenger, Instagram, WhatsApp or a storefront channel that a Merchant connects.</li>
+          <li><strong className="text-foreground">AI Output</strong> means text, product cards, suggestions, orders or other material generated by the Service&apos;s AI features.</li>
+          <li><strong className="text-foreground">Merchant Content</strong> means products, prices, stock, photos, guidance, messages, customer records and any other material a Merchant or its Customers provide.</li>
+        </LegalList>
+      </LegalSection>
 
-          {/* Terms Text */}
-          <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
-            <p>
-              Welcome to {COMPANY_NAME}! These Terms &amp; Conditions ("Terms") govern your access to and use of {COMPANY_NAME} ("the Platform"), a multi-tenant AI auto-reply e-commerce SaaS application. The Platform is owned, developed, and operated by <strong>{PARENT_COMPANY_NAME}</strong>. By registering an account, connecting channels, or using the Platform, you agree to comply with and be bound by these Terms.
-            </p>
+      <LegalSection title="2. Eligibility and authority">
+        <p>
+          You must be at least 18 years old and able to enter into a binding contract. If you use the
+          Service for a business, you confirm that you are authorised to act for that business and to
+          connect each account, Page or phone number you add. The Service is not directed to children.
+        </p>
+      </LegalSection>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Shield className="h-4.5 w-4.5 text-primary" />
-                <h2>1. Account Registration and Security</h2>
-              </div>
-              <p>
-                To access features like product listing, order management, and agent customization, you must create a merchant account.
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>Authentication is managed securely through Firebase Auth. You are solely responsible for keeping your login credentials confidential.</li>
-                <li>You agree to notify support immediately of any unauthorized access to your account.</li>
-                <li>{PARENT_COMPANY_NAME} is not liable for losses caused by unauthorized use of your credentials.</li>
-              </ul>
-            </section>
+      <LegalSection title="3. Accounts and security">
+        <LegalList>
+          <li>Provide accurate account and business information and keep it current.</li>
+          <li>Keep your sign-in credentials confidential. You are responsible for activity under your account.</li>
+          <li>Notify us promptly at the contact address below if you believe your account or a connected channel has been compromised.</li>
+          <li>Do not share accounts, resell access, or create accounts by automated means.</li>
+        </LegalList>
+      </LegalSection>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <FileCheck className="h-4.5 w-4.5 text-primary" />
-                <h2>2. Channel Integration &amp; Compliance</h2>
-              </div>
-              <p>
-                {COMPANY_NAME} connects to third-party social platforms (Facebook Messenger, Instagram, WhatsApp) to auto-reply to customers.
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>You must comply with Meta's developer and platform policies, terms of service, and messaging policies.</li>
-                <li>You must only connect social accounts and pages that you own or have legal authorization to manage and connect.</li>
-                <li>You acknowledge that Meta webhook events are verified and signatures validated using HMAC keys. Deactivation or removal of pages will terminate webhook event delivery.</li>
-              </ul>
-            </section>
+      <LegalSection title="4. Connected platforms and Meta rules">
+        <p>
+          The Service connects to platforms operated by Meta and other third parties. You must own or
+          be authorised to manage every account you connect, and you must comply with the applicable
+          platform terms, developer policies, messaging policies and advertising rules, including
+          Meta&apos;s Platform Terms. You grant us permission to access the connected account only to
+          provide the Service, including reading messages and comments, sending replies and managing
+          catalog, order and notification data.
+        </p>
+        <p>
+          Platforms may change their APIs, suspend accounts or stop delivering events. We are not
+          responsible for platform decisions, rate limits, outages or account restrictions, and
+          disconnecting a channel ends our ability to receive or send on it.
+        </p>
+      </LegalSection>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <AlertTriangle className="h-4.5 w-4.5 text-primary" />
-                <h2>3. AI Agents &amp; Limitations of Service</h2>
-              </div>
-              <p>
-                Our AI agents run on LangGraph and Gemini LLM tools to talk to customers and manage carts/orders:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>AI responses are generated programmatically and dynamically. While we strive to optimize prompts, {PARENT_COMPANY_NAME} does not guarantee 100% accuracy of AI auto-replies.</li>
-                <li>You are responsible for regularly reviewing your agents' conversations and correcting product lists, stocks, or pricing data to prevent incorrect orders.</li>
-                <li>Service is provided "as is" and "as available". We are not responsible for Gemini or Meta API service outages, rate-limiting, or token exhaustion.</li>
-              </ul>
-            </section>
+      <LegalSection title="5. AI agent and AI output">
+        <LegalList>
+          <li>The AI uses probabilistic models. AI Output can be inaccurate, incomplete or inappropriate, even when the underlying catalog is correct.</li>
+          <li>You are responsible for the products, prices, stock, delivery terms and guidance you provide, and for reviewing AI Output and customer conversations where accuracy matters.</li>
+          <li>The Service includes controls to pause an agent for a business or a conversation and to reply manually. You must use these controls where human review is required.</li>
+          <li>AI Output is not legal, medical, financial or other professional advice and must not be relied on as such.</li>
+          <li>We do not guarantee any level of accuracy, response time, availability or conversion.</li>
+        </LegalList>
+      </LegalSection>
 
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <HelpCircle className="h-4.5 w-4.5 text-primary" />
-                <h2>4. Intellectual Property</h2>
-              </div>
-              <p>
-                All rights, titles, and interests in the {COMPANY_NAME} platform, its database schemas, backend code (Hono framework), agent configurations, web app layouts, designs, and brand logos are and remain the exclusive intellectual property of <strong>{PARENT_COMPANY_NAME}</strong> and its licensors. You may not copy, modify, distribute, or reverse-engineer the source code.
-              </p>
-            </section>
+      <LegalSection title="6. Orders, payments and customer relationships">
+        <p>
+          You are the seller of record for every order placed through your storefront or conversations.
+          You are responsible for fulfilment, delivery, returns, refunds, warranties, taxes and
+          compliance with consumer-protection law in the places you sell. We are not a party to the
+          sale between you and a Customer and do not take title to goods.
+        </p>
+        <p>
+          The Service may record payment details a Customer provides, such as a cash-on-delivery choice
+          or a bKash/Nagad transaction ID. We do not process card payments, hold funds, verify
+          mobile-money transfers or act as a payment intermediary. Any payment arrangement is between
+          you and your Customer.
+        </p>
+      </LegalSection>
 
-            <section className="space-y-3 border-t border-border/40 pt-6">
-              <h2 className="text-foreground font-geist font-bold text-base">5. Governing Law and Support</h2>
-              <p>
-                These Terms shall be governed by and construed in accordance with the laws of Bangladesh. Any dispute arising from these terms shall be settled exclusively in the competent courts of Dhaka, Bangladesh.
-              </p>
-              <p className="mt-2">
-                For questions regarding billing, enterprise terms, or service complaints, contact the {PARENT_COMPANY_NAME} team at:
-              </p>
-              <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
-                <p><strong className="text-foreground">{PARENT_COMPANY_NAME} - Software Division</strong></p>
-                <p>Email: alamsarwar@hotmail.com</p>
-                <p>
-                  Address:<br />
-                  51, Mirpur Road<br />
-                  Room 517, Alpana Plaza, Level 5<br />
-                  Dhaka 1205<br />
-                  Bangladesh
-                </p>
-              </div>
-            </section>
-          </div>
+      <LegalSection title="7. Acceptable use">
+        <LegalList>
+          <li>Do not use the Service for unlawful, deceptive, harassing or discriminatory activity, or to sell prohibited or unsafe goods.</li>
+          <li>Do not send spam or unsolicited messages, or contact people who asked not to be contacted.</li>
+          <li>Do not misrepresent AI Output as a human statement where that would deceive a Customer.</li>
+          <li>Do not attempt to access another merchant&apos;s data, bypass authentication, probe or disrupt the Service, or reverse-engineer the software.</li>
+          <li>Do not upload malware, unlawful content, or content that infringes another person&apos;s rights.</li>
+        </LegalList>
+      </LegalSection>
 
-          {/* Action Footer */}
-          <div className="flex items-center justify-between border-t border-border/40 pt-6 mt-4">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-element border border-border bg-card hover:bg-muted text-foreground font-geist font-bold text-xs tracking-wide transition-all shadow-sm active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4 stroke-[2.5]" /> Back to Home
-            </Link>
-            
-            <Link
-              href="/privacy"
-              className="text-xs text-primary hover:underline font-semibold"
-            >
-              Read Privacy Policy
-            </Link>
-          </div>
+      <LegalSection title="8. Merchant content and licence">
+        <p>
+          You keep ownership of Merchant Content. You grant us a worldwide, non-exclusive licence to
+          host, copy, process, transmit and display Merchant Content as needed to operate, secure and
+          improve the Service, including sending it to connected platforms and model providers as
+          described in our <a href="/privacy" className="font-semibold text-primary hover:underline">Privacy Policy</a>.
+          You confirm you have the rights and notices needed to share Customer data with us. Feedback
+          you send us may be used without restriction or payment.
+        </p>
+      </LegalSection>
 
-        </div>
-      </main>
+      <LegalSection title="9. Our intellectual property">
+        <p>
+          The Service, software, design, documentation, brand and underlying technology are owned by{' '}
+          {PARENT_COMPANY_NAME} and its licensors. These Terms grant you a limited, revocable,
+          non-transferable right to use the Service for your business. No other rights are granted.
+        </p>
+      </LegalSection>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
-      </footer>
-    </div>
+      <LegalSection title="10. Plans, fees and changes">
+        <LegalList>
+          <li>Plans, allowances and prices are shown in the console or on the pricing page and may change with notice.</li>
+          <li>Message and comment allowances may be capped by a plan or by our operator. A used-up allowance pauses automated replies until it resets or is changed.</li>
+          <li>Fees are payable as agreed with us. Taxes are your responsibility except for our income taxes. Unless the law requires otherwise, fees already paid are non-refundable.</li>
+          <li>A free plan may be limited, changed or withdrawn. We do not promise that any plan remains free indefinitely.</li>
+        </LegalList>
+      </LegalSection>
+
+      <LegalSection title="11. Third-party services">
+        <p>
+          The Service relies on providers such as Meta, Google Firebase and Gemini, OpenAI or Azure,
+          Backblaze, Neon and Vercel. Their services are governed by their own terms and privacy
+          policies. We are not responsible for their acts, omissions, outages or changes, and a
+          provider failure may interrupt parts of the Service.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="12. Privacy">
+        <p>
+          Our <a href="/privacy" className="font-semibold text-primary hover:underline">Privacy Policy</a>{' '}
+          explains what we collect and how we use it. Our{' '}
+          <a href="/cookies" className="font-semibold text-primary hover:underline">Cookie Policy</a>{' '}
+          explains cookies and your choices. For Customer data processed on your behalf, you are the
+          controller and we act as your processor; you must provide your own privacy notice and lawful
+          basis.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="13. Disclaimers">
+        <p className="uppercase tracking-wide">
+          The Service is provided &quot;as is&quot; and &quot;as available&quot;. To the maximum extent
+          permitted by law, we disclaim all warranties, express or implied, including merchantability,
+          fitness for a particular purpose, non-infringement, accuracy and uninterrupted or secure
+          operation. We do not warrant that messages will be delivered, that a platform will remain
+          available, or that AI Output will be correct.
+        </p>
+        <p>
+          Some jurisdictions do not allow certain exclusions, so parts of this section may not apply to
+          you. Nothing here limits rights that consumer law does not allow us to limit.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="14. Limitation of liability">
+        <p className="uppercase tracking-wide">
+          To the maximum extent permitted by law, we are not liable for indirect, incidental, special,
+          consequential or punitive damages, or for lost profits, revenue, data, goodwill or business
+          opportunity, even if we were advised of the possibility.
+        </p>
+        <p className="uppercase tracking-wide">
+          Our total liability for all claims relating to the Service is limited to the greater of the
+          amounts you paid us in the 12 months before the claim or US$100. This cap does not apply where
+          the law prohibits it, including liability for fraud or wilful misconduct.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="15. Indemnity">
+        <p>
+          You will defend and indemnify {PARENT_COMPANY_NAME} against claims, losses, liabilities and
+          expenses (including reasonable legal fees) arising from your Merchant Content, your use of
+          the Service, your Customers, your products or fulfilment, your breach of these Terms or of a
+          platform&apos;s rules, or your violation of another person&apos;s rights.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="16. Suspension and termination">
+        <p>
+          You may stop using the Service at any time and may request deletion of your workspace. We may
+          suspend or terminate access if you breach these Terms, if a platform requires it, if your use
+          creates a security or legal risk, or if required by law. On termination, your right to use the
+          Service ends; sections that by their nature survive (including content licences, disclaimers,
+          liability, indemnity and governing law) survive. We may delete data after a reasonable period
+          unless the law requires otherwise.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="17. Changes to these Terms">
+        <p>
+          We may update these Terms to reflect changes to the Service or the law. The updated date at
+          the top will change, and material changes will be communicated in the console or by email
+          where appropriate. Continuing to use the Service after an update means you accept the new
+          Terms.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="18. Governing law and disputes">
+        <p>
+          These Terms are governed by the laws of Bangladesh. The courts of Dhaka, Bangladesh have
+          exclusive jurisdiction, except that either party may seek relief in any court with competent
+          jurisdiction to protect intellectual property or prevent misuse. If you are a consumer
+          resident elsewhere, mandatory consumer protections in your country of residence still apply.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="19. General">
+        <LegalList>
+          <li>These Terms and the Privacy and Cookie Policies are the entire agreement about the Service.</li>
+          <li>If a provision is unenforceable, the rest remains in effect.</li>
+          <li>We may assign these Terms in connection with a merger or sale of the business; you may not assign them without our consent.</li>
+          <li>We are not liable for delays caused by events beyond our reasonable control.</li>
+          <li>Notices to us must use the contact details below; notices to you may use your account email or console.</li>
+        </LegalList>
+      </LegalSection>
+
+      <LegalSection title="20. Contact">
+        <p>Questions about these Terms or service complaints:</p>
+        <LegalContact companyName={PARENT_COMPANY_NAME} />
+      </LegalSection>
+    </LegalPage>
   );
 }

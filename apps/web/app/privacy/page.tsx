@@ -1,184 +1,264 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowLeft, ShieldCheck, Mail, Lock, Eye, FileText } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { ShieldCheck } from 'lucide-react';
 import { useBrand } from '@/components/brand-provider';
+import {
+  LegalContact,
+  LegalList,
+  LegalPage,
+  LegalSection,
+} from '@/components/legal/legal-page';
+
+const UPDATED = '31 October 2026';
 
 export default function PrivacyPage() {
   const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-inter flex flex-col justify-between">
-      {/* Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
-            <svg viewBox="0 0 32 32" className="w-8 h-8 select-none">
-              <defs>
-                <linearGradient id="logo-grad-priv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#8B5CF6" />
-                  <stop offset="100%" stopColor="#6366F1" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M16 8C12 8 8 11.5 8 16s4 8 8 8c3 0 5-1.5 6.5-3.5L25 18c-2 2.5-5 4-9 4-6 0-11-4.5-11-10S10 2 16 2c4 0 7 1.5 9 4l-2.5 2.5C21 6.5 19 8 16 8zm0 16c4 0 8-3.5 8-8s-4-8-8-8c-3 0-5 1.5-6.5 3.5L11 14c2-2.5 5-4 9-4 6 0 11 4.5 11 10s-5 10-11 10c-4 0-7-1.5-9-4l2.5-2.5c1.5 2 3.5 3.5 6.5 3.5z"
-                fill="url(#logo-grad-priv)"
-              />
-            </svg>
-            <div className="flex flex-col">
-              <span className="font-geist font-black text-xl tracking-tight text-foreground group-hover:opacity-90 transition-opacity leading-none">
-                {COMPANY_NAME}
-              </span>
-              <span className="text-[8px] font-geist font-extrabold text-muted-foreground uppercase tracking-widest mt-0.5 leading-none">
-                by {PARENT_COMPANY_NAME}
-              </span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link 
-              href="/login" 
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-geist font-bold text-sm px-4.5 py-2.5 rounded-element transition-all active:scale-95 shadow-sm"
-            >
-              Start Free
-            </Link>
-          </div>
+    <LegalPage
+      title="Privacy Policy"
+      subtitle={`How ${COMPANY_NAME} collects, uses, shares and protects personal data.`}
+      updated={UPDATED}
+      icon={ShieldCheck}
+      current="/privacy"
+    >
+      <p>
+        {COMPANY_NAME}, a product of <strong className="text-foreground">{PARENT_COMPANY_NAME}</strong>{' '}
+        (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), provides AI-assisted messaging, catalog,
+        storefront and order tools for merchants. This policy explains what personal data we process,
+        why, who we share it with and the choices you have. It applies to our websites, the merchant
+        console, connected messaging features and storefronts.
+      </p>
+
+      <LegalSection title="1. Who is responsible for your data">
+        <p>
+          For merchant account, billing and website data, {PARENT_COMPANY_NAME} is the data controller.
+          For Customer conversations, orders and customer records that a Merchant handles through the
+          Service, the Merchant is the controller and we act as its processor: we process that data on
+          the Merchant&apos;s instructions and only to provide the Service. Merchants must give their
+          own customers an appropriate privacy notice and have a lawful basis for contacting them.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="2. Data we collect">
+        <LegalList>
+          <li><strong className="text-foreground">Account data:</strong> name, email address, sign-in method, Firebase user identifier and account security records.</li>
+          <li><strong className="text-foreground">Business data:</strong> store name, description, contact details, guidance, catalog, product photos, prices, stock, categories and storefront settings.</li>
+          <li><strong className="text-foreground">Connected platform data:</strong> Page and account identifiers, encrypted access tokens, page names, webhook events and notification Messenger identifiers you connect.</li>
+          <li><strong className="text-foreground">Conversations and comments:</strong> customer messages, comments, photos, profile names/avatars supplied by the platform, AI replies, suggestions and conversation state.</li>
+          <li><strong className="text-foreground">Orders and customer records:</strong> name, phone number, delivery address, order contents, totals, payment method and any transaction ID a customer provides.</li>
+          <li><strong className="text-foreground">Plan and allowance data:</strong> assigned plan, usage counters, overrides and notices. We do not collect card numbers in the Service.</li>
+          <li><strong className="text-foreground">Technical data:</strong> IP address, device/browser information, request logs, error diagnostics, timestamps and approximate timezone.</li>
+          <li><strong className="text-foreground">Notification data:</strong> browser push subscription tokens, and the Messenger account identifiers used for merchant notices.</li>
+          <li><strong className="text-foreground">Cookie choices:</strong> your consent record and, if you accept analytics, a random first-party visitor id.</li>
+        </LegalList>
+        <p>
+          We do not intentionally collect special-category data (such as health, religion or biometric
+          data), and you should not ask Customers to provide it in a conversation. Do not send payment
+          card numbers in chat.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="3. Where the data comes from">
+        <LegalList>
+          <li>From you, when you create an account, add products or settings, or connect a channel.</li>
+          <li>From Customers, when they message, comment, send photos or place an order through your connected platform.</li>
+          <li>From platforms, which supply message events, profiles, page details and delivery information.</li>
+          <li>Automatically, from your browser and our servers, as request logs and cookie choices.</li>
+        </LegalList>
+      </LegalSection>
+
+      <LegalSection title="4. Why we use data and our legal bases">
+        <div className="overflow-x-auto rounded-lg border border-border/50">
+          <table className="w-full min-w-[560px] text-left text-xs">
+            <thead className="bg-muted/50 text-foreground">
+              <tr>
+                <th className="px-3 py-2.5 font-semibold">Purpose</th>
+                <th className="px-3 py-2.5 font-semibold">Examples</th>
+                <th className="px-3 py-2.5 font-semibold">Legal basis (GDPR/UK)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              <tr>
+                <td className="px-3 py-2.5">Provide the Service</td>
+                <td className="px-3 py-2.5">Accounts, agents, catalog, orders, storefronts, support</td>
+                <td className="px-3 py-2.5">Contract</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2.5">Secure and improve the Service</td>
+                <td className="px-3 py-2.5">Logs, diagnostics, abuse prevention, anonymous visit counts</td>
+                <td className="px-3 py-2.5">Legitimate interests; consent for analytics cookies</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2.5">Billing and notices</td>
+                <td className="px-3 py-2.5">Plan assignment, allowances, service notices</td>
+                <td className="px-3 py-2.5">Contract; legal obligation</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2.5">Comply with law</td>
+                <td className="px-3 py-2.5">Responding to lawful requests, retaining records</td>
+                <td className="px-3 py-2.5">Legal obligation</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </header>
+        <p>
+          Where we rely on consent (for example analytics cookies), you can withdraw it at any time
+          through the cookie settings in the footer. Withdrawal does not affect processing that already
+          happened.
+        </p>
+      </LegalSection>
 
-      {/* Main Content */}
-      <main className="relative min-h-[calc(100vh-8rem)] flex-1 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Glows */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none -z-10" />
-        
-        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-card shadow-card p-6 sm:p-10 relative z-10 space-y-8">
-          
-          {/* Header section */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 border-b border-border/40 pb-6">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
-              <ShieldCheck className="h-6 w-6 stroke-[2]" />
-            </div>
-            <div className="text-center sm:text-left">
-              <h1 className="font-geist font-black text-3xl tracking-tight text-foreground">
-                Privacy Policy
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                Last Updated: July 4, 2026 • {COMPANY_NAME} is a product of {PARENT_COMPANY_NAME}
-              </p>
-            </div>
-          </div>
+      <LegalSection title="5. AI processing">
+        <p>
+          Messages, comments and attached photos may be sent to an AI model provider (such as Google
+          Gemini, OpenAI or Azure OpenAI) to draft replies, suggestions or product matches. The output
+          is returned to the Service and may be sent to your customer when the agent is active. We do
+          not use Customer conversations to train our own models. Model providers process the content
+          under their terms and privacy commitments. AI output can be inaccurate, which is why the
+          console lets you pause an agent, take over a conversation and reply yourself. We do not make
+          automated decisions that produce legal or similarly significant effects about a person;
+          order acceptance and fulfilment decisions remain with the Merchant.
+        </p>
+      </LegalSection>
 
-          {/* Privacy Text */}
-          <div className="space-y-6 text-sm text-muted-foreground leading-relaxed font-inter">
-            <p>
-              At {COMPANY_NAME}, we are committed to protecting your privacy. This Privacy Policy explains how {COMPANY_NAME} (referred to as "we," "us," or "our"), a specialized product of <strong>{PARENT_COMPANY_NAME}</strong>, collects, uses, processes, and protects your information when you use our multi-tenant SaaS platform, websites, and integrations.
-            </p>
-
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Eye className="h-4.5 w-4.5 text-primary" />
-                <h2>1. Information We Collect</h2>
-              </div>
-              <p>
-                To provide our AI auto-reply and sales agent features, we collect information from both merchants and end-customers:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li><strong>Merchant Account Data:</strong> Registration and authentication information, including name, email address, password hashes (managed securely via Firebase Auth), and billing details.</li>
-                <li><strong>Social Platform Access Tokens:</strong> When you connect a social platform (e.g., Facebook Messenger, Instagram, WhatsApp), we securely store the Page Access Tokens required to read messages and post replies.</li>
-                <li><strong>Conversation Logs:</strong> We store communication transcripts, including user messages, AI agent responses, product inquiries, cart statuses, and order details, to process auto-replies and show performance analytics.</li>
-              </ul>
-            </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Lock className="h-4.5 w-4.5 text-primary" />
-                <h2>2. How We Use and Process Data</h2>
-              </div>
-              <p>
-                We use the collected information for the following business operations:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>Providing the LangGraph &amp; Gemini AI-driven automated chat sales services.</li>
-                <li>Creating and managing product carts, checking stock availability, and creating merchant orders directly from conversation streams.</li>
-                <li>Displaying performance metrics, response speed analytics, and message counts in the merchant dashboard.</li>
-                <li>Ensuring security, debugging system issues, and preventing fraudulent usage.</li>
-              </ul>
-            </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <FileText className="h-4.5 w-4.5 text-primary" />
-                <h2>3. Data Sharing and Third-Party API Integrations</h2>
-              </div>
-              <p>
-                We do not sell merchant or customer data. To deliver {COMPANY_NAME}'s core functionality, data is processed through the following secure third-party systems:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li><strong>Meta APIs (Facebook &amp; Instagram):</strong> We fetch messages and dispatch AI replies via the Meta Graph Send API.</li>
-                <li><strong>Google Gemini API:</strong> Message payloads are processed through Gemini LLM services to generate smart customer responses.</li>
-                <li><strong>Firebase Admin SDK:</strong> Used for secure auth session verification.</li>
-                <li><strong>Cloud Storage (Backblaze B2):</strong> To securely cache and serve product catalog and variant images.</li>
-              </ul>
-            </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-geist font-bold text-base">
-                <Mail className="h-4.5 w-4.5 text-primary" />
-                <h2>4. Data Deletion and Deactivation</h2>
-              </div>
-              <p>
-                Merchants retain full control over their integrations. When you disconnect a Facebook Page or delete a channel from {COMPANY_NAME}:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>We automatically call Meta APIs to unsubscribe our webhook from your Page events.</li>
-                <li>Associated social access tokens and credentials are deleted or deactivated within our database.</li>
-                <li>Merchants may request a complete hard delete of their business workspace, product lists, and historical conversation histories by contacting support.</li>
-              </ul>
-            </section>
-
-            <section className="space-y-3 border-t border-border/40 pt-6">
-              <h2 className="text-foreground font-geist font-bold text-base">5. Contact Support</h2>
-              <p>
-                If you have questions about this policy, or if you need to request data deletion under GDPR/CCPA regulations, you can follow our <Link href="/data-delete-instructions" className="text-primary hover:underline font-semibold">Data Deletion Instructions</Link> or contact us at:
-              </p>
-              <div className="bg-muted/40 rounded-lg p-4 border border-border/40 space-y-1 mt-2 text-xs text-muted-foreground">
-                <p><strong className="text-foreground">{PARENT_COMPANY_NAME} - Software Division</strong></p>
-                <p>Email: alamsarwar@hotmail.com</p>
-                <p>
-                  Address:<br />
-                  51, Mirpur Road<br />
-                  Room 517, Alpana Plaza, Level 5<br />
-                  Dhaka 1205<br />
-                  Bangladesh
-                </p>
-              </div>
-            </section>
-          </div>
-
-          {/* Action Footer */}
-          <div className="flex items-center justify-between border-t border-border/40 pt-6 mt-4">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-element border border-border bg-card hover:bg-muted text-foreground font-geist font-bold text-xs tracking-wide transition-all shadow-sm active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4 stroke-[2.5]" /> Back to Home
-            </Link>
-            
-            <Link
-              href="/terms"
-              className="text-xs text-primary hover:underline font-semibold"
-            >
-              Read Terms &amp; Conditions
-            </Link>
-          </div>
-
+      <LegalSection title="6. Who we share data with">
+        <p>
+          We do not sell personal data and we do not share it for cross-context behavioural advertising.
+          We share data with service providers that help run the Service, under their terms and only as
+          needed:
+        </p>
+        <div className="overflow-x-auto rounded-lg border border-border/50">
+          <table className="w-full min-w-[560px] text-left text-xs">
+            <thead className="bg-muted/50 text-foreground">
+              <tr>
+                <th className="px-3 py-2.5 font-semibold">Provider</th>
+                <th className="px-3 py-2.5 font-semibold">Purpose</th>
+                <th className="px-3 py-2.5 font-semibold">Data</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              <tr><td className="px-3 py-2.5">Meta (Facebook, Instagram, WhatsApp)</td><td className="px-3 py-2.5">Messaging, comments, notifications</td><td className="px-3 py-2.5">Messages, profiles, page identifiers, tokens</td></tr>
+              <tr><td className="px-3 py-2.5">Google Firebase</td><td className="px-3 py-2.5">Authentication and browser push</td><td className="px-3 py-2.5">Account identifiers, push tokens</td></tr>
+              <tr><td className="px-3 py-2.5">Google Gemini, OpenAI / Azure OpenAI</td><td className="px-3 py-2.5">AI replies and suggestions</td><td className="px-3 py-2.5">Conversation text, photos, catalog context</td></tr>
+              <tr><td className="px-3 py-2.5">Backblaze B2</td><td className="px-3 py-2.5">Image storage</td><td className="px-3 py-2.5">Product and chat photos</td></tr>
+              <tr><td className="px-3 py-2.5">Neon</td><td className="px-3 py-2.5">Database hosting</td><td className="px-3 py-2.5">All Service records</td></tr>
+              <tr><td className="px-3 py-2.5">Vercel</td><td className="px-3 py-2.5">Application hosting</td><td className="px-3 py-2.5">Request logs and application data</td></tr>
+              <tr><td className="px-3 py-2.5">Axiom</td><td className="px-3 py-2.5">Operational logging</td><td className="px-3 py-2.5">Diagnostic events and identifiers</td></tr>
+            </tbody>
+          </table>
         </div>
-      </main>
+        <p>
+          We may also disclose data if required by law, to protect rights or safety, to investigate
+          abuse, or as part of a merger or sale of the business (subject to this policy). Merchants see
+          the data of their own business; we do not share one merchant&apos;s data with another.
+        </p>
+      </LegalSection>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
-        © 2026 {COMPANY_NAME}. A product of {PARENT_COMPANY_NAME}. All rights reserved.
-      </footer>
-    </div>
+      <LegalSection title="7. Cookies and similar technologies">
+        <p>
+          We use strictly necessary cookies for sign-in and security, plus preference storage for your
+          theme, cart and timezone. With your consent, we use first-party analytics to count store
+          visits anonymously. We do not use advertising or cross-site tracking cookies. See the{' '}
+          <a href="/cookies" className="font-semibold text-primary hover:underline">Cookie Policy</a>{' '}
+          for the exact list, durations and controls.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="8. How long we keep data">
+        <LegalList>
+          <li><strong className="text-foreground">Account and business data:</strong> while the account is active, then for a short deletion window and any legally required period.</li>
+          <li><strong className="text-foreground">Conversations, comments and orders:</strong> for the life of the business workspace unless you delete them, so you can serve returning customers and keep records.</li>
+          <li><strong className="text-foreground">Platform tokens:</strong> until you disconnect the channel or delete the workspace.</li>
+          <li><strong className="text-foreground">Operational logs:</strong> generally up to 30 days, longer only for security investigations.</li>
+          <li><strong className="text-foreground">Anonymous visit counts:</strong> the visitor id lasts 30 days; the hashed daily count is kept with store analytics.</li>
+          <li><strong className="text-foreground">Cookie choices:</strong> 180 days, unless you change them sooner.</li>
+        </LegalList>
+        <p>
+          Backups may retain copies for a limited period after deletion. Where a law requires a longer
+          retention period, we keep only what is required.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="9. Security">
+        <p>
+          We use TLS in transit, encrypt connected-platform tokens at rest, verify webhook signatures,
+          restrict access to production systems and keep audit logs. No system is perfectly secure. You
+          are responsible for protecting your credentials, and you should not send card numbers or
+          sensitive identity documents through chat.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="10. International transfers">
+        <p>
+          We and our providers process data in Bangladesh, the United States and other countries where
+          our providers operate. Where data leaves the UK/EEA, we rely on appropriate safeguards such as
+          standard contractual clauses or an applicable adequacy decision. You can contact us for more
+          information about the safeguards used.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="11. Your rights">
+        <p>
+          Depending on where you live, you may have the right to access, correct, delete, restrict or
+          object to processing, receive a portable copy, withdraw consent and lodge a complaint with a
+          supervisory authority. EU/UK residents can complain to their local data protection authority.
+        </p>
+        <p>
+          If you are in California, you may request to know, delete or correct personal information, and
+          to opt out of sale or sharing. We do not sell personal information or share it for cross-context
+          behavioural advertising, so there is no sale/share to opt out of. We will not discriminate
+          against you for exercising a privacy right.
+        </p>
+        <p>
+          To exercise a right, email us at the address below. For Customer data held by a Merchant, we
+          will forward your request to that Merchant and assist them; contact the Merchant first if you
+          know which store you dealt with. We may need to verify identity before acting.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="12. Children">
+        <p>
+          The Service is for businesses and is not directed to children. Merchants must be at least 18.
+          We do not knowingly collect personal data from children. If you believe a child&apos;s data has
+          been sent to us, contact us and we will take appropriate steps. Merchants must comply with
+          platform age rules and their local child-protection law.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="13. Marketing and notifications">
+        <p>
+          We send service and account notices through the console, email and, if you connect it, the
+          notification Messenger account. You can disconnect that account at any time. We do not send
+          third-party advertising or sell your contact details. Transactional notices about orders,
+          allowances and security are part of the Service.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="14. Changes to this policy">
+        <p>
+          We may update this policy as the Service or the law changes. The updated date at the top will
+          change, and material changes will be communicated in the console or by email where
+          appropriate. If a change relies on consent, we will ask for it again.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="15. Contact">
+        <p>
+          For privacy questions, data requests or processor enquiries (including a data processing
+          agreement), contact us. We have not appointed a statutory Data Protection Officer; privacy
+          enquiries go to the address below. Where EU/UK law requires a local representative, we will
+          publish their contact details here; until then our privacy contact handles those requests.
+        </p>
+        <LegalContact companyName={PARENT_COMPANY_NAME} />
+        <p>
+          You can also use our{' '}
+          <a href="/data-delete-instructions" className="font-semibold text-primary hover:underline">
+            data deletion instructions
+          </a>
+          .
+        </p>
+      </LegalSection>
+    </LegalPage>
   );
 }

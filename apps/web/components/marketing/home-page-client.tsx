@@ -25,18 +25,18 @@ import {
 } from 'lucide-react';
 
 const HERO_PROOF_POINTS = [
-  { icon: Clock, title: 'Instant replies', copy: 'AI answers customers 24/7' },
-  { icon: Layers, title: 'One inbox', copy: 'Every channel, zero tab chaos' },
-  { icon: ShoppingBag, title: 'Chat to order', copy: 'Receipts → courier handoff' },
-  { icon: BarChart3, title: 'Auto posts', copy: 'Drops published on schedule' },
+  { icon: Clock, title: 'AI replies', copy: 'Answers when your Page is connected' },
+  { icon: Layers, title: 'One inbox', copy: 'Every connected channel together' },
+  { icon: ShoppingBag, title: 'Chat to order', copy: 'Orders captured in your dashboard' },
+  { icon: BarChart3, title: 'Clear analytics', copy: 'See chats, orders and revenue' },
 ];
 
 const TRUST_POINTS = [
   {
     icon: Lock,
     tone: 'bg-violet-500/15 text-violet-300',
-    title: 'Secure access',
-    copy: 'We only request the permissions needed to run your accounts.',
+    title: 'Scoped access',
+    copy: 'We request only the platform permissions needed to run your accounts.',
   },
   {
     icon: ShieldCheck,
@@ -47,14 +47,14 @@ const TRUST_POINTS = [
   {
     icon: Layers,
     tone: 'bg-emerald-500/15 text-emerald-300',
-    title: 'Reliable infrastructure',
-    copy: 'Built on trusted providers with industry-standard security.',
+    title: 'Established providers',
+    copy: 'Hosted on reputable cloud infrastructure. See our Privacy Policy for the list.',
   },
   {
     icon: Clock,
     tone: 'bg-amber-500/15 text-amber-300',
-    title: 'Real human support',
-    copy: 'Our team is on hand when you need a person, not a bot.',
+    title: 'Human oversight',
+    copy: 'Review, edit, pause or take over any AI reply.',
   },
 ];
 
@@ -107,8 +107,8 @@ export default function HomePageClient({
                 <Reveal delayMs={140}>
                   <p className="max-w-xl text-balance text-base leading-relaxed text-slate-300 sm:text-[17px]">
                     {COMPANY_NAME} turns DMs and comments into confirmed orders
-                    — smart replies, live catalog checks, payment verification
-                    and courier handoff, all from one inbox.
+                    — automated replies, live catalog checks, order capture
+                    and human handoff, all from one inbox.
                   </p>
                 </Reveal>
 
@@ -132,7 +132,7 @@ export default function HomePageClient({
 
                 <Reveal delayMs={280}>
                   <p className="text-xs text-slate-500">
-                    Free plan forever · Setup in minutes · Cancel anytime
+                    Free plan available · Cancel anytime
                   </p>
                 </Reveal>
               </div>
@@ -140,6 +140,10 @@ export default function HomePageClient({
               {/* Phone demo (right) */}
               <Reveal delayMs={120} className="lg:col-span-7">
                 <HeroInteractiveAd />
+                <p className="mx-auto mt-3 max-w-[440px] text-center text-[10px] leading-relaxed text-slate-500">
+                  Interactive preview. Screens are simulated illustrations; available features depend
+                  on your connected channels and plan.
+                </p>
               </Reveal>
             </div>
 

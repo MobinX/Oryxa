@@ -11,7 +11,7 @@ import {
   MessageCircle,
   Package,
   Send,
-  Truck,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   AnimatePresence,
@@ -31,14 +31,14 @@ const STEPS = [
     id: 'reply',
     short: 'Replies',
     title: 'Messenger AI replies',
-    copy: 'Answers price, size and stock questions in seconds, in your shop’s tone — and hands off when it matters.',
+    copy: 'Answers price, size and stock questions automatically, in your shop’s tone, with a human able to take over at any time.',
     icon: Bot,
   },
   {
     id: 'checkout',
     short: 'Checkout',
     title: 'Checkout inside the chat',
-    copy: 'Customers confirm the cart, address and payment without leaving Messenger.',
+    copy: 'Customers confirm the cart, address and payment method without leaving Messenger.',
     icon: CreditCard,
   },
   {
@@ -49,11 +49,11 @@ const STEPS = [
     icon: LayoutDashboard,
   },
   {
-    id: 'courier',
-    short: 'Courier',
-    title: 'Courier tracking, auto-shared',
-    copy: 'Book the courier in one tap; tracking updates are sent back to the buyer’s chat.',
-    icon: Truck,
+    id: 'control',
+    short: 'Control',
+    title: 'You stay in control',
+    copy: 'Pause the agent for the whole store or one conversation. Messages keep arriving in your inbox.',
+    icon: ShieldCheck,
   },
 ] as const;
 
@@ -83,9 +83,13 @@ export function HomeBento() {
             eyebrow="Conversational commerce"
             icon={<MessageCircle className="h-3.5 w-3.5" />}
             title="From first message"
-            gradient="to delivered order."
+            gradient="to confirmed order."
             copy="Everything a chat-first store needs, in one place."
           />
+          <p className="mx-auto mt-3 max-w-xl text-center text-[11px] leading-relaxed text-slate-500">
+            Illustrative preview. Screens are simulated; available features depend on your connected
+            channels and plan.
+          </p>
 
           <div id="how-it-works" className="mt-12 lg:mt-14">
             <div className="lg:hidden">
@@ -280,7 +284,7 @@ function StepPreview({ index, reduced }: { index: number; reduced: boolean }) {
     case 2:
       return <DashboardPreview reduced={reduced} />;
     case 3:
-      return <CourierPreview reduced={reduced} />;
+      return <ControlPreview />;
     default:
       return <MessengerPreview reduced={reduced} />;
   }
@@ -564,19 +568,19 @@ function CheckoutPreview({ reduced }: { reduced: boolean }) {
 
 function DashboardPreview({ reduced }: { reduced: boolean }) {
   const newOrders = useCountUp(12, reduced, 100, 800);
-  const packed = useCountUp(8, reduced, 200, 800);
-  const shipped = useCountUp(21, reduced, 300, 900);
+  const onDelivery = useCountUp(8, reduced, 200, 800);
+  const done = useCountUp(21, reduced, 300, 900);
 
   const stats = [
     { label: 'New', value: newOrders, ratio: 12 / 30, icon: Package, tone: 'text-violet-300 bg-[#5B3DF5]/15' },
-    { label: 'Packed', value: packed, ratio: 8 / 30, icon: Box, tone: 'text-amber-300 bg-amber-400/10' },
-    { label: 'Shipped', value: shipped, ratio: 21 / 30, icon: Truck, tone: 'text-emerald-300 bg-emerald-400/10' },
+    { label: 'On delivery', value: onDelivery, ratio: 8 / 30, icon: Box, tone: 'text-amber-300 bg-amber-400/10' },
+    { label: 'Done', value: done, ratio: 21 / 30, icon: Check, tone: 'text-emerald-300 bg-emerald-400/10' },
   ];
 
   const rows = [
     { id: '#OO-2481', item: 'Linen kurti · M', status: 'New', tone: 'text-violet-200 bg-[#5B3DF5]/20' },
-    { id: '#OO-2478', item: 'Cotton panjabi · L', status: 'Packed', tone: 'text-amber-200 bg-amber-400/15' },
-    { id: '#OO-2470', item: 'Silk scarf · One size', status: 'Shipped', tone: 'text-emerald-200 bg-emerald-400/15' },
+    { id: '#OO-2478', item: 'Cotton panjabi · L', status: 'On delivery', tone: 'text-amber-200 bg-amber-400/15' },
+    { id: '#OO-2470', item: 'Silk scarf · One size', status: 'Done', tone: 'text-emerald-200 bg-emerald-400/15' },
   ];
 
   return (
@@ -584,7 +588,7 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-white">Order board</p>
-          <p className="text-[10px] text-slate-500">Today · live across every channel</p>
+          <p className="text-[10px] text-slate-500">Today · example view</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] text-slate-400">
           <m.span
@@ -652,120 +656,87 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
   );
 }
 
-const COURIER_STEPS = [
-  { label: 'Picked up', copy: 'Handed to courier · 9:41 AM' },
-  { label: 'In transit', copy: 'Sorting hub, Dhaka · 12:20 PM' },
-  { label: 'Out for delivery', copy: 'Rider assigned · 3:05 PM' },
-  { label: 'Delivered', copy: 'Cash collected · 5:30 PM' },
-];
-
-function CourierPreview({ reduced }: { reduced: boolean }) {
-  const [stage, setStage] = useState(0);
-
-  useEffect(() => {
-    if (reduced) {
-      setStage(3);
-      return;
-    }
-
-    setStage(0);
-    const timers = [
-      window.setTimeout(() => setStage(1), 750),
-      window.setTimeout(() => setStage(2), 1450),
-      window.setTimeout(() => setStage(3), 2200),
-    ];
-
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [reduced]);
+function ControlPreview() {
+  const [agentOn, setAgentOn] = useState(true);
 
   return (
-    <div className="h-full">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5B3DF5]/15 text-violet-300">
-            <Truck className="h-4.5 w-4.5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Pathao Courier</p>
-            <p className="truncate text-[10px] text-slate-500">Tracking OO-2481 · Dhaka</p>
+    <div className="flex h-full flex-col gap-3">
+      <div
+        className={cn(
+          'rounded-xl border p-3.5 transition-colors',
+          agentOn
+            ? 'border-emerald-400/25 bg-emerald-400/[0.06]'
+            : 'border-rose-400/30 bg-rose-400/[0.06]',
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                'grid h-9 w-9 place-items-center rounded-xl',
+                agentOn ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300',
+              )}
+            >
+              <ShieldCheck className="h-4.5 w-4.5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-white">AI agent</p>
+              <p className="text-[10px] text-slate-400">
+                {agentOn ? 'Answering automatically' : 'Paused — you answer'}
+              </p>
+            </div>
           </div>
+          <span
+            className={cn(
+              'rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider',
+              agentOn ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300',
+            )}
+          >
+            {agentOn ? 'On' : 'Off'}
+          </span>
         </div>
+
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-300">
+          {agentOn
+            ? 'Answers Messenger, Instagram and comments automatically.'
+            : 'No automatic replies. New messages still land in your inbox for you to answer.'}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={agentOn}
+        onClick={() => setAgentOn((current) => !current)}
+        className={cn(
+          'flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-[11px] font-semibold transition',
+          agentOn
+            ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.07]'
+            : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/15',
+        )}
+      >
+        {agentOn ? 'Pause the agent for this business' : 'Turn the agent back on'}
         <span
           className={cn(
-            'shrink-0 rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider',
-            stage === 3
-              ? 'bg-emerald-400/15 text-emerald-300'
-              : 'bg-[#5B3DF5]/15 text-violet-200',
+            'relative h-5 w-9 shrink-0 rounded-full transition-colors',
+            agentOn ? 'bg-emerald-500' : 'bg-slate-600',
           )}
-        >
-          {stage === 3 ? 'Delivered' : 'On the way'}
-        </span>
-      </div>
-
-      <div className="relative mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3.5 pl-11">
-        <div
           aria-hidden
-          className="pointer-events-none absolute bottom-7 left-[27px] top-7 w-px bg-white/10"
         >
-          <m.div
-            className="absolute inset-0 origin-top bg-gradient-to-b from-[#5B3DF5] via-[#7C3AED] to-emerald-400"
-            animate={{ scaleY: stage / (COURIER_STEPS.length - 1) }}
-            transition={reduced ? { duration: 0 } : { duration: 0.45, ease: 'easeOut' }}
+          <span
+            className={cn(
+              'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all',
+              agentOn ? 'left-[18px]' : 'left-0.5',
+            )}
           />
-        </div>
+        </span>
+      </button>
 
-        <ul className="space-y-3.5">
-          {COURIER_STEPS.map((step, index) => {
-            const done = index <= stage;
-            const current = index === stage;
-            return (
-              <li key={step.label} className="relative">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'absolute -left-[27px] top-0.5 z-10 grid h-5 w-5 place-items-center rounded-full border transition-colors',
-                    done
-                      ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-300'
-                      : 'border-white/15 bg-[#0B0D18] text-slate-600',
-                  )}
-                >
-                  {done ? (
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  )}
-                </span>
-                {current && !reduced ? (
-                  <m.span
-                    className="absolute -left-[31px] top-[-3px] h-[29px] w-[29px] rounded-full border border-emerald-400/30"
-                    animate={{ opacity: [0.55, 0, 0.55], scale: [0.8, 1.15, 0.8] }}
-                    transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                  />
-                ) : null}
-                <p
-                  className={cn(
-                    'text-xs font-semibold',
-                    current ? 'text-white' : done ? 'text-slate-200' : 'text-slate-500',
-                  )}
-                >
-                  {step.label}
-                </p>
-                <p className={cn('text-[10px]', done ? 'text-slate-500' : 'text-slate-600')}>{step.copy}</p>
-              </li>
-            );
-          })}
-        </ul>
+      <div className="mt-auto flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
+        <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300" />
+        The switch works for the whole store or a single conversation, and suggestions stay
+        available when the agent is paused.
       </div>
-
-      <m.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={reduced ? { duration: 0 } : { duration: 0.3, delay: 0.2, ease: 'easeOut' }}
-        className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] text-slate-400"
-      >
-        <MessageCircle className="h-3.5 w-3.5 text-violet-300" />
-        Tracking updates are shared back to the buyer’s chat.
-      </m.div>
     </div>
   );
 }

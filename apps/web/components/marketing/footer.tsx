@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useBrand } from '@/components/brand-provider';
+import { CookieSettingsButton } from '@/components/cookie-consent';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 
 const FOOTER_COLUMNS = [
@@ -27,6 +28,7 @@ const FOOTER_COLUMNS = [
     links: [
       { label: 'Privacy policy', href: '/privacy' },
       { label: 'Terms of service', href: '/terms' },
+      { label: 'Cookie policy', href: '/cookies' },
       { label: 'Data deletion', href: '/data-delete-instructions' },
     ],
   },
@@ -88,9 +90,15 @@ export function MarketingFooter() {
           <p>
             © {new Date().getFullYear()} {companyName}. All rights reserved.
           </p>
-          <p className="text-slate-600">
-            Made for social sellers, everywhere they sell.
-          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+            <Link href="/cookies" className="transition hover:text-slate-300">
+              Cookie policy
+            </Link>
+            <CookieSettingsButton className="transition hover:text-slate-300">
+              Cookie settings
+            </CookieSettingsButton>
+            <span>Made for social sellers, everywhere they sell.</span>
+          </div>
         </div>
       </div>
     </footer>

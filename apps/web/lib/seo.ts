@@ -24,5 +24,6 @@ export const SITEMAP_ROUTES = [
   '/pricing',
   '/terms',
   '/privacy',
+  '/cookies',
   '/data-delete-instructions',
 ] as const;

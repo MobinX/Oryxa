@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { BrandProvider } from '@/components/brand-provider';
+import { CookieConsentProvider } from '@/components/cookie-consent';
 import { OrganizationJsonLd } from '@/components/seo/json-ld';
 import { getBrand } from '@/lib/brand-server';
 import { siteUrl } from '@/lib/seo';
@@ -65,7 +66,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        <BrandProvider brand={brand}>{children}</BrandProvider>
+        <BrandProvider brand={brand}>
+          <CookieConsentProvider>{children}</CookieConsentProvider>
+        </BrandProvider>
         <OrganizationJsonLd />
       </body>
     </html>
