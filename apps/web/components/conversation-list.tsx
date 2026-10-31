@@ -1,18 +1,23 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Check, Inbox, Search, Trash2 } from 'lucide-react';
-import type { Conversation } from '@/lib/api';
+import type { Channel, Conversation } from '@/lib/api';
+import { InboxChannelFilter, channelDisplayName } from '@/components/inbox-channel-filter';
 import { cn } from '@/lib/utils';
 
 export function ConversationList({
   conversations,
+  channels,
+  activeChannelId,
   businessId,
   selectedId,
   bulkDeleteAction,
 }: {
   conversations: Conversation[];
+  channels: Channel[];
+  activeChannelId?: string;
   businessId: string;
   selectedId?: string;
   bulkDeleteAction: (formData: FormData) => Promise<void>;
@@ -21,6 +26,15 @@ export function ConversationList({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
   const [pending, startTransition] = useTransition();
+
+  const activeChannel = channels.find((channel) => channel.id === activeChannelId);
+  const activeChannelName = activeChannel ? channelDisplayName(activeChannel) : null;
+  const channelQuery = activeChannelId ? `&channel=${activeChannelId}` : '';
+
+  // Bulk actions only apply to what is on screen; switching channels drops the old selection.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [activeChannelId]);
 
   const filtered = useMemo(() => conversations.filter((conversation) => {
     const matchesQuery = `${conversation.customerName ?? ''} ${conversation.pageName ?? ''} ${conversation.customerPlatformId}`
@@ -64,12 +78,17 @@ export function ConversationList({
           <h2 className="text-lg font-bold tracking-tight">Inbox</h2>
           <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{conversations.length}</span>
         </div>
+        {channels.length > 0 && (
+          <div className="mb-2.5">
+            <InboxChannelFilter businessId={businessId} channels={channels} activeChannelId={activeChannelId} />
+          </div>
+        )}
         <label className="flex h-10 items-center gap-2 rounded-xl border border-border bg-background px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-primary/20">
           <Search className="h-4 w-4 shrink-0" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search conversations..."
+            placeholder={activeChannelName ? `Search ${activeChannelName}...` : 'Search conversations...'}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             aria-label="Search conversations"
           />
@@ -122,7 +141,7 @@ export function ConversationList({
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-violet-200 text-xs font-bold text-indigo-700 dark:from-indigo-950 dark:to-violet-900 dark:text-indigo-200">{initials}</div>
                 {isOpen && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500" />}
               </div>
-              <Link href={`/b/${businessId}/inbox?c=${conversation.id}`} className="min-w-0 flex-1 pr-1">
+              <Link href={`/b/${businessId}/inbox?c=${conversation.id}${channelQuery}`} className="min-w-0 flex-1 pr-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className={cn('truncate text-sm font-semibold', selectedId === conversation.id && 'text-primary')}>{conversation.customerName ?? 'Customer'}</span>
                   <time className="shrink-0 text-[10px] text-muted-foreground" dateTime={conversation.createdAt}>{new Date(conversation.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time>
@@ -138,8 +157,32 @@ export function ConversationList({
         {filtered.length === 0 && (
           <div className="flex flex-col items-center px-6 py-12 text-center text-muted-foreground">
             <Inbox className="mb-2 h-8 w-8 opacity-50" />
-            <p className="text-sm font-medium">{conversations.length ? 'No matching conversations' : 'Your inbox is empty'}</p>
-            <p className="mt-1 text-xs">New customer messages will show up here.</p>
+            <p className="text-sm font-medium">
+              {query.trim()
+                ? 'No matching conversations'
+                : conversations.length
+                  ? 'No matches in this view'
+                  : activeChannelName
+                    ? `No chats from ${activeChannelName} yet`
+                    : 'Your inbox is empty'}
+            </p>
+            <p className="mt-1 text-xs">
+              {query.trim()
+                ? 'Try another name, Page or account.'
+                : conversations.length
+                  ? 'Switch the Open or Resolved tab to see the rest.'
+                  : activeChannelName
+                    ? 'New messages from this channel will show up here.'
+                    : 'New customer messages will show up here.'}
+            </p>
+            {activeChannelName && !query.trim() && (
+              <Link
+                href={`/b/${businessId}/inbox`}
+                className="mt-3 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+              >
+                Show all channels
+              </Link>
+            )}
           </div>
         )}
       </div>
