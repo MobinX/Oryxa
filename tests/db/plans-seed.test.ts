@@ -38,11 +38,13 @@ describe('0012 plans seed', () => {
     const rows = await db.select().from(plans).orderBy(asc(plans.position));
 
     expect(rows.map((r) => r.slug)).toEqual(['free', 'starter', 'pro', 'enterprise']);
-    expect(rows.map((r) => [r.messageLimit, r.commentLimit])).toEqual([[1000, 1000], [1000, 1000], [10000, 10000], [null, null]]);
+    expect(rows.map((r) => [r.messageLimit, r.commentLimit])).toEqual([[1000, 1000], [25000, 25000], [100000, 100000], [null, null]]);
     expect(rows.map((r) => r.priceCents)).toEqual([0, 2900, 7900, 0]);
     expect(rows.every((r) => r.active && r.deletedAt === null)).toBe(true);
     // Free is the fleet default, so it is the row every existing business inherits.
     expect(rows.find((r) => r.slug === 'free')?.name).toBe('Free');
+    // 0044 renames the fourth row: no Enterprise tier, just the Custom card.
+    expect(rows.find((r) => r.slug === 'enterprise')?.name).toBe('Custom');
   });
 
   it('is idempotent — replaying the file changes nothing', async () => {

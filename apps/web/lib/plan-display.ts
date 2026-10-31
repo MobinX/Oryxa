@@ -1,4 +1,4 @@
-import type { PublicPlan } from '@/lib/api';
+import type { PublicPlan } from './api';
 
 /** One card as both the landing page and /pricing draw it. */
 export type DisplayPlan = {
@@ -8,6 +8,9 @@ export type DisplayPlan = {
   priceCents: number;
   copy: string;
   cta: string;
+  ctaHref: string;
+  /** $0 and uncapped on both allowances: the Custom card, priced with the team. */
+  custom: boolean;
   featured: boolean;
   badge?: string;
   tagTone: string;
@@ -25,16 +28,26 @@ const TAG_TONES = [
 export function toDisplayPlans(plans: PublicPlan[]): DisplayPlan[] {
   return plans.map((plan, index) => {
     const featured = plan.slug === 'pro';
+    // A free tier is $0 with a quota; $0 with no quota on either side is the
+    // Custom offer, which must read as "talk to us", never as a free signup.
+    const custom =
+      plan.priceCents === 0 &&
+      plan.messageLimitLabel === 'Uncapped' &&
+      plan.commentLimitLabel === 'Uncapped';
     const features = [
       ...new Set([plan.messageLimitLabel, plan.commentLimitLabel, ...plan.features]),
     ];
     return {
       name: plan.name,
       slug: plan.slug,
-      priceLabel: plan.priceLabel,
+      priceLabel: custom ? 'Custom' : plan.priceLabel,
       priceCents: plan.priceCents,
-      copy: `${plan.messageLimitLabel} · ${plan.commentLimitLabel} per 30-day cycle`,
-      cta: plan.priceCents === 0 ? 'Get started free' : 'Get started',
+      copy: custom
+        ? 'Unlimited replies, priced with our team'
+        : `${plan.messageLimitLabel} · ${plan.commentLimitLabel} per 30-day cycle`,
+      cta: custom ? 'Contact us' : plan.priceCents === 0 ? 'Get started free' : 'Get started',
+      ctaHref: custom ? '/contact' : '/login',
+      custom,
       featured,
       ...(featured ? { badge: 'Most popular' } : {}),
       tagTone: TAG_TONES[index % TAG_TONES.length]!,

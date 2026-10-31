@@ -386,7 +386,7 @@ function PlanBody({ plan }: { plan: DisplayPlan }) {
         <span
           className={`inline-block rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${plan.tagTone}`}
         >
-          {plan.priceCents === 0 ? 'Free' : 'Paid'}
+          {plan.custom ? 'Custom' : plan.priceCents === 0 ? 'Free' : 'Paid'}
         </span>
         <h3 className="mt-3 font-geist text-xl font-bold text-white">{plan.name}</h3>
         <p className="mt-1.5 min-h-9 text-xs text-slate-400">{plan.copy}</p>
@@ -408,7 +408,7 @@ function PlanBody({ plan }: { plan: DisplayPlan }) {
         </ul>
       </div>
       <Link
-        href="/login"
+        href={plan.ctaHref}
         className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70 ${
           plan.featured
             ? 'bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-white shadow-[0_0_28px_-6px_rgba(91,61,245,0.8)] hover:brightness-110'

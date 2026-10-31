@@ -120,7 +120,7 @@ export default async function PricingPage() {
                         : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {plan.priceCents === 0 ? 'Free' : 'Paid'}
+                    {plan.custom ? 'Custom' : plan.priceCents === 0 ? 'Free' : 'Paid'}
                   </span>
                   <h2 className="mt-3 font-geist text-xl font-bold text-slate-950">{plan.name}</h2>
                   <p className="mt-1 text-xs text-slate-500">{plan.copy}</p>
@@ -141,7 +141,7 @@ export default async function PricingPage() {
                   </ul>
                 </div>
                 <Link
-                  href="/login"
+                  href={plan.ctaHref}
                   className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold ${
                     plan.featured
                       ? 'bg-[#5B3DF5] text-white shadow-md shadow-[#5B3DF5]/25 hover:bg-[#4C2EE0]'
