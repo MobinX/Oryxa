@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { ArrowLeft, Trash2, ShieldAlert, Mail, Settings, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useBrand } from '@/components/brand-provider';
+import { supportEmailForHost } from '@/lib/brand';
 
 export default function DataDeleteInstructionsPage() {
-  const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = useBrand();
+  const brand = useBrand();
+  const { companyName: COMPANY_NAME, parentCompanyName: PARENT_COMPANY_NAME } = brand;
+  const supportEmail = supportEmailForHost(brand.host);
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300 font-inter flex flex-col justify-between">
       {/* Navbar */}
@@ -148,7 +151,7 @@ export default function DataDeleteInstructionsPage() {
                     If you cannot access your dashboard, you can request manual offline deletion of all records:
                   </p>
                   <ul className="list-disc pl-5 space-y-1 text-xs">
-                    <li>Email: <strong className="text-foreground">alamsarwar@hotmail.com</strong></li>
+                    <li>Email: <strong className="text-foreground">{supportEmail}</strong></li>
                     <li>Subject: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[10px]">{COMPANY_NAME} Data Deletion Request</code></li>
                     <li>Include: your Business Name, account email address, and connected Facebook Page ID(s).</li>
                     <li>Processing time: <strong>7 business days</strong>.</li>
