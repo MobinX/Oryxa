@@ -18,17 +18,17 @@ export function CtaBanner() {
         <div className="relative space-y-5">
           <span className="inline-flex items-center gap-2 rounded-full border border-[#5B3DF5]/30 bg-[#5B3DF5]/10 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#A78BFA]">
             <Sparkles className="h-3.5 w-3.5" />
-            Free plan, no card required
+            Free plan available
           </span>
           <h2 className="mx-auto max-w-2xl font-geist text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-[44px] lg:leading-[1.12]">
-            Put tomorrow&rsquo;s orders{' '}
+            Put your customer chats{' '}
             <span className="bg-gradient-to-r from-[#A78BFA] via-[#C084FC] to-[#818CF8] bg-clip-text text-transparent">
               on autopilot
             </span>
           </h2>
           <p className="mx-auto max-w-xl text-balance text-sm leading-relaxed text-slate-400 sm:text-base">
-            Connect your first channel, import your catalog and watch the AI
-            start closing chats tonight.
+            Connect your first channel, import your catalog and see how the
+            AI handles incoming chats.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <Link

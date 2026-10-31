@@ -125,6 +125,11 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     emitAnomaly('channel_without_agent', { detail: commentThreadId });
     return;
   }
+  // Business-wide kill switch: comments stay stored for the merchant, no reply goes out.
+  if ((thread.business ?? thread.channel.business)?.agentState === false) {
+    console.log(`[comment-runner] agent off for business ${thread.businessId} — skipping run`);
+    return;
+  }
   const platform = thread.channel.platform === 'instagram' ? 'instagram' : 'facebook';
 
   const claimed = await claimCommentThreadForRun(

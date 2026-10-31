@@ -19,6 +19,7 @@ import {
   conversationOrderDefaultsSchema,
 } from '@repo/shared';
 import { createOrder } from '@repo/db/crud/order';
+import { getBusinessById } from '@repo/db/crud/business';
 import { runSuggestionAgent } from '@api/lib/suggestion-runner';
 import { sendSuggestionAsCards } from '@api/lib/suggestion-sender';
 import { getConversationOrderDefaults } from '@api/lib/order-defaults';
@@ -219,6 +220,10 @@ const updateAutoPilotRoute = createRoute({
       content: { 'application/json': { schema: z.object({ error: z.string() }) } },
       description: 'Conversation not found',
     },
+    409: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'The business-wide agent switch is off',
+    },
   },
 });
 
@@ -226,6 +231,15 @@ conversationsRouter.openapi(updateAutoPilotRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const conversationId = c.req.param('conversationId');
   const { autoPilot } = c.req.valid('json');
+
+  // Turning a thread on cannot override the business kill switch; the UI disables the
+  // control, and this keeps a stale tab from re-enabling an agent the merchant stopped.
+  if (autoPilot) {
+    const business = await getBusinessById(businessId);
+    if (business?.agentState === false) {
+      return c.json({ error: 'The AI agent is turned off for this business' }, 409);
+    }
+  }
 
   const row = await setConversationAutoPilot(conversationId, businessId, autoPilot);
   if (!row) return c.json({ error: 'Conversation not found' }, 404);
@@ -243,7 +257,7 @@ const generateSuggestionsRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: generateSuggestionsOutputSchema } },
-      description: 'Suggestions for the latest customer turn (empty when auto pilot is on)',
+      description: 'Suggestions for the latest customer turn (empty when the agent is answering)',
     },
     404: {
       content: { 'application/json': { schema: z.object({ error: z.string() }) } },

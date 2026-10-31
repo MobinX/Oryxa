@@ -56,6 +56,23 @@ describe('Businesses API', () => {
     expect(body.agentBargainGuidance).toBe('Prices are fixed; offer free delivery above 2000 Taka.');
   });
 
+  it('exposes and updates the business-wide agent switch', async () => {
+    const { business } = await seedTestWorld();
+
+    const initial = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
+    expect(((await initial.json()) as { agentState: boolean }).agentState).toBe(true);
+
+    const off = await app.request(`/api/v1/businesses/${business.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ agentState: false }),
+    });
+    expect(off.status).toBe(200);
+
+    const after = await app.request(`/api/v1/businesses/${business.id}`, { headers: authHeaders() });
+    expect(((await after.json()) as { agentState: boolean }).agentState).toBe(false);
+  });
+
   it('GET /api/v1/businesses/:id/stats returns aggregate counts', async () => {
     const { business } = await seedTestWorld();
     const res = await app.request(`/api/v1/businesses/${business.id}/stats`, { headers: authHeaders() });

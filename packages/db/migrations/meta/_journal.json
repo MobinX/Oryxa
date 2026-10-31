@@ -295,6 +295,20 @@
       "when": 1793680000000,
       "tag": "0041_business_cap_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793389663361,
+      "tag": "0042_default_agent_v007_core_prompt",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793429436000,
+      "tag": "0043_business_agent_state",
+      "breakpoints": true
     }
   ]
 }

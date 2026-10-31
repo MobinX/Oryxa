@@ -12,7 +12,6 @@ import {
   Sparkles,
   ShoppingBag,
   CreditCard,
-  Truck,
   CheckCircle2,
   ArrowRight,
   Clock,
@@ -46,61 +45,61 @@ export const AD_SCENES: AdScene[] = [
   {
     id: 0,
     timecode: '00:06',
-    badge: 'SCENE 01 · 02:45 AM MIDNIGHT',
-    title: 'Customer Messages at 2:45 AM (While You Sleep 🌙)',
-    subtitle: 'Store owner is offline & sleeping. AI Sales Agent engages in 0.3 seconds.',
+    badge: 'SCENE 01 · LATE-NIGHT MESSAGE',
+    title: 'A customer messages while you sleep',
+    subtitle: 'The AI agent reads your catalog and drafts a reply when your Page is connected.',
     durationMs: 5000,
-    featureTitle: '24/7 Overnight Auto-Closer',
-    featureDesc: 'Captures late-night shoppers when your competitors are asleep. Zero missed customer inquiries.',
-    benefitTag: '+42% Extra Night Sales',
+    featureTitle: 'Automated first response',
+    featureDesc: 'Answers routine questions around the clock, while you can still take over.',
+    benefitTag: 'No tab babysitting',
     icon: Moon,
   },
   {
     id: 1,
     timecode: '00:15',
-    badge: 'SCENE 02 · REAL-TIME INVENTORY',
-    title: 'Instant Visual Matching & Stock Verification ⚡',
-    subtitle: 'Understands customer photos, recommends matching sizes, and confirms live stock.',
+    badge: 'SCENE 02 · CATALOG & STOCK',
+    title: 'Answers from your catalog, not guesses',
+    subtitle: 'Products, sizes, prices and stock come from the data you already maintain.',
     durationMs: 5000,
-    featureTitle: 'Visual Intelligence & Sizing',
-    featureDesc: 'Recognizes photos, fabric details and recommends exact chest/length measurements in seconds.',
-    benefitTag: 'Zero Stock Outages',
+    featureTitle: 'Grounded catalog answers',
+    featureDesc: 'The agent checks your product records before it speaks, and says so when data is missing.',
+    benefitTag: 'Your data, not guesses',
     icon: Sparkles,
   },
   {
     id: 2,
     timecode: '00:26',
-    badge: 'SCENE 03 · AUTOMATED CHECKOUT',
-    title: '1-Click bKash Verification & Order Receipt 💳',
-    subtitle: 'Customer pays advance via bKash. TrxID verified in real-time, order created.',
+    badge: 'SCENE 03 · ORDER IN CHAT',
+    title: 'Order details captured inside the chat',
+    subtitle: 'Name, phone and address become a receipt; any bKash TrxID is saved for you to check.',
     durationMs: 5200,
-    featureTitle: 'Instant Payment & Order Voucher',
-    featureDesc: 'Parses Bangladeshi phone numbers and addresses into official receipts without manual typing.',
-    benefitTag: 'Zero Manual Data Entry',
+    featureTitle: 'Order capture, less typing',
+    featureDesc: 'Parses chat details into an order record. It does not verify or process payments.',
+    benefitTag: 'Fewer copy-paste mistakes',
     icon: CreditCard,
   },
   {
     id: 3,
     timecode: '00:38',
-    badge: 'SCENE 04 · AUTOMATED COURIER',
-    title: 'Automated Courier Consignment Handover 🚚',
-    subtitle: 'Parcel booked with Steadfast Courier with tracking SMS sent to customer.',
+    badge: 'SCENE 04 · YOUR CONTROL',
+    title: 'Pause or take over at any time',
+    subtitle: 'Stop the agent for the whole store or one conversation. Messages keep arriving.',
     durationMs: 5000,
-    featureTitle: 'Courier Tracking Sync',
-    featureDesc: 'Generates Steadfast/Pathao courier tracking slips automatically and notifies the buyer.',
-    benefitTag: '24h Delivery Dispatch',
-    icon: Truck,
+    featureTitle: 'Kill switch and human handoff',
+    featureDesc: 'Decide when the AI answers, and reply yourself when a customer needs a person.',
+    benefitTag: 'Human oversight built in',
+    icon: ShieldCheck,
   },
   {
     id: 4,
     timecode: '00:48',
-    badge: 'SCENE 05 · 08:30 AM MORNING',
-    title: 'Morning 8:30 AM: Wake Up to Deposited Profits ☀️',
-    subtitle: 'Merchant wakes up to overnight order summary: 14 orders processed & ৳32,850 revenue.',
+    badge: 'SCENE 05 · MORNING SUMMARY',
+    title: 'See conversations and orders in one place',
+    subtitle: 'Open the inbox and dashboard to review what happened and what needs you next.',
     durationMs: 5500,
-    featureTitle: 'Total Merchant Peace of Mind',
-    featureDesc: 'Wake up to real orders ready for delivery, with full receipts and customer happiness.',
-    benefitTag: '100% Peace of Mind',
+    featureTitle: 'One live inbox',
+    featureDesc: 'Conversations, customer details and orders stay together for your team.',
+    benefitTag: 'A calmer morning',
     icon: TrendingUp,
   },
 ];
@@ -147,18 +146,17 @@ export function MotionVideoAd() {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#5B3DF5]/40 bg-[#5B3DF5]/15 px-3.5 py-1 text-xs font-semibold text-[#A78BFA]">
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Commercial Motion Showcase · Desktop Video Ad</span>
+            <span>Interactive product tour · Simulated screens</span>
           </div>
           <h2 className="font-geist text-3xl font-extrabold tracking-tight text-white sm:text-5xl leading-[1.12]">
-            You sleep. <span className="text-[#818CF8]">{COMPANY_NAME} sells.</span>
+            You sleep. <span className="text-[#818CF8]">{COMPANY_NAME} keeps answering.</span>
             <br />
             <span className="text-slate-300 text-2xl sm:text-4xl font-bold">
-              Every message converted into verified orders.
+              Customer conversations captured while you rest.
             </span>
           </h2>
           <p className="max-w-2xl text-sm leading-relaxed text-slate-300 sm:text-base">
-            See what happens when a late-night customer messages your Facebook page at 2:45 AM.
-            Watch {COMPANY_NAME} handle conversations, stock checks, bKash verification, and courier booking.
+            See how a late-night message moves through replies, catalog checks, order capture and your dashboard. Screens are simulated illustrations.
           </p>
         </div>
 
@@ -253,7 +251,7 @@ export function MotionVideoAd() {
                     </div>
                   </div>
                   <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 text-[10px] font-bold text-emerald-400">
-                    AI Auto-Pilot 100% Active
+                    AI agent on
                   </span>
                 </div>
 
@@ -279,11 +277,11 @@ export function MotionVideoAd() {
                     <div className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-emerald-400 animate-bounce" />
                       <span className="text-slate-200">
-                        {COMPANY_NAME} AI Agent engaged in <strong className="text-emerald-400">0.3 seconds</strong>
+                        {COMPANY_NAME} AI replies from your catalog
                       </span>
                     </div>
                     <span className="rounded bg-indigo-500/30 px-2 py-0.5 text-[10px] font-bold text-[#A78BFA]">
-                      Fastest in BD
+                      Automated reply
                     </span>
                   </div>
                 </div>
@@ -299,12 +297,12 @@ export function MotionVideoAd() {
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="h-5 w-5 text-emerald-400" />
                     <div>
-                      <p className="text-xs font-bold text-white">Warehouse Inventory Scanned</p>
+                      <p className="text-xs font-bold text-white">Catalog stock checked</p>
                       <p className="text-[10px] text-slate-400">Product: Blue Silk Kurti (SKU: BSK-XL)</p>
                     </div>
                   </div>
                   <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-300">
-                    12 Units in Stock
+                    Stock available
                   </span>
                 </div>
 
@@ -334,19 +332,19 @@ export function MotionVideoAd() {
                ------------------------------------------------------------- */}
             {activeSceneIdx === 2 && (
               <div className="relative z-10 space-y-3.5 my-auto animate-fadeIn">
-                {/* Live bKash Verification Banner */}
+                {/* Transaction ID saved with the order */}
                 <div className="rounded-xl border border-pink-500/40 bg-[#1D0F1B] p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E2136E] text-xs font-black text-white">
                       bK
                     </span>
                     <div>
-                      <p className="text-xs font-bold text-white">bKash Merchant Auto-Verification</p>
-                      <p className="font-mono text-[10px] text-pink-300">TrxID: BK9F2D8M1 · Instant Match</p>
+                      <p className="text-xs font-bold text-white">bKash transaction ID recorded</p>
+                      <p className="font-mono text-[10px] text-pink-300">TrxID: BK9F2D8M1 · saved for review</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-extrabold text-emerald-400">
-                    ৳১,৯২০ Received
+                    TrxID saved
                   </span>
                 </div>
 
@@ -355,7 +353,7 @@ export function MotionVideoAd() {
                   <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <span className="text-xs font-extrabold text-white">অর্ডার ভাউচার #4892</span>
                     <span className="rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5">
-                      Paid &amp; Approved
+                      Order captured
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
@@ -373,32 +371,32 @@ export function MotionVideoAd() {
             )}
 
             {/* -------------------------------------------------------------
-                SCENE 3: Automated Courier Consignment Handover
+                SCENE 3: Order saved to the dashboard
                ------------------------------------------------------------- */}
             {activeSceneIdx === 3 && (
               <div className="relative z-10 space-y-3.5 my-auto animate-fadeIn">
                 <div className="rounded-xl border border-blue-500/30 bg-[#0E1528] p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400">
-                      <Truck className="h-5 w-5" />
+                      <ShieldCheck className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white">Steadfast Courier Booking</p>
-                      <p className="font-mono text-[10px] text-blue-300">Consignment #ST-90248-BD</p>
+                      <p className="text-xs font-bold text-white">Order saved to your dashboard</p>
+                      <p className="font-mono text-[10px] text-blue-300">Order #4892 · New</p>
                     </div>
                   </div>
                   <span className="rounded bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">
-                    Label Generated
+                    Open in console
                   </span>
                 </div>
 
                 <div className="rounded-2xl border border-white/15 bg-[#13172E] p-3.5 space-y-2">
                   <p className="text-xs text-slate-200 leading-relaxed">
-                    📦 পার্সেল স্বয়ংক্রিয়ভাবে বুকিং সম্পন্ন হয়েছে। কাস্টমারকে এসএমএস ও মেসেঞ্জারে ট্র্যাকিং লিঙ্ক পাঠানো হয়েছে।
+                    Customer details and the transaction ID are saved with the order. Fulfilment stays in your hands.
                   </p>
                   <div className="flex items-center justify-between border-t border-white/8 pt-2 text-[11px]">
-                    <span className="text-emerald-400 font-semibold">✓ SMS Sent: Tracking Live</span>
-                    <span className="text-slate-400">Dhaka Express Delivery</span>
+                    <span className="text-emerald-400 font-semibold">✓ Order captured</span>
+                    <span className="text-slate-400">Review it in your inbox</span>
                   </div>
                 </div>
               </div>
@@ -416,21 +414,21 @@ export function MotionVideoAd() {
                     </div>
                     <div>
                       <p className="text-xs font-bold text-white">08:30 AM · Morning Store Summary</p>
-                      <p className="text-[10px] text-amber-300">Good morning! Your store sold all night.</p>
+                      <p className="text-[10px] text-amber-300">Good morning — here is what needs you.</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-extrabold text-emerald-400">
-                    +৳৩২,৮৫০ Net
+                    Review ready
                   </span>
                 </div>
 
                 <div className="rounded-2xl border border-[#5B3DF5]/40 bg-gradient-to-r from-[#171B38] to-[#1F193F] p-4 text-center space-y-2 shadow-xl">
-                  <p className="text-xs font-bold text-slate-300">Overnight Automated Performance</p>
+                  <p className="text-xs font-bold text-slate-300">While you were away</p>
                   <p className="text-2xl sm:text-3xl font-extrabold text-white">
-                    ১৪টি নতুন অর্ডার <span className="text-emerald-400">কনফার্মড</span>
+                    Conversations and orders <span className="text-emerald-400">in one place</span>
                   </p>
                   <p className="text-xs text-slate-400">
-                    জিরো মিসড সেলস · জিরো ম্যানুয়াল চ্যাট · ফুল পেমেন্ট ও কুরিয়ার সিঙ্ক
+                    Open the inbox to reply, or keep the agent running.
                   </p>
                 </div>
               </div>

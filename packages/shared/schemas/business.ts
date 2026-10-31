@@ -20,7 +20,10 @@ export const createBusinessInputSchema = z.object({
   storeTheme: storeThemeSchema.nullable().optional(),
 }).openapi('CreateBusinessInput');
 
-export const updateBusinessInputSchema = createBusinessInputSchema.partial();
+export const updateBusinessInputSchema = createBusinessInputSchema.partial().extend({
+  /** The business-wide agent kill switch edited from the dashboard. */
+  agentState: z.boolean().optional(),
+});
 
 export const selectBusinessSchema = z.object({
   id: uuidSchema,
@@ -40,6 +43,8 @@ export const selectBusinessSchema = z.object({
   // return null for a business created before the defaults were added.
   hasTradeLicense: z.boolean().nullable(),
   hasTaxLicense: z.boolean().nullable(),
+  /** False when the merchant turned the answering agent off for the whole business. */
+  agentState: z.boolean().default(true),
   facebookPageLink: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   createdAt: timestampSchema,

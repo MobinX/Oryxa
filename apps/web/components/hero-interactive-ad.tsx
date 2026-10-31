@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Share2,
   Clock,
-  Truck,
   ShoppingBag,
   CreditCard,
   Play,
@@ -22,9 +21,7 @@ import {
   Smile,
   Image as ImageIcon,
   Mic,
-  Star,
   ChevronLeft,
-  ExternalLink,
   ThumbsUp,
   MapPin,
 } from 'lucide-react';
@@ -41,14 +38,12 @@ export interface StoryChapter {
 }
 
 export const CHAPTERS: StoryChapter[] = [
-  { id: 0, labelBn: 'সালাম', labelEn: 'Greeting', durationMs: 4200, title: 'স্বাগতম ও ক্যাটাগরি সাজেশন', statusBadge: 'AI Response: 0.4s' },
-  { id: 1, labelBn: 'পছন্দ', labelEn: 'Catalog', durationMs: 4500, title: 'লাইভ প্রোডাক্ট ক্যাটালগ কার্ড', statusBadge: 'Live Inventory Synced' },
-  { id: 2, labelBn: 'ছবি', labelEn: 'Photo Match', durationMs: 4600, title: 'কাস্টমার ছবি দেখে স্বয়ংক্রিয় শনাক্ত', statusBadge: 'Vision AI: 99.2% Match' },
-  { id: 3, labelBn: 'সাইজ', labelEn: 'Size Check', durationMs: 4200, title: 'রিয়েলটাইম সাইজ গাইড ও স্টক যাচাই', statusBadge: 'Inventory: In Stock' },
-  { id: 4, labelBn: 'অর্ডার', labelEn: 'Checkout', durationMs: 4400, title: 'ঠিকানা ও ফোন নম্বর স্বয়ংক্রিয় পার্সিং', statusBadge: 'Address Verified' },
-  { id: 5, labelBn: 'রসিদ', labelEn: 'Receipt', durationMs: 4800, title: 'ইনস্ট্যান্ট অর্ডার ভাউচার ও মেমো', statusBadge: 'Order #22961 Created' },
-  { id: 6, labelBn: 'কুরিয়ার', labelEn: 'Courier', durationMs: 4600, title: 'স্টেডফাস্ট কুরিয়ার কনসাইনমেন্ট ও ট্র্যাকিং', statusBadge: 'Steadfast Sync · 24h Delivery' },
-  { id: 7, labelBn: 'রিভিউ', labelEn: 'Review', durationMs: 4400, title: 'ডেলিভারি পরবর্তী ৫-স্টার ফিডব্যাক', statusBadge: '★ 5.0 Customer Rating' },
+  { id: 0, labelBn: 'সালাম', labelEn: 'Greeting', durationMs: 4200, title: 'স্বাগতম ও ক্যাটাগরি সাজেশন', statusBadge: 'AI reply drafted' },
+  { id: 1, labelBn: 'পছন্দ', labelEn: 'Catalog', durationMs: 4500, title: 'প্রোডাক্ট ক্যাটালগ কার্ড', statusBadge: 'Catalog lookup' },
+  { id: 2, labelBn: 'ছবি', labelEn: 'Photo Match', durationMs: 4600, title: 'কাস্টমার ছবি দেখে প্রোডাক্ট মিল', statusBadge: 'Photo match' },
+  { id: 3, labelBn: 'সাইজ', labelEn: 'Size Check', durationMs: 4200, title: 'সাইজ গাইড ও স্টক যাচাই', statusBadge: 'Stock checked' },
+  { id: 4, labelBn: 'অর্ডার', labelEn: 'Checkout', durationMs: 4400, title: 'ঠিকানা ও ফোন নম্বর পার্সিং', statusBadge: 'Details captured' },
+  { id: 5, labelBn: 'রসিদ', labelEn: 'Receipt', durationMs: 4800, title: 'অর্ডার ভাউচার ও মেমো', statusBadge: 'Order created' },
 ];
 
 export function HeroInteractiveAd() {
@@ -373,7 +368,7 @@ export function HeroInteractiveAd() {
                   <div className="rounded-2xl rounded-tl-xs border border-white/10 bg-[#16192B] px-3.5 py-2 text-slate-100 max-w-[85%] leading-relaxed">
                     <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold mb-1">
                       <Sparkles className="h-3 w-3 text-emerald-400" />
-                      <span>Vision AI: Mint Chikankari (KT1087) ৯৯.২% মিলেছে</span>
+                      <span>Photo match: Mint Chikankari (KT1087)</span>
                     </div>
                     জ্বি ম্যাম! এটা আমাদের অরিজিনাল মিন্ট চিকেনকারি কুর্তি 😊 ১০০% পিওর কটন ফেব্রিক।
                   </div>
@@ -494,74 +489,6 @@ export function HeroInteractiveAd() {
                   <span className="text-emerald-400 font-semibold">অথবা ক্যাশ অন ডেলিভারি</span>
                 </div>
               </div>
-            )}
-
-            {/* STAGE 6+: Courier Handover & Steadfast Consignment */}
-            {currentChapter >= 6 && (
-              <div className="rounded-xl border border-[#5B3DF5]/30 bg-[#13162C] p-3 space-y-2 animate-scaleIn">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Truck className="h-4 w-4 text-[#818CF8]" />
-                    <span className="text-xs font-bold text-white">
-                      Steadfast Courier Integration
-                    </span>
-                  </div>
-                  <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[9px] font-bold text-blue-300">
-                    পার্সেল হস্তান্তর
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-300 space-y-0.5">
-                  <p>
-                    ট্র্যাকিং আইডি:{' '}
-                    <strong className="font-mono text-[#818CF8]">ST-902418-BD</strong>
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    রাইডার পার্সেল সংগ্রহ করেছে। সাধারণত ২৪ ঘণ্টার মধ্যে ডেলিভারি সম্পন্ন হয়।
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-1 rounded-lg bg-white/10 py-1 text-[10px] font-bold text-slate-200 hover:bg-white/20 transition"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  <span>লাইভ ট্র্যাকিং দেখুন</span>
-                </button>
-              </div>
-            )}
-
-            {/* STAGE 7: Delivery & 5-Star Review */}
-            {currentChapter >= 7 && (
-              <>
-                <div className="flex flex-col items-end space-y-0.5 animate-fadeIn">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-xs bg-[#5B3DF5] px-3.5 py-2 text-white shadow-xs leading-relaxed">
-                    Kurti ta onnorokom sundor hoise 😍 5-star review dilam! Color &amp; fitting ekdom perfect.
-                  </div>
-                  <span className="text-[9px] text-slate-500 pr-1">Next Day 3:40 PM</span>
-                </div>
-
-                <div className="rounded-xl border border-amber-500/30 bg-[#1E1910] p-2.5 flex items-center justify-between animate-scaleIn">
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="h-3.5 w-3.5 fill-current" />
-                      ))}
-                    </div>
-                    <span className="text-xs font-bold text-white">5.0 Star Verified Review</span>
-                  </div>
-                  <span className="rounded bg-amber-400/20 px-2 py-0.5 text-[9px] font-bold text-amber-300">
-                    Saved to Store
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-2 animate-fadeIn">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-[#5B3DF5] to-[#818CF8] text-[9px] font-bold">
-                    S
-                  </div>
-                  <div className="rounded-2xl rounded-tl-xs border border-white/10 bg-[#16192B] px-3.5 py-2 text-slate-100 max-w-[85%] leading-relaxed">
-                    শুনে খুব ভালো লাগল ম্যাম 🥰 আপনার ৫-স্টার রিভিউ আমাদের জন্য অনেক অনুপ্রেরণা! আবার আসবেন।
-                  </div>
-                </div>
-              </>
             )}
 
             {/* Interactive User Injected Replies */}
@@ -701,7 +628,7 @@ export function HeroInteractiveAd() {
         </div>
 
         {/* 8-Step Interactive Progress Timeline Rail */}
-        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
           {CHAPTERS.map((ch, idx) => {
             const isActive = currentChapter === idx;
             const isPassed = currentChapter > idx;

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, Lightbulb } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useBrand } from '@/components/brand-provider';
+import { PublicFooterLinks } from '@/components/legal/public-footer-links';
 
 export default function SolutionsPage() {
   const { companyName: COMPANY_NAME } = useBrand();
@@ -71,6 +72,7 @@ export default function SolutionsPage() {
       {/* Footer */}
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground bg-background/50">
         © 2026 {COMPANY_NAME}. All rights reserved.
+        <PublicFooterLinks />
       </footer>
     </div>
   );

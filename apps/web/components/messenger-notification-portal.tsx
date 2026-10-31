@@ -106,7 +106,15 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
           <p className="mt-1 text-sm text-muted-foreground">
             Get every order and allowance notice in your Messenger too. Create your code, send it as
             a message to our Facebook page, and this business is linked to that account. Repeat with
-            another account if more than one person should hear about it.
+            another account if more than one person should hear about it. Once connected, send{' '}
+            <strong className="font-semibold text-foreground">ON</strong> or{' '}
+            <strong className="font-semibold text-foreground">OFF</strong> to that chat to start or
+            stop the AI agent for this business.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            This links a Messenger account for notices and ON/OFF only. It does not add a Facebook
+            Page as a store channel; to answer customers on a Page, connect that Page under
+            Integrations.
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => void load()} title="Refresh">
@@ -128,8 +136,11 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Send this code in a message to our Facebook page. You will get a confirmation there,
-            and from then on notices arrive in Messenger.
+            Send this code in a message to our Facebook page. We will reply with a connection
+            confirmation, then notices arrive in Messenger. Sending{' '}
+            <strong className="font-semibold text-foreground">ON</strong> or{' '}
+            <strong className="font-semibold text-foreground">OFF</strong> here starts or stops the
+            AI agent for this business and confirms whether it is running or stopped.
           </p>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

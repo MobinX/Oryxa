@@ -11,7 +11,17 @@ const AUTH_COOKIE = 'oryxa_token';
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const brand = brandForHost(normalizeBrandHost(request.headers.get('host')));
+  const requestHost = normalizeBrandHost(request.headers.get('host'));
+
+  // One canonical host per brand. `www` serves the same site, so sending it to the apex
+  // avoids two indexed copies competing for the same pages.
+  if (requestHost.startsWith('www.')) {
+    const url = request.nextUrl.clone();
+    url.host = requestHost.slice(4);
+    return NextResponse.redirect(url, 308);
+  }
+
+  const brand = brandForHost(requestHost);
 
   // Overwrite rather than append: a client must not be able to choose its own brand by sending
   // an `x-brand-company` header of its own.

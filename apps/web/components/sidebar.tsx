@@ -38,23 +38,13 @@ const primaryNav: Array<{
   label: string;
   icon: LucideIcon;
   badgeKey?: 'notifications';
-  children?: Array<{ href: string; label: string }>;
 }> = [
   { href: 'dashboard', label: 'Dashboard', icon: Home },
   { href: 'inbox', label: 'Inbox', icon: MessageSquare },
   { href: 'orders', label: 'Orders', icon: ClipboardList },
   { href: 'products', label: 'Products', icon: Package },
   { href: 'customers', label: 'Customers', icon: Users },
-  {
-    href: 'posts',
-    label: 'Social Media',
-    icon: Megaphone,
-    children: [
-      { href: 'posts', label: 'Content & Posts' },
-      { href: 'posts?tab=comments', label: 'Comments' },
-      { href: 'posts?tab=autoreply', label: 'Auto-Reply' },
-    ],
-  },
+  { href: 'posts', label: 'Social Media', icon: Megaphone },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
   { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
   { href: 'channels', label: 'Integrations', icon: Blocks },
@@ -200,7 +190,6 @@ export function Sidebar({
 }) {
   const pathname = usePathname() ?? '';
   const [isOpen, setIsOpen] = useState(false);
-  const [socialExpanded, setSocialExpanded] = useState(true);
   const displayUser = userName === 'User' ? 'Mohammad Shihab' : userName;
   const userInitial = displayUser.trim().charAt(0).toUpperCase() || 'M';
 
@@ -263,91 +252,40 @@ export function Sidebar({
       {primaryNav.map((item) => {
         const active = isActive(item.href);
         const Icon = item.icon;
-        const hasChildren = Boolean(item.children && item.children.length > 0);
         const badgeCount = item.badgeKey === 'notifications' && unreadNotificationsCount > 0 ? unreadNotificationsCount : null;
 
         return (
-          <div key={item.href}>
-            <div className="flex items-center">
-              <Link
-                href={`/b/${businessId}/${item.href}`}
-                onClick={onItemClick}
+          <Link
+            key={item.href}
+            href={`/b/${businessId}/${item.href}`}
+            onClick={onItemClick}
+            className={cn(
+              'group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-medium transition-all duration-150',
+              active
+                ? 'bg-[#5B3DF5] text-white font-semibold shadow-sm shadow-[#5B3DF5]/30'
+                : 'text-slate-300/85 hover:bg-white/8 hover:text-white',
+            )}
+          >
+            <span className="flex items-center gap-3">
+              <Icon
                 className={cn(
-                  'group relative flex flex-1 items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-medium transition-all duration-150',
-                  active
-                    ? 'bg-[#5B3DF5] text-white font-semibold shadow-sm shadow-[#5B3DF5]/30'
-                    : 'text-slate-300/85 hover:bg-white/8 hover:text-white',
+                  'h-4 w-4 shrink-0 transition-colors',
+                  active ? 'text-white' : 'text-slate-400 group-hover:text-white',
+                )}
+              />
+              <span>{item.label}</span>
+            </span>
+
+            {badgeCount !== null && (
+              <span
+                className={cn(
+                  'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold bg-rose-500 text-white',
                 )}
               >
-                <span className="flex items-center gap-3">
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0 transition-colors',
-                      active ? 'text-white' : 'text-slate-400 group-hover:text-white',
-                    )}
-                  />
-                  <span>{item.label}</span>
-                </span>
-
-                <span className="flex items-center gap-1.5">
-                  {badgeCount !== null && (
-                    <span
-                      className={cn(
-                        'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold bg-rose-500 text-white',
-                      )}
-                    >
-                      {badgeCount}
-                    </span>
-                  )}
-                  {hasChildren && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setSocialExpanded((prev) => !prev);
-                      }}
-                      className="rounded p-0.5 text-slate-300 hover:bg-white/10"
-                      aria-label="Toggle submenu"
-                    >
-                      <ChevronDown
-                        className={cn('h-3.5 w-3.5 transition-transform', socialExpanded ? 'rotate-180' : '')}
-                      />
-                    </button>
-                  )}
-                </span>
-              </Link>
-            </div>
-
-            {hasChildren && socialExpanded && (
-              <div className="mt-1 ml-6 space-y-0.5 border-l border-white/10 pl-3">
-                {item.children!.map((sub) => {
-                  const subActive = pathname.includes('/posts') && sub.label === 'Content & Posts';
-                  return (
-                    <Link
-                      key={sub.label}
-                      href={`/b/${businessId}/${sub.href}`}
-                      onClick={onItemClick}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors',
-                        subActive
-                          ? 'text-[#A78BFA] font-semibold'
-                          : 'text-slate-400 hover:text-white',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'h-1.5 w-1.5 rounded-full',
-                          subActive ? 'bg-[#A78BFA]' : 'bg-slate-600',
-                        )}
-                      />
-                      {sub.label}
-                    </Link>
-                  );
-                })}
-              </div>
+                {badgeCount}
+              </span>
             )}
-          </div>
+          </Link>
         );
       })}
     </div>

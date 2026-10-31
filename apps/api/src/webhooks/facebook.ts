@@ -11,6 +11,8 @@ import {
 import { getProductById } from '@repo/db/crud/product';
 import {
   findBusinessByNotificationToken,
+  isMessengerNotificationUser,
+  setAgentStateForNotificationUser,
   upsertMessengerNotificationUser,
 } from '@repo/db/crud/messenger-notification';
 import { processInboundComment, setCommentThreadProfileIfMissing, resetStaleCommentThread, checkPendingComments } from '@repo/db/crud/comment';
@@ -551,11 +553,15 @@ fbWebhookRouter.post('/facebook', receiveMetaWebhook);
 fbWebhookRouter.post('/instagram', receiveMetaWebhook);
 
 /**
- * The operator page's DMs are not conversations. A message that is exactly a business's
- * notification code binds this Messenger account to that business and is answered with a
- * confirmation; anything else is ignored. No agent ever runs on an admin-only page.
+ * The operator page's DMs are not store conversations. A message containing a business's
+ * notification code binds this Messenger account to that business and is answered once
+ * with a connection confirmation. Once bound, ON and OFF flip that business's agent switch
+ * and confirm whether the agent is running or stopped. Other messages from a connected
+ * notification account are ignored, so a merchant never gets an AI answer from the operator
+ * page. Anything else from an unknown sender is ordinary admin-page traffic and falls
+ * through. No agent ever runs on an admin-only page.
  */
-const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const NOTIFICATION_CODE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
  * Customer DMs on an admin-only page skip the store flow entirely and hand their turns to
@@ -598,43 +604,88 @@ async function processOfficialMessaging(
   }
 }
 
-async function processMessengerNotificationCodes(
+async function processAdminPageCommands(
   channel: { id: string; apiToken: string },
   events: MessagingEvent[],
-): Promise<void> {  for (const ev of events) {
+): Promise<Set<number>> {
+  const handled = new Set<number>();
+  for (const [index, ev] of events.entries()) {
     const senderId = ev.sender?.id;
     const text = ev.message?.text?.trim().toLowerCase();
     if (!senderId || ev.message?.is_echo || !text) continue;
-    if (!NOTIFICATION_CODE.test(text)) {
-      fbLog('admin channel: message is not a notification code', { senderId });
+
+    // A code can arrive inside a sentence ("my code is …") or with punctuation around it;
+    // extracting it keeps the handshake silent instead of letting the Official agent answer.
+    const code = text.match(NOTIFICATION_CODE)?.[0];
+    if (code) {
+      handled.add(index);
+      const row = await findBusinessByNotificationToken(code);
+      if (!row) {
+        fbLog('admin channel: unknown notification code', { senderId });
+        continue;
+      }
+
+      const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      await upsertMessengerNotificationUser({
+        businessId: row.businessId,
+        channelId: channel.id,
+        platformUserId: senderId,
+        name: profile.name ?? null,
+      });
+
+      // One confirmation on a successful connection; ON/OFF and other messages remain
+      // silent. The merchant needs proof the code was accepted, not a chat.
+      const businessName = row.business?.name ?? 'this business';
+      await fbSendMessage(
+        channel.apiToken,
+        senderId,
+        `Successfully connected to "${businessName}" and working.`,
+      ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
+
+      fbLog('admin channel: messenger user connected', {
+        businessId: row.businessId,
+        senderId,
+      });
       continue;
     }
 
-    const row = await findBusinessByNotificationToken(text);
-    if (!row) {
-      fbLog('admin channel: unknown notification code', { senderId });
+    // ON/OFF from an account that redeemed a code here flips the business agent.
+    const command = text.replace(/[.!]+$/g, '');
+    if (command === 'on' || command === 'off') {
+      const businessIds = await setAgentStateForNotificationUser(
+        channel.id,
+        senderId,
+        command === 'on',
+      );
+      if (businessIds.length > 0) {
+        handled.add(index);
+        fbLog('admin channel: notification user toggled the agent', {
+          senderId,
+          agentState: command === 'on',
+          businessIds,
+        });
+        await fbSendMessage(
+          channel.apiToken,
+          senderId,
+          command === 'on'
+            ? 'Agent is running for all your channels.'
+            : 'Agent is stopped for all your channels.',
+        ).catch((err) => console.error('[fb-webhook] agent command confirmation failed:', err));
+        continue;
+      }
+    }
+
+    // Once an account is connected for notices, the operator page is a control channel,
+    // not a support inbox. Keep its messages away from the Official agent entirely.
+    if (await isMessengerNotificationUser(channel.id, senderId)) {
+      handled.add(index);
+      fbLog('admin channel: ignoring message from a connected notification account', { senderId });
       continue;
     }
 
-    const profile = await getFacebookUserProfile(channel.apiToken, senderId);
-    await upsertMessengerNotificationUser({
-      businessId: row.businessId,
-      channelId: channel.id,
-      platformUserId: senderId,
-      name: profile.name ?? null,
-    });
-
-    await fbSendMessage(
-      channel.apiToken,
-      senderId,
-      `You are connected. Notifications for ${row.business?.name ?? 'this store'} will arrive here.`,
-    ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
-
-    fbLog('admin channel: messenger user connected', {
-      businessId: row.businessId,
-      senderId,
-    });
+    fbLog('admin channel: message is not a notification command or code', { senderId });
   }
+  return handled;
 }
 
 /**
@@ -724,13 +775,14 @@ async function processEntries(
         messagingCount: messaging.length,
       });
       if (messaging.length > 0) {
-        await processMessengerNotificationCodes(
+        const handled = await processAdminPageCommands(
           { id: channel.id, apiToken: channel.apiToken },
           messaging,
         );
+        const remaining = messaging.filter((_, index) => !handled.has(index));
         await processOfficialMessaging(
           { id: channel.id, apiToken: channel.apiToken, platform, platformChannelId: entry.id },
-          messaging,
+          remaining,
         );
       }
       continue;
@@ -756,14 +808,18 @@ async function processEntries(
     // each one; deliveries carry a single page in practice.
     tagContext({ channelId: channel.id, businessId });
 
+    // The business-wide switch: messages and comments are still stored for the inbox,
+    // but no run is scheduled and no automated reply leaves the page.
+    const agentOn = channel.business?.agentState !== false;
+
     if (messaging.length > 0) {
-      await processMessagingEvents({ ...channel, businessId }, messaging, platform);
+      await processMessagingEvents({ ...channel, businessId }, messaging, platform, agentOn);
     }
     if (changes.length > 0) {
       if (platform === 'instagram') {
-        await processInstagramChanges({ ...channel, businessId }, entry.id, changes);
+        await processInstagramChanges({ ...channel, businessId }, entry.id, changes, agentOn);
       } else {
-        await processCommentChanges({ ...channel, businessId }, entry.id, changes);
+        await processCommentChanges({ ...channel, businessId }, entry.id, changes, agentOn);
       }
     }
   }
@@ -911,6 +967,7 @@ async function processMessagingEvents(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   events: MessagingEvent[],
   platform: ChannelPlatform,
+  agentOn = true,
 ): Promise<void> {
   fbLog('processMessagingEvents start', {
     channelId: channel.id,
@@ -942,6 +999,13 @@ async function processMessagingEvents(
     // failure — so the agent can apologize and suggest something else instead of staying silent.
     const details = ev.postback ? parseDetailsPayload(ev.postback.payload) : null;
     if (details && ev.sender?.id) {
+      if (!agentOn) {
+        fbLog('processMessagingEvents details postback skipped — business agent off', {
+          index,
+          kind: details.kind,
+        });
+        continue;
+      }
       const result = await handleDetailsPostback(channel, ev.sender.id, details, platform);
       fbLog('processMessagingEvents details postback', {
         index,
@@ -1165,7 +1229,16 @@ async function processMessagingEvents(
     let outcome: string;
     let ageMs: number | undefined;
 
-    if (!autoPilot) {
+    if (!agentOn) {
+      // The message stays stored and visible; only the automated answer is skipped.
+      outcome = 'business_agent_off';
+      fbLog('processMessagingEvents business agent off — message stored, agent skipped', {
+        index,
+        conversationId,
+        inserted,
+        priorStatus,
+      });
+    } else if (!autoPilot) {
       // The message stays stored and visible; only the automated answer is skipped.
       outcome = 'autopilot_off';
       fbLog('processMessagingEvents auto pilot off — message stored, agent skipped', {
@@ -1313,6 +1386,7 @@ async function handleInboundComment(
   platform: ChannelPlatform,
   budget: () => Promise<TriggerOptions>,
   comment: InboundPlatformComment,
+  agentOn = true,
 ): Promise<void> {
   const { commentId, parentId, postId, text, fromId, fromName, verb } = comment;
 
@@ -1373,7 +1447,16 @@ async function handleInboundComment(
   let outcome: string;
   let ageMs: number | undefined;
 
-  if (!inserted) {
+  if (!agentOn) {
+    // Stored for the inbox, never answered while the business kill switch is off.
+    outcome = 'business_agent_off';
+    fbLog('handleInboundComment business agent off — comment stored, agent skipped', {
+      platform,
+      threadId,
+      inserted,
+      priorStatus,
+    });
+  } else if (!inserted) {
     // A re-delivered comment id: Meta is still waiting for an answer, so the
     // runner it waited on is a candidate for recovery just as above.
     outcome = 'redelivered';
@@ -1534,6 +1617,7 @@ async function processCommentChanges(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   pageId: string,
   changes: WebhookChange[],
+  agentOn = true,
 ): Promise<void> {
   fbLog('processCommentChanges start', { channelId: channel.id, pageId, changeCount: changes.length });
   const budget = forTrigger(channel.businessId);
@@ -1597,7 +1681,7 @@ async function processCommentChanges(
       fromId,
       fromName: value.from?.name,
       verb: value.verb,
-    });
+    }, agentOn);
   }
 
   fbLog('processCommentChanges done', { channelId: channel.id });
@@ -1613,6 +1697,7 @@ async function processInstagramChanges(
   channel: { id: string; businessId: string; agentId?: string | null; apiToken: string },
   instagramAccountId: string,
   changes: WebhookChange[],
+  agentOn = true,
 ): Promise<void> {
   fbLog('processInstagramChanges start', {
     channelId: channel.id,
@@ -1721,7 +1806,7 @@ async function processInstagramChanges(
       text,
       fromId,
       fromName,
-    });
+    }, agentOn);
   }
 
   fbLog('processInstagramChanges done', { channelId: channel.id });

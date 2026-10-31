@@ -35,6 +35,12 @@ export async function generateMetadata({ params }: { params: ProductParams }): P
       images: product.thumbnailUrl ? [product.thumbnailUrl] : undefined,
       url: `/store/${slug}/${product.id}`,
     },
+    twitter: {
+      card: 'summary_large_image',
+      title: product.name,
+      description: product.description ?? undefined,
+      images: product.thumbnailUrl ? [product.thumbnailUrl] : undefined,
+    },
   };
 }
 

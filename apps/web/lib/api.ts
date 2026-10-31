@@ -106,6 +106,8 @@ export type Business = {
   foundedDate?: string | null;
   hasTradeLicense: boolean;
   hasTaxLicense: boolean;
+  /** False when the business-wide agent switch is off. */
+  agentState: boolean;
   facebookPageLink?: string | null;
   phone?: string | null;
   createdAt: string;

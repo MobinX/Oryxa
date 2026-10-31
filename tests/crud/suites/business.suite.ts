@@ -56,6 +56,26 @@ export function registerBusinessCrudTests() {
     expect(updated?.name).toBe('New Name');
   });
 
+  it('updateBusiness switches the agent off and back on', async () => {
+    const user = await syncUser({
+      firebaseUid: `agent-biz-uid-${Date.now()}`,
+      name: 'Owner',
+      signInMethod: 'google',
+    });
+    const business = await createBusiness(user.id, {
+      name: 'Shop',
+      hasTradeLicense: false,
+      hasTaxLicense: false,
+    });
+    expect(business.agentState).toBe(true);
+
+    await updateBusiness(business.id, user.id, { agentState: false });
+    expect((await getBusinessById(business.id))?.agentState).toBe(false);
+
+    await updateBusiness(business.id, user.id, { agentState: true });
+    expect((await getBusinessById(business.id))?.agentState).toBe(true);
+  });
+
   it('updateBusiness returns null for wrong owner', async () => {
     const owner = await syncUser({
       firebaseUid: `owner-uid-${Date.now()}`,

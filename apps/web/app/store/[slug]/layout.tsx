@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { StorefrontShell } from '@/components/storefront/storefront-shell';
 import { StorefrontSkeleton } from '@/components/storefront/storefront-skeleton';
+import { StoreJsonLd } from '@/components/storefront/store-json-ld';
 import { VisitBeacon } from '@/components/storefront/visit-beacon';
 import { getStore } from '@/lib/storefront';
 import type { PublicStore } from '@/lib/storefront';
@@ -47,6 +48,12 @@ export async function generateMetadata({
       url: `/store/${slug}`,
       images: store.theme?.heroImageUrl ? [store.theme.heroImageUrl] : undefined,
     },
+    twitter: {
+      card: 'summary_large_image',
+      title: store.name,
+      description,
+      images: store.theme?.heroImageUrl ? [store.theme.heroImageUrl] : undefined,
+    },
   };
 }
 
@@ -72,6 +79,7 @@ async function StorefrontFrame({
   return (
     <>
       <VisitBeacon slug={store.slug} />
+      <StoreJsonLd store={store} slug={slug} />
       <StorefrontShell store={store}>{children}</StorefrontShell>
     </>
   );

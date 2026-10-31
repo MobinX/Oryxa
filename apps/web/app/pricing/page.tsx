@@ -3,17 +3,31 @@ import { Check, ArrowRight, ChevronDown, Lock, ShieldCheck, Server, Headphones }
 import { cachedPublicPlans } from '@/app/_cache/queries';
 import { toCompareRows, toDisplayPlans } from '@/lib/plan-display';
 import { getBrand } from '@/lib/brand-server';
+import { socialMetadata } from '@/lib/seo';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 import { CookieSettingsButton } from '@/components/cookie-consent';
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
+<<<<<<< HEAD
   return {
     title: `Pricing — ${companyName}`,
     description: `${companyName} plans for AI auto-reply, catalog and order management. Simple, transparent pricing that scales with your store.`,
     alternates: { canonical: '/pricing' },
+=======
+  const title = `Pricing — ${companyName}`;
+  const description = `${companyName} plans for AI auto-reply, catalog and order management. Simple, transparent pricing that scales with your store.`;
+  return {
+    title,
+    description,
+    alternates: { canonical: '/pricing' },
+    ...socialMetadata({ title, description, path: '/pricing', siteName: companyName }),
+>>>>>>> origin/main
   };
 }
+
+/** Brand copy comes from request headers, so this route may block. */
+export const instant = false;
 
 /** Brand copy comes from request headers, so this route may block. */
 export const instant = false;

@@ -483,6 +483,11 @@ export const businesses = pgTable('businesses', {
   foundedDate: timestamp('founded_date'),
   hasTradeLicense: boolean('has_trade_license').default(false),
   hasTaxLicense: boolean('has_tax_license').default(false),
+  /**
+   * Business-wide kill switch for the answering agent. False stops every automatic
+   * Messenger, Instagram and comment reply while messages keep arriving in the inbox.
+   */
+  agentState: boolean('agent_state').default(true).notNull(),
   facebookPageLink: varchar('facebook_page_link', { length: 500 }),
   phone: varchar('phone', { length: 20 }),
   /** NULL = no plan = unlimited. The operator's per-business escape hatch. */

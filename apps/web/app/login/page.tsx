@@ -1,14 +1,28 @@
 import { AuthForm } from '@/components/auth-form';
 import { getBrand } from '@/lib/brand-server';
+import { socialMetadata } from '@/lib/seo';
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
+  const title = `Sign in — ${companyName}`;
+  const description = 'Sign in or create an account to manage your AI-powered e-commerce store.';
   return {
+<<<<<<< HEAD
     title: `Sign in — ${companyName}`,
     description: 'Sign in or create an account to manage your AI-powered e-commerce store.',
     robots: { index: false, follow: false },
+=======
+    title,
+    description,
+    alternates: { canonical: '/login' },
+    robots: { index: false, follow: false },
+    ...socialMetadata({ title, description, path: '/login', siteName: companyName }),
+>>>>>>> origin/main
   };
 }
+
+/** Brand shell is request-derived, so this route may block. */
+export const instant = false;
 
 /** Brand shell is request-derived, so this route may block. */
 export const instant = false;

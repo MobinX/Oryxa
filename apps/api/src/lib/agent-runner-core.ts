@@ -88,6 +88,13 @@ export async function runAgentCore(
   }
   const businessId: string = conv.businessId;
 
+  // The business-wide kill switch outranks every thread switch: no model call and no
+  // send while it is off, whichever path (webhook, stale recovery, internal call) got here.
+  if ((conv.business ?? conv.channel.business)?.agentState === false) {
+    console.log(`[agent-runner-core] agent off for business ${businessId} — skipping run`);
+    return;
+  }
+
   // Defence in depth: the webhook checks this before scheduling a run, but a stale
   // recovery or an internal call must not answer a thread the merchant switched off.
   if (!conv.autoPilot) {

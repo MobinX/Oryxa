@@ -56,6 +56,24 @@ export async function updateBusinessAction(businessId: string, formData: FormDat
   redirect(`/b/${businessId}/settings?saved=1`);
 }
 
+/**
+ * The dashboard kill switch. Turning the agent off stops every automatic reply for the
+ * business without touching per-thread auto-pilot, so turning it back on restores each
+ * thread's own setting. Both the dashboard and the inbox read the fresh business in SSR,
+ * so expiring the cached business is all it takes for the disabled toggle to follow.
+ */
+export async function setBusinessAgentStateAction(
+  businessId: string,
+  agentState: boolean,
+): Promise<{ agentState: boolean }> {
+  const token = await requireAuth();
+  await updateBusiness(token, businessId, { agentState });
+  expireBusiness(businessId);
+  revalidatePath(`/b/${businessId}/dashboard`);
+  revalidatePath(`/b/${businessId}/inbox`);
+  return { agentState };
+}
+
 export async function updateStoreAction(businessId: string, formData: FormData) {
   const token = await requireAuth();
   const rawSlug = String(formData.get('slug') ?? '').trim().toLowerCase();

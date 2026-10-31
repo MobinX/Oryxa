@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
-import { channels, messengerNotificationUsers, messengerNotifications } from '@db/schema';
+import { businesses, channels, messengerNotificationUsers, messengerNotifications } from '@db/schema';
 import { decryptChannelToken } from '@repo/db/crud/channel';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,4 +102,51 @@ export async function removeMessengerNotificationUser(
     )
     .returning({ id: messengerNotificationUsers.id });
   return removed.length > 0;
+}
+
+/** True when this Messenger account is already linked to a business through this page. */
+export async function isMessengerNotificationUser(
+  channelId: string,
+  platformUserId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: messengerNotificationUsers.id })
+    .from(messengerNotificationUsers)
+    .where(
+      and(
+        eq(messengerNotificationUsers.channelId, channelId),
+        eq(messengerNotificationUsers.platformUserId, platformUserId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * A connected notification account sends ON or OFF: flip the agent switch on every business
+ * it follows through this page. Returns the affected ids so the webhook can tell a command
+ * from ordinary chatter (empty means the sender is not a notification account here).
+ */
+export async function setAgentStateForNotificationUser(
+  channelId: string,
+  platformUserId: string,
+  agentState: boolean,
+): Promise<string[]> {
+  const rows = await db
+    .select({ businessId: messengerNotificationUsers.businessId })
+    .from(messengerNotificationUsers)
+    .where(
+      and(
+        eq(messengerNotificationUsers.channelId, channelId),
+        eq(messengerNotificationUsers.platformUserId, platformUserId),
+      ),
+    );
+  const businessIds = [...new Set(rows.map((row) => row.businessId))];
+  if (businessIds.length === 0) return [];
+
+  await db
+    .update(businesses)
+    .set({ agentState })
+    .where(inArray(businesses.id, businessIds));
+  return businessIds;
 }

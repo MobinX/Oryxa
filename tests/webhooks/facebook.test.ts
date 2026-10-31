@@ -16,6 +16,11 @@ vi.mock('@api/lib/agent-runner', () => ({
   runAgentForConversation: vi.fn(),
 }));
 
+const officialIngestMock = vi.fn(async (..._args: unknown[]) => ({}));
+vi.mock('@api/lib/official/ingest', () => ({
+  officialIngest: (...args: unknown[]) => officialIngestMock(...args),
+}));
+
 vi.mock('@repo/integrations/facebook', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@repo/integrations/facebook')>();
   return {
@@ -76,12 +81,31 @@ const postbackEvent = (senderId: string, payload: string, title?: string, mid?: 
   postback: { payload, title, mid },
 });
 
+/** The operator's page: notification codes and ON/OFF commands land here, never a store. */
+async function createAdminPage() {
+  const { db } = await import('@repo/db/client');
+  const { channels } = await import('@repo/db/schema');
+  const pageId = `ADMIN_${crypto.randomUUID()}`;
+  const [row] = await db
+    .insert(channels)
+    .values({
+      platform: 'facebook',
+      apiToken: 'admin-page-token',
+      platformChannelId: pageId,
+      isAdminOnly: true,
+      businessId: null,
+    })
+    .returning({ id: channels.id });
+  return { pageId, channelId: row.id };
+}
+
 describe('Facebook Webhook', () => {
   withPglite();
   beforeEach(() => {
     process.env.META_APP_SECRET = 'test-app-secret';
     process.env.META_VERIFY_TOKEN = 'test-token';
     triggerAgentRunMock.mockClear();
+    officialIngestMock.mockClear();
   });
 
   it('verifies hub.challenge', async () => {
@@ -380,5 +404,130 @@ describe('Facebook Webhook', () => {
     );
     expect(conv?.customerName).toBe('FB Sender');
     expect(conv?.customerAvatar).toBe('https://fb/img.png');
+  });
+
+  it('connects a notification account with one confirmation, then ON/OFF confirms the switch', async () => {
+    const seed = await seedTestWorld();
+    const admin = await createAdminPage();
+    const { ensureMessengerNotification, getMessengerNotificationOverview } = await import(
+      '@repo/db/crud/messenger-notification'
+    );
+    const { getBusinessById } = await import('@repo/db/crud/business');
+    const facebook = await import('@repo/integrations/facebook');
+    const code = await ensureMessengerNotification(seed.business.id);
+    vi.mocked(facebook.sendMessage).mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', code)])],
+    });
+    const overview = await getMessengerNotificationOverview(seed.business.id);
+    expect(overview.users.map((user) => user.platformUserId)).toContain('NOTIFY_OWNER');
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    const confirmation = String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2]);
+    expect(confirmation).toContain('Successfully connected');
+    expect(confirmation).toContain(seed.business.name);
+
+    vi.mocked(facebook.sendMessage).mockClear();
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'OFF')])],
+    });
+    expect((await getBusinessById(seed.business.id))?.agentState).toBe(false);
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Agent is stopped for all your channels',
+    );
+
+    vi.mocked(facebook.sendMessage).mockClear();
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'on')])],
+    });
+    expect((await getBusinessById(seed.business.id))?.agentState).toBe(true);
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Agent is running for all your channels',
+    );
+  });
+
+  it('accepts a notification code embedded in a sentence and confirms once', async () => {
+    const seed = await seedTestWorld();
+    const admin = await createAdminPage();
+    const { ensureMessengerNotification, getMessengerNotificationOverview } = await import(
+      '@repo/db/crud/messenger-notification'
+    );
+    const facebook = await import('@repo/integrations/facebook');
+    const code = await ensureMessengerNotification(seed.business.id);
+    vi.mocked(facebook.sendMessage).mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [
+        pageEntry(admin.pageId, [textEvent('NOTIFY_SENTENCE', `my code is ${code} thanks`)]),
+      ],
+    });
+
+    const overview = await getMessengerNotificationOverview(seed.business.id);
+    expect(overview.users.map((user) => user.platformUserId)).toContain('NOTIFY_SENTENCE');
+    expect(officialIngestMock).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Successfully connected',
+    );
+  });
+
+  it('keeps a connected notification account away from the Official agent', async () => {
+    const seed = await seedTestWorld();
+    const admin = await createAdminPage();
+    const { ensureMessengerNotification } = await import('@repo/db/crud/messenger-notification');
+    const facebook = await import('@repo/integrations/facebook');
+    const code = await ensureMessengerNotification(seed.business.id);
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', code)])],
+    });
+    officialIngestMock.mockClear();
+    vi.mocked(facebook.sendMessage).mockClear();
+
+    // A plain greeting from the linked account must not reach the Official agent.
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'Hi')])],
+    });
+
+    expect(officialIngestMock).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('still routes unknown admin-page senders to the Official inbox', async () => {
+    await seedTestWorld();
+    const admin = await createAdminPage();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('UNKNOWN_PAGE_SENDER', 'Hello')])],
+    });
+
+    expect(officialIngestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores messages but skips the agent while the business switch is off', async () => {
+    const seed = await seedTestWorld();
+    const { updateBusiness } = await import('@repo/db/crud/business');
+    await updateBusiness(seed.business.id, seed.user.id, { agentState: false });
+    triggerAgentRunMock.mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(seed.pageChannelId, [textEvent('AGENT_OFF_USER', 'still there?', 'mid-off-1')])],
+    });
+
+    expect(triggerAgentRunMock).not.toHaveBeenCalled();
+    const { getOrCreateConversation: getConv } = await import('@repo/db/crud/conversation');
+    const conv = await getConv(seed.business.id, seed.channel.id, 'AGENT_OFF_USER');
+    const msgs = await listMessages(conv!.id, seed.business.id);
+    expect(msgs?.some((message) => message.content === 'still there?')).toBe(true);
   });
 });
