@@ -16,11 +16,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const brand = await getBrand();
   const { companyName } = brand;
   const title = `${companyName} — AI Auto-Reply for Messenger & Instagram`;
-  const description = `${companyName} answers customer comments and messages with AI, manages catalog and orders, and runs your storefront — for Facebook, Instagram and WhatsApp commerce.`;
+  const description = `${companyName} answers DMs, comments and storefront questions with AI, manages catalog and orders — for Facebook, Instagram and WhatsApp commerce.`;
   return {
     metadataBase: new URL(siteUrl(brand.host)),
     title,
     description,
+    applicationName: companyName,
     manifest: '/manifest.webmanifest',
     alternates: { canonical: '/' },
     openGraph: {
@@ -28,7 +29,8 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: companyName,
       title,
       description,
-      images: ['/og-default.png'],
+      url: '/',
+      images: [{ url: '/og-default.png', width: 1200, height: 630, alt: `${companyName} preview` }],
     },
     twitter: {
       card: 'summary_large_image',
@@ -36,13 +38,24 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       images: ['/og-default.png'],
     },
-    icons: { icon: '/favicon.ico', apple: '/apple-touch-icon.png' },
+    icons: {
+      icon: [
+        { url: '/favicon.ico', sizes: '48x48', type: 'image/x-icon' },
+        { url: '/icon-48.png', sizes: '48x48', type: 'image/png' },
+        { url: '/icon-96.png', sizes: '96x96', type: 'image/png' },
+        { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+      shortcut: '/favicon.ico',
+      apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    },
   };
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#5B3DF5',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -64,12 +77,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             `,
           }}
         />
+        <OrganizationJsonLd />
       </head>
       <body>
         <BrandProvider brand={brand}>
           <CookieConsentProvider>{children}</CookieConsentProvider>
         </BrandProvider>
-        <OrganizationJsonLd />
       </body>
     </html>
   );

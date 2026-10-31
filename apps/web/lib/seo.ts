@@ -16,6 +16,36 @@ export function siteUrl(host: string | null | undefined): string {
 }
 
 /**
+ * Open Graph and Twitter cards for a page. Without this, child pages inherit the
+ * homepage's social title and description, which is what Google and chat apps show.
+ */
+export function socialMetadata(input: {
+  title: string;
+  description: string;
+  path: string;
+  siteName: string;
+}) {
+  return {
+    openGraph: {
+      type: 'website' as const,
+      siteName: input.siteName,
+      title: input.title,
+      description: input.description,
+      url: input.path,
+      images: [
+        { url: '/og-default.png', width: 1200, height: 630, alt: input.title },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image' as const,
+      title: input.title,
+      description: input.description,
+      images: ['/og-default.png'],
+    },
+  };
+}
+
+/**
  * Public routes worth indexing. Placeholder pages (features, solutions, docs,
  * developers) stay out until they ship real content; console routes are noindexed.
  */

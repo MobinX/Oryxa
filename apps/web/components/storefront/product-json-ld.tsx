@@ -51,6 +51,7 @@ export async function ProductJsonLd({
       {
         '@type': 'Product',
         '@id': canonical,
+        url: canonical,
         name: product.name,
         ...(product.description ? { description: product.description } : {}),
         image,
@@ -60,15 +61,28 @@ export async function ProductJsonLd({
           url: canonical,
           price: product.price.toFixed(2),
           priceCurrency: 'USD',
+          itemCondition: 'https://schema.org/NewCondition',
           availability: product.inStock
             ? 'https://schema.org/InStock'
             : 'https://schema.org/OutOfStock',
+          ...(store
+            ? {
+                seller: {
+                  '@type': 'Organization',
+                  name: store.name,
+                  url: `${base}/store/${slug}`,
+                },
+              }
+            : {}),
         },
       },
       { '@type': 'BreadcrumbList', itemListElement: crumbs },
     ],
   };
   return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
+    />
   );
 }
