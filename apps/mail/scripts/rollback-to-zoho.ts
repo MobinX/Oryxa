@@ -262,8 +262,11 @@ async function run(): Promise<void> {
       ttl: record.ttl ?? 3600,
     })) || [];
   const targetMx = zohoTarget.length ? zohoTarget : ZOHO_MX;
+  // The catch-all is also returned by the rules list; reset it separately below.
   const workerRules = rules.filter(
-    (rule) => targetsWorker(rule.actions) || rule.name === "OnlyOrders mail worker",
+    (rule) =>
+      rule.id !== catchAll?.id &&
+      (targetsWorker(rule.actions) || rule.name === "OnlyOrders mail worker"),
   );
   const catchAllWorker = Boolean(catchAll && targetsWorker(catchAll.actions));
 
