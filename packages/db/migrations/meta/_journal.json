@@ -309,6 +309,13 @@
       "when": 1793429436000,
       "tag": "0043_business_agent_state",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793465434104,
+      "tag": "0044_plan_prices_oct_2026",
+      "breakpoints": true
     }
   ]
 }

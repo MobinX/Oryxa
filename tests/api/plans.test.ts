@@ -359,7 +359,7 @@ describe('PUT /api2/admin/businesses/:businessId/plan', () => {
     const switched = await putOnPlan(businessId, (await seededPlan('pro')).id);
 
     // The honest upgrade: what you already used still counts against the new budget.
-    expect(switched.messageLimit).toBe(10_000);
+    expect(switched.messageLimit).toBe(100_000);
     expect(switched.messagesUsed).toBe(640);
     // And the cycle it is measured inside did not restart, which is what would make
     // "exhaust it, switch plan, switch back" a way to mint replies for free.
@@ -499,7 +499,7 @@ describe('the merchant billing page', () => {
       body: JSON.stringify({ planId: (await seededPlan('enterprise')).id }),
     });
     expect(upgraded.status).toBe(200);
-    expect((await json<{ name: string }>(upgraded)).name).toBe('Enterprise');
+    expect((await json<{ name: string }>(upgraded)).name).toBe('Custom');
 
     expect(
       (

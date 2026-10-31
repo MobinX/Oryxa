@@ -3,7 +3,7 @@ import { planActorKindSchema, timestampSchema, uuidSchema } from '@shared/schema
 
 /**
  * One allowance. NULL and 0 are different things and always have been:
- * NULL = uncapped (Enterprise), 0 = no replies allowed (the operator's pause switch).
+ * NULL = uncapped (Custom), 0 = no replies allowed (the operator's pause switch).
  */
 const limitSchema = z.number().int().nonnegative().nullable().openapi({
   description: 'Replies allowed per 30-day cycle. null means uncapped; 0 means none at all.',
