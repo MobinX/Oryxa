@@ -19,6 +19,7 @@ const FOOTER_COLUMNS = [
     heading: 'Resources',
     links: [
       { label: 'Documentation', href: '/docs' },
+      { label: 'Contact', href: '/contact' },
       { label: 'Sign in', href: '/login' },
       { label: 'Get started', href: '/login' },
     ],

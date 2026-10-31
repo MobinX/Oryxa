@@ -119,6 +119,7 @@ export function LegalPage({
           <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
           <Link href="/cookies" className="hover:text-foreground hover:underline">Cookie policy</Link>
           <Link href="/data-delete-instructions" className="hover:text-foreground hover:underline">Data deletion</Link>
+          <Link href="/contact" className="hover:text-foreground hover:underline">Contact</Link>
           <CookieSettingsButton className="underline-offset-2 hover:text-foreground hover:underline" />
         </div>
       </footer>
