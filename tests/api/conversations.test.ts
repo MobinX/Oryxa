@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld, authHeaders } from '../helpers/seed';
 import { createChannel } from '@repo/db/crud/channel';
+import { updateBusiness } from '@repo/db/crud/business';
 import { getOrCreateConversation } from '@repo/db/crud/conversation';
 import { getOrderById } from '@repo/db/crud/order';
 import { app } from '@api/app';
@@ -133,6 +134,24 @@ describe('Conversations API', () => {
       { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: true }) },
     );
     expect((await on.json() as any).autoPilot).toBe(true);
+  });
+
+  it('refuses to switch auto pilot on while the business agent is off', async () => {
+    const seed = await seedTestWorld();
+    await updateBusiness(seed.business.id, seed.user.id, { agentState: false });
+
+    const on = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: true }) },
+    );
+    expect(on.status).toBe(409);
+
+    // Turning a thread off stays allowed: it is the safe direction.
+    const off = await app.request(
+      `/api/v1/${seed.business.id}/conversations/${seed.conversation.id}/auto-pilot`,
+      { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ autoPilot: false }) },
+    );
+    expect(off.status).toBe(200);
   });
 
   it('POST suggestions answers empty without running the model while auto pilot is on', async () => {

@@ -106,7 +106,10 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
           <p className="mt-1 text-sm text-muted-foreground">
             Get every order and allowance notice in your Messenger too. Create your code, send it as
             a message to our Facebook page, and this business is linked to that account. Repeat with
-            another account if more than one person should hear about it.
+            another account if more than one person should hear about it. Once connected, send{' '}
+            <strong className="font-semibold text-foreground">ON</strong> or{' '}
+            <strong className="font-semibold text-foreground">OFF</strong> to that chat to start or
+            stop the AI agent for this business.
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => void load()} title="Refresh">
@@ -128,8 +131,10 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Send this code in a message to our Facebook page. You will get a confirmation there,
-            and from then on notices arrive in Messenger.
+            Send this code in a message to our Facebook page. From then on notices arrive in
+            Messenger, and sending <strong className="font-semibold text-foreground">ON</strong> or{' '}
+            <strong className="font-semibold text-foreground">OFF</strong> here starts or stops the
+            AI agent for this business.
           </p>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

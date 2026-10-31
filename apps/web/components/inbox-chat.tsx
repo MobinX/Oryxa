@@ -47,6 +47,7 @@ export function InboxChat({
   createdAt,
   initialMessages,
   initialAutoPilot,
+  businessAgentOn,
 }: {
   businessId: string;
   conversationId: string;
@@ -54,6 +55,8 @@ export function InboxChat({
   createdAt: string;
   initialMessages: InboxMessage[];
   initialAutoPilot: boolean;
+  /** The business-wide switch loaded in SSR: off disables the per-thread auto pilot control. */
+  businessAgentOn: boolean;
 }) {
   const [messages, setMessages] = useState<InboxMessage[]>(initialMessages);
   const [autoPilot, setAutoPilot] = useState(initialAutoPilot);
@@ -142,11 +145,18 @@ export function InboxChat({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, suggesting]);
 
-  const suggestionKey = `${autoPilot}:${lastMessageFromCustomer ? latestCustomerId ?? '' : ''}`;
+  // The kill switch outranks the thread setting: the button reads as off and cannot be
+  // toggled, but the stored per-thread choice is left intact for when it comes back on.
+  const effectiveAutoPilot = autoPilot && businessAgentOn;
+  // Suggestions exist exactly where automatic replies do not: auto pilot off, business
+  // agent off, or both. They are a drafting aid for the merchant, never a sent reply.
+  const suggestionsVisible = !effectiveAutoPilot;
+
+  const suggestionKey = `${suggestionsVisible}:${lastMessageFromCustomer ? latestCustomerId ?? '' : ''}`;
 
   // A new, unanswered customer turn while auto pilot is off asks the suggestion agent once.
   useEffect(() => {
-    if (autoPilot || !latestCustomerId || !lastMessageFromCustomer) {
+    if (!suggestionsVisible || !latestCustomerId || !lastMessageFromCustomer) {
       setSuggestions([]);
       setSuggesting(false);
       setSuggestionError(null);
@@ -175,10 +185,10 @@ export function InboxChat({
     return () => {
       cancelled = true;
     };
-  }, [autoPilot, businessId, conversationId, latestCustomerId, lastMessageFromCustomer, suggestionKey]);
+  }, [suggestionsVisible, businessId, conversationId, latestCustomerId, lastMessageFromCustomer, suggestionKey]);
 
   const toggleAutoPilot = async () => {
-    if (savingToggle) return;
+    if (savingToggle || !businessAgentOn) return;
     const next = !autoPilot;
     setSavingToggle(true);
     setToggleSaved(false);
@@ -383,14 +393,16 @@ export function InboxChat({
           <button
             type="button"
             role="switch"
-            aria-checked={autoPilot}
+            aria-checked={effectiveAutoPilot}
             onClick={toggleAutoPilot}
-            disabled={savingToggle}
+            disabled={savingToggle || !businessAgentOn}
+            title={businessAgentOn ? undefined : 'The AI agent is turned off for this business. Turn it on in Dashboard.'}
             className={cn(
-              'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold transition',
-              autoPilot
+              'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold transition disabled:cursor-not-allowed',
+              effectiveAutoPilot
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                 : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+              savingToggle || !businessAgentOn ? 'opacity-60' : 'hover:brightness-[0.98]',
             )}
           >
             <Zap className="h-3.5 w-3.5" />
@@ -398,10 +410,10 @@ export function InboxChat({
             <span
               className={cn(
                 'rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wide',
-                autoPilot ? 'bg-emerald-500 text-white' : 'bg-slate-400 text-white dark:bg-slate-600',
+                effectiveAutoPilot ? 'bg-emerald-500 text-white' : 'bg-slate-400 text-white dark:bg-slate-600',
               )}
             >
-              {autoPilot ? 'On' : 'Off'}
+              {effectiveAutoPilot ? 'On' : 'Off'}
             </span>
             {savingToggle ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -410,9 +422,13 @@ export function InboxChat({
             ) : null}
           </button>
           <span className="text-[10px] text-slate-400">
-            {autoPilot ? 'The AI answers this customer' : 'Messages wait for you; AI suggests replies'}
+            {!businessAgentOn
+              ? 'Agent is off for this business. AI still suggests replies.'
+              : effectiveAutoPilot
+                ? 'The AI answers this customer'
+                : 'Messages wait for you; AI suggests replies'}
           </span>
-          {suggesting && !autoPilot && (
+          {suggesting && suggestionsVisible && (
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#5B3DF5] dark:text-indigo-300">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5B3DF5]" />
               AI is suggesting…
@@ -503,7 +519,7 @@ export function InboxChat({
             </div>
           );
         })}
-        {suggesting && !autoPilot && (
+        {suggesting && suggestionsVisible && (
           <div className="flex items-end justify-end gap-2.5">
             <div className="max-w-[88%] rounded-2xl rounded-br-xs bg-[#5B3DF5]/85 px-4 py-2.5 text-xs text-white shadow-xs sm:max-w-[75%]">
               <span className="flex items-center gap-2">
@@ -525,7 +541,7 @@ export function InboxChat({
         )}
       </div>
 
-      {(suggesting || suggestions.length > 0 || suggestionError) && !autoPilot && (
+      {(suggesting || suggestions.length > 0 || suggestionError) && suggestionsVisible && (
         <div className="shrink-0 border-t border-slate-200/80 bg-[#5B3DF5]/[0.04] px-4 py-3 dark:border-slate-800 dark:bg-[#5B3DF5]/10 sm:px-6">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#5B3DF5] dark:text-indigo-300">
@@ -663,7 +679,7 @@ export function InboxChat({
       )}
 
       <form onSubmit={submit} className="shrink-0 border-t border-border/70 bg-card p-3 sm:px-5 sm:py-4">
-        {suggesting && !autoPilot && (
+        {suggesting && suggestionsVisible && (
           <div
             role="status"
             aria-live="polite"

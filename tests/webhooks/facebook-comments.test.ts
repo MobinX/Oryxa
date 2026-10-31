@@ -77,6 +77,38 @@ describe('Facebook Webhook: comments', () => {
     expect(triggerAgentRunMock).not.toHaveBeenCalled();
   });
 
+  it('stores a comment but does not trigger while the business agent is off', async () => {
+    const seed = await seedTestWorld();
+    const { updateBusiness } = await import('@repo/db/crud/business');
+    await updateBusiness(seed.business.id, seed.user.id, { agentState: false });
+    triggerCommentRunMock.mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [
+        commentEntry(
+          seed.pageChannelId,
+          commentValue({
+            comment_id: 'CMT_AGENT_OFF',
+            post_id: 'POST_AGENT_OFF',
+            from: { id: 'COMMENTER_AGENT_OFF', name: 'Alice' },
+          }),
+        ),
+      ],
+    });
+
+    expect(triggerCommentRunMock).not.toHaveBeenCalled();
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_AGENT_OFF',
+      'COMMENTER_AGENT_OFF',
+      'Alice',
+    );
+    const all = await listComments(thread.id);
+    expect(all.some((comment) => comment.content === 'Do you have this in red?')).toBe(true);
+  });
+
   it('skips the page\u2019s own comments (no re-ingest, no trigger)', async () => {
     const seed = await seedTestWorld();
     const res = await postWebhook({

@@ -1,7 +1,10 @@
 import type { InboxSuggestion, TokenUsageMetrics } from '@repo/agent';
 
 /**
- * Builds the merchant-facing suggestions for a thread whose auto-pilot is off.
+ * Builds the merchant-facing suggestions whenever automatic replies are not running:
+ * the thread's auto-pilot is off, the business-wide switch is off, or both. Suggestions
+ * are a drafting aid for the merchant, not an automated answer, so the kill switch does
+ * not silence them.
  *
  * It reuses the store's answering agent system prompt, history and catalog summary — the
  * same facts a real reply sees — but swaps the tool set for recorders, so nothing can be
@@ -21,7 +24,9 @@ export async function runSuggestionAgent(
   if (!conv?.channel || conv.businessId == null) {
     return { forMessageId: null, suggestions: [] };
   }
-  if (conv.autoPilot) {
+  const businessAgentOn = (conv.business ?? conv.channel.business)?.agentState !== false;
+  // Only silence suggestions while the agent is genuinely answering this thread.
+  if (conv.autoPilot && businessAgentOn) {
     return { forMessageId: null, suggestions: [] };
   }
 

@@ -76,6 +76,24 @@ const postbackEvent = (senderId: string, payload: string, title?: string, mid?: 
   postback: { payload, title, mid },
 });
 
+/** The operator's page: notification codes and ON/OFF commands land here, never a store. */
+async function createAdminPage() {
+  const { db } = await import('@repo/db/client');
+  const { channels } = await import('@repo/db/schema');
+  const pageId = `ADMIN_${crypto.randomUUID()}`;
+  const [row] = await db
+    .insert(channels)
+    .values({
+      platform: 'facebook',
+      apiToken: 'admin-page-token',
+      platformChannelId: pageId,
+      isAdminOnly: true,
+      businessId: null,
+    })
+    .returning({ id: channels.id });
+  return { pageId, channelId: row.id };
+}
+
 describe('Facebook Webhook', () => {
   withPglite();
   beforeEach(() => {
@@ -380,5 +398,57 @@ describe('Facebook Webhook', () => {
     );
     expect(conv?.customerName).toBe('FB Sender');
     expect(conv?.customerAvatar).toBe('https://fb/img.png');
+  });
+
+  it('connects a notification account silently, then ON/OFF flips the business agent silently', async () => {
+    const seed = await seedTestWorld();
+    const admin = await createAdminPage();
+    const { ensureMessengerNotification, getMessengerNotificationOverview } = await import(
+      '@repo/db/crud/messenger-notification'
+    );
+    const { getBusinessById } = await import('@repo/db/crud/business');
+    const facebook = await import('@repo/integrations/facebook');
+    const code = await ensureMessengerNotification(seed.business.id);
+    vi.mocked(facebook.sendMessage).mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', code)])],
+    });
+    const overview = await getMessengerNotificationOverview(seed.business.id);
+    expect(overview.users.map((user) => user.platformUserId)).toContain('NOTIFY_OWNER');
+    expect(facebook.sendMessage).not.toHaveBeenCalled();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'OFF')])],
+    });
+    expect((await getBusinessById(seed.business.id))?.agentState).toBe(false);
+    expect(facebook.sendMessage).not.toHaveBeenCalled();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'on')])],
+    });
+    expect((await getBusinessById(seed.business.id))?.agentState).toBe(true);
+    expect(facebook.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('stores messages but skips the agent while the business switch is off', async () => {
+    const seed = await seedTestWorld();
+    const { updateBusiness } = await import('@repo/db/crud/business');
+    await updateBusiness(seed.business.id, seed.user.id, { agentState: false });
+    triggerAgentRunMock.mockClear();
+
+    await postWebhook({
+      object: 'page',
+      entry: [pageEntry(seed.pageChannelId, [textEvent('AGENT_OFF_USER', 'still there?', 'mid-off-1')])],
+    });
+
+    expect(triggerAgentRunMock).not.toHaveBeenCalled();
+    const { getOrCreateConversation: getConv } = await import('@repo/db/crud/conversation');
+    const conv = await getConv(seed.business.id, seed.channel.id, 'AGENT_OFF_USER');
+    const msgs = await listMessages(conv!.id, seed.business.id);
+    expect(msgs?.some((message) => message.content === 'still there?')).toBe(true);
   });
 });

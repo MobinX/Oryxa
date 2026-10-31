@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { ArrowLeft, Check, Trash2, MessageSquare } from 'lucide-react';
 import { requireAuth } from '@/lib/auth';
-import { listConversations, listMessages, type Channel } from '@/lib/api';
+import { getBusiness, listConversations, listMessages, type Channel } from '@/lib/api';
 import { cachedChannels } from '@/app/_cache/queries';
 import {
   deleteConversationAction,
@@ -44,7 +44,13 @@ async function InboxContent({
   const { businessId } = await params;
   const { c: selectedId, channel: channelParam } = await searchParams;
   const token = await requireAuth();
-  const channels = await cachedChannels(token, businessId).catch((): Channel[] => []);
+  // Uncached and SSR: the chat's auto-pilot control must agree with the dashboard kill
+  // switch even when it was flipped seconds ago from the notification Messenger chat.
+  const [channels, business] = await Promise.all([
+    cachedChannels(token, businessId).catch((): Channel[] => []),
+    getBusiness(token, businessId).catch(() => null),
+  ]);
+  const businessAgentOn = business?.agentState !== false;
   // An unknown or deleted channel id falls back to all channels instead of an empty inbox.
   const activeChannel = channels.find((channel) => channel.id === channelParam);
   const conversations = await listConversations(token, businessId, {
@@ -177,6 +183,7 @@ async function InboxContent({
               createdAt={selected.createdAt}
               initialMessages={messages}
               initialAutoPilot={selected.autoPilot ?? true}
+              businessAgentOn={businessAgentOn}
             />
           </>
         ) : (

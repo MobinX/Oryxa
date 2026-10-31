@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { cachedAnalytics, cachedBusiness, cachedMe } from '@/app/_cache/queries';
+import { cachedAnalytics, cachedMe } from '@/app/_cache/queries';
 import DashboardSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { DropdownSelect } from '@/components/ui/dropdown-select';
@@ -23,6 +23,8 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchBar } from '@/components/search-bar';
 import { PushNotificationPrompt } from '@/components/push-notification-prompt';
 import { cachedBilling, cachedNotifications } from '@/app/_cache/queries';
+import { getBusiness } from '@/lib/api';
+import { AgentKillSwitch } from '@/components/agent-kill-switch';
 import type { NotificationItem, QuotaStatus } from '@/lib/api';
 
 const sparklinePaths = {
@@ -54,7 +56,9 @@ async function DashboardContent({
   const token = await requireAuth();
 
   const [business, analytics, me, quota, notices] = await Promise.all([
-    cachedBusiness(token, businessId),
+    // Uncached: the agent switch can be flipped from a notification Messenger chat, and a
+    // stale "On" here would hide the kill switch the merchant is looking for.
+    getBusiness(token, businessId),
     cachedAnalytics(token, businessId, 7),
     cachedMe(token),
     // The strip is one line of the dashboard, not its subject: a billing outage (or a
@@ -205,6 +209,9 @@ async function DashboardContent({
           />
         </div>
       </div>
+
+      {/* The business-wide agent kill switch */}
+      <AgentKillSwitch businessId={businessId} initialOn={business.agentState !== false} />
 
       {/* Row 0: what the agent may still answer this cycle */}
       <QuotaStrip quota={quota} businessId={businessId} />
