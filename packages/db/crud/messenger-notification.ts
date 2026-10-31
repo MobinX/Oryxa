@@ -104,6 +104,24 @@ export async function removeMessengerNotificationUser(
   return removed.length > 0;
 }
 
+/** True when this Messenger account is already linked to a business through this page. */
+export async function isMessengerNotificationUser(
+  channelId: string,
+  platformUserId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: messengerNotificationUsers.id })
+    .from(messengerNotificationUsers)
+    .where(
+      and(
+        eq(messengerNotificationUsers.channelId, channelId),
+        eq(messengerNotificationUsers.platformUserId, platformUserId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * A connected notification account sends ON or OFF: flip the agent switch on every business
  * it follows through this page. Returns the affected ids so the webhook can tell a command

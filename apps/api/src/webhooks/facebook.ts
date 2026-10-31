@@ -11,6 +11,7 @@ import {
 import { getProductById } from '@repo/db/crud/product';
 import {
   findBusinessByNotificationToken,
+  isMessengerNotificationUser,
   setAgentStateForNotificationUser,
   upsertMessengerNotificationUser,
 } from '@repo/db/crud/messenger-notification';
@@ -552,13 +553,15 @@ fbWebhookRouter.post('/facebook', receiveMetaWebhook);
 fbWebhookRouter.post('/instagram', receiveMetaWebhook);
 
 /**
- * The operator page's DMs are not conversations. A message that is exactly a business's
+ * The operator page's DMs are not store conversations. A message containing a business's
  * notification code binds this Messenger account to that business; once bound, ON and OFF
  * flip that business's agent switch. Both are handled silently — no confirmation, no reply —
- * and neither enters the Officials pipeline. Anything else from an unbound account is
- * ordinary admin-page traffic and falls through. No agent ever runs on an admin-only page.
+ * and neither enters the Officials pipeline. Other messages from a connected notification
+ * account are ignored too, so a merchant never gets an AI answer from the operator page.
+ * Anything else from an unknown sender is ordinary admin-page traffic and falls through.
+ * No agent ever runs on an admin-only page.
  */
-const NOTIFICATION_CODE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const NOTIFICATION_CODE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
  * Customer DMs on an admin-only page skip the store flow entirely and hand their turns to
@@ -610,52 +613,63 @@ async function processAdminPageCommands(
     const senderId = ev.sender?.id;
     const text = ev.message?.text?.trim().toLowerCase();
     if (!senderId || ev.message?.is_echo || !text) continue;
-    if (!NOTIFICATION_CODE.test(text)) {
-      // ON/OFF from an account that redeemed a code here flips the business agent.
-      // Everyone else's text stays ordinary admin-page traffic and falls through.
-      if (text === 'on' || text === 'off') {
-        const businessIds = await setAgentStateForNotificationUser(
-          channel.id,
-          senderId,
-          text === 'on',
-        );
-        if (businessIds.length > 0) {
-          handled.add(index);
-          fbLog('admin channel: notification user toggled the agent', {
-            senderId,
-            agentState: text === 'on',
-            businessIds,
-          });
-          continue;
-        }
+
+    // A code can arrive inside a sentence ("my code is …") or with punctuation around it;
+    // extracting it keeps the handshake silent instead of letting the Official agent answer.
+    const code = text.match(NOTIFICATION_CODE)?.[0];
+    if (code) {
+      handled.add(index);
+      const row = await findBusinessByNotificationToken(code);
+      if (!row) {
+        fbLog('admin channel: unknown notification code', { senderId });
+        continue;
       }
-      fbLog('admin channel: message is not a notification command or code', { senderId });
+
+      const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      await upsertMessengerNotificationUser({
+        businessId: row.businessId,
+        channelId: channel.id,
+        platformUserId: senderId,
+        name: profile.name ?? null,
+      });
+
+      // Deliberately silent: the code is a handshake, not a conversation. The merchant
+      // already reads the instructions in the console and asked for no confirmation reply.
+      fbLog('admin channel: messenger user connected', {
+        businessId: row.businessId,
+        senderId,
+      });
       continue;
     }
 
-    // Code-shaped text is never ordinary traffic, even when it belongs to no business:
-    // it must not leak into the official inbox as prose.
-    handled.add(index);
-    const row = await findBusinessByNotificationToken(text);
-    if (!row) {
-      fbLog('admin channel: unknown notification code', { senderId });
+    // ON/OFF from an account that redeemed a code here flips the business agent.
+    const command = text.replace(/[.!]+$/g, '');
+    if (command === 'on' || command === 'off') {
+      const businessIds = await setAgentStateForNotificationUser(
+        channel.id,
+        senderId,
+        command === 'on',
+      );
+      if (businessIds.length > 0) {
+        handled.add(index);
+        fbLog('admin channel: notification user toggled the agent', {
+          senderId,
+          agentState: command === 'on',
+          businessIds,
+        });
+        continue;
+      }
+    }
+
+    // Once an account is connected for notices, the operator page is a control channel,
+    // not a support inbox. Keep its messages away from the Official agent entirely.
+    if (await isMessengerNotificationUser(channel.id, senderId)) {
+      handled.add(index);
+      fbLog('admin channel: ignoring message from a connected notification account', { senderId });
       continue;
     }
 
-    const profile = await getFacebookUserProfile(channel.apiToken, senderId);
-    await upsertMessengerNotificationUser({
-      businessId: row.businessId,
-      channelId: channel.id,
-      platformUserId: senderId,
-      name: profile.name ?? null,
-    });
-
-    // Deliberately silent: the code is a handshake, not a conversation. The merchant
-    // already reads the instructions in the console and asked for no confirmation reply.
-    fbLog('admin channel: messenger user connected', {
-      businessId: row.businessId,
-      senderId,
-    });
+    fbLog('admin channel: message is not a notification command or code', { senderId });
   }
   return handled;
 }
