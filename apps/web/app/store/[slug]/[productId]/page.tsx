@@ -173,6 +173,9 @@ async function ProductView({ params }: { params: ProductParams }) {
   );
 }
 
+/** Store data is fetched per request, so this route may block. */
+export const instant = false;
+
 export default function StorefrontProductPage({ params }: { params: ProductParams }) {
   return (
     <Suspense fallback={<ProductDetailSkeleton />}>

@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useBrand } from '@/components/brand-provider';
+import { supportEmailForHost } from '@/lib/brand';
 import { CookieSettingsButton } from '@/components/cookie-consent';
 import { OnlyOrdesLogo } from '@/components/sidebar';
 
@@ -118,6 +119,7 @@ export function LegalPage({
           <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
           <Link href="/cookies" className="hover:text-foreground hover:underline">Cookie policy</Link>
           <Link href="/data-delete-instructions" className="hover:text-foreground hover:underline">Data deletion</Link>
+          <Link href="/contact" className="hover:text-foreground hover:underline">Contact</Link>
           <CookieSettingsButton className="underline-offset-2 hover:text-foreground hover:underline" />
         </div>
       </footer>
@@ -145,10 +147,12 @@ export function LegalList({ children }: { children: React.ReactNode }) {
 }
 
 export function LegalContact({ companyName }: { companyName: string }) {
+  const { host } = useBrand();
+  const supportEmail = supportEmailForHost(host);
   return (
     <div className="space-y-1 rounded-lg border border-border/40 bg-muted/40 p-4 text-xs text-muted-foreground">
       <p><strong className="text-foreground">{companyName} — Software Division</strong></p>
-      <p>Email: alamsarwar@hotmail.com</p>
+      <p>Email: {supportEmail}</p>
       <p>
         Address:<br />
         51, Mirpur Road<br />

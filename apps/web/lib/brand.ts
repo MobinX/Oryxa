@@ -71,3 +71,16 @@ export function brandFromHeaders(headers: Pick<Headers, 'get'>): BrandInfo {
 
   return brandForHost(headers.get('host'));
 }
+
+const ONLYORDERS_SUPPORT_EMAIL = 'support@onlyorders.tech';
+const DEFAULT_SUPPORT_EMAIL = 'alamsarwar@hotmail.com';
+
+/**
+ * Contact mailbox follows the brand: the support address exists only for the
+ * OnlyOrders host; every other host keeps the established contact address.
+ */
+export function supportEmailForHost(host: string | null | undefined): string {
+  return brandForHost(host).companyName === 'OnlyOrders'
+    ? ONLYORDERS_SUPPORT_EMAIL
+    : DEFAULT_SUPPORT_EMAIL;
+}

@@ -23,6 +23,9 @@ async function Collection({
   return <StorefrontHome store={store} initialFilters={initialFilters} />;
 }
 
+/** Store data is fetched per request, so this route may block. */
+export const instant = false;
+
 export default function StorefrontCollectionPage({
   params,
   searchParams,

@@ -15,6 +15,9 @@ export async function generateMetadata() {
   };
 }
 
+/** Brand shell is request-derived, so this route may block. */
+export const instant = false;
+
 export default async function LoginPage() {
   const { companyName } = await getBrand();
 

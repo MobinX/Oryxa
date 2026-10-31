@@ -11,6 +11,7 @@ export function PublicFooterLinks() {
       <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
       <Link href="/cookies" className="hover:text-foreground hover:underline">Cookie policy</Link>
       <Link href="/data-delete-instructions" className="hover:text-foreground hover:underline">Data deletion</Link>
+      <Link href="/contact" className="hover:text-foreground hover:underline">Contact</Link>
       <CookieSettingsButton className="hover:text-foreground hover:underline">
         Cookie settings
       </CookieSettingsButton>

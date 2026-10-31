@@ -1,4 +1,5 @@
 import { getBrand } from '@/lib/brand-server';
+import { supportEmailForHost } from '@/lib/brand';
 import { siteUrl } from '@/lib/seo';
 
 /**
@@ -8,6 +9,7 @@ import { siteUrl } from '@/lib/seo';
 export async function OrganizationJsonLd(): Promise<React.JSX.Element> {
   const brand = await getBrand();
   const base = siteUrl(brand.host);
+  const supportEmail = supportEmailForHost(brand.host);
   const logo = `${base}/logo.png`;
   const description = `${brand.companyName} answers DMs, comments and storefront questions with AI, manages catalog and orders for Facebook, Instagram and WhatsApp commerce.`;
 
@@ -31,7 +33,7 @@ export async function OrganizationJsonLd(): Promise<React.JSX.Element> {
           caption: `${brand.companyName} logo`,
         },
         image: { '@id': `${base}/#logo` },
-        email: 'alamsarwar@hotmail.com',
+        email: supportEmail,
         address: {
           '@type': 'PostalAddress',
           streetAddress: '51, Mirpur Road, Room 517, Alpana Plaza, Level 5',
@@ -42,7 +44,7 @@ export async function OrganizationJsonLd(): Promise<React.JSX.Element> {
         contactPoint: {
           '@type': 'ContactPoint',
           contactType: 'customer support',
-          email: 'alamsarwar@hotmail.com',
+          email: supportEmail,
           availableLanguage: ['English', 'Bengali'],
         },
       },
