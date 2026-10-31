@@ -1,4 +1,4 @@
-name: Mail Worker CI/CD
+name: Mail Worker CI
 
 on:
   pull_request:
@@ -15,11 +15,6 @@ on:
       - "bun.lock"
       - "package.json"
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: "Deploy to production after the preview build"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -59,92 +54,3 @@ jobs:
           path: apps/mail/dist
           retention-days: 7
           if-no-files-found: error
-
-  deploy:
-    name: Deploy production
-    needs: preview
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.deploy == true) }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Generate plaintext Worker config from GitHub secrets
-        env:
-          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
-          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-          B2_BUCKET_NAME: ${{ secrets.B2_BUCKET_NAME }}
-          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
-          B2_REGION: ${{ secrets.B2_REGION }}
-          MAIL_API_KEY: ${{ secrets.MAIL_API_KEY }}
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          SENDER_API_KEY: ${{ secrets.SENDER_API_KEY }}
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const cfg = JSON.parse(fs.readFileSync('apps/mail/wrangler.jsonc', 'utf8'));
-          const names = [
-            'B2_KEY_ID', 'B2_APPLICATION_KEY', 'B2_BUCKET_NAME', 'B2_ENDPOINT',
-            'B2_REGION', 'MAIL_API_KEY', 'BREVO_API_KEY', 'SENDER_API_KEY',
-          ];
-          cfg.vars = cfg.vars || {};
-          for (const name of names) {
-            const value = process.env[name];
-            if (!value) {
-              console.error(`Missing GitHub secret: ${name}`);
-              process.exit(1);
-            }
-            cfg.vars[name] = value;
-          }
-          fs.writeFileSync('apps/mail/wrangler.ci.json', JSON.stringify(cfg, null, 2));
-          NODE
-
-      - name: Deploy Worker
-        working-directory: apps/mail
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
-          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-          B2_BUCKET_NAME: ${{ secrets.B2_BUCKET_NAME }}
-          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
-          B2_REGION: ${{ secrets.B2_REGION }}
-          MAIL_API_KEY: ${{ secrets.MAIL_API_KEY }}
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          SENDER_API_KEY: ${{ secrets.SENDER_API_KEY }}
-        run: |
-          set +e
-          bun run deploy:ci > /tmp/mail-deploy.log 2>&1
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            node <<'NODE'
-            const fs = require('fs');
-            let log = fs.readFileSync('/tmp/mail-deploy.log', 'utf8');
-            const names = [
-              'B2_KEY_ID', 'B2_APPLICATION_KEY', 'B2_BUCKET_NAME', 'B2_ENDPOINT',
-              'B2_REGION', 'MAIL_API_KEY', 'BREVO_API_KEY', 'SENDER_API_KEY',
-            ];
-            for (const name of names) {
-              const value = process.env[name] || '';
-              for (let size = value.length; size >= 8; size -= 1) {
-                log = log.split(value.slice(0, size)).join('<redacted>');
-              }
-            }
-            console.error(log.split('\n').slice(-25).join('\n'));
-            NODE
-            exit "$status"
-          fi
-          echo "Deployed onlyorders-mail."
-
-      - name: Remove temporary secret config
-        if: always()
-        run: rm -f apps/mail/wrangler.ci.json

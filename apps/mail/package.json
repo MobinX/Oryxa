@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "deploy:plaintext": "wrangler deploy -c wrangler.local.json",
-    "deploy:ci": "wrangler deploy -c wrangler.ci.json",
+    "deploy:plaintext": "if [ -f wrangler.local.json ]; then exec wrangler deploy -c wrangler.local.json; else exec wrangler deploy --keep-vars; fi",
+    "deploy:keep-vars": "wrangler deploy --keep-vars",
     "preview": "wrangler deploy --dry-run --outdir=dist",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 execute onlyorders-mail-db --local --file=./migrations/0001_init.sql",

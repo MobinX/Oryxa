@@ -207,55 +207,48 @@ wrangler deploy
 
 ### Current plaintext variable mode
 
-This deployment currently uses **plaintext Worker variables** from the gitignored
-`apps/mail/wrangler.local.json`. Cloudflare stores and displays these as environment
-variables, not encrypted secrets. `wrangler secret list` is empty.
+This deployment currently uses **plaintext Worker variables** configured in Cloudflare.
+They are not encrypted secrets. `apps/mail/wrangler.local.json` exists only on the local
+machine (chmod 600, gitignored) and is not available to Cloudflare Workers Builds.
 
-```sh
-# Deploy the current plaintext-var configuration
-wrangler deploy -c wrangler.local.json > /tmp/mail-deploy.log 2>&1
+- Local deploys: `bun run deploy:plaintext` uses `wrangler.local.json` when present.
+- Cloudflare Workers Builds: the same command finds no local file and automatically falls
+  back to `wrangler deploy --keep-vars`. `--keep-vars` preserves the plaintext Worker
+  variables already configured in Cloudflare.
+- Explicit CI command: `bun run deploy:keep-vars`.
 
-# Never print that log: Wrangler echoes plaintext values (truncated).
-```
+Never use plain `wrangler deploy` (or `bun run deploy`) without `--keep-vars` in CI:
+Wrangler would delete the existing dashboard variables before setting the vars in
+`wrangler.jsonc`. Never commit `wrangler.local.json` or `.dev.vars`.
 
-`wrangler.local.json` and `.dev.vars` are chmod 600 and gitignored. Do not commit them.
-Deploying with the normal `wrangler.jsonc` will remove these plaintext vars, so use the
-local config until the values are moved back to encrypted secrets. Plaintext vars are
-visible to anyone with Worker/dashboard/API access; encrypted secrets are safer.
+## CI/CD
 
-## GitHub Actions CI/CD
+Production deployment is handled by **Cloudflare Workers Builds** connected to the
+repository.
 
-Workflow: `.github/workflows/mail-worker.yml`
+Cloudflare Workers Builds settings:
 
-- Pull requests touching `apps/mail/**`: install, typecheck, `wrangler deploy --dry-run
-  --outdir=dist`, then upload the preview artifact.
-- Push to `main`, or manual dispatch with `deploy=true`: generate a temporary
-  `apps/mail/wrangler.ci.json` from GitHub secrets, deploy, and delete it.
+- **Root directory:** repository root (`/`, or leave blank)
+- **Build command:** `cd apps/mail && bun run preview`
+- **Deploy command:** `cd apps/mail && bun run deploy:plaintext`
+  (falls back to `--keep-vars` in the build environment), or explicitly
+  `cd apps/mail && bun run deploy:keep-vars`
 
-Required repository secrets:
+GitHub Actions (`.github/workflows/mail-worker.yml`) is **preview/CI only**:
 
-`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `B2_KEY_ID`, `B2_APPLICATION_KEY`,
-`B2_BUCKET_NAME`, `B2_ENDPOINT`, `B2_REGION`, `MAIL_API_KEY`, `BREVO_API_KEY`,
-`SENDER_API_KEY`.
+- Pull requests and pushes to `main`: install, typecheck, dry-run build, and upload
+  `apps/mail/dist` as `mail-worker-preview-<sha>`.
+- It does not deploy and requires no GitHub deployment secrets.
 
 Local commands:
 
 ```sh
 cd apps/mail
 bun run preview             # preview build only, no deploy
-bun run deploy:plaintext    # current plaintext-var deployment (redirect output)
+bun run deploy:plaintext    # local: wrangler.local.json; CI: --keep-vars
+bun run deploy:keep-vars    # deploy committed config, preserve dashboard vars
 bun run deploy              # secure encrypted-secrets deployment
-bun run deploy:ci           # CI only; requires generated wrangler.ci.json
 ```
-
-Manual production deploy from GitHub:
-
-```sh
-gh workflow run mail-worker.yml --ref main -f deploy=true
-```
-
-The workflow must be committed and pushed together with `apps/mail` before GitHub
-Actions can run it. `wrangler.ci.json` is gitignored and removed after deployment.
 
 ### Brevo prerequisites
 
