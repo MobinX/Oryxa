@@ -93,10 +93,11 @@ export default function TermsPage() {
           sale between you and a Customer and do not take title to goods.
         </p>
         <p>
-          The Service may record payment details a Customer provides, such as a cash-on-delivery choice
-          or a bKash/Nagad transaction ID. We do not process card payments, hold funds, verify
-          mobile-money transfers or act as a payment intermediary. Any payment arrangement is between
-          you and your Customer.
+          The Service may record the payment method a Customer chooses. Where the Merchant offers it,
+          orders can be paid in cash on delivery; mobile-money details such as a bKash or Nagad
+          transaction ID are recorded for the Merchant to review. We do not process card payments, hold
+          funds, verify mobile-money transfers or act as a payment intermediary. Any payment
+          arrangement is between you and your Customer.
         </p>
       </LegalSection>
 
@@ -136,6 +137,13 @@ export default function TermsPage() {
           <li>Fees are payable as agreed with us. Taxes are your responsibility except for our income taxes. Unless the law requires otherwise, fees already paid are non-refundable.</li>
           <li>A free plan may be limited, changed or withdrawn. We do not promise that any plan remains free indefinitely.</li>
         </LegalList>
+        <p>
+          We operate the Service in compliance with applicable Bangladeshi tax laws and other legal
+          requirements, and we keep the records needed for those obligations. Taxes on your sales
+          (including VAT where applicable), invoices, trade licences, product compliance and
+          consumer-protection obligations remain the Merchant&apos;s responsibility. Nothing in the
+          Service is tax or legal advice.
+        </p>
       </LegalSection>
 
       <LegalSection title="11. Third-party services">

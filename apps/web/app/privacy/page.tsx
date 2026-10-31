@@ -173,6 +173,7 @@ export default function PrivacyPage() {
           <li><strong className="text-foreground">Platform tokens:</strong> until you disconnect the channel or delete the workspace.</li>
           <li><strong className="text-foreground">Operational logs:</strong> generally up to 30 days, longer only for security investigations.</li>
           <li><strong className="text-foreground">Anonymous visit counts:</strong> the visitor id lasts 30 days; the hashed daily count is kept with store analytics.</li>
+          <li><strong className="text-foreground">Plan, billing and tax records:</strong> kept for the period required by applicable Bangladeshi tax and accounting law, including after a workspace is closed.</li>
           <li><strong className="text-foreground">Cookie choices:</strong> 180 days, unless you change them sooner.</li>
         </LegalList>
         <p>
