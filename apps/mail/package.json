@@ -1,0 +1,28 @@
+{
+  "name": "@repo/mail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:plaintext": "wrangler deploy -c wrangler.local.json",
+    "deploy:ci": "wrangler deploy -c wrangler.ci.json",
+    "preview": "wrangler deploy --dry-run --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 execute onlyorders-mail-db --local --file=./migrations/0001_init.sql",
+    "db:migrate:remote": "wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0001_init.sql",
+    "test:api": "bun run scripts/test-api.ts",
+    "test:provider": "bun run scripts/test-provider.ts"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.13.14",
+    "postal-mime": "^4.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261031.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.156.0"
+  }
+}

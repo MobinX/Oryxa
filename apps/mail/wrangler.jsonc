@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "onlyorders-mail",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "onlyorders-mail-db",
+      "database_id": "26ebc803-5424-4c8f-a02e-6a16f8494d0e"
+    }
+  ],
+  "vars": {
+    "DEFAULT_FROM_EMAIL": "noreply@onlyorders.tech",
+    "DEFAULT_FROM_NAME": "OnlyOrders",
+    "B2_JSON_PREFIX": "emails",
+    "MAX_SEND_BYTES": "10485760"
+  }
+}
