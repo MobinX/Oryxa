@@ -4,6 +4,7 @@ import { cachedPublicPlans } from '@/app/_cache/queries';
 import { toCompareRows, toDisplayPlans } from '@/lib/plan-display';
 import { getBrand } from '@/lib/brand-server';
 import { OnlyOrdesLogo } from '@/components/sidebar';
+import { CookieSettingsButton } from '@/components/cookie-consent';
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
@@ -213,7 +214,7 @@ export default async function PricingPage() {
               Your Business Data Stays in Your Control
             </h3>
             <p className="mt-1.5 text-xs text-slate-500">
-              We follow industry best practices to keep your data secure and private.
+              We scope platform access to what the Service needs and use established providers.
             </p>
           </div>
           <div className="lg:col-span-9 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -240,8 +241,8 @@ export default async function PricingPage() {
                 <Server className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-xs font-bold text-slate-900">Reliable Infrastructure</p>
-                <p className="mt-0.5 text-[11px] text-slate-500">Trusted cloud providers &amp; encryption.</p>
+                <p className="text-xs font-bold text-slate-900">Established providers</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Trusted cloud infrastructure and encryption in transit.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -249,13 +250,28 @@ export default async function PricingPage() {
                 <Headphones className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-xs font-bold text-slate-900">Real Human Support</p>
-                <p className="mt-0.5 text-[11px] text-slate-500">Dedicated help whenever you need it.</p>
+                <p className="text-xs font-bold text-slate-900">Human oversight</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Pause or take over any AI conversation.</p>
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      <footer className="border-t border-slate-200/70 bg-white/60 px-4 py-8 text-center text-xs text-slate-500">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <Link href="/terms" className="hover:text-slate-900 hover:underline">Terms</Link>
+          <Link href="/privacy" className="hover:text-slate-900 hover:underline">Privacy</Link>
+          <Link href="/cookies" className="hover:text-slate-900 hover:underline">Cookie policy</Link>
+          <Link href="/data-delete-instructions" className="hover:text-slate-900 hover:underline">Data deletion</Link>
+          <CookieSettingsButton className="hover:text-slate-900 hover:underline">
+            Cookie settings
+          </CookieSettingsButton>
+        </div>
+        <p className="mt-3">
+          © {new Date().getFullYear()} {companyName}. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 }
