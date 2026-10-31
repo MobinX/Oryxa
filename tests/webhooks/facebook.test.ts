@@ -406,7 +406,7 @@ describe('Facebook Webhook', () => {
     expect(conv?.customerAvatar).toBe('https://fb/img.png');
   });
 
-  it('connects a notification account silently, then ON/OFF flips the business agent silently', async () => {
+  it('connects a notification account with one confirmation, then ON/OFF confirms the switch', async () => {
     const seed = await seedTestWorld();
     const admin = await createAdminPage();
     const { ensureMessengerNotification, getMessengerNotificationOverview } = await import(
@@ -423,24 +423,35 @@ describe('Facebook Webhook', () => {
     });
     const overview = await getMessengerNotificationOverview(seed.business.id);
     expect(overview.users.map((user) => user.platformUserId)).toContain('NOTIFY_OWNER');
-    expect(facebook.sendMessage).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    const confirmation = String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2]);
+    expect(confirmation).toContain('Successfully connected');
+    expect(confirmation).toContain(seed.business.name);
 
+    vi.mocked(facebook.sendMessage).mockClear();
     await postWebhook({
       object: 'page',
       entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'OFF')])],
     });
     expect((await getBusinessById(seed.business.id))?.agentState).toBe(false);
-    expect(facebook.sendMessage).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Agent is stopped for all your channels',
+    );
 
+    vi.mocked(facebook.sendMessage).mockClear();
     await postWebhook({
       object: 'page',
       entry: [pageEntry(admin.pageId, [textEvent('NOTIFY_OWNER', 'on')])],
     });
     expect((await getBusinessById(seed.business.id))?.agentState).toBe(true);
-    expect(facebook.sendMessage).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Agent is running for all your channels',
+    );
   });
 
-  it('accepts a notification code embedded in a sentence and never replies', async () => {
+  it('accepts a notification code embedded in a sentence and confirms once', async () => {
     const seed = await seedTestWorld();
     const admin = await createAdminPage();
     const { ensureMessengerNotification, getMessengerNotificationOverview } = await import(
@@ -460,7 +471,10 @@ describe('Facebook Webhook', () => {
     const overview = await getMessengerNotificationOverview(seed.business.id);
     expect(overview.users.map((user) => user.platformUserId)).toContain('NOTIFY_SENTENCE');
     expect(officialIngestMock).not.toHaveBeenCalled();
-    expect(facebook.sendMessage).not.toHaveBeenCalled();
+    expect(facebook.sendMessage).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(facebook.sendMessage).mock.calls[0]?.[2])).toContain(
+      'Successfully connected',
+    );
   });
 
   it('keeps a connected notification account away from the Official agent', async () => {

@@ -136,10 +136,11 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Send this code in a message to our Facebook page. From then on notices arrive in
-            Messenger, and sending <strong className="font-semibold text-foreground">ON</strong> or{' '}
+            Send this code in a message to our Facebook page. We will reply with a connection
+            confirmation, then notices arrive in Messenger. Sending{' '}
+            <strong className="font-semibold text-foreground">ON</strong> or{' '}
             <strong className="font-semibold text-foreground">OFF</strong> here starts or stops the
-            AI agent for this business.
+            AI agent for this business and confirms whether it is running or stopped.
           </p>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -554,12 +554,12 @@ fbWebhookRouter.post('/instagram', receiveMetaWebhook);
 
 /**
  * The operator page's DMs are not store conversations. A message containing a business's
- * notification code binds this Messenger account to that business; once bound, ON and OFF
- * flip that business's agent switch. Both are handled silently — no confirmation, no reply —
- * and neither enters the Officials pipeline. Other messages from a connected notification
- * account are ignored too, so a merchant never gets an AI answer from the operator page.
- * Anything else from an unknown sender is ordinary admin-page traffic and falls through.
- * No agent ever runs on an admin-only page.
+ * notification code binds this Messenger account to that business and is answered once
+ * with a connection confirmation. Once bound, ON and OFF flip that business's agent switch
+ * and confirm whether the agent is running or stopped. Other messages from a connected
+ * notification account are ignored, so a merchant never gets an AI answer from the operator
+ * page. Anything else from an unknown sender is ordinary admin-page traffic and falls
+ * through. No agent ever runs on an admin-only page.
  */
 const NOTIFICATION_CODE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -633,8 +633,15 @@ async function processAdminPageCommands(
         name: profile.name ?? null,
       });
 
-      // Deliberately silent: the code is a handshake, not a conversation. The merchant
-      // already reads the instructions in the console and asked for no confirmation reply.
+      // One confirmation on a successful connection; ON/OFF and other messages remain
+      // silent. The merchant needs proof the code was accepted, not a chat.
+      const businessName = row.business?.name ?? 'this business';
+      await fbSendMessage(
+        channel.apiToken,
+        senderId,
+        `Successfully connected to "${businessName}" and working.`,
+      ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
+
       fbLog('admin channel: messenger user connected', {
         businessId: row.businessId,
         senderId,
@@ -657,6 +664,13 @@ async function processAdminPageCommands(
           agentState: command === 'on',
           businessIds,
         });
+        await fbSendMessage(
+          channel.apiToken,
+          senderId,
+          command === 'on'
+            ? 'Agent is running for all your channels.'
+            : 'Agent is stopped for all your channels.',
+        ).catch((err) => console.error('[fb-webhook] agent command confirmation failed:', err));
         continue;
       }
     }
