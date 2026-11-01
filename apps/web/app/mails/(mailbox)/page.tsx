@@ -1,4 +1,5 @@
 import { MailListPane } from '@/components/mails/mail-list';
+import { MailErrorNotice, MailSentNotice } from '@/components/mails/mail-notice';
 import { EmptyMailDetail, MailShell } from '@/components/mails/mail-shell';
 import { one, readFolder, readOffset, type RawMailParams } from '@/lib/mail-query';
 import { getBrand } from '@/lib/brand-server';
@@ -18,10 +19,19 @@ export default async function MailsPage({ searchParams }: { searchParams: Promis
   const folder = readFolder(params.folder);
   const q = one(params.q) || '';
   const offset = readOffset(params.offset);
+  const error = one(params.error);
+  const sent = one(params.sent) === '1';
 
   return (
     <MailShell
       mode="list"
+      banner={
+        error ? (
+          <MailErrorNotice message={error} />
+        ) : sent ? (
+          <MailSentNotice />
+        ) : null
+      }
       list={<MailListPane folder={folder} q={q} offset={offset} />}
       detail={<EmptyMailDetail />}
     />

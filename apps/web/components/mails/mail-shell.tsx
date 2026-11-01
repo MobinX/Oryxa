@@ -9,27 +9,32 @@ export function MailShell({
   mode,
   list,
   detail,
+  banner,
 }: {
   mode: 'list' | 'detail';
   list: React.ReactNode;
   detail: React.ReactNode;
+  banner?: React.ReactNode;
 }) {
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-      <section
-        className={
-          mode === 'detail' ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'
-        }
-      >
-        {list}
-      </section>
-      <section
-        className={
-          mode === 'list' ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'
-        }
-      >
-        <div className="h-full min-h-0 overflow-y-auto overscroll-contain">{detail}</div>
-      </section>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
+      {banner ? <div className="shrink-0">{banner}</div> : null}
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+        <section
+          className={
+            mode === 'detail' ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'
+          }
+        >
+          {list}
+        </section>
+        <section
+          className={
+            mode === 'list' ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'
+          }
+        >
+          <div className="h-full min-h-0 overflow-y-auto overscroll-contain">{detail}</div>
+        </section>
+      </div>
     </div>
   );
 }

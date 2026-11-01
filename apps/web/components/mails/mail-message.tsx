@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { ArrowLeft, Paperclip } from 'lucide-react';
+import { ArrowLeft, CornerUpLeft, Forward, Paperclip } from 'lucide-react';
+import { MailSubmitButton } from '@/components/mail-submit-button';
+import { forwardMailAction, replyMailAction } from '@/app/mails/actions';
 import { consoleApiFetch } from '@/lib/console-session';
 import {
   formatMailBytes,
@@ -161,6 +163,105 @@ export async function MailMessage({
           ) : null}
         </div>
       </article>
+
+      {email.direction === 'inbound' ? (
+        <details className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+          <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
+            <CornerUpLeft className="h-4 w-4 text-primary" /> Reply
+          </summary>
+          <form action={replyMailAction} className="mt-3 space-y-3">
+            <input type="hidden" name="id" value={email.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs">
+                <span className="mb-1 block font-semibold">CC</span>
+                <input
+                  name="cc"
+                  type="text"
+                  placeholder="Optional"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="mb-1 block font-semibold">BCC</span>
+                <input
+                  name="bcc"
+                  type="text"
+                  placeholder="Optional"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+            </div>
+            <textarea
+              name="text"
+              required
+              rows={5}
+              placeholder={`Reply to ${body?.from.email || email.from.email}…`}
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+            />
+            <MailSubmitButton
+              label="Send reply"
+              pendingLabel="Sending reply…"
+              icon="reply"
+              size="sm"
+            />
+          </form>
+        </details>
+      ) : null}
+
+      <details className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
+          <Forward className="h-4 w-4 text-primary" /> Forward
+        </summary>
+        <form action={forwardMailAction} className="mt-3 space-y-3">
+          <input type="hidden" name="id" value={email.id} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold">To</span>
+              <input
+                name="to"
+                required
+                placeholder="recipient@example.com"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold">CC</span>
+              <input
+                name="cc"
+                placeholder="Optional"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold">BCC</span>
+              <input
+                name="bcc"
+                placeholder="Optional"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold">Note</span>
+              <input
+                name="text"
+                placeholder="Optional note above the forwarded content"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Original attachments are copied into the forwarded message.
+          </p>
+          <MailSubmitButton
+            label="Forward message"
+            pendingLabel="Forwarding…"
+            icon="forward"
+            size="sm"
+          />
+        </form>
+      </details>
 
       <p className="px-2 pb-2 text-[10px] text-muted-foreground">
         Stored in the same mailbox as the admin console. Content is streamed from private

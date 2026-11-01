@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { LogOut } from 'lucide-react';
+import { LogOut, PenLine } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SignOutForm } from '@/components/sign-out-button';
 import { getActiveConsoleUser } from '@/lib/console-session';
@@ -47,6 +47,14 @@ export default async function MailboxLayout({ children }: { children: React.Reac
                 {user.email}
               </span>
             </span>
+            <Link
+              href="/mails/compose"
+              title="Compose a message"
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-primary px-2.5 text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-opacity hover:opacity-90 active:scale-95 sm:px-3"
+            >
+              <PenLine className="h-4 w-4" />
+              <span className="hidden sm:inline">Compose</span>
+            </Link>
             <ThemeToggle />
             <SignOutForm
               action={mailSignOutAction}
