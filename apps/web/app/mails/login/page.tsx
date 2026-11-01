@@ -12,6 +12,7 @@ export async function generateMetadata() {
   return {
     title: `Mail — sign in — ${companyName}`,
     description: `Sign in to the ${companyName} admin mailbox.`,
+    robots: { index: false, follow: false },
   };
 }
 
