@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -14,14 +15,13 @@ import {
   Send,
 } from 'lucide-react';
 import { AdminPageHeader } from '@/components/admin-page-header';
+import { MailSubmitButton } from '@/components/mail-submit-button';
 import { consoleApiFetch, requireConsoleUser } from '@/lib/console-session';
 import { consoleCan } from '@/lib/console-capabilities';
 import type {
   MailAddress,
-  MailContent,
   MailDetailResponse,
   MailListResponse,
-  MailRow,
   Mailbox,
 } from '@/lib/mail-types';
 import { forwardMailAction, replyMailAction, sendMailAction } from './actions';
@@ -95,9 +95,7 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
 
   let mailbox: Mailbox | null = null;
   let list: MailListResponse | null = null;
-  let detail: MailDetailResponse | null = null;
   let loadError: string | null = null;
-  let detailError: string | null = null;
 
   try {
     const mailboxData = await consoleApiFetch<{ mailbox: Mailbox }>('/api2/admin/mail/mailbox');
@@ -111,16 +109,6 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
     if (folder === 'sent') query.set('direction', 'outbound');
     if (queryText) query.set('q', queryText);
     list = await consoleApiFetch<MailListResponse>(`/api2/admin/mail/emails?${query.toString()}`);
-    if (selectedId) {
-      try {
-        detail = await consoleApiFetch<MailDetailResponse>(
-          `/api2/admin/mail/emails/${encodeURIComponent(selectedId)}`,
-        );
-      } catch (detailFailure) {
-        detailError =
-          detailFailure instanceof Error ? detailFailure.message : 'This email could not be opened';
-      }
-    }
   } catch (failure) {
     loadError = failure instanceof Error ? failure.message : 'Inbox could not be loaded';
   }
@@ -131,51 +119,61 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
   const limit = list?.limit || 40;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <AdminPageHeader
-        icon={Mail}
-        title="Inbox"
-        description={
-          <span>
-            <code>{mailbox?.address || user.email}</code> · sent and received mail, forwarded with
-            its attachments.
-          </span>
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={hrefFor({ folder, id: selectedId, compose: true, q: queryText })}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"
-            >
-              <Plus className="h-3.5 w-3.5" /> Compose
-            </Link>
-            <Link
-              href={hrefFor({ folder, q: queryText })}
-              className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Refresh
-            </Link>
-          </div>
-        }
-      />
+    <div className="flex flex-col gap-4 sm:gap-6 lg:h-[calc(100dvh-7.5rem)] lg:min-h-[32rem]">
+      <div className="shrink-0 space-y-4">
+        <AdminPageHeader
+          icon={Mail}
+          title="Inbox"
+          description={
+            <span>
+              <code>{mailbox?.address || user.email}</code> · sent and received mail, forwarded with
+              its attachments.
+            </span>
+          }
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={hrefFor({ folder, id: selectedId, compose: true, q: queryText })}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" /> Compose
+              </Link>
+              <Link
+                href={hrefFor({ folder, q: queryText })}
+                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Refresh
+              </Link>
+            </div>
+          }
+        />
 
-      {error ? (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
-      {sent ? (
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          Message sent and stored in Sent.
-        </div>
-      ) : null}
+        {error ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <p className="font-semibold">The message could not be sent.</p>
+            <p className="mt-0.5">{error}</p>
+            <p className="mt-1 text-xs">Please try again.</p>
+          </div>
+        ) : null}
+        {sent ? (
+          <div
+            role="status"
+            className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+          >
+            Message sent and stored in Sent.
+          </div>
+        ) : null}
+      </div>
       {loadError ? (
         <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           {loadError}
         </div>
       ) : (
-        <div className="grid min-h-[60vh] gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-          <section className={activePane ? 'hidden lg:block' : 'block'}>
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+          <section className={activePane ? 'hidden min-h-0 lg:block' : 'block min-h-0'}>
             <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               <div className="border-b border-border/50 p-3">
                 <div className="flex rounded-xl bg-muted/50 p-1">
@@ -314,26 +312,26 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
             </div>
           </section>
 
-          <section className={activePane ? 'block' : 'hidden lg:block'}>
-            {compose ? (
-              <ComposePane folder={folder} queryText={queryText} />
-            ) : detail ? (
-              <MessagePane detail={detail} folder={folder} queryText={queryText} detailError={detailError} />
-            ) : (
-              <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/40 p-8 text-center">
-                <Mail className="mb-3 h-9 w-9 text-muted-foreground/50" />
-                <p className="text-sm font-semibold">Select a message</p>
-                <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                  Open a received or sent message, or compose a new one. Attachments stay in B2 and
-                  are streamed only after your console session is checked.
-                </p>
-                {detailError ? (
-                  <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                    {detailError}
-                  </p>
-                ) : null}
-              </div>
-            )}
+          {/* The pane owns its scrolling so a long email never stretches the page on phones:
+              the section is capped to the viewport and this inner column scrolls instead. */}
+          <section
+            className={
+              activePane
+                ? 'flex max-h-[calc(100dvh-16rem)] min-h-[20rem] flex-col lg:max-h-none lg:min-h-0'
+                : 'hidden min-h-0 lg:flex lg:flex-col'
+            }
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:pr-1">
+              {compose ? (
+                <ComposePane folder={folder} queryText={queryText} />
+              ) : selectedId ? (
+                <Suspense key={selectedId} fallback={<MessageSkeleton />}>
+                  <MessageLoader id={selectedId} folder={folder} queryText={queryText} />
+                </Suspense>
+              ) : (
+                <EmptyPane />
+              )}
+            </div>
           </section>
         </div>
       )}
@@ -408,13 +406,88 @@ function ComposePane({ folder, queryText }: { folder: string; queryText: string 
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
           />
         </label>
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
-        >
-          <Send className="h-4 w-4" /> Send message
-        </button>
+        <MailSubmitButton label="Send message" pendingLabel="Sending…" icon="send" />
       </form>
+    </div>
+  );
+}
+
+async function MessageLoader({
+  id,
+  folder,
+  queryText,
+}: {
+  id: string;
+  folder: string;
+  queryText: string;
+}) {
+  try {
+    const detail = await consoleApiFetch<MailDetailResponse>(
+      `/api2/admin/mail/emails/${encodeURIComponent(id)}`,
+    );
+    return <MessagePane detail={detail} folder={folder} queryText={queryText} />;
+  } catch (failure) {
+    const message = failure instanceof Error ? failure.message : 'This email could not be opened';
+    return <MessageErrorPane message={message} folder={folder} queryText={queryText} />;
+  }
+}
+
+function MessageSkeleton() {
+  return (
+    <div aria-busy="true" className="space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-6">
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
+          <div className="h-3 w-28 animate-pulse rounded bg-muted/70" />
+        </div>
+        <div className="mt-3 h-6 w-2/3 animate-pulse rounded bg-muted" />
+        <div className="mt-3 space-y-2">
+          <div className="h-3 w-1/2 animate-pulse rounded bg-muted/70" />
+          <div className="h-3 w-2/5 animate-pulse rounded bg-muted/70" />
+        </div>
+        <div className="mt-5 h-[min(28rem,60dvh)] w-full animate-pulse rounded-xl bg-muted/60" />
+        <div className="mt-4 h-14 w-full animate-pulse rounded-xl bg-muted/40" />
+      </div>
+      <div className="h-14 animate-pulse rounded-2xl border border-border/60 bg-card" />
+      <div className="h-14 animate-pulse rounded-2xl border border-border/60 bg-card" />
+      <span className="sr-only">Loading message</span>
+    </div>
+  );
+}
+
+function EmptyPane() {
+  return (
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/40 p-8 text-center">
+      <Mail className="mb-3 h-9 w-9 text-muted-foreground/50" />
+      <p className="text-sm font-semibold">Select a message</p>
+      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+        Open a received or sent message, or compose a new one. Attachments stay in B2 and are
+        streamed only after your console session is checked.
+      </p>
+    </div>
+  );
+}
+
+function MessageErrorPane({
+  message,
+  folder,
+  queryText,
+}: {
+  message: string;
+  folder: string;
+  queryText: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
+      <p className="font-semibold">This email could not be opened.</p>
+      <p className="mt-0.5">{message}</p>
+      <p className="mt-1 text-xs">Please try again.</p>
+      <Link
+        href={hrefFor({ folder, q: queryText })}
+        className="mt-4 inline-flex items-center gap-1 text-xs font-semibold underline"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to the list
+      </Link>
     </div>
   );
 }
@@ -423,12 +496,10 @@ function MessagePane({
   detail,
   folder,
   queryText,
-  detailError,
 }: {
   detail: MailDetailResponse;
   folder: string;
   queryText: string;
-  detailError: string | null;
 }) {
   const { email, content } = detail;
   const body = content;
@@ -445,14 +516,8 @@ function MessagePane({
           <span className="text-[10px] text-muted-foreground">{formatDate(email.received_at || email.created_at)}</span>
         </div>
 
-        {detailError ? (
-          <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {detailError}
-          </p>
-        ) : null}
-
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 break-words">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
@@ -492,10 +557,10 @@ function MessagePane({
               sandbox=""
               referrerPolicy="no-referrer"
               srcDoc={body.html}
-              className="h-[28rem] w-full rounded-xl border border-border bg-white"
+              className="h-[min(28rem,60dvh)] w-full rounded-xl border border-border bg-white"
             />
           ) : (
-            <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 text-sm">
+            <pre className="max-h-[min(28rem,60dvh)] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-background p-4 text-sm">
               {body?.text || 'No message body was stored.'}
             </pre>
           )}
@@ -558,12 +623,12 @@ function MessagePane({
               placeholder={`Reply to ${body?.from.email || email.from.email}…`}
               className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
             />
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"
-            >
-              <CornerUpLeft className="h-3.5 w-3.5" /> Send reply
-            </button>
+            <MailSubmitButton
+              label="Send reply"
+              pendingLabel="Sending reply…"
+              icon="reply"
+              size="sm"
+            />
           </form>
         </details>
       ) : null}
@@ -614,12 +679,12 @@ function MessagePane({
           <p className="text-[11px] text-muted-foreground">
             Original attachments are copied from B2 into the forwarded message.
           </p>
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"
-          >
-            <Forward className="h-3.5 w-3.5" /> Forward message
-          </button>
+          <MailSubmitButton
+            label="Forward message"
+            pendingLabel="Forwarding…"
+            icon="forward"
+            size="sm"
+          />
         </form>
       </details>
     </div>

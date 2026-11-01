@@ -19,9 +19,8 @@ export async function sendMailAction(formData: FormData): Promise<void> {
   if (!to || !subject || !text.trim()) {
     failTarget('/admin/inbox?compose=1', new Error('To, subject and message are required.'));
   }
-  let result: { email: { id: string } };
   try {
-    result = await consoleApiFetch('/api2/admin/mail/send', {
+    await consoleApiFetch('/api2/admin/mail/send', {
       method: 'POST',
       body: JSON.stringify({
         to,
@@ -34,7 +33,7 @@ export async function sendMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget('/admin/inbox?compose=1', error);
   }
-  redirect(`/admin/inbox?folder=sent&id=${encodeURIComponent(result.email.id)}&sent=1`);
+  redirect('/admin/inbox?folder=sent&sent=1');
 }
 
 export async function replyMailAction(formData: FormData): Promise<void> {
@@ -42,9 +41,8 @@ export async function replyMailAction(formData: FormData): Promise<void> {
   const text = String(formData.get('text') ?? '');
   if (!id) failTarget('/admin/inbox', new Error('Missing email id.'));
   if (!text.trim()) failTarget(`/admin/inbox?id=${encodeURIComponent(id)}`, new Error('Reply body is required.'));
-  let result: { email: { id: string } };
   try {
-    result = await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/reply`, {
+    await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/reply`, {
       method: 'POST',
       body: JSON.stringify({
         cc: formString(formData, 'cc'),
@@ -55,7 +53,7 @@ export async function replyMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget(`/admin/inbox?id=${encodeURIComponent(id)}`, error);
   }
-  redirect(`/admin/inbox?folder=sent&id=${encodeURIComponent(result.email.id)}&sent=1`);
+  redirect('/admin/inbox?folder=sent&sent=1');
 }
 
 export async function forwardMailAction(formData: FormData): Promise<void> {
@@ -63,9 +61,8 @@ export async function forwardMailAction(formData: FormData): Promise<void> {
   const to = formString(formData, 'to');
   if (!id) failTarget('/admin/inbox', new Error('Missing email id.'));
   if (!to) failTarget(`/admin/inbox?id=${encodeURIComponent(id)}`, new Error('Forward recipient is required.'));
-  let result: { email: { id: string } };
   try {
-    result = await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/forward`, {
+    await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/forward`, {
       method: 'POST',
       body: JSON.stringify({
         to,
@@ -77,5 +74,5 @@ export async function forwardMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget(`/admin/inbox?id=${encodeURIComponent(id)}`, error);
   }
-  redirect(`/admin/inbox?folder=sent&id=${encodeURIComponent(result.email.id)}&sent=1`);
+  redirect('/admin/inbox?folder=sent&sent=1');
 }
