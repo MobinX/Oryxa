@@ -5,6 +5,7 @@ import { seedTestWorld } from '../helpers/seed';
 import { createAgentTools } from '@repo/agent/tools';
 import { getOrderById, updateOrderState } from '@repo/db/crud/order';
 import { createProduct } from '@repo/db/crud/product';
+import { updateBusiness } from '@repo/db/crud/business';
 import { listMessages } from '@repo/db/crud/conversation';
 import { parseConversationAgentState } from '@repo/shared';
 import { db } from '@db/client';
@@ -150,24 +151,133 @@ describe('Agent Tools', () => {
     expect(Number(accepted.shippingCost)).toBe(60);
   });
 
-  it('requires a bKash/Nagad transaction id and stores it on the order', async () => {
+  it('refuses an order until a configured method gets its transaction id', async () => {
     const seed = await seedTestWorld();
-    const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'create_order')!;
+    const tool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: [
+        { name: 'bKash Personal', info: '01712-345678', requiresTransactionId: true },
+        { name: 'Nogad Agent', requiresTransactionId: true },
+        { name: 'Bank transfer' },
+      ],
+    }).find((t) => t.name === 'create_order')!;
     const base = {
       ...orderDefaults,
       productId: seed.productDetail.id,
       variantId: seed.productDetail.variants[0]?.id,
-      paymentMethod: 'bKash',
     };
 
-    const missing = JSON.parse(await tool.invoke(base));
+    // The customer's loose words still resolve to the method, and the refusal carries the
+    // account to pay plus the instruction to come back with the id.
+    const missing = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'bkash personal number' }));
     expect(missing.created).toBe(false);
     expect(missing.missing).toContain('payment transaction id');
+    expect(missing.paymentMethod).toBe('bKash Personal');
+    expect(missing.paymentInfo).toBe('01712-345678');
+    expect(missing.instruction).toContain('01712-345678');
 
-    const created = JSON.parse(await tool.invoke({ ...base, transactionId: 'TRX123' }));
+    const created = JSON.parse(
+      await tool.invoke({ ...base, paymentMethod: 'Nogad Agent', transactionId: 'TRX123' }),
+    );
     expect(created.id).toBeTruthy();
     const order = await getOrderById(seed.business.id, created.id);
     expect(order?.transactionId).toBe('TRX123');
+
+    // Cash on delivery and a method the merchant did not mark are never blocked for lacking an id.
+    const cod = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'Cash on delivery' }));
+    expect(cod.id).toBeTruthy();
+    const bank = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'Bank transfer' }));
+    expect(bank.id).toBeTruthy();
+  });
+
+  it('create_order enforces the payment strategy before any order exists', async () => {
+    const seed = await seedTestWorld();
+    const methods = [{ name: 'bKash Personal', info: '01712-345678', requiresTransactionId: true }];
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+    };
+
+    // Full prepaid: cash on delivery alone is refused with the strategy named, a prepaid
+    // method without its id is refused, and method + id places the order. The store row is
+    // set to match the tool context, as the runner always hands it the merchant's real row.
+    await updateBusiness(seed.business.id, seed.business.userId, {
+      paymentMethods: methods,
+      paymentStrategy: 'full_prepaid',
+    });
+    const fullTool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: methods,
+      paymentStrategy: 'full_prepaid',
+    }).find((t) => t.name === 'create_order')!;
+    const cod = JSON.parse(await fullTool.invoke({ ...base, paymentMethod: 'Cash on delivery' }));
+    expect(cod.created).toBe(false);
+    expect(cod.paymentStrategy).toBe('full_prepaid');
+    expect(cod.missing).toContain('payment method');
+    expect(cod.instruction).toContain('Do not place the order as cash on delivery');
+
+    const noTxn = JSON.parse(await fullTool.invoke({ ...base, paymentMethod: 'bKash Personal' }));
+    expect(noTxn.created).toBe(false);
+    expect(noTxn.missing).toContain('payment transaction id');
+
+    const paid = JSON.parse(
+      await fullTool.invoke({ ...base, paymentMethod: 'bKash Personal', transactionId: 'TRX-FULL-1' }),
+    );
+    expect(paid.id).toBeTruthy();
+    expect(paid.paymentStrategy).toBe('full_prepaid');
+
+    // Delivery prepaid: the same refusals while a delivery charge applies.
+    await updateBusiness(seed.business.id, seed.business.userId, { paymentStrategy: 'delivery_prepaid' });
+    const deliveryTool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: methods,
+      paymentStrategy: 'delivery_prepaid',
+    }).find((t) => t.name === 'create_order')!;
+    const deliveryCod = JSON.parse(
+      await deliveryTool.invoke({ ...base, shippingCost: 60, paymentMethod: 'Cash on delivery' }),
+    );
+    expect(deliveryCod.created).toBe(false);
+    expect(deliveryCod.paymentStrategy).toBe('delivery_prepaid');
+    const deliveryPaid = JSON.parse(
+      await deliveryTool.invoke({
+        ...base,
+        shippingCost: 60,
+        paymentMethod: 'bKash Personal',
+        transactionId: 'TRX-DEL-1',
+      }),
+    );
+    expect(deliveryPaid.id).toBeTruthy();
+  });
+
+  it('product tools name the strategy and shout when a product overrides the store', async () => {
+    const seed = await seedTestWorld();
+    const special = await createProduct({
+      businessId: seed.business.id,
+      name: 'Strategy Special',
+      price: 80,
+      sku: `SPEC-${Date.now()}`,
+      paymentStrategyOverride: 'full_prepaid',
+      variants: [{ name: 'Only', stock: 2, isAvailable: true }],
+    });
+    const tools = createAgentTools({ ...agentContext(seed), paymentStrategy: 'cod' });
+
+    const found = JSON.parse(await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'Strategy Special' }));
+    expect(found[0].id).toBe(special.id);
+    expect(found[0].paymentStrategy).toBe('full_prepaid');
+    expect(found[0].paymentStrategySource).toBe('product_override');
+    expect(found[0].paymentStrategyAlert).toContain('PAYMENT STRATEGY OVERRIDE');
+
+    // The seeded product follows the store, so it carries the rule without the alarm.
+    const plain = JSON.parse(await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'T-Shirt' }));
+    expect(plain[0].paymentStrategy).toBe('cod');
+    expect(plain[0].paymentStrategyAlert).toBeUndefined();
+
+    const options = JSON.parse(
+      await tools.find((t) => t.name === 'get_product_options')!.invoke({ productId: special.id }),
+    );
+    expect(options.paymentStrategy).toBe('full_prepaid');
+    expect(options.paymentStrategyAlert).toContain('PAYMENT STRATEGY OVERRIDE');
   });
 
   it('notifies the owner when money moved but order creation fails', async () => {

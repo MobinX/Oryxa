@@ -23,7 +23,13 @@ import {
 import { cn } from '@/lib/utils';
 import { AlertDialog } from '@/components/alert-dialog';
 import { Input } from '@/components/ui/input';
-import type { Category, InboxSuggestion, ProductDetail, ProductListItem } from '@/lib/api';
+import type { Category, InboxSuggestion, PaymentMethod, PaymentStrategy, ProductDetail, ProductListItem } from '@/lib/api';
+import {
+  paymentStrategyDescription,
+  paymentStrategyLabel,
+  requiresUpfrontPayment,
+  resolvePaymentStrategy,
+} from '@/lib/payment-strategy';
 import {
   createInboxOrderAction,
   generateSuggestionsAction,
@@ -48,6 +54,8 @@ export function InboxChat({
   initialMessages,
   initialAutoPilot,
   businessAgentOn,
+  paymentMethods,
+  paymentStrategy = 'cod',
 }: {
   businessId: string;
   conversationId: string;
@@ -57,6 +65,10 @@ export function InboxChat({
   initialAutoPilot: boolean;
   /** The business-wide switch loaded in SSR: off disables the per-thread auto pilot control. */
   businessAgentOn: boolean;
+  /** The merchant's configured payment methods, as edited on the Payments page. */
+  paymentMethods: PaymentMethod[];
+  /** Store-wide default payment strategy from the Payments page; a product may override it. */
+  paymentStrategy?: PaymentStrategy;
 }) {
   const [messages, setMessages] = useState<InboxMessage[]>(initialMessages);
   const [autoPilot, setAutoPilot] = useState(initialAutoPilot);
@@ -93,6 +105,31 @@ export function InboxChat({
   const [orderResult, setOrderResult] = useState<{ id: string; totalPrice: number } | null>(null);
   const [orderCardBusy, setOrderCardBusy] = useState(false);
   const [orderCardSent, setOrderCardSent] = useState(false);
+
+  // The merchant's own payment list decides what is offered here and which choice cannot be
+  // ordered without a receipt number; the product's payment strategy decides how much must
+  // move before the order exists at all. The product rule wins over the store default.
+  const chosenMethod = paymentMethods.find((method) => method.name === orderPayment) ?? null;
+  const needsTransaction = chosenMethod?.requiresTransactionId === true;
+  const orderStrategy = resolvePaymentStrategy(paymentStrategy, selectedProduct?.paymentStrategyOverride);
+  const orderShippingNum = orderShipping.trim() ? Number(orderShipping) : undefined;
+  const upfrontRequired = requiresUpfrontPayment(
+    orderStrategy.effective,
+    typeof orderShippingNum === 'number' && Number.isFinite(orderShippingNum) ? orderShippingNum : null,
+  );
+  const showTransaction = needsTransaction || upfrontRequired;
+  const codBlocked = orderStrategy.effective === 'full_prepaid' || upfrontRequired;
+
+  // A product that forbids cash-on-delivery-only ordering must not sit on that choice from
+  // the last order: move to the first prepaid method the merchant configured, if there is one.
+  useEffect(() => {
+    if (!selectedProduct || !codBlocked) return;
+    if (orderPayment === 'Cash on delivery' && paymentMethods[0]) {
+      setOrderPayment(paymentMethods[0].name);
+    }
+    // Only the product/strategy change should re-point the choice, not every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct?.id, orderStrategy.effective, upfrontRequired]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -355,10 +392,23 @@ export function InboxChat({
   const submitOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedProduct) return;
-    const needsTransaction = /bkash|nagad/i.test(orderPayment);
-    if (needsTransaction && !orderTxn.trim()) {
+    if (codBlocked && (orderPayment === 'Cash on delivery' || !chosenMethod)) {
+      setErrorTitle('Prepaid payment needed');
+      setError(
+        paymentMethods.length
+          ? `${paymentStrategyLabel(orderStrategy.effective)}: choose one of the store's prepaid methods (${paymentMethods.map((m) => m.name).join(', ')}) — cash on delivery alone cannot place this order.`
+          : `${paymentStrategyLabel(orderStrategy.effective)}: this product needs payment before ordering, but the store has no prepaid method configured. Add one on the Payments page.`,
+      );
+      setDialogOpen(true);
+      return;
+    }
+    if ((needsTransaction || upfrontRequired) && !orderTxn.trim()) {
       setErrorTitle('Transaction id needed');
-      setError('bKash and Nagad orders need the TrxID from the customer.');
+      setError(
+        upfrontRequired
+          ? `${paymentStrategyLabel(orderStrategy.effective)} orders need the transaction id from the customer's upfront payment before the order can be created.`
+          : `${orderPayment} orders need the transaction id from the customer.`,
+      );
       setDialogOpen(true);
       return;
     }
@@ -372,7 +422,7 @@ export function InboxChat({
       customerAddress: orderAddress.trim(),
       shippingCost: orderShipping.trim() ? Number(orderShipping) : undefined,
       paymentMethod: orderPayment,
-      transactionId: needsTransaction ? orderTxn.trim() : undefined,
+      transactionId: showTransaction ? orderTxn.trim() || undefined : undefined,
     });
     setToolBusy(false);
     if (result.error) {
@@ -983,6 +1033,25 @@ export function InboxChat({
                     ← Choose another product
                   </button>
                   <p className="text-xs font-bold">{selectedProduct.name}</p>
+                  <p
+                    role={orderStrategy.isOverride ? 'alert' : undefined}
+                    className={
+                      orderStrategy.isOverride
+                        ? 'rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100'
+                        : 'rounded-lg bg-[var(--muted)] px-3 py-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]'
+                    }
+                  >
+                    <span className="font-semibold text-[var(--foreground)]">
+                      Payment: {paymentStrategyLabel(orderStrategy.effective)}
+                    </span>
+                    {orderStrategy.isOverride ? ' — overrides the store default. ' : ' '}
+                    {paymentStrategyDescription(orderStrategy.effective)}
+                    {orderStrategy.effective === 'delivery_prepaid'
+                      ? ' Enter the delivery charge as Shipping, choose a prepaid method for it, and record its transaction id.'
+                      : orderStrategy.effective === 'full_prepaid'
+                        ? ' Choose a prepaid method and record its transaction id; cash on delivery alone cannot create this order.'
+                        : ''}
+                  </p>
                   {selectedProduct.variants.length > 0 && (
                     <label className="block text-[11px] font-semibold">
                       Variant
@@ -1033,20 +1102,31 @@ export function InboxChat({
                       onChange={(event) => setOrderPayment(event.target.value)}
                       className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
                     >
-                      <option>Cash on delivery</option>
-                      <option>bKash</option>
-                      <option>Nagad</option>
-                      <option>Bank transfer</option>
+                      <option disabled={codBlocked}>Cash on delivery{codBlocked ? ' (not enough for this product)' : ''}</option>
+                      {paymentMethods.map((method) => (
+                        <option key={method.name}>{method.name}</option>
+                      ))}
                     </select>
                   </label>
-                  {/bkash|nagad/i.test(orderPayment) && (
+                  {codBlocked && paymentMethods.length === 0 ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                      This product needs payment before ordering, but the store has no prepaid method configured. Add one on the Payments page.
+                    </p>
+                  ) : null}
+                  {chosenMethod?.info ? (
+                    <p className="rounded-lg bg-[var(--muted)] px-3 py-2 text-[11px] text-[var(--muted-foreground)]">
+                      {chosenMethod.name} money goes to: <span className="font-semibold text-[var(--foreground)]">{chosenMethod.info}</span>
+                    </p>
+                  ) : null}
+                  {showTransaction && (
                     <label className="block text-[11px] font-semibold">
-                      Transaction ID
+                      Transaction ID{upfrontRequired ? ' (upfront payment)' : ''}
                       <Input
                         value={orderTxn}
                         onChange={(event) => setOrderTxn(event.target.value)}
                         className="mt-1 h-9"
                         placeholder="TrxID from the customer"
+                        required
                       />
                     </label>
                   )}
@@ -1218,6 +1298,9 @@ function ProductPicker({
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400">
                   {money(item.price)} · {item.variantCount ?? 0} variant
                   {(item.variantCount ?? 0) === 1 ? '' : 's'}
+                  {item.paymentStrategyOverride
+                    ? ` · ${paymentStrategyLabel(item.paymentStrategyOverride)} payment`
+                    : ''}
                 </span>
               </span>
               <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />

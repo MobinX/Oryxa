@@ -8,12 +8,14 @@ import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
-import type { ConversationAgentState } from '@repo/shared';
+import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
   formatCompactAgentState,
   detectTurnLanguage,
   classifyTurnIntent,
   validateAndSanitizeReply,
+  PAYMENT_STRATEGY_DESCRIPTIONS,
+  PAYMENT_STRATEGY_LABELS,
 } from '@repo/shared';
 
 /** Callback type for emitting structured debug/observability events. */
@@ -86,6 +88,10 @@ export interface AgentConfig {
     agentBargainGuidance?: string | null;
     /** Region-based delivery charges the agent quotes and passes to create_order. */
     deliveryZones?: Array<{ label: string; price: number }>;
+    /** Payment methods the merchant defined; cash on delivery is always available on top of these. */
+    paymentMethods?: PaymentMethodConfig[];
+    /** Store-wide default for how much is paid before ordering; a product may override it. */
+    paymentStrategy?: PaymentStrategy;
   };
   /**
    * The thread the model is about to read. `imageKeys` are the bucket keys of the pictures the
@@ -353,6 +359,8 @@ export class Agent {
           agentState: this.config.agentState,
           persistAgentState: this.config.persistAgentState,
           deliveryZones: this.config.business.deliveryZones,
+          paymentMethods: this.config.business.paymentMethods,
+          paymentStrategy: this.config.business.paymentStrategy,
         },
         (text) => sentTexts.push(text),
       );
@@ -387,6 +395,14 @@ export class Agent {
             .map((zone) => `${zone.label}: BDT ${Number(zone.price).toFixed(2)}`)
             .join('; ')}. Ask which area the customer is in, quote the matching charge, and pass that amount as shippingCost to create_order. If the address matches no zone, say delivery cannot be quoted for it and hand off. Never invent or discount a delivery charge.`
         : '',
+      this.config.business.paymentMethods?.length
+        ? `Payment methods the store accepts besides cash on delivery (offer only these): ${this.config.business.paymentMethods
+            .map((method) =>
+              `${method.name}${method.info ? ` — money goes to ${method.info}` : ''}${method.requiresTransactionId ? ' (transaction id REQUIRED before create_order)' : ''}`,
+            )
+            .join('; ')}. Cash on delivery is always available and needs nothing up front. When the chosen method needs a transaction id, tell the customer where to pay, ask them to copy the id from their payment confirmation, and pass it as transactionId — no order can be created without it. Read these details out only while the customer is ordering or paying, never invent an account number, and never ask for a PIN, OTP, password or credentials.`
+        : '',
+      `Payment strategy for this store (applies to every product unless the product overrides it): ${PAYMENT_STRATEGY_LABELS[this.config.business.paymentStrategy ?? 'cod']} — ${PAYMENT_STRATEGY_DESCRIPTIONS[this.config.business.paymentStrategy ?? 'cod']} A product tool result names the effective strategy for its product; when it carries a PAYMENT STRATEGY OVERRIDE alert, follow that product strategy instead of this store default.`,
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',
       compactState ? `Conversation state (verified facts):\n${JSON.stringify(compactState)}` : '',

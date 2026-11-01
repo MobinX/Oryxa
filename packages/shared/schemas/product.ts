@@ -25,6 +25,8 @@ export const baseProductSchema = z.object({
   discountPercent: z.coerce.number().min(0).max(100).default(0),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
   showInStorefront: z.boolean().default(true),
+  /** This product's own payment strategy; null/absent follows the store default. */
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
 }).openapi('Product');
 
 /** One knob a product is sold in — "Color", "Size" — and the values it may take. */
@@ -166,6 +168,8 @@ export const updateProductInputSchema = z.object({
   discountPercent: z.coerce.number().min(0).max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   showInStorefront: z.boolean().optional(),
+  /** Present replaces the override (null clears it back to the store default); absent leaves it alone. */
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   /** Present means replace the product's options wholesale; absent leaves them alone. */
   options: z.array(productOptionInputSchema).max(3).optional(),
   variants: z.array(updateVariantInputSchema).optional(),
@@ -187,6 +191,7 @@ export const bulkImportProductSchema = z.object({
   sku: z.string().max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
   showInStorefront: z.boolean().default(true),
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   /** A shelf to find or create for this business, e.g. the CSV's product type. */
   categoryName: z.string().min(1).max(255).optional(),
   /** Percent off the listed price; zero means no discount. */

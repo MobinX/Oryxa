@@ -4,6 +4,7 @@ import {
   COMMENT_AGENT_GUIDANCE,
   CORE_AGENT_PROMPT,
   MESSENGER_AGENT_GUIDANCE,
+  PAYMENT_STRATEGY_INSTRUCTIONS,
   PAYMENT_TRANSACTION_INSTRUCTIONS,
   SUGGESTION_TOOL_INSTRUCTIONS,
 } from '@repo/shared';
@@ -60,6 +61,15 @@ describe('v007 system prompt', () => {
     expect(CORE_AGENT_PROMPT).toContain(SUGGESTION_TOOL_INSTRUCTIONS);
     expect(CORE_AGENT_PROMPT).toContain(CATALOG_CATEGORY_INSTRUCTIONS);
     expect(CORE_AGENT_PROMPT).toContain(PAYMENT_TRANSACTION_INSTRUCTIONS);
+    expect(CORE_AGENT_PROMPT).toContain(PAYMENT_STRATEGY_INSTRUCTIONS);
+  });
+
+  it('keeps the payment strategy rules prominent', () => {
+    expect(CORE_AGENT_PROMPT).toContain('PAYMENT STRATEGY OVERRIDE alert');
+    expect(CORE_AGENT_PROMPT).toContain('Delivery charge prepaid');
+    expect(CORE_AGENT_PROMPT).toContain('Full payment prepaid');
+    expect(CORE_AGENT_PROMPT).toContain('Cash on delivery alone can never place such an order');
+    expect(MESSENGER_AGENT_GUIDANCE).toContain('payment strategy');
   });
 
   it.each([

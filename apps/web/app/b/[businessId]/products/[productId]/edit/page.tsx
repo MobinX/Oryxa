@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
-import { cachedCategories, cachedCustomers, cachedProduct } from '@/app/_cache/queries';
+import { cachedBusiness, cachedCategories, cachedCustomers, cachedProduct } from '@/app/_cache/queries';
 import { updateProductAction } from '@/app/actions/products';
 import { Card } from '@/components/ui/card';
 import { ProductWizard } from '@/components/products/product-wizard';
@@ -68,6 +68,7 @@ async function EditProductForm({
 
   const categories = await cachedCategories(token, businessId);
   const book = await cachedCustomers(token, businessId);
+  const business = await cachedBusiness(token, businessId).catch(() => null);
 
   const variantInitial = product.variants.map((v) => {
     // The keys are what the form submits back; the signed URLs are what it shows meanwhile, and
@@ -93,6 +94,7 @@ async function EditProductForm({
     product.description ?? '',
     product.category?.id ?? '',
     product.customer?.id ?? '',
+    product.paymentStrategyOverride ?? '',
     product.options?.map((o) => `${o.name}:${o.values.map((v) => v.value).join(',')}`).join('|') ?? '',
     ...variantInitial.map(
       (v) => `${v.id}:${v.name}:${v.stock}:${v.price ?? ''}:${v.images.map((img) => img.key).join(',')}`,
@@ -118,10 +120,12 @@ async function EditProductForm({
             submitLabel="Save changes"
             savingLabel="Saving…"
             cancelHref={`/b/${businessId}/products`}
+            storePaymentStrategy={business?.paymentStrategy ?? 'cod'}
             initial={{
               name: product.name,
               price: String(product.price),
               currency: product.currency,
+              paymentStrategyOverride: product.paymentStrategyOverride ?? null,
               sku: product.sku,
               description: product.description ?? '',
               categoryId: product.category?.id,

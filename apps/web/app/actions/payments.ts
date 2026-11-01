@@ -51,3 +51,72 @@ export async function updateDeliveryZonesAction(
   revalidatePath(`/b/${businessId}/payments`);
   redirect(`/b/${businessId}/payments?saved=1`);
 }
+
+/**
+ * The merchant's own payment list. Names are what the customer's words get matched against and
+ * what an order stores, so they are deduplicated here and capped to the 40 characters the order
+ * column can hold; `info` is shown to the buyer exactly as typed.
+ */
+export async function updatePaymentMethodsAction(
+  businessId: string,
+  formData: FormData,
+): Promise<void> {
+  const token = await requireAuth();
+  const raw = String(formData.get('methods') ?? '[]');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    redirect(`/b/${businessId}/payments?error=methods`);
+  }
+  if (!Array.isArray(parsed)) {
+    redirect(`/b/${businessId}/payments?error=methods`);
+  }
+
+  const seen = new Set<string>();
+  const methods: Array<{ name: string; info?: string; requiresTransactionId?: boolean }> = [];
+  for (const row of parsed.slice(0, 20)) {
+    const record = row as Record<string, unknown>;
+    const name = String(record.name ?? '').trim().slice(0, 40);
+    if (!name) continue;
+    const key = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (seen.has(key)) {
+      redirect(`/b/${businessId}/payments?error=duplicate`);
+    }
+    seen.add(key);
+    const info = String(record.info ?? '').trim().slice(0, 200);
+    methods.push({
+      name,
+      ...(info ? { info } : {}),
+      requiresTransactionId: record.requiresTransactionId === true,
+    });
+  }
+
+  await updateBusiness(token, businessId, { paymentMethods: methods });
+
+  expireBusiness(businessId);
+  revalidatePath(`/b/${businessId}/payments`);
+  redirect(`/b/${businessId}/payments?saved=1`);
+}
+
+/**
+ * The store-wide default for how much is paid before ordering. Only the three known values
+ * are accepted; anything else is the form's mistake, not a strategy, and bounces back.
+ */
+export async function updatePaymentStrategyAction(
+  businessId: string,
+  formData: FormData,
+): Promise<void> {
+  const token = await requireAuth();
+  const raw = String(formData.get('strategy') ?? '').trim();
+  if (raw !== 'cod' && raw !== 'delivery_prepaid' && raw !== 'full_prepaid') {
+    redirect(`/b/${businessId}/payments?error=strategy`);
+  }
+
+  await updateBusiness(token, businessId, { paymentStrategy: raw });
+
+  expireBusiness(businessId);
+  revalidatePath(`/b/${businessId}/payments`);
+  redirect(`/b/${businessId}/payments?saved=strategy`);
+}

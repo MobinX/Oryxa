@@ -10,6 +10,7 @@ import {
   deleteOrder,
 } from '@repo/db/crud/order';
 import { createProduct, getProductById } from '@repo/db/crud/product';
+import { updateBusiness } from '@repo/db/crud/business';
 
 export function registerOrderCrudTests() {
   it('createOrder computes total price', async () => {
@@ -48,6 +49,144 @@ export function registerOrderCrudTests() {
     expect(order.currency).toBe('USD');
     expect(order.totalPrice).toBe(12);
     expect(productDetail.currency).toBe('BDT');
+  });
+
+  it('refuses an order whose method needs a transaction id, whatever door it came in through', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    await updateBusiness(business.id, business.userId, {
+      paymentMethods: [
+        { name: 'bKash', info: '01712-345678', requiresTransactionId: true },
+        { name: 'Nogad Agent', requiresTransactionId: true },
+        { name: 'Bank transfer' },
+      ],
+    });
+    const base = {
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId: productDetail.variants[0]?.id,
+      count: 1,
+      customerName: 'Buyer',
+    };
+
+    await expect(createOrder({ ...base, paymentMethod: 'bKash' })).rejects.toThrow(/transaction id/);
+    // The customer's wording, not just the exact label, is what gets matched.
+    await expect(createOrder({ ...base, paymentMethod: 'I will pay by BKash' })).rejects.toThrow(
+      /bKash/,
+    );
+
+    const paid = await createOrder({
+      ...base,
+      paymentMethod: 'Nogad Agent',
+      transactionId: 'TRX-777',
+    });
+    expect((await getOrderById(business.id, paid.id))?.transactionId).toBe('TRX-777');
+
+    // Unmarked methods and cash on delivery stay open, and an order that names no method is
+    // not blocked — a store that configured nothing behaves exactly as it did before.
+    await expect(createOrder({ ...base, paymentMethod: 'Bank transfer' })).resolves.toBeTruthy();
+    await expect(createOrder({ ...base, paymentMethod: 'Cash on delivery' })).resolves.toBeTruthy();
+    await expect(createOrder(base)).resolves.toBeTruthy();
+  });
+
+  it('enforces the payment strategy: prepaid products refuse cash on delivery', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    await updateBusiness(business.id, business.userId, {
+      paymentMethods: [{ name: 'bKash', info: '01712-345678', requiresTransactionId: true }],
+      paymentStrategy: 'full_prepaid',
+    });
+    const base = {
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId: productDetail.variants[0]?.id,
+      count: 1,
+      customerName: 'Buyer',
+    };
+
+    await expect(createOrder({ ...base, paymentMethod: 'Cash on delivery' })).rejects.toThrow(
+      /Cash on delivery alone/,
+    );
+    await expect(createOrder({ ...base, paymentMethod: 'bKash' })).rejects.toThrow(/transaction id/);
+
+    const paid = await createOrder({ ...base, paymentMethod: 'bKash', transactionId: 'TRX-FULL' });
+    expect(paid.paymentStrategy).toBe('full_prepaid');
+    expect((await getOrderById(business.id, paid.id))?.paymentStrategy).toBe('full_prepaid');
+  });
+
+  it('a product override beats the store default, in both directions', async () => {
+    const { business } = await seedTestWorld();
+    await updateBusiness(business.id, business.userId, {
+      paymentMethods: [{ name: 'bKash', info: '01712-345678', requiresTransactionId: true }],
+      paymentStrategy: 'cod',
+    });
+    const prepaid = await createProduct({
+      businessId: business.id,
+      name: 'Prepaid Only Item',
+      price: 50,
+      sku: `PRE-${Date.now()}`,
+      paymentStrategyOverride: 'full_prepaid',
+      variants: [{ name: 'Only', stock: 3, isAvailable: true }],
+    });
+    const prepaidDetail = await getProductById(business.id, prepaid.id);
+    expect(prepaidDetail?.paymentStrategyOverride).toBe('full_prepaid');
+
+    await expect(
+      createOrder({
+        businessId: business.id,
+        productId: prepaid.id,
+        variantId: prepaidDetail!.variants[0]!.id,
+        count: 1,
+        customerName: 'Buyer',
+        paymentMethod: 'Cash on delivery',
+      }),
+    ).rejects.toThrow(/Cash on delivery alone/);
+
+    // The other direction: a COD product in a full-prepaid store orders with nothing up front.
+    await updateBusiness(business.id, business.userId, { paymentStrategy: 'full_prepaid' });
+    const codItem = await createProduct({
+      businessId: business.id,
+      name: 'Pay Later Item',
+      price: 20,
+      sku: `COD-${Date.now()}`,
+      paymentStrategyOverride: 'cod',
+      variants: [{ name: 'Only', stock: 3, isAvailable: true }],
+    });
+    const codDetail = await getProductById(business.id, codItem.id);
+    const order = await createOrder({
+      businessId: business.id,
+      productId: codItem.id,
+      variantId: codDetail!.variants[0]!.id,
+      count: 1,
+      customerName: 'Buyer',
+      paymentMethod: 'Cash on delivery',
+    });
+    expect(order.paymentStrategy).toBe('cod');
+  });
+
+  it('delivery prepaid collects only the delivery charge before ordering', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    await updateBusiness(business.id, business.userId, {
+      paymentMethods: [{ name: 'bKash', info: '01712-345678', requiresTransactionId: true }],
+      paymentStrategy: 'delivery_prepaid',
+    });
+    const base = {
+      businessId: business.id,
+      productId: productDetail.id,
+      variantId: productDetail.variants[0]?.id,
+      count: 1,
+      customerName: 'Buyer',
+      shippingCost: 60,
+    };
+
+    await expect(createOrder({ ...base, paymentMethod: 'Cash on delivery' })).rejects.toThrow(
+      /delivery charge/,
+    );
+    const paid = await createOrder({ ...base, paymentMethod: 'bKash', transactionId: 'TRX-DEL' });
+    expect(paid.paymentStrategy).toBe('delivery_prepaid');
+
+    // With no delivery charge there is nothing to prepay, so COD orders again.
+    await expect(
+      createOrder({ ...base, shippingCost: 0, paymentMethod: 'Cash on delivery' }),
+    ).resolves.toBeTruthy();
   });
 
   it('createOrder decrements variant stock', async () => {

@@ -16,7 +16,7 @@ export const createOrderInputSchema = z.object({
   shippingCost: z.number().min(0).optional(),
   /** In the buyer's own words — "Cash on delivery", "bKash" — not a code, so the card reads as speech. */
   paymentMethod: z.string().min(1).max(40).optional(),
-  /** Required for bKash/Nagad before the agent may create the order. */
+  /** Required when the chosen payment method is configured to need one. */
   transactionId: z.string().min(1).max(120).optional(),
   conversationId: uuidSchema.optional(),
   /**
@@ -35,6 +35,8 @@ export const createOrderOutputSchema = z.object({
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),
+  /** The payment strategy this order was placed under. */
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).optional(),
   state: orderStateSchema,
   /** The card this order matched by phone; null when the buyer gave no number to match. */
   customerId: uuidSchema.nullable(),
@@ -63,6 +65,7 @@ export const orderListItemSchema = z.object({
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   state: orderStateSchema,
   createdAt: timestampSchema,
 });
@@ -116,6 +119,7 @@ export const getOrderOutputSchema = z.object({
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   conversationId: uuidSchema.nullable().optional(),
   createdAt: timestampSchema,
 });

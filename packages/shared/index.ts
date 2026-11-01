@@ -18,6 +18,8 @@ export * from '@shared/schemas/official';
 export * from '@shared/schemas/plan';
 export * from '@shared/schemas/billing';
 export * from './prompts/agent';
+export * from './payment-methods';
+export * from './payment-strategy';
 export * from './language';
 export * from '@shared/timezone';
 

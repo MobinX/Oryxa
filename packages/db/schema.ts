@@ -8,6 +8,20 @@ export type DeliveryZone = {
   price: number;
 };
 
+/**
+ * One way the merchant takes money. Cash on delivery is always available and needs no entry
+ * here; anything else is merchant-named, carries the account or number the customer pays into,
+ * and may demand a transaction id before an order may exist.
+ */
+export type PaymentMethod = {
+  name: string;
+  info?: string;
+  requiresTransactionId?: boolean;
+};
+
+/** How much must be paid before an order may exist; the rest (if any) is paid on delivery. */
+export type PaymentStrategy = 'cod' | 'delivery_prepaid' | 'full_prepaid';
+
 export type StoreTheme = {
   accentColor?: string;
   font?: 'sans' | 'serif' | 'mono';
@@ -489,6 +503,17 @@ export const businesses = pgTable('businesses', {
    * charge and the order tool receives the matching amount as shippingCost.
    */
   deliveryZones: jsonb('delivery_zones').$type<DeliveryZone[]>().default(sql`'[]'::jsonb`).notNull(),
+  /**
+   * How the merchant takes money beyond cash on delivery. The agent offers only these, shows the
+   * customer the `info` it collects into, and must collect a transaction id when the method says
+   * `requiresTransactionId`. Empty means the store has set nothing up yet.
+   */
+  paymentMethods: jsonb('payment_methods').$type<PaymentMethod[]>().default(sql`'[]'::jsonb`).notNull(),
+  /**
+   * How much a customer must pay before an order may exist, for every product that does not
+   * override it: cash on delivery, the delivery charge prepaid, or everything prepaid.
+   */
+  paymentStrategy: varchar('payment_strategy', { length: 30 }).$type<PaymentStrategy>().default('cod').notNull(),
   employeeCount: integer('employee_count'),
   type: varchar('type', { length: 100 }),
   foundedDate: timestamp('founded_date'),
@@ -559,6 +584,11 @@ export const products = pgTable('products', {
   tags: text('tags').array().default(sql`'{}'::text[]`).notNull(),
   /** False hides the product from the public store without deleting it from the catalog. */
   showInStorefront: boolean('show_in_storefront').default(true).notNull(),
+  /**
+   * This product's own payment strategy, when it breaks the store default. NULL follows the
+   * store: most products never override, and a store-wide change then reaches them all.
+   */
+  paymentStrategyOverride: varchar('payment_strategy_override', { length: 30 }).$type<PaymentStrategy>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -674,8 +704,10 @@ export const orders = pgTable('orders', {
   shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
   /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
   paymentMethod: varchar('payment_method', { length: 40 }),
-  /** The bKash/Nagad transaction id the buyer gave before the order was placed. */
+  /** The transaction id the buyer gave when their chosen method demands one. */
   transactionId: varchar('transaction_id', { length: 120 }),
+  /** The payment strategy this order was placed under, snapshotted so a later store change cannot rewrite history. */
+  paymentStrategy: varchar('payment_strategy', { length: 30 }).$type<PaymentStrategy>(),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),

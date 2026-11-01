@@ -59,6 +59,49 @@ export function registerBusinessCrudTests() {
     expect(business?.deliveryZones).toEqual(zones);
   });
 
+  it('stores the merchant\'s payment methods with their account info', async () => {
+    const user = await syncUser({
+      firebaseUid: `pay-biz-uid-${Date.now()}`,
+      name: 'Owner',
+      signInMethod: 'google',
+    });
+    const created = await createBusiness(user.id, {
+      name: 'Pay Shop',
+      hasTradeLicense: false,
+      hasTaxLicense: false,
+    });
+    // Nothing configured is today's behaviour: cash on delivery only.
+    expect(created.paymentMethods).toEqual([]);
+
+    const methods = [
+      { name: 'bKash Personal', info: '01712-345678', requiresTransactionId: true },
+      { name: 'Bank transfer' },
+    ];
+    await updateBusiness(created.id, user.id, { paymentMethods: methods });
+    const business = await getBusinessById(created.id);
+    expect(business?.paymentMethods).toEqual(methods);
+  });
+
+  it('stores the store-wide payment strategy, defaulting to cash on delivery', async () => {
+    const user = await syncUser({
+      firebaseUid: `strategy-biz-uid-${Date.now()}`,
+      name: 'Owner',
+      signInMethod: 'google',
+    });
+    const created = await createBusiness(user.id, {
+      name: 'Strategy Shop',
+      hasTradeLicense: false,
+      hasTaxLicense: false,
+    });
+    expect(created.paymentStrategy).toBe('cod');
+
+    await updateBusiness(created.id, user.id, { paymentStrategy: 'delivery_prepaid' });
+    expect((await getBusinessById(created.id))?.paymentStrategy).toBe('delivery_prepaid');
+
+    await updateBusiness(created.id, user.id, { paymentStrategy: 'full_prepaid' });
+    expect((await getBusinessById(created.id))?.paymentStrategy).toBe('full_prepaid');
+  });
+
   it('updateBusiness updates fields', async () => {
     const user = await syncUser({
       firebaseUid: `upd-biz-uid-${Date.now()}`,

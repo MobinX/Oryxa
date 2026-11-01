@@ -330,6 +330,34 @@
       "when": 1793524916036,
       "tag": "0046_currency_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793556000000,
+      "tag": "0047_payment_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793556000001,
+      "tag": "0048_default_agent_payment_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793556000002,
+      "tag": "0049_payment_strategy",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793556000003,
+      "tag": "0050_default_agent_payment_strategy",
+      "breakpoints": true
     }
   ]
 }

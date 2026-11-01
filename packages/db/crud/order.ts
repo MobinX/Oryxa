@@ -1,10 +1,13 @@
 import { eq, and, desc, isNull, sql, gte } from 'drizzle-orm';
 import { db } from '@db/client';
-import { orders, products, variants } from '@db/schema';
+import { orders, products, variants, businesses } from '@db/schema';
 import {
   createOrderInputSchema,
   updateOrderInputSchema,
   updateOrderStateInputSchema,
+  checkOrderPayment,
+  resolvePaymentStrategy,
+  type PaymentStrategy,
 } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { findOrCreateCustomerByPhone, ensureCompanyIdForBusiness, normalizePhone } from './customer';
@@ -50,6 +53,30 @@ export async function createOrder(input: unknown) {
 
   const totalPrice = variantPrice * parsed.count;
 
+  // The merchant decides which of its payment methods cannot be ordered without a receipt
+  // number, and the payment strategy decides how much has to move before any order exists.
+  // Every door — agent, inbox, dashboard, storefront — funnels through here, so one check
+  // covers them all, and a store on cash on delivery with nothing configured behaves exactly
+  // as it did before. The product's own strategy wins over the store default when it has one.
+  const store = await db.query.businesses.findFirst({
+    where: eq(businesses.id, parsed.businessId),
+    columns: { paymentMethods: true, paymentStrategy: true },
+  });
+  const strategy = resolvePaymentStrategy(
+    store?.paymentStrategy,
+    (product as { paymentStrategyOverride?: PaymentStrategy | null }).paymentStrategyOverride,
+  );
+  const paymentCheck = checkOrderPayment({
+    strategy: strategy.effective,
+    paymentMethod: parsed.paymentMethod,
+    transactionId: parsed.transactionId,
+    paymentMethods: store?.paymentMethods,
+    shippingCost: parsed.shippingCost,
+  });
+  if (!paymentCheck.ok) {
+    throw new Error(paymentCheck.message);
+  }
+
   // Every door an order can come in through — the agent's `create_order` tool, the
   // merchant's form, the storefront's checkout — funnels here, so this is the one place
   // that turns a typed phone number into the company's customer. A number nobody has
@@ -86,6 +113,7 @@ export async function createOrder(input: unknown) {
       shippingCost: (parsed.shippingCost ?? 0).toFixed(2),
       paymentMethod: parsed.paymentMethod?.trim() ? parsed.paymentMethod.trim() : null,
       transactionId: parsed.transactionId?.trim() ? parsed.transactionId.trim() : null,
+      paymentStrategy: strategy.effective,
       state: 'pending',
     })
     .returning();
@@ -123,6 +151,7 @@ export async function createOrder(input: unknown) {
     shippingCost: parsed.shippingCost ?? 0,
     paymentMethod: parsed.paymentMethod ?? null,
     transactionId: parsed.transactionId?.trim() || null,
+    paymentStrategy: strategy.effective,
     state: order.state,
     customerId: order.customerId,
   };
@@ -166,6 +195,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     shippingCost: parseFloat(order.shippingCost),
     paymentMethod: order.paymentMethod,
     transactionId: order.transactionId,
+    paymentStrategy: order.paymentStrategy ?? null,
     conversationId: order.conversationId,
     createdAt: order.createdAt,
   };
@@ -221,6 +251,7 @@ export async function listOrders(
         shippingCost: parseFloat(o.shippingCost),
         paymentMethod: o.paymentMethod,
         transactionId: o.transactionId,
+        paymentStrategy: o.paymentStrategy ?? null,
         state: o.state,
         createdAt: o.createdAt.toISOString(),
       };
@@ -294,6 +325,7 @@ export async function getOrdersByPlatformId(
         imageUrl,
         count: o.count,
         totalPrice: parseFloat(o.totalPrice),
+        currency: o.currency,
         state: o.state,
         createdAt: o.createdAt,
       };

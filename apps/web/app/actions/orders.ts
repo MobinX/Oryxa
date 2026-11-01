@@ -31,19 +31,38 @@ export async function createOrderAction(businessId: string, formData: FormData) 
   const customerName = String(formData.get('customerName') ?? '').trim();
   const customerPhone = String(formData.get('customerPhone') ?? '').trim();
   const customerAddress = String(formData.get('customerAddress') ?? '').trim();
+  const shippingRaw = String(formData.get('shippingCost') ?? '').trim();
+  const shippingCost = shippingRaw ? Number(shippingRaw) : undefined;
+  const paymentMethod = String(formData.get('paymentMethod') ?? '').trim() || undefined;
+  const transactionId = String(formData.get('transactionId') ?? '').trim() || undefined;
 
   if (!productId || !customerName) {
     redirect(`/b/${businessId}/orders/new?error=required`);
   }
 
-  const order = await createOrder(token, businessId, {
-    productId,
-    variantId,
-    count,
-    customerName,
-    customerPhone: customerPhone || undefined,
-    customerAddress: customerAddress || undefined,
-  });
+  let order: Awaited<ReturnType<typeof createOrder>>;
+  try {
+    order = await createOrder(token, businessId, {
+      productId,
+      variantId,
+      count,
+      customerName,
+      customerPhone: customerPhone || undefined,
+      customerAddress: customerAddress || undefined,
+      ...(typeof shippingCost === 'number' && Number.isFinite(shippingCost) && shippingCost >= 0
+        ? { shippingCost }
+        : {}),
+      paymentMethod,
+      transactionId,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      redirect(
+        `/b/${businessId}/orders/new?productId=${encodeURIComponent(productId)}&error=${encodeURIComponent(err.message)}`,
+      );
+    }
+    throw err;
+  }
 
   revalidatePath(`/b/${businessId}/orders`);
   expireOrders(businessId, order.id, order.customerId);

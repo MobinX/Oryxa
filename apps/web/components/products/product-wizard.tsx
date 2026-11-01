@@ -13,6 +13,12 @@ import { CategorySelect } from '@/components/products/category-select';
 import { CustomerSelect } from '@/components/products/customer-select';
 import { ProductFormSubmit } from '@/components/products/product-form-submit';
 import type { UploadedImage } from '@/lib/uploads-client';
+import type { PaymentStrategy } from '@/lib/api';
+import {
+  PAYMENT_STRATEGY_OPTIONS,
+  paymentStrategyDescription,
+  paymentStrategyLabel,
+} from '@/lib/payment-strategy';
 
 /** A variant holds as many shots as a merchant has; past this the strip is a gallery nobody scrolls. */
 const MAX_IMAGES = 8;
@@ -45,6 +51,8 @@ export interface ProductWizardInitial {
   name?: string;
   price?: string;
   currency?: string;
+  /** This product's own payment strategy; null/absent follows the store default. */
+  paymentStrategyOverride?: PaymentStrategy | null;
   sku?: string;
   description?: string;
   categoryId?: string;
@@ -113,6 +121,7 @@ export function ProductWizard({
   submitLabel,
   savingLabel,
   cancelHref,
+  storePaymentStrategy = 'cod',
 }: {
   businessId: string;
   action: (formData: FormData) => void;
@@ -123,6 +132,8 @@ export function ProductWizard({
   submitLabel: string;
   savingLabel: string;
   cancelHref: string;
+  /** The store default from the Payments page, shown beside the override picker. */
+  storePaymentStrategy?: PaymentStrategy;
 }) {
   const hasInitialOptions = (initial?.options?.length ?? 0) > 0;
   const [step, setStep] = useState<1 | 2>(1);
@@ -142,6 +153,11 @@ export function ProductWizard({
   );
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '));
   const [showInStorefront, setShowInStorefront] = useState(initial?.showInStorefront ?? true);
+  // Empty means "follow the store default" — the common case, and the one a store-wide
+  // change on the Payments page is supposed to keep reaching.
+  const [paymentOverride, setPaymentOverride] = useState<string>(
+    initial?.paymentStrategyOverride ?? '',
+  );
   const [options, setOptions] = useState<WizardOption[]>(initial?.options ?? []);
   const [optionDrafts, setOptionDrafts] = useState<Record<number, string>>({});
 
@@ -459,6 +475,36 @@ export function ProductWizard({
               This product appears on the public store
             </label>
             <input type="hidden" name="showInStorefront" value={showInStorefront ? '1' : '0'} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium" htmlFor="paymentStrategyOverride">
+              Alter default payment strategy <span className="font-normal text-[var(--muted-foreground)]">(optional)</span>
+            </label>
+            <select
+              id="paymentStrategyOverride"
+              name="paymentStrategyOverride"
+              value={paymentOverride}
+              onChange={(e) => setPaymentOverride(e.target.value)}
+              className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm dark:bg-slate-900"
+            >
+              <option value="">
+                Use store default — {paymentStrategyLabel(storePaymentStrategy)}
+              </option>
+              {PAYMENT_STRATEGY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                  {option.value === storePaymentStrategy ? ' (store default)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              {paymentOverride
+                ? paymentStrategyDescription(paymentOverride)
+                : `This product follows the store default: ${paymentStrategyDescription(storePaymentStrategy)} Change the default for every product on the Payments page.`}
+              {paymentOverride && paymentOverride !== storePaymentStrategy
+                ? ' The sales agent is alerted that this product overrides the store default whenever it looks the product up.'
+                : ''}
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-medium">URL slug</label>

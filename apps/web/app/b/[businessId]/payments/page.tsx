@@ -3,7 +3,13 @@ import { requireAuth } from '@/lib/auth';
 import { cachedBusiness } from '@/app/_cache/queries';
 import { Card } from '@/components/ui/card';
 import { DeliveryZonesEditor } from '@/components/payments/delivery-zones-editor';
-import { updateDeliveryZonesAction } from '@/app/actions/payments';
+import { PaymentMethodsEditor } from '@/components/payments/payment-methods-editor';
+import { PaymentStrategyEditor } from '@/components/payments/payment-strategy-editor';
+import {
+  updateDeliveryZonesAction,
+  updatePaymentMethodsAction,
+  updatePaymentStrategyAction,
+} from '@/app/actions/payments';
 
 export default function PaymentsPage({
   params,
@@ -17,8 +23,9 @@ export default function PaymentsPage({
       <div>
         <h1 className="text-xl font-bold sm:text-2xl">Payments</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Set the delivery charge for each region. The AI quotes only these amounts and records
-          the matching charge on the order.
+          Set the delivery charge for each region, the ways customers pay you, and how much must
+          be paid before an order can be placed. The AI quotes only these amounts and methods,
+          and an order cannot be created until the payment strategy for that product is met.
         </p>
       </div>
       <Suspense fallback={<PaymentsSkeleton />}>
@@ -42,18 +49,51 @@ async function PaymentsContent({
 
   return (
     <>
-      {saved === '1' && (
+      {(saved === '1' || saved === 'strategy') && (
         <Card className="border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-          ✓ Delivery charges saved.
+          ✓ {saved === 'strategy' ? 'Payment strategy saved.' : 'Payment settings saved.'}
         </Card>
       )}
       {error ? (
         <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           {error === 'price'
             ? 'Every region needs a delivery price of 0 or more. Blank rows are saved as nothing; a named region cannot be left without one.'
-            : 'Those delivery charges could not be read. Please try again.'}
+            : error === 'duplicate'
+              ? 'Two payment methods share the same name. The customer’s words are matched against that name, so it has to be unique — keep one of them.'
+              : error === 'methods'
+                ? 'Those payment methods could not be read. Please try again.'
+                : error === 'strategy'
+                  ? 'That payment strategy could not be read. Please choose one of the three options and try again.'
+                  : 'Those delivery charges could not be read. Please try again.'}
         </Card>
       ) : null}
+
+      <Card>
+        <h2 className="text-lg font-semibold">Payment methods</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          How customers pay you, in your own words. The agent offers cash on delivery plus exactly
+          these, tells the customer the number or account you wrote, and will not create an order
+          for a method that needs a transaction id until that id arrives.
+        </p>
+        <PaymentMethodsEditor
+          action={updatePaymentMethodsAction.bind(null, businessId)}
+          initial={business.paymentMethods ?? []}
+        />
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold">Payment strategy</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          How much a customer must pay before an order can be placed. This applies to every
+          product, unless a product overrides it in its own form. Cash on delivery needs nothing
+          up front; the prepaid options need a configured method above (not cash on delivery)
+          and its transaction id before the order exists.
+        </p>
+        <PaymentStrategyEditor
+          action={updatePaymentStrategyAction.bind(null, businessId)}
+          initial={business.paymentStrategy ?? 'cod'}
+        />
+      </Card>
 
       <Card>
         <h2 className="text-lg font-semibold">Delivery charges by region</h2>
@@ -69,11 +109,12 @@ async function PaymentsContent({
       </Card>
 
       <Card>
-        <h2 className="text-lg font-semibold">How customers pay</h2>
+        <h2 className="text-lg font-semibold">How orders are paid</h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Checkout is cash on delivery, bKash or Nagad in the customer’s own words. The order
-          records the method and, for mobile payments, the transaction ID the customer types;
-          payment is not gateway-verified in the console.
+          Cash on delivery always works and asks for nothing up front. A method you ticked as
+          needing a transaction id cannot be ordered until the customer gives that id — the agent,
+          the inbox order form and the saved order all enforce it. Payment is not gateway-verified
+          in the console; you confirm the money on your side.
         </p>
       </Card>
     </>

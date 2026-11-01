@@ -235,6 +235,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         commenterPlatformId: thread.commenterPlatformId,
         platform,
         emitSse: trace.emitSse,
+        paymentStrategy: (thread.business as { paymentStrategy?: import('@repo/shared').PaymentStrategy } | null)?.paymentStrategy,
       },
       (text, kind) => {
         if (kind === 'private') privateMessageDelivered = true;

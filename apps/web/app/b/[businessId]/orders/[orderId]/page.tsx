@@ -15,6 +15,7 @@ import {
   advanceOrderStateAction,
 } from '@/app/actions/orders';
 import OrderDetailSkeleton from './skeleton';
+import { paymentStrategyLabel } from '@/lib/payment-strategy';
 
 const stateVariant: Record<string, 'warning' | 'info' | 'purple' | 'success'> = {
   pending: 'warning',
@@ -160,6 +161,12 @@ async function OrderDetail({
           <div>
             <span className="text-[var(--muted-foreground)]">Payment: </span>
             <span className="font-medium">{order.paymentMethod}</span>
+          </div>
+        )}
+        {order.paymentStrategy && (
+          <div>
+            <span className="text-[var(--muted-foreground)]">Payment strategy: </span>
+            <span className="font-medium">{paymentStrategyLabel(order.paymentStrategy)}</span>
           </div>
         )}
         {order.transactionId && (

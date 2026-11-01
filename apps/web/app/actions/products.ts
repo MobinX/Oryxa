@@ -146,6 +146,23 @@ function readCurrency(formData: FormData): string | undefined {
   return /^[A-Z]{3,8}$/.test(raw) ? raw : undefined;
 }
 
+type PaymentStrategyValue = 'cod' | 'delivery_prepaid' | 'full_prepaid';
+
+/**
+ * The product's payment-strategy override. Absent field means the caller never showed the
+ * picker, so the saved value is left alone (undefined); present-but-empty is the merchant
+ * choosing "use store default" and clears the override (null).
+ */
+function readPaymentStrategyOverride(
+  formData: FormData,
+): PaymentStrategyValue | null | undefined {
+  const rawField = formData.get('paymentStrategyOverride');
+  if (rawField === null) return undefined;
+  const raw = String(rawField).trim();
+  if (!raw) return null;
+  return raw === 'cod' || raw === 'delivery_prepaid' || raw === 'full_prepaid' ? raw : undefined;
+}
+
 export async function createProductAction(businessId: string, formData: FormData) {
   const token = await requireAuth();
   const name = String(formData.get('name') ?? '').trim();
@@ -171,12 +188,14 @@ export async function createProductAction(businessId: string, formData: FormData
 
   const options = parseOptions(formData);
   const variants = await parseVariants(token, businessId, formData);
+  const paymentStrategyOverride = readPaymentStrategyOverride(formData);
 
   await createProduct(token, businessId, {
     name,
     sku,
     price,
     currency,
+    paymentStrategyOverride: paymentStrategyOverride ?? null,
     description: description || undefined,
     // Typed name wins over dropdown selection.
     categoryName: categoryName || undefined,
@@ -231,11 +250,13 @@ export async function updateProductAction(
   const rawStorefront = formData.get('showInStorefront');
   const showInStorefront = rawStorefront === null ? undefined : rawStorefront !== '0';
   const options = parseOptions(formData);
+  const paymentStrategyOverride = readPaymentStrategyOverride(formData);
 
   const variants = await parseVariants(token, businessId, formData);
 
   try {
     await updateProduct(token, businessId, productId, {
+      ...(paymentStrategyOverride !== undefined ? { paymentStrategyOverride } : {}),
       name: name || undefined,
       sku: sku || undefined,
       price: price || undefined,

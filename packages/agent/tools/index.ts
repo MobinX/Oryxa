@@ -25,7 +25,16 @@ import {
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import type { SseEmitter } from '@agent/Agent';
-import type { ConversationAgentState } from '@repo/shared';
+import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
+import {
+  matchPaymentMethod,
+  checkOrderPayment,
+  resolvePaymentStrategy,
+  PAYMENT_STRATEGY_DESCRIPTIONS,
+  PAYMENT_STRATEGY_LABELS,
+  upfrontAmount,
+  upfrontKind,
+} from '@repo/shared';
 
 /** A catalog row with its variants, exactly as `searchProducts` hands it back. */
 type SearchedProduct = Awaited<ReturnType<typeof searchProducts>>[number];
@@ -168,11 +177,51 @@ function stateWord(state: string): string {
   return STATE_FOR_BUYER[state] ?? state;
 }
 
+/**
+ * The payment facts a product tool hands the model about one product: the strategy that
+ * actually governs it, where that strategy came from, and — only when the product breaks the
+ * store's rule — a loud alert, because an override the model reads past is an override the
+ * customer never hears about. Every product-reading tool spreads this in, so any route to a
+ * product carries the same warning.
+ */
+function paymentInfoFor(
+  storeDefault: PaymentStrategy | null | undefined,
+  product: { paymentStrategyOverride?: PaymentStrategy | string | null },
+) {
+  const resolved = resolvePaymentStrategy(
+    storeDefault,
+    (product.paymentStrategyOverride ?? null) as PaymentStrategy | null,
+  );
+  return {
+    paymentStrategy: resolved.effective,
+    paymentStrategyLabel: PAYMENT_STRATEGY_LABELS[resolved.effective],
+    paymentStrategyRule: PAYMENT_STRATEGY_DESCRIPTIONS[resolved.effective],
+    paymentStrategySource: resolved.source,
+    storeDefaultPaymentStrategy: resolved.storeDefault,
+    ...(resolved.productOverride ? { productPaymentStrategyOverride: resolved.productOverride } : {}),
+    ...(resolved.isOverride
+      ? {
+          paymentStrategyAlert:
+            `PAYMENT STRATEGY OVERRIDE: ${PAYMENT_STRATEGY_LABELS[resolved.effective]} governs this product, `
+            + `not the store default (${PAYMENT_STRATEGY_LABELS[resolved.storeDefault]}). `
+            + `${PAYMENT_STRATEGY_DESCRIPTIONS[resolved.effective]} Tell the customer this rule before they pay anything, `
+            + 'and follow it when ordering this product.',
+        }
+      : {}),
+  };
+}
+
 /** Catalog tools shared by every transport (Messenger, comments, future ones). */
 export function createCatalogTools(context: {
   businessId: string;
   /** Optional: links an order to the originating Messenger conversation. */
   conversationId?: string;
+  /** The merchant's region-based delivery charges, used to validate shippingCost. */
+  deliveryZones?: Array<{ label: string; price: number }>;
+  /** The merchant's payment methods; one marked requiresTransactionId blocks an order without an id. */
+  paymentMethods?: PaymentMethodConfig[];
+  /** Store-wide default payment strategy; a product's own override wins over it. */
+  paymentStrategy?: PaymentStrategy;
   /**
    * Optional: the buyer's page-scoped Messenger id, written on the order so they can ask for their own
    * history later. Absent for a comment thread or a dashboard form, where no such id is in hand.
@@ -199,6 +248,7 @@ export function createCatalogTools(context: {
           price: p.price,
           currency: p.currency,
           sku: p.sku,
+          ...paymentInfoFor(context.paymentStrategy, p),
           description: oneLine(p.description, 120),
           variantCount: p.variants.length,
           availableVariantCount: p.variants.filter((v) => v.isAvailable && v.stock > 0).length,
@@ -286,6 +336,7 @@ export function createCatalogTools(context: {
           price: product.price,
           currency: product.currency,
           description: product.description,
+          ...paymentInfoFor(context.paymentStrategy, product),
         },
         variant: {
           id: variant.id,
@@ -294,9 +345,13 @@ export function createCatalogTools(context: {
           stock: variant.stock,
           isAvailable: variant.isAvailable,
         },
-        instruction: context.conversationId
-          ? `Found matching variant: ${product.name}, variant ${variant.name}. Call show_products(query="${product.name}") to display it. Never mention the 5-character photo code in customer text.`
-          : `Found matching variant: ${product.name}, variant ${variant.name}. Answer with it without mentioning the 5-character code.`,
+        instruction:
+          (context.conversationId
+            ? `Found matching variant: ${product.name}, variant ${variant.name}. Call show_products(query="${product.name}") to display it. Never mention the 5-character photo code in customer text.`
+            : `Found matching variant: ${product.name}, variant ${variant.name}. Answer with it without mentioning the 5-character code.`)
+          + (paymentInfoFor(context.paymentStrategy, product).paymentStrategyAlert
+            ? ` ${paymentInfoFor(context.paymentStrategy, product).paymentStrategyAlert}`
+            : ''),
       });
       console.log(`[agent-tool] get_product_by_variant_id result: ${result.slice(0, 200)}${result.length > 200 ? '…' : ''}`);
       context.emitSse?.('tool_result', { name: 'get_product_by_variant_id', result });
@@ -337,6 +392,7 @@ export function createCatalogTools(context: {
         name: product.name,
         price: product.price,
         currency: product.currency,
+        ...paymentInfoFor(context.paymentStrategy, product),
         // The declared options and every value they take — the answer to "which colors/sizes does
         // it come in?", carried here so the model never has to ask the customer or guess one.
         options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
@@ -440,6 +496,7 @@ export function createCatalogTools(context: {
         return logResult(JSON.stringify({
           found: true,
           multiple: true,
+          ...paymentInfoFor(context.paymentStrategy, product),
           matches: matches.map((v) => ({ id: v.id, name: v.name, label: v.variantId ?? null, options: v.options ?? {}, price: v.price ?? product.price, stock: v.stock })),
           instruction: 'More than one variant answers that — an option is still undecided. Ask the customer for it, or put the matches on cards with show_product_info.',
         }));
@@ -448,6 +505,7 @@ export function createCatalogTools(context: {
       const variant = matches[0]!;
       return logResult(JSON.stringify({
         found: true,
+        ...paymentInfoFor(context.paymentStrategy, product),
         variant: {
           id: variant.id,
           name: variant.name,
@@ -479,7 +537,6 @@ export function createCatalogTools(context: {
       context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId, requestedPrice } });
       console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1} requestedPrice=${requestedPrice}`);
 
-      const paymentNeedsTransaction = /bkash|nagad|বিকাশ|নগদ/i.test(paymentMethod ?? '');
       const paidTransactionId = transactionId?.trim() || null;
 
       /** A payment already moved; a failed order is the owner's problem right now, not later. */
@@ -533,37 +590,10 @@ export function createCatalogTools(context: {
 
       let result: string;
 
-      /**
-       * An order that names no variant has no size to price from, no stock to check, no picture to
-       * show the customer later, and nothing for the merchant to pick off the shelf. One size left in
-       * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
-       */
-      if (
-        !count ||
-        !customerAddress?.trim() ||
-        !customerPhone?.trim() ||
-        (paymentNeedsTransaction && !paidTransactionId)
-      ) {
-        const missing = [
-          !count ? 'quantity' : null,
-          !customerPhone?.trim() ? 'phone' : null,
-          !customerAddress?.trim() ? 'delivery address' : null,
-          paymentNeedsTransaction && !paidTransactionId ? 'payment transaction id' : null,
-        ].filter(Boolean);
-        const result = JSON.stringify({
-          created: false,
-          missing,
-          ...(paymentNeedsTransaction && !paidTransactionId
-            ? {
-                instruction:
-                  'The customer chose bKash or Nagad, so a transaction id is required before ordering. Ask them to send the TrxID from their payment SMS, then call create_order again with it. Do not invent or reuse an id.',
-              }
-            : {}),
-        });
-        context.emitSse?.('tool_result', { name: 'create_order', result });
-        return result;
-      }
-
+      // The product is loaded once, up front: its payment strategy (its own override, else the
+      // store default) decides whether this order may exist yet, and pricing below reuses the
+      // same row. The merchant's method list decides the receipt rule on top of that, so a store
+      // that adds "Bank transfer" gets both enforced without a code change.
       const product = await getProductById(context.businessId, productId).catch((err) => {
         console.error('[agent-tool] create_order could not load the product before pricing:', err);
         return null;
@@ -574,6 +604,81 @@ export function createCatalogTools(context: {
           error: 'Product not found',
           instruction:
             'Nothing was ordered. Tell the customer this item is not available and offer another product.',
+        });
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
+      const strategyInfo = paymentInfoFor(context.paymentStrategy, product);
+      const resolvedStrategy = resolvePaymentStrategy(
+        context.paymentStrategy,
+        (product as { paymentStrategyOverride?: PaymentStrategy | null }).paymentStrategyOverride ?? null,
+      );
+      const paymentCheck = checkOrderPayment({
+        strategy: resolvedStrategy.effective,
+        paymentMethod,
+        transactionId: paidTransactionId,
+        paymentMethods: context.paymentMethods,
+        shippingCost,
+      });
+
+      /**
+       * An order that names no variant has no size to price from, no stock to check, no picture to
+       * show the customer later, and nothing for the merchant to pick off the shelf. One size left in
+       * the store answers itself; several do not, and guessing is the merchant receiving the wrong box.
+       */
+      if (!count || !customerAddress?.trim() || !customerPhone?.trim() || !paymentCheck.ok) {
+        const missing = [
+          !count ? 'quantity' : null,
+          !customerPhone?.trim() ? 'phone' : null,
+          !customerAddress?.trim() ? 'delivery address' : null,
+          ...(!paymentCheck.ok ? paymentCheck.missing : []),
+        ].filter((value, index, all) => Boolean(value) && all.indexOf(value) === index);
+        const failedMethod = !paymentCheck.ok ? paymentCheck.method : null;
+        // What the customer would have to hand over now, when it can be priced already: the
+        // delivery charge alone, or items + delivery. Said in the instruction so the model
+        // quotes a number the store actually configured instead of inventing one.
+        const earlyVariant = variantId
+          ? product.variants.find((v) => v.id === variantId)
+          : product.variants.length === 1
+            ? product.variants[0]
+            : undefined;
+        const unitPrice = Number(earlyVariant?.price ?? product.price);
+        const itemsTotal = Number.isFinite(unitPrice) ? unitPrice * (count || 1) : 0;
+        const upfront = upfrontAmount(resolvedStrategy.effective, { itemsTotal, shippingCost });
+        const balance = Math.max(0, itemsTotal + (shippingCost ?? 0) - upfront);
+        const result = JSON.stringify({
+          created: false,
+          missing,
+          ...strategyInfo,
+          ...(!paymentCheck.ok
+            ? {
+                paymentMethod: failedMethod?.name ?? null,
+                paymentInfo: paymentCheck.paymentInfo ?? failedMethod?.info ?? null,
+                instruction:
+                  paymentCheck.code === 'transaction_required'
+                    ? `${failedMethod?.name} is marked as needing a transaction id, so no order can be created without one. `
+                      + (failedMethod?.info
+                        ? `Tell the customer to pay ${failedMethod.info}, `
+                        : 'Tell the customer to pay first, ')
+                      + 'then copy the transaction id from their payment confirmation and send it to you. Call '
+                      + 'create_order again with transactionId set to exactly what they typed. Never invent, guess, '
+                      + 'reuse an id, or read one off a screenshot you are not sure of.'
+                    : `${paymentCheck.message} `
+                      + (upfrontKind(resolvedStrategy.effective) !== 'none'
+                        ? `Tell the customer they must pay ${money(upfront, product.currency)} now`
+                          + `${paymentCheck.paymentInfo ? ` to ${paymentCheck.paymentInfo}` : ''}`
+                          + (resolvedStrategy.effective === 'delivery_prepaid'
+                            ? ` (the delivery charge only; ${money(balance, product.currency)} stays payable on delivery)`
+                            : ' (the full amount; nothing remains on delivery)')
+                          + ', using one of the store’s configured payment methods — never cash on delivery for this advance — '
+                        : '')
+                      + 'then copy the transaction id from their payment confirmation and send it to you. Call '
+                      + 'create_order again with that paymentMethod and transactionId set to exactly what they typed. '
+                      + 'Never invent, guess, reuse an id, or read one off a screenshot you are not sure of. '
+                      + 'Do not place the order as cash on delivery instead.',
+              }
+            : {}),
         });
         context.emitSse?.('tool_result', { name: 'create_order', result });
         return result;
@@ -709,6 +814,33 @@ export function createCatalogTools(context: {
         }
       }
 
+      // Re-checked with the delivery charge now validated: a delivery-prepaid order whose
+      // charge only became known here must still show its upfront payment before it exists.
+      // The order write checks again, so the two can never drift.
+      const finalPaymentCheck = checkOrderPayment({
+        strategy: resolvedStrategy.effective,
+        paymentMethod,
+        transactionId: paidTransactionId,
+        paymentMethods: context.paymentMethods,
+        shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
+      });
+      if (!finalPaymentCheck.ok) {
+        result = JSON.stringify({
+          created: false,
+          missing: finalPaymentCheck.missing,
+          ...strategyInfo,
+          paymentMethod: finalPaymentCheck.method?.name ?? null,
+          paymentInfo: finalPaymentCheck.paymentInfo ?? finalPaymentCheck.method?.info ?? null,
+          instruction:
+            `${finalPaymentCheck.message} Tell the customer what must be paid now, ask them to pay and send the `
+            + 'transaction id from their payment confirmation, then call create_order again with that '
+            + 'paymentMethod and transactionId. Do not place the order as cash on delivery instead.',
+        });
+        await notifyPaidOrderFailure(finalPaymentCheck.message);
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
       try {
         const order = await createOrder({
           businessId: context.businessId,
@@ -741,7 +873,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'create_order',
-      description: 'Creates a new customer order. Use ONLY when productId, variantId, count, requestedPrice, customerPhone, and customerAddress are all known; requestedPrice is the customer-agreed per-unit price and any value below the listed catalog price is refused; do NOT use to edit an existing order.',
+      description: 'Creates a new customer order. Use ONLY when productId, variantId, count, requestedPrice, customerPhone, and customerAddress are all known, and the product’s payment strategy is satisfied (delivery-charge-prepaid and full-payment-prepaid need a configured non-COD paymentMethod plus its transactionId before ordering; cash on delivery alone is refused for those); requestedPrice is the customer-agreed per-unit price and any value below the listed catalog price is refused; do NOT use to edit an existing order.',
       schema: z.object({
         productId: z.string().uuid(),
         variantId: z.string().uuid().nullable().optional().describe(
@@ -757,10 +889,10 @@ export function createCatalogTools(context: {
           'The delivery charge for the customer’s area, in BDT, taken exactly from the store’s configured delivery zones. Required when the store has zones; ask for the area and pass the matching amount. Omit only when the store has no zones.',
         ),
         paymentMethod: z.string().max(40).nullable().optional().describe(
-          'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
+          'How the customer will pay, in their words, taken from the store’s configured payment methods (plus "Cash on delivery" only when the product’s payment strategy allows it). Ask before ordering when they have not said; a delivery-prepaid or full-prepaid product must name a configured non-COD method here.',
         ),
         transactionId: z.string().max(120).nullable().optional().describe(
-          'The bKash/Nagad transaction id from the customer. Required before ordering when paymentMethod is bKash or Nagad; never invent, guess or reuse one.',
+          'The transaction id from the customer’s payment confirmation. Required before ordering whenever the chosen method is marked as needing one, and whenever the product’s payment strategy needs payment before ordering (see the product tool result and this prompt); never invent, guess or reuse one.',
         ),
       }),
     },
@@ -910,6 +1042,10 @@ export function createAgentTools(
     persistAgentState?: (state: ConversationAgentState) => Promise<void>;
     /** The merchant's region-based delivery charges, used to validate shippingCost. */
     deliveryZones?: Array<{ label: string; price: number }>;
+    /** The merchant's payment methods; one marked requiresTransactionId blocks an order without an id. */
+    paymentMethods?: PaymentMethodConfig[];
+    /** Store-wide default payment strategy; a product's own override wins over it. */
+    paymentStrategy?: PaymentStrategy;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
@@ -1048,6 +1184,12 @@ export function createAgentTools(
           : null,
         orderDetails.paymentMethod,
         orderDetails.transactionId ? `TrxID ${orderDetails.transactionId}` : null,
+        // A method that takes money without a receipt number still has to be paid somewhere, and
+        // the card is the thing the buyer keeps. Ordered last so it is the first to fall off the
+        // 80 characters Meta shows.
+        !orderDetails.transactionId
+          ? matchPaymentMethod(orderDetails.paymentMethod, context.paymentMethods)?.info ?? null
+          : null,
       ].filter(Boolean).join(' · '),
       80,
     );
@@ -1207,7 +1349,7 @@ export function createAgentTools(
           showing: `${from + 1}-${shownThrough}`,
           matchingProducts: total,
           hasMore,
-          products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency, description: p.description })),
+          products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency, description: p.description, ...paymentInfoFor(context.paymentStrategy, p) })),
           ...(unavailable.length ? { notBuyable: unavailable } : {}),
           reason: products.length === 0
             ? `all ${matches.length} products on this page are not available to order`
@@ -1253,6 +1395,7 @@ export function createAgentTools(
           title: oneLine(p.name, 60),
           price: displayPrice(p),
           stock: p.variants.reduce((acc, v) => acc + (v.isAvailable ? v.stock : 0), 0),
+          ...paymentInfoFor(context.paymentStrategy, p),
         })),
         ...(photoless.length ? { skippedWithoutPhoto: photoless } : {}),
         ...(unavailable.length ? { notBuyable: unavailable } : {}),
@@ -1489,6 +1632,7 @@ export function createAgentTools(
       return logResult(JSON.stringify({
         sent: true,
         product: line,
+        ...paymentInfoFor(context.paymentStrategy, product),
         // The declared options ride along: the next "do you have it in blue?" is answerable from
         // this result alone, without another lookup or a question to the customer.
         options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
@@ -1639,6 +1783,7 @@ export function createAgentTools(
 
       return logResult(JSON.stringify({
         sent: true,
+        ...paymentInfoFor(context.paymentStrategy, product),
         variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price, product.currency), stock: variant.stock },
         ...(via !== 'id' && via !== 'none' ? { matchedBy: via } : {}),
         photosSent: last,
@@ -1701,7 +1846,7 @@ export function createAgentTools(
             photos: photoCount(variant),
           };
         });
-      return JSON.stringify({ productId: product.id, productName: product.name, variants });
+      return JSON.stringify({ productId: product.id, productName: product.name, ...paymentInfoFor(context.paymentStrategy, product), variants });
     },
     {
       name: 'suggest_alternatives',

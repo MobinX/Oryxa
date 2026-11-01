@@ -28,7 +28,7 @@ export const notificationKindSchema = z.enum([
   'comment_quota_100',
   // A sale landed through any door: the agent, the merchant's form, or the storefront.
   'order_placed',
-  // A bKash/Nagad transaction id was given but the order could not be created.
+  // A transaction id was given for a method that requires one, but the order could not be created.
   'payment_order_failed',
   // The agent handed a customer's question to a human.
   'human_help',
