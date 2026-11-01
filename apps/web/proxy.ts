@@ -4,6 +4,13 @@ import { BRAND_HEADERS, brandForHost, normalizeBrandHost } from '@/lib/brand';
 
 const AUTH_COOKIE = 'oryxa_token';
 
+/** Dedicated hosts and the route each one opens. */
+const HOST_DOORS: Record<string, { root: string; login: string }> = {
+  'mail.onlyorders.tech': { root: '/mails', login: '/mails/login' },
+  'admin.onlyorders.tech': { root: '/admin', login: '/admin/login' },
+  'sudo.onlyorders.tech': { root: '/superuser', login: '/superuser/login' },
+};
+
 /**
  * The brand is decided per request from the host and passed to server components as request
  * headers. There is deliberately no redirect: `oryxa.rrcomputer.com.bd` and `onlyorders.tech`
@@ -21,14 +28,15 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
-  // The mail host is the dedicated mail console, not the marketing site: its door and its
-  // sign-in live under /mails, so `/` and the merchant `/login` never stand in for them.
-  if (requestHost === 'mail.onlyorders.tech') {
+  // Each dedicated host is a door, not a second site: its root and `/login` lead to the
+  // route it exists for, so the marketing homepage and merchant login never stand in.
+  const door = HOST_DOORS[requestHost];
+  if (door) {
     if (pathname === '/') {
-      return NextResponse.redirect(new URL('/mails', request.url));
+      return NextResponse.redirect(new URL(door.root, request.url));
     }
     if (pathname === '/login') {
-      return NextResponse.redirect(new URL('/mails/login', request.url));
+      return NextResponse.redirect(new URL(door.login, request.url));
     }
   }
 

@@ -23,6 +23,8 @@ const ONLY_ORDERS_HOSTS = new Set([
   'onlyorders.tech',
   'www.onlyorders.tech',
   'mail.onlyorders.tech',
+  'admin.onlyorders.tech',
+  'sudo.onlyorders.tech',
 ]);
 
 export const DEFAULT_BRAND: BrandInfo = {
