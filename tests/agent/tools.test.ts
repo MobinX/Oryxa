@@ -8,12 +8,13 @@ import { createProduct } from '@repo/db/crud/product';
 import { listMessages } from '@repo/db/crud/conversation';
 import { parseConversationAgentState } from '@repo/shared';
 import { db } from '@db/client';
-import { notifications } from '@db/schema';
+import { notifications, orders } from '@db/schema';
 import type { MessengerCard } from '@repo/integrations/facebook';
 
 const orderDefaults = {
   variantId: null,
   count: 1,
+  requestedPrice: 99999,
   customerPhone: '555-0000',
   customerAddress: '1 Test Street',
 };
@@ -95,6 +96,30 @@ describe('Agent Tools', () => {
       customerPhone: '555-0001',
     });
     expect(result).toContain('"id"');
+  });
+
+  it('refuses an order whose requested price is below the listed price', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools(agentContext(seed)).find((item) => item.name === 'create_order')!;
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+    };
+
+    const before = await db.select().from(orders).where(eq(orders.businessId, seed.business.id));
+    const refused = JSON.parse(await tool.invoke({ ...base, requestedPrice: 19.99 }));
+    expect(refused.created).toBe(false);
+    expect(refused.refused).toBe(true);
+    expect(refused.reason).toBe('price_below_listed');
+    expect(refused.listedPrice).toBe(29.99);
+
+    const afterRefusal = await db.select().from(orders).where(eq(orders.businessId, seed.business.id));
+    expect(afterRefusal.length).toBe(before.length);
+
+    const accepted = JSON.parse(await tool.invoke({ ...base, requestedPrice: 29.99 }));
+    expect(accepted.id).toBeTruthy();
+    expect(Number(accepted.totalPrice)).toBe(29.99);
   });
 
   it('requires a bKash/Nagad transaction id and stores it on the order', async () => {

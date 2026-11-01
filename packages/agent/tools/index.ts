@@ -470,9 +470,9 @@ export function createCatalogTools(context: {
   );
 
   const createOrderTool = tool(
-    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId }) => {
-      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId } });
-      console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1}`);
+    async ({ productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId, requestedPrice }) => {
+      context.emitSse?.('tool_call', { name: 'create_order', args: { productId, variantId, count, customerAddress, customerPhone, shippingCost, paymentMethod, transactionId, requestedPrice } });
+      console.log(`[agent-tool] create_order called — productId=${productId} variantId=${variantId ?? 'none'} count=${count ?? 1} requestedPrice=${requestedPrice}`);
 
       const paymentNeedsTransaction = /bkash|nagad|বিকাশ|নগদ/i.test(paymentMethod ?? '');
       const paidTransactionId = transactionId?.trim() || null;
@@ -559,14 +559,25 @@ export function createCatalogTools(context: {
         return result;
       }
 
+      const product = await getProductById(context.businessId, productId).catch((err) => {
+        console.error('[agent-tool] create_order could not load the product before pricing:', err);
+        return null;
+      });
+      if (!product) {
+        result = JSON.stringify({
+          created: false,
+          error: 'Product not found',
+          instruction:
+            'Nothing was ordered. Tell the customer this item is not available and offer another product.',
+        });
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
       let chosenVariantId = variantId ?? undefined;
       if (!chosenVariantId) {
-        const product = await getProductById(context.businessId, productId).catch((err) => {
-          console.error('[agent-tool] create_order could not load the product before choosing a variant:', err);
-          return null;
-        });
-        const sizes = product?.variants ?? [];
-        if (product && sizes.length > 1) {
+        const sizes = product.variants ?? [];
+        if (sizes.length > 1) {
           result = JSON.stringify({
             error: `${product.name} is sold in ${sizes.length} variants, so the order has to say which one`,
             variants: sizes.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })),
@@ -583,6 +594,67 @@ export function createCatalogTools(context: {
           return result;
         }
         if (sizes.length === 1) chosenVariantId = sizes[0].id;
+      }
+
+      const chosenVariant = chosenVariantId
+        ? product.variants.find((variant) => variant.id === chosenVariantId)
+        : product.variants.length === 1
+          ? product.variants[0]
+          : undefined;
+      if (chosenVariantId && !chosenVariant) {
+        result = JSON.stringify({
+          created: false,
+          error: 'Variant not found',
+          instruction:
+            'Nothing was ordered. Reload the product and ask the customer to choose one of its listed variants.',
+        });
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
+      /**
+       * The catalog is the floor. A customer may ask for a lower price, but the agent may never
+       * turn that ask into a discounted order: anything below the listed product/variant price
+       * is refused here, before stock, totals or a customer record are touched.
+       */
+      const listedUnitPrice = chosenVariant?.price ?? product.price;
+      if (!Number.isFinite(listedUnitPrice) || listedUnitPrice < 0) {
+        result = JSON.stringify({
+          created: false,
+          error: 'The listed price is unavailable, so this order cannot be created.',
+          instruction:
+            'Nothing was ordered. Ask the customer to try again later or hand the conversation to the merchant.',
+        });
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
+      }
+
+      const listedCents = Math.round(listedUnitPrice * 100);
+      const requestedCents = Math.round(requestedPrice * 100);
+      if (requestedCents < listedCents) {
+        result = JSON.stringify({
+          created: false,
+          refused: true,
+          reason: 'price_below_listed',
+          productName: product.name,
+          variantName: chosenVariant?.name ?? null,
+          requestedPrice,
+          listedPrice: listedUnitPrice,
+          instruction:
+            `Do not create this order and do not promise the lower price. ${product.name}`
+            + `${chosenVariant ? ` (${chosenVariant.name})` : ''} is listed at ${listedUnitPrice} per unit; `
+            + `the customer asked for ${requestedPrice}. Tell them the listed price is the lowest available and `
+            + `offer another product if needed. Only if they accept ${listedUnitPrice} or more, call create_order `
+            + `again with requestedPrice set to ${listedUnitPrice}. Never claim a discount was approved.`,
+        });
+        console.log(
+          `[agent-tool] create_order refused — requested ${requestedPrice} is below the listed ${listedUnitPrice} for ${product.name}`,
+        );
+        await notifyPaidOrderFailure(
+          `The customer requested ${requestedPrice} per unit but the listed price is ${listedUnitPrice}, so no order was created.`,
+        );
+        context.emitSse?.('tool_result', { name: 'create_order', result });
+        return result;
       }
 
       try {
@@ -624,6 +696,9 @@ export function createCatalogTools(context: {
           'The UUID of the size/variant the customer chose. Required whenever the product has variants; the Order button on a variant card carries it.',
         ),
         count: z.number().int().min(1),
+        requestedPrice: z.number().min(0).describe(
+          'The per-unit price the customer asked for or agreed to, in the store currency. Pass the listed price when no lower price was discussed. A price below the DB-listed product/variant price is refused and no order is created.',
+        ),
         customerAddress: z.string().nullable(),
         customerPhone: z.string().nullable(),
         shippingCost: z.number().min(0).nullable().optional().describe(
