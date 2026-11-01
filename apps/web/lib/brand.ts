@@ -19,7 +19,11 @@ export const BRAND_HEADERS = {
 export const BRAND_DEFAULT_HOST = 'oryxa.rrcomputer.com.bd';
 
 const ORYXA_HOSTS = new Set(['oryxa.rrcomputer.com.bd', 'www.oryxa.rrcomputer.com.bd']);
-const ONLY_ORDERS_HOSTS = new Set(['onlyorders.tech', 'www.onlyorders.tech']);
+const ONLY_ORDERS_HOSTS = new Set([
+  'onlyorders.tech',
+  'www.onlyorders.tech',
+  'mail.onlyorders.tech',
+]);
 
 export const DEFAULT_BRAND: BrandInfo = {
   companyName: 'Oryxa',

@@ -21,6 +21,17 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
+  // The mail host is the dedicated mail console, not the marketing site: its door and its
+  // sign-in live under /mails, so `/` and the merchant `/login` never stand in for them.
+  if (requestHost === 'mail.onlyorders.tech') {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/mails', request.url));
+    }
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/mails/login', request.url));
+    }
+  }
+
   const brand = brandForHost(requestHost);
 
   // Overwrite rather than append: a client must not be able to choose its own brand by sending
