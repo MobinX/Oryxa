@@ -689,7 +689,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'create_order',
-      description: 'Creates a new customer order. Use ONLY when productId, variantId, count, customerPhone, and customerAddress are all known; do NOT use to edit an existing order.',
+      description: 'Creates a new customer order. Use ONLY when productId, variantId, count, requestedPrice, customerPhone, and customerAddress are all known; requestedPrice is the customer-agreed per-unit price and any value below the listed catalog price is refused; do NOT use to edit an existing order.',
       schema: z.object({
         productId: z.string().uuid(),
         variantId: z.string().uuid().nullable().optional().describe(
