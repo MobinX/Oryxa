@@ -39,10 +39,12 @@ function oneLine(value: string | null | undefined, limit: number): string {
   return `${flat.slice(0, limit - 1).trimEnd()}…`;
 }
 
-/** Catalog prices arrive as numeric strings; a card shows two decimals and a dollar sign. */
-function money(value: string | number | null | undefined): string {
+/** Catalog prices arrive as numeric strings and carry their own currency; a card shows both. */
+function money(value: string | number | null | undefined, currency = 'BDT'): string {
   const amount = typeof value === 'number' ? value : parseFloat(value ?? '');
-  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : '';
+  if (!Number.isFinite(amount)) return '';
+  const code = (currency || 'BDT').toUpperCase();
+  return code === 'USD' ? `$${amount.toFixed(2)}` : `${code} ${amount.toFixed(2)}`;
 }
 
 /** Meta's generic template holds ten cards; more than that is a page the buyer scrolls past. */
@@ -65,7 +67,7 @@ function displayPrice(product: SearchedProduct): string {
     .filter((variant) => variant.isAvailable && variant.stock > 0)
     .map((variant) => parseFloat(variant.price ?? ''))
     .filter(Number.isFinite);
-  return money(prices.length ? Math.min(...prices) : parseFloat(product.price));
+  return money(prices.length ? Math.min(...prices) : parseFloat(product.price), product.currency);
 }
 
 /** A card is only as good as its picture, and a sold-out size's photo is the wrong one to show. */
@@ -195,6 +197,7 @@ export function createCatalogTools(context: {
           id: p.id,
           name: p.name,
           price: p.price,
+          currency: p.currency,
           sku: p.sku,
           description: oneLine(p.description, 120),
           variantCount: p.variants.length,
@@ -281,6 +284,7 @@ export function createCatalogTools(context: {
           name: product.name,
           sku: product.sku,
           price: product.price,
+          currency: product.currency,
           description: product.description,
         },
         variant: {
@@ -332,6 +336,7 @@ export function createCatalogTools(context: {
         id: product.id,
         name: product.name,
         price: product.price,
+        currency: product.currency,
         // The declared options and every value they take — the answer to "which colors/sizes does
         // it come in?", carried here so the model never has to ask the customer or guess one.
         options: (product.options ?? []).map((o) => ({ name: o.name, values: o.values.map((v) => v.value) })),
@@ -580,7 +585,7 @@ export function createCatalogTools(context: {
         if (sizes.length > 1) {
           result = JSON.stringify({
             error: `${product.name} is sold in ${sizes.length} variants, so the order has to say which one`,
-            variants: sizes.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })),
+            variants: sizes.map((v) => ({ id: v.id, name: v.name, price: v.price, currency: product.currency, stock: v.stock })),
             instruction:
               'Nothing was ordered. Call show_product_info for this product — the customer taps the size they want '
               + 'and the tap carries its variant id — then ask them to pick. Do not choose a size for them, and do '
@@ -657,6 +662,53 @@ export function createCatalogTools(context: {
         return result;
       }
 
+      const zones = context.deliveryZones ?? [];
+      if (zones.length > 0) {
+        const zonePrices = new Set(
+          zones
+            .map((zone) => Math.round(Number(zone.price) * 100))
+            .filter((cents) => Number.isFinite(cents)),
+        );
+        const shippingCents =
+          typeof shippingCost === 'number' && Number.isFinite(shippingCost)
+            ? Math.round(shippingCost * 100)
+            : null;
+
+        if (shippingCents === null) {
+          result = JSON.stringify({
+            created: false,
+            missing: ['delivery price'],
+            deliveryZones: zones,
+            instruction:
+              'Ask which area the customer is in, then call create_order again with shippingCost '
+              + 'set to that zone’s charge exactly. Do not invent a delivery price.',
+          });
+          await notifyPaidOrderFailure('No delivery charge was supplied for a paid order.');
+          context.emitSse?.('tool_result', { name: 'create_order', result });
+          return result;
+        }
+
+        if (!zonePrices.has(shippingCents)) {
+          result = JSON.stringify({
+            created: false,
+            refused: true,
+            reason: 'delivery_price_not_in_zones',
+            deliveryZones: zones,
+            requestedShippingCost: shippingCost,
+            instruction:
+              'That delivery charge is not in the store’s configured zones. Use one of the listed '
+              + 'zone charges exactly (ask for the customer’s area if unsure). If their address matches '
+              + 'no zone, say delivery cannot be quoted and hand off. Do not create the order with an '
+              + 'invented or discounted delivery charge.',
+          });
+          await notifyPaidOrderFailure(
+            `The delivery charge ${shippingCost} did not match a configured delivery zone, so no order was created.`,
+          );
+          context.emitSse?.('tool_result', { name: 'create_order', result });
+          return result;
+        }
+      }
+
       try {
         const order = await createOrder({
           businessId: context.businessId,
@@ -702,7 +754,7 @@ export function createCatalogTools(context: {
         customerAddress: z.string().nullable(),
         customerPhone: z.string().nullable(),
         shippingCost: z.number().min(0).nullable().optional().describe(
-          'The delivery charge quoted to the customer and agreed by them, in Taka. Omit when nobody quoted one — the confirmation card then says nothing about shipping.',
+          'The delivery charge for the customer’s area, in BDT, taken exactly from the store’s configured delivery zones. Required when the store has zones; ask for the area and pass the matching amount. Omit only when the store has no zones.',
         ),
         paymentMethod: z.string().max(40).nullable().optional().describe(
           'How the customer will pay, in their words: "Cash on delivery", "bKash", "Nagad". Ask before ordering when they have not said; omit only if they refuse to answer.',
@@ -856,6 +908,8 @@ export function createAgentTools(
     onOrderCreated?: (orderId: string) => Promise<void>;
     agentState?: ConversationAgentState;
     persistAgentState?: (state: ConversationAgentState) => Promise<void>;
+    /** The merchant's region-based delivery charges, used to validate shippingCost. */
+    deliveryZones?: Array<{ label: string; price: number }>;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
@@ -986,8 +1040,12 @@ export function createAgentTools(
         `${orderDetails.count} pcs`,
         orderDetails.variantShortId ? `#${orderDetails.variantShortId}` : null,
         orderDetails.variantName,
-        `Total ${money(orderDetails.totalPrice)}`,
-        orderDetails.shippingCost > 0 ? `Delivery ${money(orderDetails.shippingCost)}` : null,
+        `Total ${money(orderDetails.totalPrice, orderDetails.currency)}`,
+        // Zones are configured in BDT regardless of what the product is quoted in, so the
+        // delivery line says BDT even on a dollar-priced product.
+        orderDetails.shippingCost > 0
+          ? `Delivery ${money(orderDetails.shippingCost, 'BDT')}`
+          : null,
         orderDetails.paymentMethod,
         orderDetails.transactionId ? `TrxID ${orderDetails.transactionId}` : null,
       ].filter(Boolean).join(' · '),
@@ -1149,7 +1207,7 @@ export function createAgentTools(
           showing: `${from + 1}-${shownThrough}`,
           matchingProducts: total,
           hasMore,
-          products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, description: p.description })),
+          products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency, description: p.description })),
           ...(unavailable.length ? { notBuyable: unavailable } : {}),
           reason: products.length === 0
             ? `all ${matches.length} products on this page are not available to order`
@@ -1262,7 +1320,7 @@ export function createAgentTools(
           const what = oneLine(`${o.count} × ${o.productName ?? 'your order'}`, 60);
           cards.push({
             title: what,
-            subtitle: oneLine(`${state} · ${money(o.totalPrice)} · ${o.createdAt.toISOString().slice(0, 10)}`, 95),
+            subtitle: oneLine(`${state} · ${money(o.totalPrice, o.currency)} · ${o.createdAt.toISOString().slice(0, 10)}`, 95),
             imageUrl: o.imageUrl,
             // The tap is the sentence the existing tracking path already understands.
             button: { title: 'Track order', payload: `please track order with id ${o.id}` },
@@ -1275,7 +1333,7 @@ export function createAgentTools(
         product: o.productName,
         variant: o.variantName,
         count: o.count,
-        total: money(o.totalPrice),
+        total: money(o.totalPrice, o.currency),
         state: stateWord(o.state),
         date: o.createdAt.toISOString().slice(0, 10),
       }));
@@ -1351,7 +1409,7 @@ export function createAgentTools(
         }));
       }
 
-      const line = { id: product.id, name: product.name, price: product.price };
+      const line = { id: product.id, name: product.name, price: product.price, currency: product.currency };
       if (product.variants.length === 0) {
         return logResult(JSON.stringify({
           sent: false,
@@ -1380,7 +1438,7 @@ export function createAgentTools(
         id: v.id,
         name: v.name,
         label: v.variantId ?? null,
-        price: money(v.price ?? product.price),
+        price: money(v.price ?? product.price, product.currency),
         stock: v.stock,
         photos: photoCount(v),
       }));
@@ -1397,7 +1455,7 @@ export function createAgentTools(
         const label = variantLine(product.name, variant.name);
         cards.push({
           title: label,
-          subtitle: variantPriceLine(money(variant.price ?? product.price), variant.stock),
+          subtitle: variantPriceLine(money(variant.price ?? product.price, product.currency), variant.stock),
           imageUrl: variant.imageUrl,
           button: { title: 'Order', payload: orderPayload(product.id, label, variant.id) },
           extraButtons: [{ title: 'Details', payload: detailsVariantPayload(product.id, variant.id) }],
@@ -1527,7 +1585,7 @@ export function createAgentTools(
       if (photos.length === 0) {
         return logResult(JSON.stringify({
           sent: false,
-          variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price), stock: variant.stock },
+          variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price, product.currency), stock: variant.stock },
           photosOnRecord: stored,
           ...(via !== 'id' && via !== 'none' ? { matchedBy: via } : {}),
           ...(stored > 0
@@ -1552,7 +1610,7 @@ export function createAgentTools(
       const cards: MessengerCard[] = shown.map((imageUrl, index) => ({
         title: label,
         subtitle: variantPriceLine(
-          money(variant.price ?? product.price),
+          money(variant.price ?? product.price, product.currency),
           variant.stock,
           { index: index + 1, of: photos.length },
         ),
@@ -1581,7 +1639,7 @@ export function createAgentTools(
 
       return logResult(JSON.stringify({
         sent: true,
-        variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price), stock: variant.stock },
+        variant: { id: variant.id, name: variant.name, label: variant.variantId ?? null, price: money(variant.price ?? product.price, product.currency), stock: variant.stock },
         ...(via !== 'id' && via !== 'none' ? { matchedBy: via } : {}),
         photosSent: last,
         photosTotal: photos.length,

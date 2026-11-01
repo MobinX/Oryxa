@@ -27,6 +27,29 @@ export function registerOrderCrudTests() {
     expect(order.state).toBe('pending');
   });
 
+  it('createOrder copies the product currency', async () => {
+    const { business, productDetail } = await seedTestWorld();
+    const usd = await createProduct({
+      businessId: business.id,
+      name: 'Dollar Item',
+      price: 12,
+      currency: 'USD',
+      sku: `USD-ORDER-${Date.now()}`,
+      variants: [{ name: 'Only', stock: 3, isAvailable: true }],
+    });
+    const withVariant = await getProductById(business.id, usd.id);
+    const order = await createOrder({
+      businessId: business.id,
+      productId: usd.id,
+      variantId: withVariant!.variants[0]!.id,
+      count: 1,
+      customerName: 'Buyer',
+    });
+    expect(order.currency).toBe('USD');
+    expect(order.totalPrice).toBe(12);
+    expect(productDetail.currency).toBe('BDT');
+  });
+
   it('createOrder decrements variant stock', async () => {
     const { business, productDetail } = await seedTestWorld();
     const variantId = productDetail.variants[0]!.id;

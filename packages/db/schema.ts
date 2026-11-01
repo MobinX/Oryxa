@@ -2,6 +2,12 @@ import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgE
 import { relations, sql } from 'drizzle-orm';
 import type { ConversationAgentState } from '@repo/shared';
 
+/** One region the merchant delivers to and the charge they quote for it. */
+export type DeliveryZone = {
+  label: string;
+  price: number;
+};
+
 export type StoreTheme = {
   accentColor?: string;
   font?: 'sans' | 'serif' | 'mono';
@@ -478,6 +484,11 @@ export const businesses = pgTable('businesses', {
    */
   agentProductGuidance: text('agent_product_guidance'),
   agentBargainGuidance: text('agent_bargain_guidance'),
+  /**
+   * The merchant's delivery price list, region by region. The agent reads it to quote a
+   * charge and the order tool receives the matching amount as shippingCost.
+   */
+  deliveryZones: jsonb('delivery_zones').$type<DeliveryZone[]>().default(sql`'[]'::jsonb`).notNull(),
   employeeCount: integer('employee_count'),
   type: varchar('type', { length: 100 }),
   foundedDate: timestamp('founded_date'),
@@ -533,6 +544,8 @@ export const products = pgTable('products', {
   customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   price: numeric('price', { precision: 10, scale: 2 }).notNull(),
+  /** ISO code the price is quoted in; BDT unless the merchant chooses otherwise. */
+  currency: varchar('currency', { length: 8 }).default('BDT').notNull(),
   slug: varchar('slug', { length: 255 }).notNull(),
   sku: varchar('sku', { length: 100 }).notNull(),
   description: text('description'),
@@ -634,6 +647,8 @@ export const orders = pgTable('orders', {
   variantId: uuid('variant_id').references(() => variants.id, { onDelete: 'set null' }),
   count: integer('count').default(1).notNull(),
   variantPrice: numeric('variant_price', { precision: 10, scale: 2 }).notNull(),
+  /** The currency the product was priced in when this order was placed. */
+  currency: varchar('currency', { length: 8 }).default('BDT').notNull(),
   // The company's customer this order matched by phone. Written wherever the order
   // came from — agent tool call, dashboard form, storefront checkout — so one person
   // stays one person across stores instead of a fresh name on every row.

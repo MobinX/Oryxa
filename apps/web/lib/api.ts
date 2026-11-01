@@ -101,6 +101,7 @@ export type Business = {
   description?: string | null;
   agentProductGuidance?: string | null;
   agentBargainGuidance?: string | null;
+  deliveryZones?: Array<{ label: string; price: number }>;
   employeeCount?: number | null;
   type?: string | null;
   foundedDate?: string | null;
@@ -195,6 +196,8 @@ export type ProductListItem = {
   name: string;
   sku: string;
   price: number;
+  /** ISO currency code the price is quoted in. */
+  currency: string;
   slug: string;
   description?: string | null;
   categoryId?: string | null;
@@ -224,6 +227,7 @@ export type ProductDetail = {
   name: string;
   sku: string;
   price: number;
+  currency: string;
   description?: string | null;
   category: { id: string; name: string } | null;
   customerId?: string | null;
@@ -262,6 +266,7 @@ export type ProductDetail = {
 export type CreateProductInput = {
   name: string;
   price: number;
+  currency?: string;
   sku: string;
   description?: string;
   categoryName?: string;
@@ -291,6 +296,7 @@ export type CreateProductInput = {
 export type UpdateProductInput = {
   name?: string;
   price?: number;
+  currency?: string;
   sku?: string;
   description?: string;
   categoryId?: string;
@@ -834,6 +840,7 @@ export type OrderListItem = {
   customerPhone?: string | null;
   customerAddress?: string | null;
   totalPrice: number;
+  currency: string;
   shippingCost?: number;
   paymentMethod?: string | null;
   transactionId?: string | null;
@@ -858,6 +865,7 @@ export type OrderDetail = {
   customerAddress?: string | null;
   state: string;
   totalPrice: number;
+  currency: string;
   shippingCost?: number;
   paymentMethod?: string | null;
   transactionId?: string | null;

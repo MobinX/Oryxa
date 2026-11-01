@@ -13,6 +13,12 @@ import { createBusinessNotification } from './notification';
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
 const ORDER_HISTORY_PAGE = 10;
 
+/** Written notices read in the currency the product was listed in, never an assumed dollar. */
+function priceLabel(value: number, currency: string): string {
+  const code = (currency || 'BDT').toUpperCase();
+  return code === 'USD' ? `$${value.toFixed(2)}` : `${code} ${value.toFixed(2)}`;
+}
+
 export async function createOrder(input: unknown) {
   const parsed = createOrderInputSchema.parse(input);
 
@@ -67,6 +73,7 @@ export async function createOrder(input: unknown) {
       variantId: variant?.id ?? parsed.variantId,
       count: parsed.count,
       variantPrice: variantPrice.toFixed(2),
+      currency: product.currency,
       customerId,
       customerName: parsed.customerName,
       customerPhone: normalizePhone(parsed.customerPhone) ?? parsed.customerPhone ?? null,
@@ -103,7 +110,7 @@ export async function createOrder(input: unknown) {
     businessId: parsed.businessId,
     kind: 'order_placed',
     title: 'New order received',
-    body: `${parsed.count} × ${product.name}${variant ? ` (${variant.name})` : ''} — $${totalPrice.toFixed(2)} from ${parsed.customerName?.trim() || 'a customer'}.`,
+    body: `${parsed.count} × ${product.name}${variant ? ` (${variant.name})` : ''} — ${priceLabel(totalPrice, product.currency)} from ${parsed.customerName?.trim() || 'a customer'}.`,
     link: `/b/${parsed.businessId}/orders/${order.id}`,
   }).catch((err) => {
     console.error('[orders] order stored but its notification could not be written:', err);
@@ -112,6 +119,7 @@ export async function createOrder(input: unknown) {
   return {
     id: order.id,
     totalPrice,
+    currency: order.currency,
     shippingCost: parsed.shippingCost ?? 0,
     paymentMethod: parsed.paymentMethod ?? null,
     transactionId: parsed.transactionId?.trim() || null,
@@ -154,6 +162,7 @@ export async function getOrderById(businessId: string, orderId: string) {
     customerAddress: order.customerAddress,
     state: order.state,
     totalPrice: parseFloat(order.totalPrice),
+    currency: order.currency,
     shippingCost: parseFloat(order.shippingCost),
     paymentMethod: order.paymentMethod,
     transactionId: order.transactionId,
@@ -208,6 +217,7 @@ export async function listOrders(
         customerPhone: o.customerPhone,
         customerAddress: o.customerAddress,
         totalPrice: parseFloat(o.totalPrice),
+        currency: o.currency,
         shippingCost: parseFloat(o.shippingCost),
         paymentMethod: o.paymentMethod,
         transactionId: o.transactionId,

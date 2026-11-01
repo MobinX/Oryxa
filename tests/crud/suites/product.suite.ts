@@ -48,6 +48,28 @@ export function registerProductCrudTests() {
     expect(product.variantCount).toBe(1);
   });
 
+  it('defaults a product price to BDT and keeps a chosen currency', async () => {
+    const businessId = await setup();
+    const defaulted = await createProduct({
+      businessId,
+      name: 'Default Currency',
+      price: 10,
+      sku: `CUR-DEFAULT-${Date.now()}`,
+      variants: [],
+    });
+    expect((await getProductById(businessId, defaulted.id))?.currency).toBe('BDT');
+
+    const usd = await createProduct({
+      businessId,
+      name: 'Dollar Product',
+      price: 10,
+      currency: 'USD',
+      sku: `CUR-USD-${Date.now()}`,
+      variants: [],
+    });
+    expect((await getProductById(businessId, usd.id))?.currency).toBe('USD');
+  });
+
   it('enforces unique slug per business', async () => {
     const businessId = await setup();
     const sku1 = `SKU-1-${Date.now()}`;

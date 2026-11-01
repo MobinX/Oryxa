@@ -1,12 +1,22 @@
 import { z } from '@hono/zod-openapi';
 import { timestampSchema, uuidSchema } from '@shared/schemas/base';
 
+const currencySchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(8)
+  .regex(/^[A-Za-z]{3,8}$/, 'Use an ISO currency code such as BDT or USD')
+  .transform((value) => value.toUpperCase());
+
 export const baseProductSchema = z.object({
   businessId: uuidSchema,
   categoryId: uuidSchema.nullable().optional(),
   customerId: uuidSchema.nullable().optional(),
   name: z.string().min(1).max(255).openapi({ example: 'Premium Cotton T-Shirt' }),
   price: z.coerce.number().positive().openapi({ example: 29.99 }),
+  /** ISO currency code the price is quoted in; BDT unless the merchant picked another. */
+  currency: currencySchema.default('BDT').openapi({ example: 'BDT' }),
   slug: z.string().regex(/^[a-z0-9-]+$/),
   sku: z.string().max(100).openapi({ example: 'TS-COT-001' }),
   description: z.string().optional(),
@@ -145,6 +155,7 @@ export const updateVariantInputSchema = variantInputSchema.extend({
 export const updateProductInputSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   price: z.coerce.number().positive().optional(),
+  currency: currencySchema.optional(),
   sku: z.string().max(100).optional(),
   description: z.string().optional(),
   categoryId: uuidSchema.optional(),
@@ -171,6 +182,7 @@ export const bulkImportProductSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(100000).optional(),
   price: z.coerce.number().min(0).optional(),
+  currency: currencySchema.default('BDT'),
   slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
   sku: z.string().max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),

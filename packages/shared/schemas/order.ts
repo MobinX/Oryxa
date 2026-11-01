@@ -31,6 +31,7 @@ export const createOrderBodySchema = createOrderInputSchema.omit({ businessId: t
 export const createOrderOutputSchema = z.object({
   id: uuidSchema,
   totalPrice: z.number(),
+  currency: z.string(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),
@@ -58,6 +59,7 @@ export const orderListItemSchema = z.object({
   customerPhone: z.string().nullable().optional(),
   customerAddress: z.string().nullable().optional(),
   totalPrice: z.number(),
+  currency: z.string(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),
@@ -110,6 +112,7 @@ export const getOrderOutputSchema = z.object({
   customerAddress: z.string().nullable().optional(),
   state: orderStateSchema,
   totalPrice: z.number(),
+  currency: z.string(),
   shippingCost: z.number().optional(),
   paymentMethod: z.string().nullable().optional(),
   transactionId: z.string().nullable().optional(),

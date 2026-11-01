@@ -84,6 +84,8 @@ export interface AgentConfig {
     description?: string | null;
     agentProductGuidance?: string | null;
     agentBargainGuidance?: string | null;
+    /** Region-based delivery charges the agent quotes and passes to create_order. */
+    deliveryZones?: Array<{ label: string; price: number }>;
   };
   /**
    * The thread the model is about to read. `imageKeys` are the bucket keys of the pictures the
@@ -350,6 +352,7 @@ export class Agent {
           onOrderCreated: this.config.onOrderCreated,
           agentState: this.config.agentState,
           persistAgentState: this.config.persistAgentState,
+          deliveryZones: this.config.business.deliveryZones,
         },
         (text) => sentTexts.push(text),
       );
@@ -378,6 +381,11 @@ export class Agent {
         : '',
       this.config.business.agentBargainGuidance
         ? `When a customer wants to bargain: ${this.config.business.agentBargainGuidance}`
+        : '',
+      this.config.business.deliveryZones?.length
+        ? `Delivery charges (BDT, quote only these): ${this.config.business.deliveryZones
+            .map((zone) => `${zone.label}: BDT ${Number(zone.price).toFixed(2)}`)
+            .join('; ')}. Ask which area the customer is in, quote the matching charge, and pass that amount as shippingCost to create_order. If the address matches no zone, say delivery cannot be quoted for it and hand off. Never invent or discount a delivery charge.`
         : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       this.config.catalogSummary ? `Catalog preview:\n${this.config.catalogSummary}` : '',

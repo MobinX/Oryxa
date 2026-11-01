@@ -827,7 +827,10 @@ async function processEntries(
   fbLog('processEntries done');
 }
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+function money(value: number, currency: string): string {
+  const code = (currency || 'BDT').toUpperCase();
+  return code === 'USD' ? `$${value.toFixed(2)}` : `${code} ${value.toFixed(2)}`;
+}
 
 /** Card titles are one line and roughly 30 visible characters — collapse before Meta does it badly. */
 function cardLine(value: string, max = 60): string {
@@ -870,7 +873,7 @@ async function handleDetailsPostback(
           };
           return {
             title: label,
-            subtitle: `${usd.format(price)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+            subtitle: `${money(price, product.currency)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
             imageUrl: variant.imageUrl as string,
             ...(buyable
               ? {
@@ -896,7 +899,7 @@ async function handleDetailsPostback(
       const variantText = product.variants
         .map(
           (variant) =>
-            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${usd.format(variant.price ?? product.price)}, ${variant.stock} in stock`,
+            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${money(variant.price ?? product.price, product.currency)}, ${variant.stock} in stock`,
         )
         .join('; ');
       await createMessage({
@@ -905,7 +908,7 @@ async function handleDetailsPostback(
         sentBy: 'ai',
         content: [
           `Showing product details of ${product.id}, ${product.name}`,
-          `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
+          `${money(product.price, product.currency)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
           `variants: ${variantText}`,
           ...(optionsText ? [`options: ${optionsText}`] : []),
         ].join(' — '),
@@ -930,7 +933,7 @@ async function handleDetailsPostback(
     const buyable = variant.isAvailable && variant.stock > 0;
     const cards = images.map((imageUrl, index) => ({
       title: label,
-      subtitle: `${usd.format(price)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+      subtitle: `${money(price, product.currency)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
       imageUrl,
       ...(buyable
         ? {
@@ -952,7 +955,7 @@ async function handleDetailsPostback(
       conversationId: conversation.id,
       from: 'self',
       sentBy: 'ai',
-      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
+      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${money(price, product.currency)}, total price ${money(price * variant.stock, product.currency)} (${images.length} images).`,
       state: 'done',
     });
     return { handled: true };

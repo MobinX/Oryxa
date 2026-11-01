@@ -122,6 +122,34 @@ describe('Agent Tools', () => {
     expect(Number(accepted.totalPrice)).toBe(29.99);
   });
 
+  it('requires the delivery charge to match a configured zone', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools({
+      ...agentContext(seed),
+      deliveryZones: [
+        { label: 'Inside Dhaka', price: 60 },
+        { label: 'Outside Dhaka', price: 120 },
+      ],
+    }).find((item) => item.name === 'create_order')!;
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+    };
+
+    const missing = JSON.parse(await tool.invoke(base));
+    expect(missing.created).toBe(false);
+    expect(missing.missing).toContain('delivery price');
+
+    const wrong = JSON.parse(await tool.invoke({ ...base, shippingCost: 100 }));
+    expect(wrong.refused).toBe(true);
+    expect(wrong.reason).toBe('delivery_price_not_in_zones');
+
+    const accepted = JSON.parse(await tool.invoke({ ...base, shippingCost: 60 }));
+    expect(accepted.id).toBeTruthy();
+    expect(Number(accepted.shippingCost)).toBe(60);
+  });
+
   it('requires a bKash/Nagad transaction id and stores it on the order', async () => {
     const seed = await seedTestWorld();
     const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'create_order')!;
@@ -319,7 +347,7 @@ describe('Agent Tools', () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({
       title: 'Photo Hoodie',
-      subtitle: '$59.00 — Warm fleece lining, with a roomy pocket',
+      subtitle: 'BDT 59.00 — Warm fleece lining, with a roomy pocket',
       imageUrl: 'https://cdn.test/hoodie.jpg',
     });
     expect(cards[0]!.button.title).toBe('Order');
@@ -327,7 +355,7 @@ describe('Agent Tools', () => {
 
     // The thread keeps what the cards said, so the merchant inbox and the next
     // turn of history are not left reading an empty bubble.
-    expect(sent).toEqual(['Photo Hoodie — $59.00 — Warm fleece lining, with a roomy pocket']);
+    expect(sent).toEqual(['Photo Hoodie — BDT 59.00 — Warm fleece lining, with a roomy pocket']);
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     // The stored line also keeps the window that went out, because a tool result does not survive the
     // turn: without it, "and the rest?" in a later message has nothing to page from and sends page one.
@@ -375,7 +403,7 @@ describe('Agent Tools', () => {
 
     expect(result.sent).toBe(true);
     expect(sendMessageMock).not.toHaveBeenCalled();
-    expect(delivered).toEqual(['Dry Hoodie — $44.00 — For the test panel']);
+    expect(delivered).toEqual(['Dry Hoodie — BDT 44.00 — For the test panel']);
   });
 
   it('create_order automatically sends the Track order button', async () => {
@@ -400,11 +428,11 @@ describe('Agent Tools', () => {
     expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98$/),
+      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total BDT 59\.98$/),
       [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98 \(Track order\)/);
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total BDT 59\.98 \(Track order\)/);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
@@ -482,7 +510,7 @@ describe('Agent Tools', () => {
       ['Acknowledged', 'Done', 'On delivery', 'Pending'],
     );
     for (const card of cards) {
-      expect(card.subtitle).toMatch(/^(Pending|Acknowledged|On delivery|Done) · \$50\.00 · \d{4}-\d{2}-\d{2}$/);
+      expect(card.subtitle).toMatch(/^(Pending|Acknowledged|On delivery|Done) · BDT 50\.00 · \d{4}-\d{2}-\d{2}$/);
     }
     expect(JSON.stringify(cards).toLowerCase()).not.toMatch(/just placed|recently|today|hours ago/);
     // The prose the model writes comes from this same field, so a card cannot be honest beside a lie.
@@ -559,7 +587,7 @@ describe('Agent Tools', () => {
     const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
     // A sold-out size gets no button: the customer would tap Order and be refused.
     expect(cards.map((c) => c.title)).toEqual(['Sizing Shirt — S', 'Sizing Shirt — M']);
-    expect(cards.map((c) => c.subtitle)).toEqual(['$38.00 · 3 in stock', '$42.00 · 5 in stock']);
+    expect(cards.map((c) => c.subtitle)).toEqual(['BDT 38.00 · 3 in stock', 'BDT 42.00 · 5 in stock']);
     expect(cards[1]!.imageUrl).toBe('https://cdn.test/m.jpg');
     expect(result.hiddenOutOfStock).toEqual(['XL']);
 
@@ -607,9 +635,9 @@ describe('Agent Tools', () => {
     // photo position differs — otherwise the list reads as three identical messages.
     expect([...new Set(cards.map((c) => c.title))]).toEqual(['Gallery Jacket — M']);
     expect(cards.map((c) => c.subtitle)).toEqual([
-      '$80.00 · 4 in stock · photo 1 of 3',
-      '$80.00 · 4 in stock · photo 2 of 3',
-      '$80.00 · 4 in stock · photo 3 of 3',
+      'BDT 80.00 · 4 in stock · photo 1 of 3',
+      'BDT 80.00 · 4 in stock · photo 2 of 3',
+      'BDT 80.00 · 4 in stock · photo 3 of 3',
     ]);
     expect(new Set(cards.map((c) => c.button.payload))).toEqual(
       new Set([`place order with ${productId} and Gallery Jacket — M variant ${variantId}`]),
@@ -956,7 +984,7 @@ describe('Agent Tools', () => {
     // "all the pictures": the customer asked twice for more and was promised a set that does not exist.
     const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
     expect(cards).toHaveLength(1);
-    expect(cards[0]!.subtitle).toBe('$25.00 · 7 in stock · the only photo');
+    expect(cards[0]!.subtitle).toBe('BDT 25.00 · 7 in stock · the only photo');
     expect(result.photosTotal).toBe(1);
   });
 
@@ -1043,7 +1071,7 @@ describe('Agent Tools', () => {
     // that there is nothing to show — which is what the next turn needs to answer instead of asking.
     expect(result.sent).toBe(false);
     expect(result.variants).toEqual([
-      { id: seed.productDetail.variants[0]!.id, name: 'Red M', label: seed.productDetail.variants[0]!.variantId ?? null, price: '$29.99', stock: 10, photos: 0 },
+      { id: seed.productDetail.variants[0]!.id, name: 'Red M', label: seed.productDetail.variants[0]!.variantId ?? null, price: 'BDT 29.99', stock: 10, photos: 0 },
     ]);
   });
 

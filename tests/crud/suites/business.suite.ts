@@ -39,6 +39,26 @@ export function registerBusinessCrudTests() {
     expect(business?.id).toBe(created.id);
   });
 
+  it('stores the region-based delivery charges', async () => {
+    const user = await syncUser({
+      firebaseUid: `zones-uid-${Date.now()}`,
+      name: 'Owner',
+      signInMethod: 'google',
+    });
+    const created = await createBusiness(user.id, {
+      name: 'Zone Shop',
+      hasTradeLicense: false,
+      hasTaxLicense: false,
+    });
+    const zones = [
+      { label: 'Inside Dhaka', price: 60 },
+      { label: 'Outside Dhaka', price: 120 },
+    ];
+    await updateBusiness(created.id, user.id, { deliveryZones: zones });
+    const business = await getBusinessById(created.id);
+    expect(business?.deliveryZones).toEqual(zones);
+  });
+
   it('updateBusiness updates fields', async () => {
     const user = await syncUser({
       firebaseUid: `upd-biz-uid-${Date.now()}`,

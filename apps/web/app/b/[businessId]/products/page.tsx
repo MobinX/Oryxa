@@ -18,8 +18,16 @@ import ProductsSkeleton from './skeleton';
 
 export const instant = false;
 
-function formatPrice(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+function formatPrice(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'code',
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
 }
 
 const headers: DataTableHeader[] = [
@@ -120,7 +128,7 @@ async function ProductsContent({
         </span>
       ),
       <span key="price" className="font-medium">
-        {formatPrice(product.price)}
+        {formatPrice(product.price, product.currency)}
       </span>,
       String(product.variantCount ?? 0),
     ],

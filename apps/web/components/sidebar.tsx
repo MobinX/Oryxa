@@ -22,6 +22,7 @@ import {
   Store,
   Terminal,
   CreditCard,
+  Wallet,
   FolderTree,
   HelpCircle,
   ArrowRight,
@@ -50,6 +51,7 @@ const primaryNav: Array<{
   { href: 'channels', label: 'Integrations', icon: Blocks },
   { href: 'categories', label: 'Categories', icon: FolderTree },
   { href: 'storefront', label: 'Storefront', icon: Store },
+  { href: 'payments', label: 'Payments', icon: Wallet },
   { href: 'billing', label: 'Billing', icon: CreditCard },
   { href: 'settings', label: 'Settings', icon: Settings },
 ];

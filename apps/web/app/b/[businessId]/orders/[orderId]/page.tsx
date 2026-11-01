@@ -103,11 +103,11 @@ async function OrderDetail({
       <div className="mt-4 grid gap-3 rounded-lg bg-[var(--muted)] p-4 text-sm sm:grid-cols-2">
         <div>
           <span className="text-[var(--muted-foreground)]">Total: </span>
-          <strong>{formatTaka(order.totalPrice)}</strong>
+          <strong>{formatTaka(order.totalPrice, order.currency)}</strong>
         </div>
         <div>
           <span className="text-[var(--muted-foreground)]">Unit price: </span>
-          {formatTaka(order.variantPrice)} × {order.count}
+          {formatTaka(order.variantPrice, order.currency)} × {order.count}
         </div>
         <div className="sm:col-span-2 flex items-start gap-3">
           {order.variantImageUrl ? (

@@ -42,8 +42,24 @@ export const ORDER_STATE_LABEL: Record<OrderState, string> = {
   done: 'Delivered',
 };
 
-/** Taka, whole units — the same format the orders workspace has always shown. */
-export function formatTaka(value: number | string | null | undefined): string {
+/**
+ * The order's currency, whole units for Taka and the ISO code for anything else. The name
+ * is historic: callers that pass no currency are Taka amounts (delivery charges included).
+ */
+export function formatTaka(
+  value: number | string | null | undefined,
+  currency = 'BDT',
+): string {
   const n = typeof value === 'number' ? value : parseFloat(String(value ?? '0')) || 0;
-  return `৳${n.toFixed(0)}`;
+  const code = (currency || 'BDT').toUpperCase();
+  if (code === 'BDT') return `৳${n.toFixed(0)}`;
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      currencyDisplay: 'code',
+    }).format(n);
+  } catch {
+    return `${code} ${n.toFixed(2)}`;
+  }
 }

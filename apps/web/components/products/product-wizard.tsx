@@ -44,6 +44,7 @@ export interface WizardVariant {
 export interface ProductWizardInitial {
   name?: string;
   price?: string;
+  currency?: string;
   sku?: string;
   description?: string;
   categoryId?: string;
@@ -130,6 +131,7 @@ export function ProductWizard({
   // Step one
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(initial?.price ?? '');
+  const [currency, setCurrency] = useState(initial?.currency ?? 'BDT');
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [slug, setSlug] = useState(initial?.slug ?? '');
@@ -345,17 +347,35 @@ export function ProductWizard({
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Default price</label>
-            <Input
-              name="price"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-            />
+            <div className="flex gap-2">
+              <Input
+                name="price"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="min-w-0 flex-1"
+                required
+              />
+              <select
+                name="currency"
+                aria-label="Currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="h-10 w-24 shrink-0 rounded-lg border border-[var(--border)] bg-white px-2 text-sm font-medium dark:bg-slate-900"
+              >
+                {['BDT', 'USD', 'EUR', 'GBP', 'INR', 'AED', 'SAR', 'MYR', 'PKR', 'LKR', 'NPR'].map(
+                  (code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              What a variant without its own price override costs.
+              What a variant without its own price override costs, quoted in this currency.
             </p>
           </div>
           <div>

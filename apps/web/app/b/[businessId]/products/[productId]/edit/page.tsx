@@ -89,6 +89,7 @@ async function EditProductForm({
     product.name,
     product.sku,
     String(product.price),
+    product.currency,
     product.description ?? '',
     product.category?.id ?? '',
     product.customer?.id ?? '',
@@ -120,6 +121,7 @@ async function EditProductForm({
             initial={{
               name: product.name,
               price: String(product.price),
+              currency: product.currency,
               sku: product.sku,
               description: product.description ?? '',
               categoryId: product.category?.id,

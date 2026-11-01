@@ -141,11 +141,17 @@ async function parseVariants(
   return variants;
 }
 
+function readCurrency(formData: FormData): string | undefined {
+  const raw = String(formData.get('currency') ?? '').trim().toUpperCase();
+  return /^[A-Z]{3,8}$/.test(raw) ? raw : undefined;
+}
+
 export async function createProductAction(businessId: string, formData: FormData) {
   const token = await requireAuth();
   const name = String(formData.get('name') ?? '').trim();
   const sku = String(formData.get('sku') ?? '').trim();
   const price = parseFloat(String(formData.get('price') ?? ''));
+  const currency = readCurrency(formData) ?? 'BDT';
   const description = String(formData.get('description') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const categoryName = String(formData.get('categoryName') ?? '').trim();
@@ -170,6 +176,7 @@ export async function createProductAction(businessId: string, formData: FormData
     name,
     sku,
     price,
+    currency,
     description: description || undefined,
     // Typed name wins over dropdown selection.
     categoryName: categoryName || undefined,
@@ -199,6 +206,7 @@ export async function updateProductAction(
   const name = String(formData.get('name') ?? '').trim();
   const sku = String(formData.get('sku') ?? '').trim();
   const price = parseFloat(String(formData.get('price') ?? ''));
+  const currency = readCurrency(formData);
   const description = String(formData.get('description') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const categoryName = String(formData.get('categoryName') ?? '').trim();
@@ -231,6 +239,7 @@ export async function updateProductAction(
       name: name || undefined,
       sku: sku || undefined,
       price: price || undefined,
+      currency,
       description,
       // Typed name wins over dropdown selection.
       categoryName: categoryName || undefined,
