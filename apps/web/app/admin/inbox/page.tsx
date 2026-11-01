@@ -93,30 +93,17 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
   const error = one(params.error);
   const sent = one(params.sent) === '1';
 
+  // Only the mailbox label is awaited here; the list below streams inside its own
+  // boundary, so every tab, search and page change shows a skeleton instead of freezing.
   let mailbox: Mailbox | null = null;
-  let list: MailListResponse | null = null;
-  let loadError: string | null = null;
-
   try {
     const mailboxData = await consoleApiFetch<{ mailbox: Mailbox }>('/api2/admin/mail/mailbox');
     mailbox = mailboxData.mailbox;
-    const query = new URLSearchParams({
-      limit: '40',
-      offset: String(offset),
-      trashed: 'false',
-    });
-    if (folder === 'inbox') query.set('direction', 'inbound');
-    if (folder === 'sent') query.set('direction', 'outbound');
-    if (queryText) query.set('q', queryText);
-    list = await consoleApiFetch<MailListResponse>(`/api2/admin/mail/emails?${query.toString()}`);
-  } catch (failure) {
-    loadError = failure instanceof Error ? failure.message : 'Inbox could not be loaded';
+  } catch {
+    // The list surfaces the same failure; the header falls back to the account address.
   }
 
   const activePane = Boolean(selectedId || compose);
-  const rows = list?.emails || [];
-  const total = list?.total || 0;
-  const limit = list?.limit || 40;
 
   return (
     <div className="flex min-w-0 flex-col gap-4 sm:gap-6 lg:h-[calc(100dvh-7.5rem)] lg:min-h-[32rem]">
@@ -167,12 +154,7 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
           </div>
         ) : null}
       </div>
-      {loadError ? (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {loadError}
-        </div>
-      ) : (
-        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
           <section className={activePane ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'}>
             <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               <div className="border-b border-border/50 p-3">
@@ -220,95 +202,16 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
                 </form>
               </div>
 
-              <div className="flex items-center justify-between border-b border-border/40 px-4 py-2 text-[11px] text-muted-foreground">
-                <span>
-                  {total} message{total === 1 ? '' : 's'} · {folder}
-                </span>
-                <span>UTC</span>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {rows.length === 0 ? (
-                  <div className="px-5 py-14 text-center text-sm text-muted-foreground">
-                    <Inbox className="mx-auto mb-3 h-8 w-8 opacity-40" />
-                    No mail in this folder yet.
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-border/40">
-                    {rows.map((row) => (
-                      <li key={row.id}>
-                        <Link
-                          href={hrefFor({ folder, id: row.id, q: queryText })}
-                          className={`block px-4 py-3 transition-colors hover:bg-muted/40 ${
-                            selectedId === row.id ? 'bg-primary/5' : ''
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                              {initial(row.direction === 'outbound' ? row.to_email : row.from.email)}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline justify-between gap-2">
-                                <p className="truncate text-xs font-semibold">
-                                  {row.direction === 'outbound' ? 'To: ' : ''}
-                                  {row.direction === 'outbound' ? row.to_email : row.from.name || row.from.email}
-                                </p>
-                                <span className="shrink-0 text-[10px] text-muted-foreground">
-                                  {formatDate(row.received_at || row.created_at)}
-                                </span>
-                              </div>
-                              <p className="mt-0.5 truncate text-sm font-medium">
-                                {row.subject || '(no subject)'}
-                              </p>
-                              <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <span
-                                  className={`rounded-full px-1.5 py-0.5 font-bold uppercase tracking-wide ${
-                                    row.direction === 'inbound'
-                                      ? 'bg-primary/10 text-primary'
-                                      : 'bg-muted text-muted-foreground'
-                                  }`}
-                                >
-                                  {row.direction === 'inbound' ? 'received' : 'sent'}
-                                </span>
-                                {row.attachment_count > 0 ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Paperclip className="h-3 w-3" />
-                                    {row.attachment_count}
-                                  </span>
-                                ) : null}
-                                <span>{formatBytes(row.size_bytes)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-border/40 px-4 py-2">
-                {offset > 0 ? (
-                  <Link
-                    href={hrefFor({ folder, q: queryText, offset: Math.max(offset - limit, 0) })}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" /> Newer
-                  </Link>
-                ) : (
-                  <span />
-                )}
-                {offset + limit < total ? (
-                  <Link
-                    href={hrefFor({ folder, q: queryText, offset: offset + limit })}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
-                  >
-                    Older <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                ) : (
-                  <span />
-                )}
-              </div>
+              {/* A new key per folder/search/page means a tab switch immediately shows the
+                  skeleton while the next list streams in. */}
+              <Suspense key={`${folder}:${queryText}:${offset}`} fallback={<MailListSkeleton />}>
+                <MailList
+                  folder={folder}
+                  queryText={queryText}
+                  offset={offset}
+                  selectedId={selectedId}
+                />
+              </Suspense>
             </div>
           </section>
 
@@ -333,8 +236,179 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
               )}
             </div>
           </section>
+      </div>
+    </div>
+  );
+}
+
+async function MailList({
+  folder,
+  queryText,
+  offset,
+  selectedId,
+}: {
+  folder: string;
+  queryText: string;
+  offset: number;
+  selectedId?: string;
+}) {
+  let list: MailListResponse;
+  try {
+    const query = new URLSearchParams({
+      limit: '40',
+      offset: String(offset),
+      trashed: 'false',
+    });
+    if (folder === 'inbox') query.set('direction', 'inbound');
+    if (folder === 'sent') query.set('direction', 'outbound');
+    if (queryText) query.set('q', queryText);
+    list = await consoleApiFetch<MailListResponse>(`/api2/admin/mail/emails?${query.toString()}`);
+  } catch (failure) {
+    const message = failure instanceof Error ? failure.message : 'The inbox could not be loaded';
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+        >
+          <p className="font-semibold">The inbox list could not be loaded.</p>
+          <p className="mt-0.5">{message}</p>
+          <p className="mt-1 text-xs">Please try again.</p>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  const rows = list.emails;
+  const total = list.total;
+  const limit = list.limit;
+
+  return (
+    <>
+      <div className="flex items-center justify-between border-b border-border/40 px-4 py-2 text-[11px] text-muted-foreground">
+        <span>
+          {total} message{total === 1 ? '' : 's'} · {folder}
+        </span>
+        <span>UTC</span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {rows.length === 0 ? (
+          <div className="px-5 py-14 text-center text-sm text-muted-foreground">
+            <Inbox className="mx-auto mb-3 h-8 w-8 opacity-40" />
+            No mail in this folder yet.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/40">
+            {rows.map((row) => (
+              <li key={row.id}>
+                <Link
+                  href={hrefFor({ folder, id: row.id, q: queryText })}
+                  className={`block px-4 py-3 transition-colors hover:bg-muted/40 ${
+                    selectedId === row.id ? 'bg-primary/5' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {initial(row.direction === 'outbound' ? row.to_email : row.from.email)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="truncate text-xs font-semibold">
+                          {row.direction === 'outbound' ? 'To: ' : ''}
+                          {row.direction === 'outbound'
+                            ? row.to_email
+                            : row.from.name || row.from.email}
+                        </p>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {formatDate(row.received_at || row.created_at)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-sm font-medium">
+                        {row.subject || '(no subject)'}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 font-bold uppercase tracking-wide ${
+                            row.direction === 'inbound'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {row.direction === 'inbound' ? 'received' : 'sent'}
+                        </span>
+                        {row.attachment_count > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Paperclip className="h-3 w-3" />
+                            {row.attachment_count}
+                          </span>
+                        ) : null}
+                        <span>{formatBytes(row.size_bytes)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between border-t border-border/40 px-4 py-2">
+        {offset > 0 ? (
+          <Link
+            href={hrefFor({ folder, q: queryText, offset: Math.max(offset - limit, 0) })}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Newer
+          </Link>
+        ) : (
+          <span />
+        )}
+        {offset + limit < total ? (
+          <Link
+            href={hrefFor({ folder, q: queryText, offset: offset + limit })}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
+          >
+            Older <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        ) : (
+          <span />
+        )}
+      </div>
+    </>
+  );
+}
+
+const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+
+function MailListSkeleton() {
+  return (
+    <div role="status" aria-live="polite" className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between border-b border-border/40 px-4 py-2">
+        <span className="h-3 w-28 animate-pulse rounded bg-muted" />
+        <span className="h-3 w-8 animate-pulse rounded bg-muted/70" />
+      </div>
+      <div aria-hidden="true" className="min-h-0 flex-1 overflow-hidden">
+        {SKELETON_ROWS.map((row) => (
+          <div key={row} className="flex items-start gap-3 border-b border-border/40 px-4 py-3">
+            <span className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-muted" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="h-3 w-32 animate-pulse rounded bg-muted" />
+                <span className="h-3 w-14 shrink-0 animate-pulse rounded bg-muted/70" />
+              </div>
+              <span className="mt-2 block h-4 w-3/4 animate-pulse rounded bg-muted" />
+              <span className="mt-2 block h-3 w-20 animate-pulse rounded bg-muted/60" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between border-t border-border/40 px-4 py-2">
+        <span className="h-3 w-12 animate-pulse rounded bg-muted/60" />
+        <span className="h-3 w-12 animate-pulse rounded bg-muted/60" />
+      </div>
+      <span className="sr-only">Loading emails</span>
     </div>
   );
 }
@@ -434,7 +508,7 @@ async function MessageLoader({
 
 function MessageSkeleton() {
   return (
-    <div aria-busy="true" className="space-y-4">
+    <div role="status" aria-live="polite" aria-busy="true" className="space-y-4">
       <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-6">
         <div className="flex items-center gap-2">
           <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
