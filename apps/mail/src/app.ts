@@ -1,9 +1,10 @@
 import { Hono, type Context } from "hono";
-import type { EmailRow, Env, MailboxRow, MailboxStorage, StoredAddress } from "./types";
+import type { AttachmentInput, EmailRow, Env, MailboxRow, MailboxStorage, StoredAddress } from "./types";
 import { ApiError, assert, errorPayload } from "./lib/errors";
 import { getObject, presignGet } from "./lib/b2";
 import { sendWithBrevo } from "./lib/brevo";
 import { activeSendProvider, sendWithSenderNet } from "./lib/sender";
+import { sendStoredOutbound } from "./lib/outbound";
 import {
   allMailboxStorage,
   ensureMailbox,
@@ -23,6 +24,7 @@ import {
 } from "./lib/store";
 import {
   base64ToBytes,
+  escapeHtml,
   htmlToText,
   isEmail,
   sanitizeFilename,
@@ -685,6 +687,189 @@ app.post("/api/emails/send", async (c) => {
     201,
   );
 });
+
+app.post("/api/emails/:id/reply", async (c) => {
+  const env = c.env;
+  const body = await readJson(c);
+  const row = await getEmailRow(env, c.req.param("id"));
+  if (!row) return fail(404, "email_not_found", "Email not found");
+  const requestedMailbox = optionalString(body.mailbox_id ?? body.mailboxId, "mailbox_id", 100);
+  if (requestedMailbox && requestedMailbox !== row.mailbox_id) {
+    return fail(403, "mailbox_mismatch", "This email belongs to another mailbox");
+  }
+  if (row.direction !== "inbound") {
+    return fail(400, "reply_not_available", "Only received mail can be replied to");
+  }
+  const mailbox = await getMailbox(env, row.mailbox_id);
+  if (!mailbox) return fail(404, "mailbox_not_found", "Mailbox not found");
+  const document = await readEmailDocument(env, row);
+  const replyToAddress: StoredAddress = {
+    email: document?.from.email || row.from_email,
+    name: document?.from.name || row.from_name || "",
+  };
+  const cc = parseAddressList(body.cc, "cc", false, 50);
+  const bcc = parseAddressList(body.bcc, "bcc", false, 50);
+  const textInput =
+    typeof body.textContent === "string"
+      ? body.textContent
+      : typeof body.text === "string"
+        ? body.text
+        : "";
+  const htmlInput =
+    typeof body.htmlContent === "string"
+      ? body.htmlContent
+      : typeof body.html === "string"
+        ? body.html
+        : "";
+  if (!textInput && !htmlInput) {
+    return fail(400, "missing_field", "Reply body is required");
+  }
+  assert(
+    textInput.length <= MAX_BODY_CHARS && htmlInput.length <= MAX_BODY_CHARS,
+    413,
+    "payload_too_large",
+    "Reply body is too large",
+  );
+  const subject = (document?.subject || row.subject || "(no subject)").toLowerCase().startsWith("re:")
+    ? document?.subject || row.subject
+    : `Re: ${document?.subject || row.subject}`;
+  const references = [...(document?.references || [])];
+  if (row.message_id) references.push(row.message_id);
+
+  const result = await sendStoredOutbound(env, {
+    mailboxId: row.mailbox_id,
+    from: { email: mailbox.address, name: mailbox.name || mailbox.address },
+    to: [replyToAddress],
+    cc,
+    bcc,
+    subject,
+    text: textInput || htmlToText(htmlInput),
+    html: htmlInput || textToHtml(textInput),
+    attachments: [],
+    inReplyTo: row.message_id,
+    references,
+  });
+
+  return ok(
+    {
+      email: serializeEmailRow(result.row),
+      provider: result.provider,
+      provider_message_id: result.providerMessageId,
+    },
+    201,
+  );
+});
+
+app.post("/api/emails/:id/forward", async (c) => {
+  const env = c.env;
+  const body = await readJson(c);
+  const row = await getEmailRow(env, c.req.param("id"));
+  if (!row) return fail(404, "email_not_found", "Email not found");
+  const requestedMailbox = optionalString(body.mailbox_id ?? body.mailboxId, "mailbox_id", 100);
+  if (requestedMailbox && requestedMailbox !== row.mailbox_id) {
+    return fail(403, "mailbox_mismatch", "This email belongs to another mailbox");
+  }
+  const mailbox = await getMailbox(env, row.mailbox_id);
+  if (!mailbox) return fail(404, "mailbox_not_found", "Mailbox not found");
+  const document = await readEmailDocument(env, row);
+  if (!document) return fail(404, "content_not_found", "Stored email JSON was not found in B2");
+
+  const to = parseAddressList(body.to, "to", true, 50);
+  const cc = parseAddressList(body.cc, "cc", false, 50);
+  const bcc = parseAddressList(body.bcc, "bcc", false, 50);
+  const textInput =
+    typeof body.textContent === "string"
+      ? body.textContent
+      : typeof body.text === "string"
+        ? body.text
+        : "";
+  const htmlInput =
+    typeof body.htmlContent === "string"
+      ? body.htmlContent
+      : typeof body.html === "string"
+        ? body.html
+        : "";
+  assert(
+    textInput.length <= MAX_BODY_CHARS && htmlInput.length <= MAX_BODY_CHARS,
+    413,
+    "payload_too_large",
+    "Forward note is too large",
+  );
+
+  const originalText = document.text || htmlToText(document.html);
+  const originalHtml = document.html || textToHtml(document.text);
+  const fromLabel = `${document.from.name ? `${document.from.name} ` : ""}<${document.from.email}>`;
+  const toLabel = document.to.map((address) => address.email).join(", ");
+  const forwardedText = [
+    textInput ? `${textInput}\n\n` : "",
+    "---------- Forwarded message ----------",
+    `From: ${fromLabel}`,
+    `Date: ${document.date}`,
+    `Subject: ${document.subject}`,
+    `To: ${toLabel}`,
+    "",
+    originalText,
+  ].join("\n");
+  const forwardedHtml = [
+    htmlInput ? `<div>${htmlInput}</div>` : "",
+    '<p style="color:#666">---------- Forwarded message ----------</p>',
+    `<p><strong>From:</strong> ${escapeHtml(fromLabel)}<br/><strong>Date:</strong> ${escapeHtml(document.date)}<br/><strong>Subject:</strong> ${escapeHtml(document.subject)}<br/><strong>To:</strong> ${escapeHtml(toLabel)}</p>`,
+    originalHtml,
+  ].join("");
+
+  const attachments: AttachmentInput[] = [];
+  let attachmentBytes = 0;
+  assert(document.attachments.length <= 20, 413, "too_many_attachments", "Too many attachments to forward");
+  for (const attachment of document.attachments) {
+    const object = await getObject(env, attachment.b2Key);
+    if (!object) {
+      return fail(404, "attachment_not_found", `Attachment ${attachment.filename} was not found in B2`);
+    }
+    const content = new Uint8Array(await object.arrayBuffer());
+    attachmentBytes += content.byteLength;
+    assert(
+      attachmentBytes <= maxSendBytes(env),
+      413,
+      "payload_too_large",
+      "Forwarded attachments exceed the send size limit",
+    );
+    attachments.push({
+      id: crypto.randomUUID(),
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      disposition: attachment.disposition,
+      contentId: attachment.contentId,
+      content,
+    });
+  }
+
+  const subject = (document.subject || row.subject || "(no subject)").toLowerCase().startsWith("fwd:")
+    ? document.subject || row.subject
+    : `Fwd: ${document.subject || row.subject}`;
+  const result = await sendStoredOutbound(env, {
+    mailboxId: row.mailbox_id,
+    from: { email: mailbox.address, name: mailbox.name || mailbox.address },
+    to,
+    cc,
+    bcc,
+    subject,
+    text: forwardedText,
+    html: forwardedHtml,
+    attachments,
+    references: document.references || [],
+  });
+
+  return ok(
+    {
+      email: serializeEmailRow(result.row),
+      provider: result.provider,
+      provider_message_id: result.providerMessageId,
+    },
+    201,
+  );
+});
+
+
 
 app.post("/api/emails/trash", async (c) => {
   const body = await readJson(c);

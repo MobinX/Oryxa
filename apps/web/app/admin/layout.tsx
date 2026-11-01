@@ -1,10 +1,15 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { LogOut } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { SignOutForm } from '@/components/sign-out-button';
 import { logsSignOutAction } from '@/app/actions/logs-auth';
-import { logsBearer } from '@/lib/logs-session';
+import { getActiveConsoleUser } from '@/lib/console-session';
+import {
+  capabilityForAdminPagePath,
+  firstAllowedAdminHref,
+} from '@/lib/console-capabilities';
 import { getBrand } from '@/lib/brand-server';
 import type { Metadata } from 'next';
 
@@ -15,9 +20,22 @@ export const metadata: Metadata = {
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The rail is the chrome of a signed-in console, so the sign-in page does not offer a
-  // shortcut to a page the reader has not earned yet. Only the console's own session
-  // counts as earned: an account token proves a merchant, not an operator.
-  const signedIn = Boolean(await logsBearer());
+  // shortcut to a page the reader has not earned yet. DB console sessions are the new
+  // door; the legacy logs session remains a fallback for old bookmarks.
+  const user = await getActiveConsoleUser();
+  const signedIn = Boolean(user);
+  const pathname = (await headers()).get('x-pathname') || '';
+  const requiredCapability = capabilityForAdminPagePath(pathname);
+  const allowed =
+    !user ||
+    !requiredCapability ||
+    user.role === 'superuser' ||
+    user.capabilities.includes(requiredCapability);
+  const allowedCapabilities = user
+    ? user.role === 'superuser'
+      ? ('all' as const)
+      : user.capabilities
+    : [];
   const { companyName } = await getBrand();
 
   return (
@@ -56,8 +74,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* One column pair: the sidebar is a sticky item of this flex box, the page its
           neighbour, so the two can never paint over each other again. */}
       <div className="mx-auto flex w-full max-w-7xl flex-col px-0 lg:flex-row lg:items-start">
-        <AdminSidebar signedIn={signedIn} />
-        <main className="min-w-0 flex-1 px-4 pb-10 pt-2 sm:px-6 sm:pt-6">{children}</main>
+        <AdminSidebar signedIn={signedIn} allowedCapabilities={allowedCapabilities} />
+        <main className="min-w-0 flex-1 px-4 pb-10 pt-2 sm:px-6 sm:pt-6">
+          {allowed ? (
+            children
+          ) : (
+            <div className="mx-auto mt-12 max-w-md rounded-2xl border border-border/70 bg-card p-6 text-center shadow-sm">
+              <h1 className="text-lg font-semibold">Access not permitted</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Your console role does not include this section. Ask the superuser to grant it.
+              </p>
+              <Link
+                href={firstAllowedAdminHref(user)}
+                className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              >
+                Go to an allowed page
+              </Link>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import {
   Inbox,
   LayoutDashboard,
   LifeBuoy,
+  Mail,
   PanelRightOpen,
   Radio,
   Receipt,
@@ -22,68 +23,78 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import type { ConsoleCapability } from '@/lib/console-capabilities';
 
 type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  capability: ConsoleCapability;
 };
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Overview',
     items: [
-      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/admin/token-analytics', label: 'Tokens', icon: Cpu },
-      { href: '/admin/model-billing', label: 'Model billing', icon: Receipt },
+      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, capability: 'dashboard' },
+      { href: '/admin/token-analytics', label: 'Tokens', icon: Cpu, capability: 'tokens' },
+      { href: '/admin/model-billing', label: 'Model billing', icon: Receipt, capability: 'model_billing' },
+    ],
+  },
+  {
+    label: 'Mail',
+    items: [
+      { href: '/admin/inbox', label: 'Inbox', icon: Mail, capability: 'inbox' },
     ],
   },
   {
     label: 'Store platform',
     items: [
-      { href: '/admin/plans', label: 'Plans', icon: CreditCard },
-      { href: '/admin/channels', label: 'Store channels', icon: Radio },
-      { href: '/admin/default-agent', label: 'Default agent', icon: FileText },
-      { href: '/admin/agent-playground', label: 'Playground', icon: Bot },
+      { href: '/admin/plans', label: 'Plans', icon: CreditCard, capability: 'plans' },
+      { href: '/admin/channels', label: 'Store channels', icon: Radio, capability: 'channels' },
+      { href: '/admin/default-agent', label: 'Default agent', icon: FileText, capability: 'default_agent' },
+      { href: '/admin/agent-playground', label: 'Playground', icon: Bot, capability: 'playground' },
     ],
   },
   {
     label: 'Official channels',
     items: [
-      { href: '/admin/official', label: 'Official channels', icon: Globe },
-      { href: '/admin/official/inbox', label: 'Official inbox', icon: Inbox },
-      { href: '/admin/official/tickets', label: 'Tickets', icon: LifeBuoy },
-      { href: '/admin/official/prospects', label: 'Prospects', icon: Users },
+      { href: '/admin/official', label: 'Official channels', icon: Globe, capability: 'official_channels' },
+      { href: '/admin/official/inbox', label: 'Official inbox', icon: Inbox, capability: 'official_inbox' },
+      { href: '/admin/official/tickets', label: 'Tickets', icon: LifeBuoy, capability: 'tickets' },
+      { href: '/admin/official/prospects', label: 'Prospects', icon: Users, capability: 'prospects' },
     ],
   },
   {
     label: 'System',
     items: [
-      { href: '/admin/logs', label: 'Event log', icon: ScrollText },
-      { href: '/admin/settings', label: 'Settings', icon: Settings },
+      { href: '/admin/logs', label: 'Event log', icon: ScrollText, capability: 'logs' },
+      { href: '/admin/settings', label: 'Settings', icon: Settings, capability: 'settings' },
     ],
   },
 ];
-
-const NAV: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 function matches(pathname: string, href: string): boolean {
   return href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 }
 
-type AdminSidebarProps = { signedIn?: boolean };
+type AdminSidebarProps = {
+  signedIn?: boolean;
+  allowedCapabilities?: 'all' | string[];
+};
 
-/**
- * The console's navigation rail, laid out as a proper column of the page: on desktop it is
- * a section-grouped, collapsible rail in the flow (sticky under the header), so it can
- * never overlap the content again; on phones it is a slide-in drawer behind a sticky
- * hamburger above the page. The collapse state is remembered in localStorage and only
- * ever affects the desktop rail.
- */
-export function AdminSidebar({ signedIn = true }: AdminSidebarProps) {
+export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: AdminSidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => allowedCapabilities === 'all' || allowedCapabilities.includes(item.capability),
+    ),
+  })).filter((group) => group.items.length > 0);
+  const NAV = visibleGroups.flatMap((group) => group.items);
 
   useEffect(() => {
     try {
@@ -122,7 +133,7 @@ export function AdminSidebar({ signedIn = true }: AdminSidebarProps) {
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-      {NAV_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
           <p
             className={`px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 ${

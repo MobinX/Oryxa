@@ -23,6 +23,8 @@ import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
 import { adminModelBillingRouter } from '@api/routes/admin-model-billing';
+import { consoleAuthRouter } from '@api/routes/console-auth';
+import { adminMailRouter } from '@api/routes/admin-mail';
 import { fbWebhookRouter } from '@api/webhooks/facebook';
 import { waWebhookRouter } from '@api/webhooks/whatsapp';
 import { internalRouter } from '@api/routes/internal/run';
@@ -106,6 +108,8 @@ app.route('/api/v1', messengerNotificationsRouter);
 app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
+app.route('/api2', consoleAuthRouter);
+app.route('/api2', adminMailRouter);
 app.route('/api2', adminChannelsRouter);
 app.route('/api2', adminOfficialRouter);
 app.route('/api2', logsRouter);

@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
-import { AdminLoginForm } from '@/components/admin-login-form';
-import { hasLogsSession, operatorAccountEmail } from '@/lib/logs-session';
+import { ConsoleLoginForm } from '@/components/console-login-form';
+import { consoleLanding, getActiveConsoleUser } from '@/lib/console-session';
 import { getBrand } from '@/lib/brand-server';
+
+export const instant = false;
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
@@ -14,13 +16,9 @@ export async function generateMetadata() {
 }
 
 const MESSAGES: Record<string, string> = {
-  invalid: 'That user id and password do not match.',
   rate_limited:
     'Too many sign-in attempts from this address — wait a few minutes and try again.',
-  disabled:
-    'This deployment has no console secret. Set LOGS_UI_PASSWORD on the web app and the API, then try again.',
-  notoperator:
-    'The console is open, but this browser is not holding the operator account’s token — it belongs to somebody else, or it has expired. Sign in again to use the playground.',
+  forbidden: 'Your admin account does not include that section.',
 };
 
 export default function AdminLoginPage({
@@ -40,14 +38,11 @@ async function AdminLoginContent({
 }: {
   searchParams: Promise<{ error?: string | string[] }>;
 }) {
-  const error = (await searchParams).error;
-
-  // Someone bounced out of the playground still has a valid session, and sending them back to
-  // /admin would hide both the reason they were turned out and the sign-in that replaces the
-  // hour-old token the playground needs.
-  if (!error && (await hasLogsSession())) redirect('/admin');
-
-  const message = typeof error === 'string' ? MESSAGES[error] : undefined;
+  const params = await searchParams;
+  const user = await getActiveConsoleUser();
+  if (user) redirect(consoleLanding(user));
+  const error = typeof params.error === 'string' ? params.error : undefined;
+  const message = error ? MESSAGES[error] : undefined;
 
   return (
     <div className="flex min-h-[70dvh] flex-col items-center justify-center py-10">
@@ -58,11 +53,11 @@ async function AdminLoginContent({
           </div>
           <h1 className="font-geist text-xl font-bold tracking-tight">Admin console</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Platform numbers, requests, agent runs, webhooks and failures.
+            Sign in with the admin email and password created by the superuser.
           </p>
         </div>
 
-        <AdminLoginForm user={operatorAccountEmail()} />
+        <ConsoleLoginForm endpoint="/api/admin/login" nextPath="/admin" firebaseBackfill />
 
         {message ? (
           <p className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -70,18 +65,22 @@ async function AdminLoginContent({
           </p>
         ) : null}
 
-        <p className="mt-5 text-center text-xs text-muted-foreground">
-          Sign in with an authorized operator Google account or the Firebase password for{' '}
-          <code>{operatorAccountEmail()}</code>. The console account also accesses the{' '}
-          <code>oryxa-sandbox</code> store, so{' '}
-          <Link href="/admin/agent-playground" className="underline hover:text-foreground">
-            the playground
-          </Link>{' '}
-          works from here. Merchant accounts sign in at{' '}
-          <Link href="/login" className="underline hover:text-foreground">
-            /login
-          </Link>.
-        </p>
+        <div className="mt-5 space-y-2 text-center text-xs text-muted-foreground">
+          <p>
+            Superuser?{' '}
+            <Link href="/superuser/login" className="underline hover:text-foreground">
+              Manage admins here
+            </Link>
+            .
+          </p>
+          <p>
+            Merchant?{' '}
+            <Link href="/login" className="underline hover:text-foreground">
+              Sign in at /login
+            </Link>
+            .
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -128,6 +128,8 @@ All `/api/*` routes require `x-api-key: <MAIL_API_KEY>` or `Authorization: Beare
 | GET | `/api/mailboxes/:id` | Mailbox + storage |
 | GET | `/api/mailboxes/:id/emails` | List mail of one user (`trashed`, `direction`, `q`, `since`, `limit`, `offset`) |
 | POST | `/api/emails/send` | Send through Brevo (Sender.net fallback), store JSON in B2 |
+| POST | `/api/emails/:id/reply` | Reply to a received email through the active provider |
+| POST | `/api/emails/:id/forward` | Forward an email; original B2 attachments are copied |
 | GET | `/api/emails/:id` | Metadata + full JSON from B2 |
 | GET | `/api/emails/:id/content` | Raw stored JSON |
 | GET | `/api/emails/:id/attachments/:attachmentId` | Attachment download |

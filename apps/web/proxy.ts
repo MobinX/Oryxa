@@ -29,6 +29,7 @@ export function proxy(request: NextRequest) {
   requestHeaders.set(BRAND_HEADERS.company, brand.companyName);
   requestHeaders.set(BRAND_HEADERS.parent, brand.parentCompanyName);
   requestHeaders.set(BRAND_HEADERS.host, brand.host);
+  requestHeaders.set('x-pathname', pathname);
 
   const token = request.cookies.get(AUTH_COOKIE)?.value;
   const isProtected = pathname.startsWith('/businesses') || pathname.startsWith('/b/');

@@ -1190,3 +1190,40 @@ export const planAssignmentsRelations = relations(planAssignments, ({ one }) => 
   previousPlan: one(plans, { fields: [planAssignments.previousPlanId], references: [plans.id], relationName: 'previousPlan' }),
 }));
 
+
+/**
+ * Console identities are separate from merchant `users`. The old console was one shared
+ * password; these rows are the DB login, per-admin mail identity, and route capabilities.
+ */
+export const consoleRoleEnum = pgEnum('console_role', ['superuser', 'admin']);
+
+export const consoleUsers = pgTable('console_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  passwordHash: text('password_hash').notNull(),
+  role: consoleRoleEnum('role').default('admin').notNull(),
+  capabilities: jsonb('capabilities').$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdBy: uuid('created_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const consoleSessions = pgTable('console_sessions', {
+  tokenHash: varchar('token_hash', { length: 64 }).primaryKey(),
+  userId: uuid('user_id').references(() => consoleUsers.id, { onDelete: 'cascade' }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  userIdx: index('console_sessions_user_idx').on(t.userId),
+  expiryIdx: index('console_sessions_expiry_idx').on(t.expiresAt),
+}));
+
+export const consoleUserRelations = relations(consoleUsers, ({ many }) => ({
+  sessions: many(consoleSessions),
+}));
+
+export const consoleSessionRelations = relations(consoleSessions, ({ one }) => ({
+  user: one(consoleUsers, { fields: [consoleSessions.userId], references: [consoleUsers.id] }),
+}));

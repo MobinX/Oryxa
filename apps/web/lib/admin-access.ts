@@ -33,12 +33,11 @@ export async function clearOperatorAuthCookie() {
  * sign-in the front door to the admin panel: any account holding a token could open the platform
  * dashboard, the plans table, every store's token bill and the agent playground.
  *
- * Two proofs exist now, and they answer different questions. The console session is a signature
- * this app makes over an expiry, and only `operatorSignInAction` asks for one — after Google
- * confirmed that the account behind the credential is the operator's. So the session is the door,
- * and nothing else opens it. The account token is a separate thing: it is what the merchant
- * endpoints see, it lives an hour, and it can belong to somebody else while a session is still
- * open, which is why the pages that use it have it re-checked against Google.
+ * Two proofs exist now, and they answer different questions. The console session is a DB
+ * session issued by the admin login; the legacy logs cookie remains a fallback for existing
+ * sessions. The account token is a separate thing: it is what the merchant endpoints see, it
+ * lives an hour, and it can belong to somebody else while a session is still open, which is why
+ * the pages that use it have it re-checked against Google.
  */
 
 /** What `/api2` accepts as this reader's authority: the console secret, never the reader's token. */
