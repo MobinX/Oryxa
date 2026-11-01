@@ -15,6 +15,7 @@ import {
   Send,
 } from 'lucide-react';
 import { AdminPageHeader } from '@/components/admin-page-header';
+import { AttachmentUploadProvider, MailAttachmentField } from '@/components/mail-attachments';
 import { MailSubmitButton } from '@/components/mail-submit-button';
 import { consoleApiFetch, requireConsoleUser } from '@/lib/console-session';
 import { consoleCan } from '@/lib/console-capabilities';
@@ -429,7 +430,8 @@ function ComposePane({ folder, queryText }: { folder: string; queryText: string 
         </Link>
       </div>
 
-      <form action={sendMailAction} className="mt-4 space-y-3">
+      <AttachmentUploadProvider>
+        <form action={sendMailAction} className="mt-4 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-xs">
             <span className="mb-1 block font-semibold">To</span>
@@ -480,8 +482,10 @@ function ComposePane({ folder, queryText }: { folder: string; queryText: string 
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
           />
         </label>
+        <MailAttachmentField />
         <MailSubmitButton label="Send message" pendingLabel="Sending…" icon="send" />
-      </form>
+        </form>
+      </AttachmentUploadProvider>
     </div>
   );
 }
@@ -668,7 +672,8 @@ function MessagePane({
           <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
             <CornerUpLeft className="h-4 w-4 text-primary" /> Reply
           </summary>
-          <form action={replyMailAction} className="mt-3 space-y-3">
+          <AttachmentUploadProvider>
+            <form action={replyMailAction} className="mt-3 space-y-3">
             <input type="hidden" name="id" value={email.id} />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs">
@@ -697,13 +702,15 @@ function MessagePane({
               placeholder={`Reply to ${body?.from.email || email.from.email}…`}
               className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
             />
+            <MailAttachmentField />
             <MailSubmitButton
               label="Send reply"
               pendingLabel="Sending reply…"
               icon="reply"
               size="sm"
             />
-          </form>
+            </form>
+          </AttachmentUploadProvider>
         </details>
       ) : null}
 
@@ -711,7 +718,8 @@ function MessagePane({
         <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
           <Forward className="h-4 w-4 text-primary" /> Forward
         </summary>
-        <form action={forwardMailAction} className="mt-3 space-y-3">
+        <AttachmentUploadProvider>
+          <form action={forwardMailAction} className="mt-3 space-y-3">
           <input type="hidden" name="id" value={email.id} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs">
@@ -753,13 +761,15 @@ function MessagePane({
           <p className="text-[11px] text-muted-foreground">
             Original attachments are copied from B2 into the forwarded message.
           </p>
+          <MailAttachmentField />
           <MailSubmitButton
             label="Forward message"
             pendingLabel="Forwarding…"
             icon="forward"
             size="sm"
           />
-        </form>
+          </form>
+        </AttachmentUploadProvider>
       </details>
     </div>
   );

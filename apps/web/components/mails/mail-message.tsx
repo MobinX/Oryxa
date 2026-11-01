@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowLeft, CornerUpLeft, Forward, Paperclip } from 'lucide-react';
+import { AttachmentUploadProvider, MailAttachmentField } from '@/components/mail-attachments';
 import { MailSubmitButton } from '@/components/mail-submit-button';
 import { forwardMailAction, replyMailAction } from '@/app/mails/actions';
 import { consoleApiFetch } from '@/lib/console-session';
@@ -169,7 +170,8 @@ export async function MailMessage({
           <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
             <CornerUpLeft className="h-4 w-4 text-primary" /> Reply
           </summary>
-          <form action={replyMailAction} className="mt-3 space-y-3">
+          <AttachmentUploadProvider>
+            <form action={replyMailAction} className="mt-3 space-y-3">
             <input type="hidden" name="id" value={email.id} />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs">
@@ -198,13 +200,15 @@ export async function MailMessage({
               placeholder={`Reply to ${body?.from.email || email.from.email}…`}
               className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
             />
+            <MailAttachmentField />
             <MailSubmitButton
               label="Send reply"
               pendingLabel="Sending reply…"
               icon="reply"
               size="sm"
             />
-          </form>
+            </form>
+          </AttachmentUploadProvider>
         </details>
       ) : null}
 
@@ -212,7 +216,8 @@ export async function MailMessage({
         <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
           <Forward className="h-4 w-4 text-primary" /> Forward
         </summary>
-        <form action={forwardMailAction} className="mt-3 space-y-3">
+        <AttachmentUploadProvider>
+          <form action={forwardMailAction} className="mt-3 space-y-3">
           <input type="hidden" name="id" value={email.id} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs">
@@ -254,13 +259,15 @@ export async function MailMessage({
           <p className="text-[11px] text-muted-foreground">
             Original attachments are copied into the forwarded message.
           </p>
+          <MailAttachmentField />
           <MailSubmitButton
             label="Forward message"
             pendingLabel="Forwarding…"
             icon="forward"
             size="sm"
           />
-        </form>
+          </form>
+        </AttachmentUploadProvider>
       </details>
 
       <p className="px-2 pb-2 text-[10px] text-muted-foreground">

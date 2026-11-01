@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { consoleApiFetch } from '@/lib/console-session';
+import { parseUploadedAttachmentsField } from '@/lib/mail-attachments';
 
 function failTarget(base: string, error: unknown): never {
   const message = error instanceof Error ? error.message : 'Mail request failed';
@@ -28,6 +29,7 @@ export async function sendMailAction(formData: FormData): Promise<void> {
         bcc: formString(formData, 'bcc'),
         subject,
         text,
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {
@@ -48,6 +50,7 @@ export async function replyMailAction(formData: FormData): Promise<void> {
         cc: formString(formData, 'cc'),
         bcc: formString(formData, 'bcc'),
         text,
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {
@@ -69,6 +72,7 @@ export async function forwardMailAction(formData: FormData): Promise<void> {
         cc: formString(formData, 'cc'),
         bcc: formString(formData, 'bcc'),
         text: String(formData.get('text') ?? '').trim(),
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {

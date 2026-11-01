@@ -2,6 +2,7 @@
 
 import { useFormStatus } from 'react-dom';
 import { CornerUpLeft, Forward, Loader2, Send } from 'lucide-react';
+import { useAttachmentUploading } from '@/components/mail-attachments';
 
 const ICONS = { send: Send, reply: CornerUpLeft, forward: Forward };
 
@@ -19,6 +20,8 @@ export function MailSubmitButton({
   size = 'md',
 }: Props) {
   const { pending } = useFormStatus();
+  const uploading = useAttachmentUploading();
+  const blocked = pending || uploading;
   const Icon = ICONS[icon];
   const sizeClass =
     size === 'sm'
@@ -29,16 +32,16 @@ export function MailSubmitButton({
   return (
     <button
       type="submit"
-      disabled={pending}
-      aria-busy={pending}
+      disabled={blocked}
+      aria-busy={blocked}
       className={`inline-flex items-center justify-center bg-primary font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${sizeClass}`}
     >
-      {pending ? (
+      {blocked ? (
         <Loader2 className={`${iconClass} animate-spin`} aria-hidden />
       ) : (
         <Icon className={iconClass} aria-hidden />
       )}
-      {pending ? pendingLabel : label}
+      {pending ? pendingLabel : uploading ? 'Uploading…' : label}
     </button>
   );
 }

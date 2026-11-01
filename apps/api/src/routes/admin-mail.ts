@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { getSignedUploadUrl } from '@repo/integrations/b2';
 import { consoleMailMiddleware, consoleUserFromContext } from '@api/middleware/console-session';
 import {
   MailWorkerError,
@@ -15,8 +16,47 @@ import {
 
 export const adminMailRouter = new Hono();
 
+const MAX_UPLOAD_FILES = 20;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 adminMailRouter.use('/admin/mail', consoleMailMiddleware);
 adminMailRouter.use('/admin/mail/*', consoleMailMiddleware);
+
+/**
+ * Browser-uploaded attachments arrive as storage keys. The key is minted here, under
+ * the signed-in user's mailbox, so the Worker can reject a key that belongs to anyone
+ * else when it fetches the bytes at send time.
+ */
+function readUploadedAttachments(value: unknown): Record<string, unknown>[] | { error: string } {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return { error: 'uploaded_attachments must be an array' };
+  if (value.length > MAX_UPLOAD_FILES) {
+    return { error: `At most ${MAX_UPLOAD_FILES} attachments are allowed` };
+  }
+  const attachments: Record<string, unknown>[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { error: 'Each attachment must be an object' };
+    }
+    const record = item as Record<string, unknown>;
+    const key = typeof record.key === 'string' ? record.key.trim() : '';
+    if (!/^emails\/attachments\/[^/]+\/[^/]+$/.test(key)) {
+      return { error: 'Invalid attachment key' };
+    }
+    const filename = typeof record.filename === 'string' ? record.filename.trim().slice(0, 300) : '';
+    if (!filename) return { error: 'Attachment filename is required' };
+    const contentType =
+      typeof record.contentType === 'string'
+        ? record.contentType.trim().slice(0, 200)
+        : 'application/octet-stream';
+    const size = Number(record.size);
+    if (!Number.isInteger(size) || size <= 0 || size > MAX_UPLOAD_BYTES) {
+      return { error: 'Invalid attachment size' };
+    }
+    attachments.push({ key, filename, content_type: contentType, size });
+  }
+  return attachments;
+}
 
 function user(c: Context) {
   return consoleUserFromContext(c);
@@ -27,6 +67,43 @@ async function mailboxFor(c: Context): Promise<WorkerMailbox | null> {
   if (!current) return null;
   return await ensureMailbox(current.email, current.name);
 }
+
+adminMailRouter.post('/admin/mail/attachments/sign', async (c) => {
+  const mailbox = await mailboxFor(c);
+  if (!mailbox) return c.json({ error: 'Unauthorized' }, 401);
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const rawName = typeof body.filename === 'string' ? body.filename.trim() : '';
+  const contentType = typeof body.contentType === 'string' ? body.contentType.trim().toLowerCase() : '';
+  const size = Number(body.size);
+  if (!rawName) return c.json({ error: 'filename is required' }, 400);
+  if (!contentType || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(contentType)) {
+    return c.json({ error: 'contentType is required' }, 400);
+  }
+  if (!Number.isInteger(size) || size <= 0) {
+    return c.json({ error: 'size must be a positive integer' }, 400);
+  }
+  if (size > MAX_UPLOAD_BYTES) {
+    return c.json({ error: `Attachments must be ${MAX_UPLOAD_BYTES} bytes or smaller` }, 413);
+  }
+
+  const safeName =
+    rawName
+      .replace(/[^\w.\-() ]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(-180) || 'attachment';
+  const key = `emails/attachments/${mailbox.id}/${crypto.randomUUID()}-${safeName}`;
+
+  try {
+    const uploadUrl = await getSignedUploadUrl(key, contentType);
+    return c.json({ key, uploadUrl, filename: safeName, contentType, size }, 200);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Sign failed';
+    const status = message.includes('not configured') ? 503 : 500;
+    return c.json({ error: message }, status as 400 | 500 | 503);
+  }
+});
 
 function readAddresses(value: unknown, field: string, required: boolean): string[] | { error: string } {
   if (value === undefined || value === null || value === '') {
@@ -132,6 +209,10 @@ adminMailRouter.post('/admin/mail/send', async (c) => {
   const html = readText(body.html);
   if (!subject) return c.json({ error: 'subject is required' }, 400);
   if (!text && !html) return c.json({ error: 'Message body is required' }, 400);
+  const uploadedAttachments = readUploadedAttachments(body.uploaded_attachments);
+  if (!Array.isArray(uploadedAttachments)) {
+    return c.json({ error: uploadedAttachments.error }, 400);
+  }
 
   const result = await sendWorkerEmail({
     mailbox_id: mailbox.id,
@@ -142,6 +223,7 @@ adminMailRouter.post('/admin/mail/send', async (c) => {
     subject,
     text,
     html,
+    uploaded_attachments: uploadedAttachments,
   });
   return c.json(result, 201);
 });
@@ -162,6 +244,10 @@ adminMailRouter.post('/admin/mail/emails/:id/reply', async (c) => {
   const text = readText(body.text);
   const html = readText(body.html);
   if (!text && !html) return c.json({ error: 'Reply body is required' }, 400);
+  const uploadedAttachments = readUploadedAttachments(body.uploaded_attachments);
+  if (!Array.isArray(uploadedAttachments)) {
+    return c.json({ error: uploadedAttachments.error }, 400);
+  }
   const result = await replyWorkerEmail(c.req.param('id'), {
     mailbox_id: mailbox.id,
     from: { email: current.email, name: current.name || current.email },
@@ -169,6 +255,7 @@ adminMailRouter.post('/admin/mail/emails/:id/reply', async (c) => {
     bcc,
     text,
     html,
+    uploaded_attachments: uploadedAttachments,
   });
   return c.json(result, 201);
 });
@@ -187,6 +274,10 @@ adminMailRouter.post('/admin/mail/emails/:id/forward', async (c) => {
   if (!Array.isArray(cc)) return c.json({ error: cc.error }, 400);
   const bcc = readAddresses(body.bcc, 'bcc', false);
   if (!Array.isArray(bcc)) return c.json({ error: bcc.error }, 400);
+  const uploadedAttachments = readUploadedAttachments(body.uploaded_attachments);
+  if (!Array.isArray(uploadedAttachments)) {
+    return c.json({ error: uploadedAttachments.error }, 400);
+  }
   const result = await forwardWorkerEmail(c.req.param('id'), {
     mailbox_id: mailbox.id,
     from: { email: current.email, name: current.name || current.email },
@@ -195,6 +286,7 @@ adminMailRouter.post('/admin/mail/emails/:id/forward', async (c) => {
     bcc,
     text: readText(body.text),
     html: readText(body.html),
+    uploaded_attachments: uploadedAttachments,
   });
   return c.json(result, 201);
 });

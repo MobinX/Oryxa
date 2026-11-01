@@ -6,6 +6,7 @@ import { clearLogsSession } from '@/lib/logs-session';
 import { clearConsoleCookie, getConsoleToken } from '@/lib/console-cookie';
 import { API_BASE_URL } from '@/lib/api-base';
 import { consoleApiFetch } from '@/lib/console-session';
+import { parseUploadedAttachmentsField } from '@/lib/mail-attachments';
 
 export async function mailSignOutAction(): Promise<void> {
   const token = await getConsoleToken();
@@ -46,6 +47,7 @@ export async function sendMailAction(formData: FormData): Promise<void> {
         bcc: formString(formData, 'bcc'),
         subject,
         text,
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {
@@ -68,6 +70,7 @@ export async function replyMailAction(formData: FormData): Promise<void> {
         cc: formString(formData, 'cc'),
         bcc: formString(formData, 'bcc'),
         text,
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {
@@ -91,6 +94,7 @@ export async function forwardMailAction(formData: FormData): Promise<void> {
         cc: formString(formData, 'cc'),
         bcc: formString(formData, 'bcc'),
         text: String(formData.get('text') ?? '').trim(),
+        uploaded_attachments: parseUploadedAttachmentsField(formData),
       }),
     });
   } catch (error) {

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PenLine } from 'lucide-react';
+import { AttachmentUploadProvider, MailAttachmentField } from '@/components/mail-attachments';
 import { MailSubmitButton } from '@/components/mail-submit-button';
 import { sendMailAction } from '@/app/mails/actions';
 import { mailHref, type MailFolder } from '@/lib/mail-query';
@@ -37,7 +38,8 @@ export function MailCompose({
           </Link>
         </div>
 
-        <form action={sendMailAction} className="space-y-3 p-4 sm:p-5">
+        <AttachmentUploadProvider>
+          <form action={sendMailAction} className="space-y-3 p-4 sm:p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs">
               <span className="mb-1 block font-semibold">To</span>
@@ -68,13 +70,15 @@ export function MailCompose({
             <span className="mb-1 block font-semibold">Message</span>
             <textarea name="text" required rows={12} className={FIELD} />
           </label>
+          <MailAttachmentField />
           <div className="flex items-center justify-between gap-3 pt-1">
             <p className="text-[11px] text-muted-foreground">
               The sent copy and its attachments are stored in the same mailbox.
             </p>
             <MailSubmitButton label="Send message" pendingLabel="Sending…" icon="send" />
           </div>
-        </form>
+          </form>
+        </AttachmentUploadProvider>
       </div>
     </div>
   );

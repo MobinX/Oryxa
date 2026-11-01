@@ -321,6 +321,96 @@ function maxSendBytes(env: Env): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 10 * 1024 * 1024;
 }
 
+function bytesToBase64String(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Attachments uploaded by the browser straight to B2 arrive as keys, not bytes, so the
+ * send request stays small. The key prefix is mailbox-scoped: a key from another mailbox
+ * is rejected before the Worker reads it.
+ */
+async function parseUploadedAttachments(
+  env: Env,
+  mailboxId: string,
+  value: unknown,
+  maxBytes: number,
+  alreadyBytes = 0,
+  alreadyCount = 0,
+): Promise<ParsedSendAttachment[]> {
+  if (value === undefined || value === null) return [];
+  assert(
+    Array.isArray(value),
+    400,
+    "invalid_attachments",
+    "uploaded_attachments must be an array",
+  );
+  assert(
+    alreadyCount + value.length <= MAX_ATTACHMENTS,
+    400,
+    "too_many_attachments",
+    `At most ${MAX_ATTACHMENTS} attachments are allowed`,
+  );
+
+  const prefix = `emails/attachments/${mailboxId}/`;
+  let total = alreadyBytes;
+  const parsed: ParsedSendAttachment[] = [];
+
+  for (const [index, item] of value.entries()) {
+    assert(
+      item !== null && typeof item === "object" && !Array.isArray(item),
+      400,
+      "invalid_attachments",
+      "Each attachment must be an object",
+    );
+    const record = item as Record<string, unknown>;
+    const key =
+      optionalString(record.key ?? record.b2_key ?? record.b2Key, "attachment key", 1024) || "";
+    assert(key.length > 0, 400, "invalid_attachments", "Each attachment needs a storage key");
+    assert(
+      key.startsWith(prefix),
+      400,
+      "invalid_attachment_key",
+      "Attachment does not belong to this mailbox",
+    );
+
+    const filename = sanitizeFilename(
+      optionalString(record.filename, "attachment filename", 300) ||
+        key.split("/").pop() ||
+        `attachment-${index + 1}`,
+      `attachment-${index + 1}`,
+    );
+    const contentType =
+      optionalString(record.content_type ?? record.contentType, "attachment content type", 200) ||
+      "application/octet-stream";
+
+    const object = await getObject(env, key);
+    assert(
+      object,
+      404,
+      "attachment_not_found",
+      `Attachment ${filename} was not found in storage`,
+    );
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    total += bytes.byteLength;
+    assert(
+      total <= maxBytes,
+      413,
+      "attachment_too_large",
+      `Attachments exceed the ${maxBytes} byte limit`,
+    );
+
+    parsed.push({ filename, contentType, bytes, base64: bytesToBase64String(bytes) });
+  }
+
+  return parsed;
+}
+
 function downloadContentType(value: string): string {
   const type = value.toLowerCase().split(";")[0].trim();
   if (type.startsWith("image/") && !type.includes("svg")) return type;
@@ -595,7 +685,16 @@ app.post("/api/emails/send", async (c) => {
 
   const html = htmlInput || textToHtml(textInput);
   const text = textInput || htmlToText(htmlInput);
-  const attachments = parseSendAttachments(body.attachments, maxSendBytes(env));
+  const base64Attachments = parseSendAttachments(body.attachments, maxSendBytes(env));
+  const uploadedAttachments = await parseUploadedAttachments(
+    env,
+    mailbox.id,
+    body.uploaded_attachments,
+    maxSendBytes(env),
+    base64Attachments.reduce((total, item) => total + item.bytes.byteLength, 0),
+    base64Attachments.length,
+  );
+  const attachments = [...base64Attachments, ...uploadedAttachments];
   const now = new Date().toISOString();
   const tags = Array.isArray(body.tags)
     ? body.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 20)
@@ -736,6 +835,26 @@ app.post("/api/emails/:id/reply", async (c) => {
   const references = [...(document?.references || [])];
   if (row.message_id) references.push(row.message_id);
 
+  const base64Attachments = parseSendAttachments(body.attachments, maxSendBytes(env));
+  const uploadedAttachments = await parseUploadedAttachments(
+    env,
+    row.mailbox_id,
+    body.uploaded_attachments,
+    maxSendBytes(env),
+    base64Attachments.reduce((total, item) => total + item.bytes.byteLength, 0),
+    base64Attachments.length,
+  );
+  const attachments: AttachmentInput[] = [...base64Attachments, ...uploadedAttachments].map(
+    (attachment) => ({
+      id: crypto.randomUUID(),
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      disposition: "attachment",
+      contentId: null,
+      content: attachment.bytes,
+    }),
+  );
+
   const result = await sendStoredOutbound(env, {
     mailboxId: row.mailbox_id,
     from: { email: mailbox.address, name: mailbox.name || mailbox.address },
@@ -745,7 +864,7 @@ app.post("/api/emails/:id/reply", async (c) => {
     subject,
     text: textInput || htmlToText(htmlInput),
     html: htmlInput || textToHtml(textInput),
-    attachments: [],
+    attachments,
     inReplyTo: row.message_id,
     references,
   });
@@ -840,6 +959,25 @@ app.post("/api/emails/:id/forward", async (c) => {
       disposition: attachment.disposition,
       contentId: attachment.contentId,
       content,
+    });
+  }
+
+  const uploadedAttachments = await parseUploadedAttachments(
+    env,
+    row.mailbox_id,
+    body.uploaded_attachments,
+    maxSendBytes(env),
+    attachmentBytes,
+    attachments.length,
+  );
+  for (const attachment of uploadedAttachments) {
+    attachments.push({
+      id: crypto.randomUUID(),
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      disposition: "attachment",
+      contentId: null,
+      content: attachment.bytes,
     });
   }
 
