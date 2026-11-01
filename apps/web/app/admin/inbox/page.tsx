@@ -119,7 +119,7 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
   const limit = list?.limit || 40;
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 lg:h-[calc(100dvh-7.5rem)] lg:min-h-[32rem]">
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6 lg:h-[calc(100dvh-7.5rem)] lg:min-h-[32rem]">
       <div className="shrink-0 space-y-4">
         <AdminPageHeader
           icon={Mail}
@@ -172,9 +172,9 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
           {loadError}
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-          <section className={activePane ? 'hidden min-h-0 lg:block' : 'block min-h-0'}>
-            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+          <section className={activePane ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'}>
+            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               <div className="border-b border-border/50 p-3">
                 <div className="flex rounded-xl bg-muted/50 p-1">
                   {[
@@ -317,11 +317,11 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
           <section
             className={
               activePane
-                ? 'flex max-h-[calc(100dvh-16rem)] min-h-[20rem] flex-col lg:max-h-none lg:min-h-0'
-                : 'hidden min-h-0 lg:flex lg:flex-col'
+                ? 'flex min-h-[20rem] min-w-0 max-h-[calc(100dvh-16rem)] flex-col lg:max-h-none lg:min-h-0'
+                : 'hidden min-h-0 min-w-0 lg:flex lg:flex-col'
             }
           >
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:pr-1">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:pr-1">
               {compose ? (
                 <ComposePane folder={folder} queryText={queryText} />
               ) : selectedId ? (
