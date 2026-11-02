@@ -5,6 +5,17 @@ import { decryptChannelToken } from '@repo/db/crud/channel';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * How long a page may keep messaging a person after that person's last message. Meta caps it at
+ * seven days, so an owner who never writes back silently stops receiving notices. `PING` is the
+ * handshake that renews it, and the deadline is one window from the ping that renewed it.
+ */
+export const MESSENGER_WINDOW_DAYS = 7;
+
+export function nextPingDeadlineAt(from: Date): Date {
+  return new Date(from.getTime() + MESSENGER_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
+
 /** The business's notification code, created on first ask; one row per business, never rotated. */
 export async function ensureMessengerNotification(businessId: string): Promise<string> {
   const existing = await db.query.messengerNotifications.findFirst({
@@ -33,6 +44,7 @@ export async function getMessengerNotificationOverview(businessId: string) {
       id: messengerNotificationUsers.id,
       name: messengerNotificationUsers.name,
       platformUserId: messengerNotificationUsers.platformUserId,
+      lastPingAt: messengerNotificationUsers.lastPingAt,
       createdAt: messengerNotificationUsers.createdAt,
     })
     .from(messengerNotificationUsers)
@@ -57,6 +69,8 @@ export async function upsertMessengerNotificationUser(input: {
   channelId: string;
   platformUserId: string;
   name?: string | null;
+  /** The connecting message itself opens Meta's window, so it counts as the first ping. */
+  lastPingAt?: Date | null;
 }): Promise<void> {
   await db
     .insert(messengerNotificationUsers)
@@ -65,11 +79,46 @@ export async function upsertMessengerNotificationUser(input: {
       channelId: input.channelId,
       platformUserId: input.platformUserId,
       name: input.name ?? null,
+      lastPingAt: input.lastPingAt ?? null,
     })
     .onConflictDoUpdate({
       target: [messengerNotificationUsers.businessId, messengerNotificationUsers.platformUserId],
-      set: { channelId: input.channelId, name: input.name ?? null },
+      set: {
+        channelId: input.channelId,
+        name: input.name ?? null,
+        ...(input.lastPingAt ? { lastPingAt: input.lastPingAt } : {}),
+      },
     });
+}
+
+/**
+ * Renews the messaging window for every store this account follows through THIS page, because
+ * Meta counts the window per page-and-person pair — a ping on one page keeps nothing alive for a
+ * notice sent from another. Returns null when the sender is not connected here, so an unrelated
+ * "ping" from a customer is left alone.
+ */
+export async function recordMessengerNotificationPing(input: {
+  channelId: string;
+  platformUserId: string;
+  at?: Date;
+}): Promise<{ renewed: number; deadlineAt: Date; businessIds: string[] } | null> {
+  const at = input.at ?? new Date();
+  const rows = await db
+    .update(messengerNotificationUsers)
+    .set({ lastPingAt: at })
+    .where(
+      and(
+        eq(messengerNotificationUsers.channelId, input.channelId),
+        eq(messengerNotificationUsers.platformUserId, input.platformUserId),
+      ),
+    )
+    .returning({ businessId: messengerNotificationUsers.businessId });
+  if (rows.length === 0) return null;
+  return {
+    renewed: rows.length,
+    deadlineAt: nextPingDeadlineAt(at),
+    businessIds: rows.map((row: { businessId: string }) => row.businessId),
+  };
 }
 
 /** Every Messenger account following this business, with the page token allowed to message it. */

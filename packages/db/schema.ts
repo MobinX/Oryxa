@@ -807,6 +807,13 @@ export const messengerNotificationUsers = pgTable('messenger_notification_user_i
   channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
   platformUserId: varchar('platform_user_id', { length: 255 }).notNull(),
   name: varchar('name', { length: 255 }),
+  /**
+   * When this account last sent PING to the page it subscribed on. Meta only lets a page message
+   * a person for seven days after that person's last message, so an alert older than this window
+   * is refused — the ping is what keeps the door open, and the deadline is this instant plus
+   * seven days. NULL means never pinged, only connected.
+   */
+  lastPingAt: timestamp('last_ping_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   uniq: uniqueIndex('messenger_notification_user_business_platform_uniq_idx').on(t.businessId, t.platformUserId),

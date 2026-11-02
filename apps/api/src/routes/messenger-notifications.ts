@@ -4,6 +4,7 @@ import { businessAccessMiddleware } from '@api/middleware/business';
 import {
   ensureMessengerNotification,
   getMessengerNotificationOverview,
+  nextPingDeadlineAt,
   removeMessengerNotificationUser,
 } from '@repo/db/crud/messenger-notification';
 
@@ -24,6 +25,9 @@ messengerNotificationsRouter.get('/:businessId/messenger-notifications', async (
       id: user.id,
       name: user.name,
       connectedAt: user.createdAt.toISOString(),
+      /** When this account last sent PING, and the instant its alerts stop arriving without one. */
+      lastPingAt: user.lastPingAt ? user.lastPingAt.toISOString() : null,
+      nextPingDueAt: user.lastPingAt ? nextPingDeadlineAt(user.lastPingAt).toISOString() : null,
     })),
   });
 });
