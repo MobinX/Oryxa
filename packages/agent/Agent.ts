@@ -14,6 +14,8 @@ import {
   detectTurnLanguage,
   classifyTurnIntent,
   validateAndSanitizeReply,
+  isRepeatAnswer,
+  repeatAlert,
   PAYMENT_STRATEGY_DESCRIPTIONS,
   PAYMENT_STRATEGY_LABELS,
 } from '@repo/shared';
@@ -128,6 +130,13 @@ export interface AgentConfig {
   tools?: StructuredTool[];
   /** Override the default Messenger reply guidance in the system prompt. */
   replyGuidance?: string;
+  /**
+   * The last thing this conversation's agent already told the customer, with how many seconds ago.
+   * Messenger sends every short message as its own turn — "What you hve", then "Have" six seconds
+   * later — so without this the model answers the fragment again and the customer watches the bot
+   * repeat itself. Falls back to the newest `self` message in `history` when the runner omits it.
+   */
+  lastSelfReply?: { content: string; secondsAgo?: number | null };
   /**
    * Which wording rules the final text is validated against. Defaults to 'comment' when
    * custom tools are supplied (the comment runner), 'messenger' otherwise.
@@ -342,6 +351,20 @@ export class Agent {
     const sentTexts = this.sentTexts;
     const { emitSse, sendMessageOverride } = this.config;
 
+    // The answer the customer has already seen. Fragmented follow-ups are what make an agent look
+    // broken, so both the tools and this run's own final text are compared against it. Scoped to
+    // the conversation agent: a comment thread holds many different people, and two of them getting
+    // the same words is not the repetition this guard exists to catch.
+    const replyChannel =
+      this.config.validationChannel ?? (this.config.tools ? 'comment' : 'messenger');
+    const previousAnswer =
+      replyChannel === 'messenger'
+        ? (this.config.lastSelfReply?.content
+            ?? [...this.config.history].reverse().find((m) => m.from === 'self')?.content
+            ?? null)
+        : null;
+    const answerAgeSeconds = this.config.lastSelfReply?.secondsAgo ?? null;
+
     const tools: StructuredTool[] =
       this.config.tools ??
       createAgentTools(
@@ -361,6 +384,7 @@ export class Agent {
           deliveryZones: this.config.business.deliveryZones,
           paymentMethods: this.config.business.paymentMethods,
           paymentStrategy: this.config.business.paymentStrategy,
+          lastSelfReply: previousAnswer,
         },
         (text) => sentTexts.push(text),
       );
@@ -383,6 +407,9 @@ export class Agent {
     const compactState = this.config.agentState ? formatCompactAgentState(this.config.agentState) : null;
     const dynamicContent = [
       `You are a sales rep for ${this.config.business.name}.`,
+      previousAnswer
+        ? `Your previous reply to this customer${answerAgeSeconds != null ? ` (${answerAgeSeconds} seconds ago)` : ''} was: "${previousAnswer.trim().slice(0, 240)}". They see it on screen already. If their newest message is a fragment, a typo, or asks the same thing again, do NOT restate that reply — build on it: name one specific product with its price, ask a single narrower question (category, size, colour, quantity), or answer the part you have not answered yet. Saying something new every turn is the job; a repeated sentence reads to the customer as a broken bot.`
+        : '',
       this.config.business.description ? `Business: ${this.config.business.description}` : '',
       this.config.business.agentProductGuidance
         ? `How to answer questions about products: ${this.config.business.agentProductGuidance}`
@@ -433,18 +460,62 @@ export class Agent {
     // actually makes them; a genuine loop still trips it instead of running away.
     const result = await agent.invoke({ messages }, { recursionLimit: 25 });
     const latencyMs = Date.now() - startTime;
-    const lastMessage = result.messages[result.messages.length - 1];
-    let replyText = contentText(lastMessage.content);
+    let loopMessages = result.messages;
 
-    // Post-generation validation & sanitization
-    const validation = validateAndSanitizeReply(replyText, {
-      expectedLanguage: turnLanguage,
-      channel: this.config.validationChannel ?? (this.config.tools ? 'comment' : 'messenger'),
-      isSilentExpected: turnIntent === 'comment_silent',
-    });
-    replyText = validation.sanitizedText;
-    if (!validation.isValid) {
-      console.log(`[agent] reply sanitized violations: ${validation.violations.join(', ')}`);
+    const validateReply = (text: string): string => {
+      const validation = validateAndSanitizeReply(text, {
+        expectedLanguage: turnLanguage,
+        channel: replyChannel,
+        isSilentExpected: turnIntent === 'comment_silent',
+      });
+      if (!validation.isValid) {
+        console.log(`[agent] reply sanitized violations: ${validation.violations.join(', ')}`);
+      }
+      return validation.sanitizedText;
+    };
+
+    let replyText = validateReply(contentText(loopMessages[loopMessages.length - 1].content));
+
+    /**
+     * A restated answer is refused out loud, not quietly dropped: the model is shown what it
+     * already said and asked once more for a real reply. Dropping it silently would leave the
+     * customer on read, which is worse than the repetition this guards against.
+     */
+    if (previousAnswer && replyText.trim() !== 'SILENT' && isRepeatAnswer(replyText, previousAnswer)) {
+      console.warn('[agent] final reply restated the previous answer — asking for a different one');
+      emitSse?.('reply_duplicate', {
+        stage: 'final',
+        text: replyText.slice(0, 200),
+        of: previousAnswer.slice(0, 200),
+      });
+      try {
+        const retried = await agent.invoke(
+          {
+            messages: [...loopMessages, new HumanMessage(repeatAlert(previousAnswer))],
+          },
+          { recursionLimit: 8 },
+        );
+        loopMessages = retried.messages;
+        const candidate = validateReply(
+          contentText(loopMessages[loopMessages.length - 1].content),
+        );
+        if (!previousAnswer || !isRepeatAnswer(candidate, previousAnswer)) {
+          replyText = candidate;
+        } else if (sentTexts.length > 0) {
+          // Something else reached the customer this turn, so a second copy of the same sentence
+          // adds nothing; the tool sends already carried the answer.
+          console.error('[agent] retry still repeated the previous answer — sending nothing extra');
+          emitSse?.('reply_duplicate', { stage: 'retry_still_duplicate', text: candidate.slice(0, 200) });
+          replyText = '';
+        } else {
+          // Nothing was sent this turn at all: an imperfect answer beats none.
+          console.error('[agent] retry still repeated the previous answer — sending it, nothing else went out');
+          emitSse?.('reply_duplicate', { stage: 'retry_sent_anyway', text: candidate.slice(0, 200) });
+          replyText = candidate;
+        }
+      } catch (err) {
+        console.error('[agent] corrective retry failed, keeping the first reply:', err);
+      }
     }
 
     // Aggregate usage metadata across all AI messages in the React loop
@@ -452,7 +523,7 @@ export class Agent {
     let outputTokens = 0;
     let cacheHitTokens = 0;
 
-    for (const msg of result.messages) {
+    for (const msg of loopMessages) {
       if (msg._getType() !== 'ai') continue;
       // usage_metadata only exists on AIMessage; _getType() isn't a type predicate.
       const usage = (msg as AIMessage).usage_metadata;
@@ -496,7 +567,7 @@ export class Agent {
       replyText,
       sentTexts: this.sentTexts,
       metrics,
-      messages: serializeTraceMessages(result.messages),
+      messages: serializeTraceMessages(loopMessages),
     };
   }
 

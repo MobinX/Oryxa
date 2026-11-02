@@ -153,6 +153,20 @@ export async function runAgentCore(
   const orderedHistory = [...historyById.values()]
     .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
+  // What the agent last told this customer, and how long ago. Messenger turns arrive as
+  // fragments — "What you hve", then "Have" six seconds later — and answering a fragment with the
+  // same sentence twice is what makes the bot look broken to the merchant.
+  const newestSelfMessage = [...orderedHistory].reverse().find((m) => m.from === 'self');
+  const lastSelfReply = newestSelfMessage?.content
+    ? {
+        content: newestSelfMessage.content,
+        secondsAgo: Math.max(
+          0,
+          Math.round((Date.now() - new Date(newestSelfMessage.time).getTime()) / 1000),
+        ),
+      }
+    : undefined;
+
   // A picture stays pixels until six of the customer's turns have passed after it, not only for
   // the ones being answered this second. "Do you have this?" and the photo it belongs to routinely
   // land as two deliveries a second apart, and the question that matters rarely arrives in the
@@ -282,6 +296,7 @@ export async function runAgentCore(
     systemPrompt: answering.systemPrompt,
     business: conv.business ?? { id: businessId, name: 'Store' },
     history,
+    lastSelfReply,
     conversationId: conv.id,
     pageToken: conv.channel.apiToken,
     customerPlatformId: conv.customerPlatformId,

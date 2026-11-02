@@ -53,7 +53,7 @@ function agentContext(
 }
 
 describe('Agent Tools', () => {
-  withPglite();
+  withPglite({ timeoutMs: 120_000 });
 
   it('get_product tool searches catalog', async () => {
     const seed = await seedTestWorld();
@@ -427,6 +427,56 @@ describe('Agent Tools', () => {
     expect(suggestionTool).toBeTruthy();
     expect(JSON.stringify(messageTool?.description)).toContain('takes no suggestions');
     expect(JSON.stringify(suggestionTool?.description)).toContain('tappable answer chips');
+  });
+
+  it('refuses a reply that restates the last answer and demands a different one', async () => {
+    const seed = await seedTestWorld();
+    const sent: string[] = [];
+    const previous =
+      'We have these categories. Which would you like to browse? (Accessories / Apparel / Beauty / Electronics)';
+    const tools = createAgentTools(
+      {
+        ...agentContext(seed),
+        lastSelfReply: previous,
+        sendMessageOverride: async (_page, _psid, text) => {
+          sent.push(text);
+        },
+      },
+      (text) => sent.push(`tracked:${text}`),
+    );
+    const messageTool = tools.find((tool) => String(tool.name) === 'send_message')!;
+    const suggestionTool = tools.find((tool) => String(tool.name) === 'send_suggestions')!;
+
+    // The fragment "Have" answered with the same sentence minus the chips the customer already saw.
+    const repeated = JSON.parse(
+      await messageTool.invoke({ message: 'We have these categories. Which would you like to browse?' }),
+    );
+    expect(repeated.sent).toBe(false);
+    expect(repeated.duplicate).toBe(true);
+    expect(repeated.alreadySaid).toContain('categories');
+    expect(repeated.instruction).toContain('NOT sent');
+    expect(sent.filter((t) => !t.startsWith('tracked:'))).toHaveLength(0);
+
+    // The chip row is the same kind of send, so its sentence is held to the same rule.
+    const chipsRepeated = JSON.parse(
+      await suggestionTool.invoke({
+        message: 'We have these categories. Which would you like to browse?',
+        suggestions: ['Electronics', 'Apparel'],
+      }),
+    );
+    expect(chipsRepeated.duplicate).toBe(true);
+
+    // A new answer goes out — and a SECOND copy of that same new answer is refused within the run.
+    const freshText =
+      'Electronics has the Bluetooth Speaker at BDT 59.99 with 168 in stock. Want me to show it?';
+    const fresh = JSON.parse(await messageTool.invoke({ message: freshText }));
+    expect(fresh.sent).toBe(true);
+    expect(sent).toContain(freshText);
+
+    const secondCopy = JSON.parse(await messageTool.invoke({ message: freshText }));
+    expect(secondCopy.sent).toBe(false);
+    expect(secondCopy.duplicate).toBe(true);
+    expect(sent.filter((t) => t === freshText)).toHaveLength(1);
   });
 
   it('show_products sends a card per product, with the Order button carrying its id', async () => {

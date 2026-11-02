@@ -28,6 +28,8 @@ import type { SseEmitter } from '@agent/Agent';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
   matchPaymentMethod,
+  repeatsAnyAnswer,
+  repeatAlert,
   checkOrderPayment,
   resolvePaymentStrategy,
   PAYMENT_STRATEGY_DESCRIPTIONS,
@@ -1046,6 +1048,8 @@ export function createAgentTools(
     paymentMethods?: PaymentMethodConfig[];
     /** Store-wide default payment strategy; a product's own override wins over it. */
     paymentStrategy?: PaymentStrategy;
+    /** The last thing this customer was told, so a restatement of it can be refused. */
+    lastSelfReply?: string | null;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
@@ -1055,6 +1059,20 @@ export function createAgentTools(
    */
   onSent?: (text: string, kind: 'reply' | 'card') => void,
 ) {
+  /**
+   * Every plain-text answer this run has already put on the wire. Messenger customers send
+   * fragments ("What you hve", then "Have" six seconds later) and each fragment becomes a turn, so
+   * the agent answers the same thing twice and the merchant sees a broken bot. A repeat is refused
+   * out loud — the model is told what it already said and asked for a different answer, never
+   * quietly muted.
+   */
+  const sentRepliesThisRun: string[] = [];
+
+  /** The earlier answer this text would restate, or null when the text says something new. */
+  function repeatedAnswer(text: string): string | null {
+    return repeatsAnyAnswer(text, [context.lastSelfReply, ...sentRepliesThisRun]);
+  }
+
   /**
    * One thing that reaches Messenger is one unit of the message budget, whether it arrived
    * as a paragraph or as a row of cards. Claimed before the send and never after: the model
@@ -1876,6 +1894,22 @@ export function createAgentTools(
         return logResult(JSON.stringify({ sent: false, reason: 'the message is empty' }));
       }
 
+      // Refused before the budget is touched: a repeat is not a send, and the model gets an
+      // explicit instruction to answer differently rather than being quietly dropped.
+      const repeated = repeatedAnswer(text);
+      if (repeated) {
+        console.warn(
+          `[agent-tool] send_message refused — it restated the previous answer for ${context.conversationId}`,
+        );
+        context.emitSse?.('reply_duplicate', { text: text.slice(0, 200), of: repeated.slice(0, 200) });
+        return logResult(JSON.stringify({
+          sent: false,
+          duplicate: true,
+          alreadySaid: repeated.slice(0, 400),
+          instruction: repeatAlert(repeated),
+        }));
+      }
+
       const budget = await takeMessageUnit(!context.sendMessageOverride);
       if (!budget.allowed) {
         return logResult(JSON.stringify({ sent: false, reason: BUDGET_REFUSED }));
@@ -1901,6 +1935,7 @@ export function createAgentTools(
         state: 'done',
       });
       onSent?.(text, 'reply');
+      sentRepliesThisRun.push(text);
 
       return logResult(JSON.stringify({
         sent: true,
@@ -1944,6 +1979,22 @@ export function createAgentTools(
           sent: false,
           reason: 'send_suggestions needs at least two distinct options',
           instruction: 'Use send_message for a plain reply, or pass 2 to 10 real choices.',
+        }));
+      }
+
+      // The sentence above the chips is an answer too, so the same repeat rule applies to it:
+      // refusing here costs no message unit and tells the model to say something new.
+      const restatedAnswer = repeatedAnswer(text);
+      if (restatedAnswer) {
+        console.warn(
+          `[agent-tool] send_suggestions refused — its message restated the previous answer for ${context.conversationId}`,
+        );
+        context.emitSse?.('reply_duplicate', { text: text.slice(0, 200), of: restatedAnswer.slice(0, 200) });
+        return logResult(JSON.stringify({
+          sent: false,
+          duplicate: true,
+          alreadySaid: restatedAnswer.slice(0, 400),
+          instruction: repeatAlert(restatedAnswer),
         }));
       }
 
@@ -1999,6 +2050,9 @@ export function createAgentTools(
         state: 'done',
       });
       onSent?.(said, withChips ? 'card' : 'reply');
+      // Only the sentence, not the chips: showing the same product card twice on request is
+      // normal, restating the same sentence is not.
+      sentRepliesThisRun.push(said);
 
       return logResult(JSON.stringify({
         sent: true,
