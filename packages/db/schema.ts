@@ -1178,6 +1178,19 @@ export const notifications = pgTable('notifications', {
   title: varchar('title', { length: 120 }).notNull(),
   body: text('body').notNull(),
   link: varchar('link', { length: 300 }),
+  /**
+   * What happened when this notice was also sent to the merchant's Messenger accounts. A stored
+   * notice and a delivered notice are different facts: without this, a notice Meta refused
+   * (the merchant had not messaged the page inside its window) looked identical to one that
+   * arrived. NULL means no Messenger copy was attempted.
+   */
+  messengerStatus: varchar('messenger_status', { length: 16 }),
+  /** How many accounts were addressed, so "nobody is following" is distinguishable from "all failed". */
+  messengerRecipients: integer('messenger_recipients'),
+  /** How many of those accepted the message. Equal to recipients when nothing failed. */
+  messengerDelivered: integer('messenger_delivered'),
+  /** Why it did not go through, in the merchant's terms rather than a Graph API payload. */
+  messengerDetail: text('messenger_detail'),
   readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({

@@ -124,6 +124,20 @@ export default async function NotificationsPage({
                         minute: '2-digit',
                       })}
                     </p>
+                    {notice.messenger && notice.messenger.status !== 'delivered' ? (
+                      <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                        {notice.messenger.status === 'no_recipients'
+                          ? 'No Messenger alert was sent — no account is following your notification code yet.'
+                          : notice.messenger.status === 'partial'
+                            ? `Messenger alert reached ${notice.messenger.delivered} of ${notice.messenger.recipients} account(s).`
+                            : 'This was not delivered to Messenger.'}
+                        {notice.messenger.detail ? (
+                          <span className="mt-1 block text-amber-800/80 dark:text-amber-200/70">
+                            {notice.messenger.detail}
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </div>
 
                   {notice.link && (

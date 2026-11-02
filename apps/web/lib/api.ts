@@ -1395,6 +1395,13 @@ export type NotificationItem = {
   title: string;
   body: string;
   link: string | null;
+  /** How the Messenger copy of this notice went. Null when none was attempted. */
+  messenger: {
+    status: 'delivered' | 'partial' | 'failed' | 'no_recipients';
+    recipients: number;
+    delivered: number;
+    detail?: string | null;
+  } | null;
   readAt: string | null;
   createdAt: string;
 };
