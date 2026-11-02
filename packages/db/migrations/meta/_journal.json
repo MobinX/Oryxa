@@ -358,6 +358,13 @@
       "when": 1793556000003,
       "tag": "0050_default_agent_payment_strategy",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793556000004,
+      "tag": "0051_agent_row_channel_block",
+      "breakpoints": true
     }
   ]
 }
