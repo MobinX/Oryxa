@@ -7,6 +7,7 @@ import {
   forwardWorkerEmail,
   getWorkerEmail,
   listMailboxEmails,
+  mailWorkerJson,
   mailWorkerResponse,
   mailboxStorage,
   replyWorkerEmail,
@@ -289,6 +290,46 @@ adminMailRouter.post('/admin/mail/emails/:id/forward', async (c) => {
     uploaded_attachments: uploadedAttachments,
   });
   return c.json(result, 201);
+});
+
+async function trashableEmail(c: Context): Promise<{ id: string } | Response> {
+  const mailbox = await mailboxFor(c);
+  if (!mailbox) return c.json({ error: 'Unauthorized' }, 401);
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Email not found' }, 404);
+  const original = await getWorkerEmail(id);
+  if (original.email.mailbox_id !== mailbox.id) return c.json({ error: 'Email not found' }, 404);
+  return { id };
+}
+
+adminMailRouter.post('/admin/mail/emails/:id/trash', async (c) => {
+  const checked = await trashableEmail(c);
+  if (checked instanceof Response) return checked;
+  const result = await mailWorkerJson('/api/emails/trash', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [checked.id] }),
+  });
+  return c.json(result);
+});
+
+adminMailRouter.post('/admin/mail/emails/:id/restore', async (c) => {
+  const checked = await trashableEmail(c);
+  if (checked instanceof Response) return checked;
+  const result = await mailWorkerJson('/api/emails/restore', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [checked.id] }),
+  });
+  return c.json(result);
+});
+
+adminMailRouter.post('/admin/mail/emails/:id/delete', async (c) => {
+  const checked = await trashableEmail(c);
+  if (checked instanceof Response) return checked;
+  const result = await mailWorkerJson('/api/emails/delete', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [checked.id] }),
+  });
+  return c.json(result);
 });
 
 adminMailRouter.onError((error, c) => {

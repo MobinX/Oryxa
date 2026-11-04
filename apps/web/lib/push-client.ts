@@ -46,8 +46,8 @@ export function bindForegroundMessages(registration: ServiceWorkerRegistration):
     if (!data.title) return;
     void registration.showNotification(data.title, {
       body: data.body ?? '',
-      icon: '/logo.svg',
-      badge: '/logo.svg',
+      icon: '/icon-192.png',
+      badge: '/icon-96.png',
       data: { link: data.link ?? '/' },
     });
   });

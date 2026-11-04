@@ -1,11 +1,12 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { clearOperatorAuthCookie } from '@/lib/admin-access';
 import { clearLogsSession } from '@/lib/logs-session';
 import { clearConsoleCookie, getConsoleToken } from '@/lib/console-cookie';
 import { API_BASE_URL } from '@/lib/api-base';
-import { consoleApiFetch } from '@/lib/console-session';
+import { consoleApiFetch, ConsoleApiError } from '@/lib/console-session';
 import { parseUploadedAttachmentsField } from '@/lib/mail-attachments';
 
 export async function mailSignOutAction(): Promise<void> {
@@ -23,6 +24,7 @@ export async function mailSignOutAction(): Promise<void> {
 }
 
 function failTarget(base: string, error: unknown): never {
+  if (error instanceof ConsoleApiError && error.status === 401) redirect('/mails/login');
   const message = error instanceof Error ? error.message : 'Mail request failed';
   redirect(`${base}${base.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`);
 }
@@ -53,6 +55,7 @@ export async function sendMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget('/mails/compose', error);
   }
+  revalidatePath('/mails');
   redirect('/mails?folder=sent&sent=1');
 }
 
@@ -76,6 +79,7 @@ export async function replyMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget(`/mails/${encodeURIComponent(id)}`, error);
   }
+  revalidatePath('/mails');
   redirect('/mails?folder=sent&sent=1');
 }
 
@@ -100,5 +104,48 @@ export async function forwardMailAction(formData: FormData): Promise<void> {
   } catch (error) {
     failTarget(`/mails/${encodeURIComponent(id)}`, error);
   }
+  revalidatePath('/mails');
   redirect('/mails?folder=sent&sent=1');
+}
+
+export async function trashMailAction(formData: FormData): Promise<void> {
+  const id = formString(formData, 'id');
+  if (!id) failTarget('/mails', new Error('Missing email id.'));
+  try {
+    await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/trash`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    failTarget(`/mails/${encodeURIComponent(id)}`, error);
+  }
+  revalidatePath('/mails');
+  redirect('/mails?folder=trash&trashed=1');
+}
+
+export async function restoreMailAction(formData: FormData): Promise<void> {
+  const id = formString(formData, 'id');
+  if (!id) failTarget('/mails?folder=trash', new Error('Missing email id.'));
+  try {
+    await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    failTarget(`/mails/${encodeURIComponent(id)}`, error);
+  }
+  revalidatePath('/mails');
+  redirect(`/mails/${encodeURIComponent(id)}?restored=1`);
+}
+
+export async function deleteMailAction(formData: FormData): Promise<void> {
+  const id = formString(formData, 'id');
+  if (!id) failTarget('/mails?folder=trash', new Error('Missing email id.'));
+  try {
+    await consoleApiFetch(`/api2/admin/mail/emails/${encodeURIComponent(id)}/delete`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    failTarget(`/mails/${encodeURIComponent(id)}`, error);
+  }
+  revalidatePath('/mails');
+  redirect('/mails?folder=trash&deleted=1');
 }

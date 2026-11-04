@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import {
   ChevronLeft,
@@ -8,8 +9,9 @@ import {
   Paperclip,
   Search,
   Send,
+  Trash2,
 } from 'lucide-react';
-import { consoleApiFetch } from '@/lib/console-session';
+import { consoleApiFetch, ConsoleApiError } from '@/lib/console-session';
 import { formatMailBytes, formatMailDate, mailInitial } from '@/lib/mail-format';
 import { mailHref, type MailFolder } from '@/lib/mail-query';
 import type { MailListResponse } from '@/lib/mail-types';
@@ -18,6 +20,7 @@ const FOLDERS: Array<{ key: MailFolder; label: string; icon: typeof Inbox }> = [
   { key: 'inbox', label: 'Inbox', icon: Inbox },
   { key: 'sent', label: 'Sent', icon: Send },
   { key: 'all', label: 'All', icon: Mail },
+  { key: 'trash', label: 'Trash', icon: Trash2 },
 ];
 
 export function MailListPane({
@@ -95,12 +98,20 @@ async function MailListRows({
 }) {
   let list: MailListResponse;
   try {
-    const query = new URLSearchParams({ limit: '40', offset: String(offset), trashed: 'false' });
+    const trashed = folder === 'trash';
+    const query = new URLSearchParams({
+      limit: '40',
+      offset: String(offset),
+      trashed: trashed ? 'true' : 'false',
+    });
     if (folder === 'inbox') query.set('direction', 'inbound');
     if (folder === 'sent') query.set('direction', 'outbound');
     if (q) query.set('q', q);
-    list = await consoleApiFetch<MailListResponse>(`/api2/admin/mail/emails?${query.toString()}`);
+    list = await consoleApiFetch<MailListResponse>(`/api2/admin/mail/emails?${query.toString()}`, {
+      next: { revalidate: 15 },
+    });
   } catch (failure) {
+    if (failure instanceof ConsoleApiError && failure.status === 401) redirect('/mails/login');
     const message = failure instanceof Error ? failure.message : 'The mailbox could not be loaded';
     return (
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
