@@ -80,7 +80,7 @@ export async function consoleApiFetch<T>(
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
-    cache: 'no-store',
+    cache: init.cache ?? 'no-store',
   });
   const text = await response.text();
   let body: unknown = null;

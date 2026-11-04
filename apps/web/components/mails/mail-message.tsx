@@ -1,9 +1,16 @@
 import Link from 'next/link';
-import { ArrowLeft, CornerUpLeft, Forward, Paperclip } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { ArrowLeft, CornerUpLeft, Forward, Paperclip, RotateCcw, Trash2 } from 'lucide-react';
 import { AttachmentUploadProvider, MailAttachmentField } from '@/components/mail-attachments';
 import { MailSubmitButton } from '@/components/mail-submit-button';
-import { forwardMailAction, replyMailAction } from '@/app/mails/actions';
-import { consoleApiFetch } from '@/lib/console-session';
+import {
+  deleteMailAction,
+  forwardMailAction,
+  replyMailAction,
+  restoreMailAction,
+  trashMailAction,
+} from '@/app/mails/actions';
+import { consoleApiFetch, ConsoleApiError } from '@/lib/console-session';
 import {
   formatMailBytes,
   formatMailDate,
@@ -30,6 +37,7 @@ export async function MailMessage({
       `/api2/admin/mail/emails/${encodeURIComponent(id)}`,
     );
   } catch (failure) {
+    if (failure instanceof ConsoleApiError && failure.status === 401) redirect('/mails/login');
     const message = failure instanceof Error ? failure.message : 'This email could not be opened';
     return (
       <div className="p-1">
@@ -87,6 +95,42 @@ export async function MailMessage({
                 <Paperclip className="h-3 w-3" /> {email.attachment_count}
               </span>
             ) : null}
+            <span className="ml-auto flex items-center gap-1.5">
+              {email.is_trashed ? (
+                <>
+                  <form action={restoreMailAction}>
+                    <input type="hidden" name="id" value={email.id} />
+                    <button
+                      type="submit"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="h-3 w-3" /> Restore
+                    </button>
+                  </form>
+                  <form action={deleteMailAction}>
+                    <input type="hidden" name="id" value={email.id} />
+                    <input type="hidden" name="folder" value={folder} />
+                    <button
+                      type="submit"
+                      className="inline-flex items-center gap-1 rounded-lg border border-destructive/40 bg-background px-2 py-1 text-[11px] font-semibold text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete forever
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <form action={trashMailAction}>
+                  <input type="hidden" name="id" value={email.id} />
+                  <input type="hidden" name="folder" value={folder} />
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <Trash2 className="h-3 w-3" /> Trash
+                  </button>
+                </form>
+              )}
+            </span>
           </div>
 
           <h1 className="mt-2 break-words text-lg font-bold leading-tight sm:text-xl">

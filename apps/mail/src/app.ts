@@ -582,14 +582,16 @@ app.get("/api/mailboxes/:id/emails", async (c) => {
   }
 
   const where = conditions.join(" AND ");
-  const total = await c.env.DB.prepare(`SELECT COUNT(*) AS count FROM emails WHERE ${where}`)
-    .bind(...bindings)
-    .first<{ count: number }>();
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM emails WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
-  )
-    .bind(...bindings, limit, offset)
-    .all<EmailRow>();
+  const [total, rows] = await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS count FROM emails WHERE ${where}`)
+      .bind(...bindings)
+      .first<{ count: number }>(),
+    c.env.DB.prepare(
+      `SELECT * FROM emails WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    )
+      .bind(...bindings, limit, offset)
+      .all<EmailRow>(),
+  ]);
 
   return ok({
     mailbox: serializeMailbox(mailbox),
