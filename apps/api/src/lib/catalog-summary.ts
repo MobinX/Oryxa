@@ -107,7 +107,7 @@ export async function buildCatalogSummary(
     const unclassified = firstPage.length - named.reduce((sum, c) => sum + c.count, 0);
 
     const lines = firstPage
-      .map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`)
+      .map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}${(p as { paymentStrategyOverride?: string | null }).paymentStrategyOverride ? ` — PAYMENT OVERRIDE: this product follows "${(p as { paymentStrategyOverride?: string | null }).paymentStrategyOverride}" instead of the store default; follow the product tool result for its rule` : ''}`)
       .join('\n');
     const result = {
       total,
@@ -144,7 +144,7 @@ export async function buildCatalogSummary(
       shelfShape(populated, unclassified),
       answerWithCategories(canShowCards),
       howToAnswer,
-      ...firstPage.map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}`),
+      ...firstPage.map((p) => `- ${p.name} [id: ${p.id}; variants: ${p.variants.length}] ($${p.price}) SKU: ${p.sku}${p.category?.name ? ` — in ${p.category.name}` : ''}${(p as { paymentStrategyOverride?: string | null }).paymentStrategyOverride ? ` — PAYMENT OVERRIDE: "${(p as { paymentStrategyOverride?: string | null }).paymentStrategyOverride}"` : ''}`),
     ].join('\n'),
   };
   catalogCache.set(cacheKey, { summary: result, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS });

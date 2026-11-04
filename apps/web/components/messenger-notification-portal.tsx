@@ -5,8 +5,19 @@ import { Check, Copy, MessageCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
-type Follower = { id: string; name: string | null; connectedAt: string };
+type Follower = {
+  id: string;
+  name: string | null;
+  connectedAt: string;
+  lastPingAt: string | null;
+  nextPingDueAt: string | null;
+};
 type Overview = { code: string | null; users: Follower[] };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
  * The merchant's Messenger door: a code created on demand, sent as a DM to the operator's page.
@@ -111,6 +122,14 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
             <strong className="font-semibold text-foreground">OFF</strong> to that chat to start or
             stop the AI agent for this business.
           </p>
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            <strong className="font-semibold text-foreground">Then keep it open: send PING.</strong>{' '}
+            Facebook only lets our page message you for 7 days after the last message{' '}
+            <em>you</em> sent, and it counts each page separately — so ping{' '}
+            <strong className="font-semibold text-foreground">every page</strong> you connected a
+            business to, before the deadline shown under each account below. Without a ping, alerts
+            stop arriving and nothing else will tell you.
+          </p>
           <p className="mt-2 text-xs text-muted-foreground">
             This links a Messenger account for notices and ON/OFF only. It does not add a Facebook
             Page as a store channel; to answer customers on a Page, connect that Page under
@@ -140,7 +159,9 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
             confirmation, then notices arrive in Messenger. Sending{' '}
             <strong className="font-semibold text-foreground">ON</strong> or{' '}
             <strong className="font-semibold text-foreground">OFF</strong> here starts or stops the
-            AI agent for this business and confirms whether it is running or stopped.
+            AI agent for this business and confirms whether it is running or stopped. After it is
+            connected, send <strong className="font-semibold text-foreground">PING</strong> to that
+            page to keep alerts flowing for another 7 days.
           </p>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -166,6 +187,22 @@ export function MessengerNotificationPortal({ businessId }: { businessId: string
                           year: 'numeric',
                         })}
                       </p>
+                      {user.nextPingDueAt ? (
+                        <p
+                          className={`text-xs ${
+                            new Date(user.nextPingDueAt).getTime() - Date.now() < DAY_MS
+                              ? 'font-medium text-amber-700 dark:text-amber-300'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          Ping by {shortDate(user.nextPingDueAt)}
+                          {user.lastPingAt ? ` · last ping ${shortDate(user.lastPingAt)}` : ''}
+                        </p>
+                      ) : (
+                        <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                          This account has never sent PING — send it now, or alerts will stop.
+                        </p>
+                      )}
                     </div>
                     <Button
                       type="button"

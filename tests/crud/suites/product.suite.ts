@@ -48,6 +48,28 @@ export function registerProductCrudTests() {
     expect(product.variantCount).toBe(1);
   });
 
+  it('defaults a product price to BDT and keeps a chosen currency', async () => {
+    const businessId = await setup();
+    const defaulted = await createProduct({
+      businessId,
+      name: 'Default Currency',
+      price: 10,
+      sku: `CUR-DEFAULT-${Date.now()}`,
+      variants: [],
+    });
+    expect((await getProductById(businessId, defaulted.id))?.currency).toBe('BDT');
+
+    const usd = await createProduct({
+      businessId,
+      name: 'Dollar Product',
+      price: 10,
+      currency: 'USD',
+      sku: `CUR-USD-${Date.now()}`,
+      variants: [],
+    });
+    expect((await getProductById(businessId, usd.id))?.currency).toBe('USD');
+  });
+
   it('enforces unique slug per business', async () => {
     const businessId = await setup();
     const sku1 = `SKU-1-${Date.now()}`;
@@ -152,6 +174,33 @@ export function registerProductCrudTests() {
     });
     const result = await updateProduct(businessId, created.id, { name: 'New', price: 10 });
     expect(result?.updated).toBe(true);
+  });
+
+  it('stores a per-product payment strategy override and clears it back to the store default', async () => {
+    const businessId = await setup();
+    const created = await createProduct({
+      businessId,
+      name: 'Override Item',
+      price: 5,
+      sku: `OVR-${Date.now()}`,
+      paymentStrategyOverride: 'full_prepaid',
+      variants: [],
+    });
+    expect((await getProductById(businessId, created.id))?.paymentStrategyOverride).toBe('full_prepaid');
+    expect((await listProducts(businessId)).products.find((p) => p.id === created.id)?.paymentStrategyOverride)
+      .toBe('full_prepaid');
+
+    await updateProduct(businessId, created.id, { paymentStrategyOverride: 'delivery_prepaid' });
+    expect((await getProductById(businessId, created.id))?.paymentStrategyOverride).toBe('delivery_prepaid');
+
+    // Null is the merchant choosing "use store default" again, not a missing field.
+    await updateProduct(businessId, created.id, { paymentStrategyOverride: null });
+    expect((await getProductById(businessId, created.id))?.paymentStrategyOverride).toBeNull();
+
+    // An update that never mentions the field leaves the override alone.
+    await updateProduct(businessId, created.id, { paymentStrategyOverride: 'cod' });
+    await updateProduct(businessId, created.id, { name: 'Renamed Override Item' });
+    expect((await getProductById(businessId, created.id))?.paymentStrategyOverride).toBe('cod');
   });
 
   it('updateProduct changes category', async () => {

@@ -287,7 +287,7 @@ export async function ensureQuotaNotice(
     .returning({ id: notifications.id });
 
   // Only a row that actually landed becomes a push; the unique index keeps repeats silent.
-  if (inserted.length > 0) announceNotice({ businessId, ...copy, link });
+  if (inserted.length > 0) announceNotice({ businessId, notificationId: inserted[0].id, ...copy, link });
 }
 
 /**
@@ -335,7 +335,7 @@ export async function ensurePlanNotices(
     });
 
   for (const row of inserted) {
-    announceNotice({ businessId: row.businessId, title: row.title, body: row.body, link: row.link });
+    announceNotice({ businessId: row.businessId, notificationId: row.id, title: row.title, body: row.body, link: row.link });
   }
   return inserted.length;
 }
@@ -430,6 +430,14 @@ export async function listNotifications(businessId: string, limit = 50): Promise
     title: row.title,
     body: row.body,
     link: row.link,
+    messenger: row.messengerStatus
+      ? {
+          status: row.messengerStatus as 'delivered' | 'partial' | 'failed' | 'no_recipients',
+          recipients: row.messengerRecipients ?? 0,
+          delivered: row.messengerDelivered ?? 0,
+          detail: row.messengerDetail,
+        }
+      : null,
     readAt: row.readAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }));

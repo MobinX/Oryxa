@@ -2,6 +2,24 @@ import { z } from '@hono/zod-openapi';
 import { timestampSchema, uuidSchema } from '@shared/schemas/base';
 import { storeThemeSchema } from '@shared/schemas/store';
 
+/** One region the merchant delivers to and the amount they charge for it. */
+export const deliveryZoneSchema = z.object({
+  label: z.string().trim().min(1).max(80).openapi({ example: 'Inside Dhaka' }),
+  price: z.coerce.number().min(0).max(1_000_000).openapi({ example: 60 }),
+});
+
+/**
+ * One way the merchant takes money. `name` has to fit the 40-character orders.payment_method
+ * column, because an order stores the customer's words for exactly this string.
+ */
+export const paymentMethodSchema = z.object({
+  name: z.string().trim().min(1).max(40).openapi({ example: 'bKash personal' }),
+  /** The number or account detail the customer sends money to, shown to them as written. */
+  info: z.string().trim().max(200).optional().openapi({ example: '01712-345678 (Personal)' }),
+  /** True blocks an order until the customer gives the transaction id. */
+  requiresTransactionId: z.boolean().optional(),
+});
+
 export const createBusinessInputSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'Acme Store' }),
   description: z.string().optional(),
@@ -9,6 +27,12 @@ export const createBusinessInputSchema = z.object({
   agentProductGuidance: z.string().max(4000).nullable().optional(),
   /** Added to the Messenger/Instagram agent prompt: what to do when a customer bargains. */
   agentBargainGuidance: z.string().max(4000).nullable().optional(),
+  /** Region-based delivery charges the agent quotes and passes to create_order. */
+  deliveryZones: z.array(deliveryZoneSchema).max(20).optional(),
+  /** Ways the merchant takes money beyond cash on delivery; empty means nothing configured. */
+  paymentMethods: z.array(paymentMethodSchema).max(20).optional(),
+  /** How much must be paid before an order may exist, for products that do not override it. */
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).optional(),
   employeeCount: z.number().int().positive().optional(),
   type: z.string().max(100).optional(),
   hasTradeLicense: z.boolean().default(false),
@@ -36,6 +60,9 @@ export const selectBusinessSchema = z.object({
   description: z.string().nullable().optional(),
   agentProductGuidance: z.string().nullable().optional(),
   agentBargainGuidance: z.string().nullable().optional(),
+  deliveryZones: z.array(deliveryZoneSchema).optional(),
+  paymentMethods: z.array(paymentMethodSchema).optional(),
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).default('cod'),
   employeeCount: z.number().nullable().optional(),
   type: z.string().nullable().optional(),
   foundedDate: timestampSchema.nullable().optional(),

@@ -316,6 +316,69 @@
       "when": 1793465434104,
       "tag": "0044_plan_prices_oct_2026",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793500000000,
+      "tag": "0045_console_admins",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793524916036,
+      "tag": "0046_currency_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793556000000,
+      "tag": "0047_payment_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793556000001,
+      "tag": "0048_default_agent_payment_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793556000002,
+      "tag": "0049_payment_strategy",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793556000003,
+      "tag": "0050_default_agent_payment_strategy",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793556000004,
+      "tag": "0051_agent_row_channel_block",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793640000000,
+      "tag": "0052_notification_messenger_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793640000001,
+      "tag": "0053_notification_ping_window",
+      "breakpoints": true
     }
   ]
 }

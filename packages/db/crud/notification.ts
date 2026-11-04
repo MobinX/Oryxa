@@ -1,5 +1,6 @@
 import { db } from '@db/client';
 import { notifications } from '@db/schema';
+import { eq } from 'drizzle-orm';
 
 /** What a push needs: the stored notice's own words and where a click should land. */
 export type NotificationPush = {
@@ -7,6 +8,16 @@ export type NotificationPush = {
   title: string;
   body: string;
   link: string | null;
+  /** The stored row's id, so the Messenger outcome can be written back to it. */
+  notificationId?: string | null;
+};
+
+/** How the Messenger copy of a notice fared. Recorded on the notice, never assumed. */
+export type MessengerDelivery = {
+  status: 'delivered' | 'partial' | 'failed' | 'no_recipients';
+  recipients: number;
+  delivered: number;
+  detail?: string | null;
 };
 
 let notificationPushHandler: ((notice: NotificationPush) => Promise<void>) | null = null;
@@ -29,23 +40,63 @@ export function pushNotice(notice: NotificationPush): void {
   });
 }
 
-let messengerNoticeHandler: ((notice: NotificationPush) => Promise<void>) | null = null;
+let messengerNoticeHandler: ((notice: NotificationPush) => Promise<MessengerDelivery>) | null = null;
 
 /**
- * The API registers the Messenger sender here when it boots, for the same reason as pushes:
- * the database package must not know how Facebook messages are sent.
+ * The API registers the Messenger sender here when it boots, for the same reason as pushes: the
+ * database package must not know how Facebook messages are sent. The handler reports what
+ * happened rather than nothing at all, because a send Meta silently refused used to look
+ * identical to a delivery the merchant received.
  */
 export function setMessengerNoticeHandler(
-  handler: ((notice: NotificationPush) => Promise<void>) | null,
+  handler: ((notice: NotificationPush) => Promise<MessengerDelivery>) | null,
 ): void {
   messengerNoticeHandler = handler;
 }
 
+/** Best effort: writing the outcome must never break the notice that is already stored. */
+async function recordMessengerDelivery(
+  notificationId: string | null | undefined,
+  delivery: MessengerDelivery,
+): Promise<void> {
+  if (!notificationId) return;
+  try {
+    await db
+      .update(notifications)
+      .set({
+        messengerStatus: delivery.status,
+        messengerRecipients: delivery.recipients,
+        messengerDelivered: delivery.delivered,
+        messengerDetail: delivery.detail ?? null,
+      })
+      .where(eq(notifications.id, notificationId));
+  } catch (err) {
+    console.error('[notifications] could not record the Messenger outcome:', err);
+  }
+}
+
 function notifyMessenger(notice: NotificationPush): void {
   if (!messengerNoticeHandler) return;
-  void messengerNoticeHandler(notice).catch((err) => {
-    console.error('[notifications] messenger delivery failed:', err);
-  });
+  const handler = messengerNoticeHandler;
+  void Promise.resolve()
+    .then(() => handler(notice))
+    .then((delivery) => {
+      if (delivery.status !== 'delivered') {
+        console.warn(
+          `[notifications] messenger ${delivery.status} for ${notice.businessId}: ${delivery.detail ?? 'no detail'}`,
+        );
+      }
+      return recordMessengerDelivery(notice.notificationId, delivery);
+    })
+    .catch(async (err) => {
+      console.error('[notifications] messenger delivery failed:', err);
+      await recordMessengerDelivery(notice.notificationId, {
+        status: 'failed',
+        recipients: 0,
+        delivered: 0,
+        detail: err instanceof Error ? err.message.slice(0, 300) : 'the Messenger send failed',
+      });
+    });
 }
 
 /** Every stored notice goes out on both channels: the browser's push and the merchant's Messenger. */
@@ -82,6 +133,7 @@ export async function createBusinessNotification(input: {
   if (inserted.length === 0) return;
   announceNotice({
     businessId: input.businessId,
+    notificationId: inserted[0].id,
     title: input.title,
     body: input.body,
     link: input.link ?? null,

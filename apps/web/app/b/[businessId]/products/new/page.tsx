@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { cachedCategories, cachedCustomers } from '@/app/_cache/queries';
+import { cachedBusiness, cachedCategories, cachedCustomers } from '@/app/_cache/queries';
 import { createProductAction } from '@/app/actions/products';
 import { Card } from '@/components/ui/card';
 import { ProductWizard } from '@/components/products/product-wizard';
@@ -52,9 +52,10 @@ async function NewProductForm({
 }) {
   const { businessId } = await params;
   const token = await requireAuth();
-  const [categories, book] = await Promise.all([
+  const [categories, book, business] = await Promise.all([
     cachedCategories(token, businessId),
     cachedCustomers(token, businessId),
+    cachedBusiness(token, businessId).catch(() => null),
   ]);
 
   return (
@@ -66,6 +67,7 @@ async function NewProductForm({
           action={createProductAction.bind(null, businessId)}
           categories={categories}
           customers={book.customers}
+          storePaymentStrategy={business?.paymentStrategy ?? 'cod'}
           submitLabel="Create product"
           savingLabel="Creating…"
           cancelHref={`/b/${businessId}/products`}

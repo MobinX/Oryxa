@@ -12,6 +12,8 @@ import { getProductById } from '@repo/db/crud/product';
 import {
   findBusinessByNotificationToken,
   isMessengerNotificationUser,
+  nextPingDeadlineAt,
+  recordMessengerNotificationPing,
   setAgentStateForNotificationUser,
   upsertMessengerNotificationUser,
 } from '@repo/db/crud/messenger-notification';
@@ -564,6 +566,29 @@ fbWebhookRouter.post('/instagram', receiveMetaWebhook);
 const NOTIFICATION_CODE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
+ * The rule a merchant has to know or their alerts stop: Meta counts a messaging window per page
+ * and person, so one account following three stores over two pages must ping both pages. Sent at
+ * first connection and on every PING, so nobody discovers it by missing an order.
+ */
+const PING_INSTRUCTIONS =
+  'To keep these alerts arriving, send PING to this page again before your deadline. '
+  + 'Facebook opens a 7-day window from the last message YOU send, and it counts per page — so '
+  + 'ping every page you connected a business to, not just this one.';
+
+/** Deadlines are stored and sent in UTC; a merchant in Dhaka and a merchant in Dubai must not read the same instant differently. */
+function formatPingDeadline(date: Date): string {
+  return `${new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(date)} UTC`;
+}
+
+/**
  * Customer DMs on an admin-only page skip the store flow entirely and hand their turns to
  * the Officials pipeline. Notification codes stay with the flow above — they are a
  * redemption handshake, not a conversation, so they never enter an official thread (the
@@ -626,20 +651,27 @@ async function processAdminPageCommands(
       }
 
       const profile = await getFacebookUserProfile(channel.apiToken, senderId);
+      const connectedAt = new Date();
       await upsertMessengerNotificationUser({
         businessId: row.businessId,
         channelId: channel.id,
         platformUserId: senderId,
         name: profile.name ?? null,
+        lastPingAt: connectedAt,
       });
 
       // One confirmation on a successful connection; ON/OFF and other messages remain
-      // silent. The merchant needs proof the code was accepted, not a chat.
+      // silent. The merchant needs proof the code was accepted, not a chat — and the window
+      // rule with it, because an alert that cannot be delivered is worse than no alert at all.
       const businessName = row.business?.name ?? 'this business';
       await fbSendMessage(
         channel.apiToken,
         senderId,
-        `Successfully connected to "${businessName}" and working.`,
+        [
+          `Successfully connected to "${businessName}" and working.`,
+          PING_INSTRUCTIONS,
+          `Your first deadline: ${formatPingDeadline(nextPingDeadlineAt(connectedAt))}.`,
+        ].join('\n\n'),
       ).catch((err) => console.error('[fb-webhook] notification confirmation failed:', err));
 
       fbLog('admin channel: messenger user connected', {
@@ -671,6 +703,34 @@ async function processAdminPageCommands(
             ? 'Agent is running for all your channels.'
             : 'Agent is stopped for all your channels.',
         ).catch((err) => console.error('[fb-webhook] agent command confirmation failed:', err));
+        continue;
+      }
+    }
+
+    // PING renews the messaging window on THIS page. Meta lets a page write to a person for only
+    // seven days after that person's last message, so an owner who never pings stops receiving
+    // order and human-help alerts — and nothing said so. The reply states the new deadline.
+    if (command === 'ping') {
+      const renewed = await recordMessengerNotificationPing({
+        channelId: channel.id,
+        platformUserId: senderId,
+      });
+      if (renewed) {
+        handled.add(index);
+        fbLog('admin channel: notification ping renewed the window', {
+          senderId,
+          renewed: renewed.renewed,
+        });
+        await fbSendMessage(
+          channel.apiToken,
+          senderId,
+          [
+            `Thanks for pinging. Your notifications from ${renewed.renewed === 1
+              ? 'this page'
+              : `all ${renewed.renewed} business(es) on this page`} are live until ${formatPingDeadline(renewed.deadlineAt)}.`,
+            PING_INSTRUCTIONS,
+          ].join('\n\n'),
+        ).catch((err) => console.error('[fb-webhook] ping confirmation failed:', err));
         continue;
       }
     }
@@ -827,7 +887,10 @@ async function processEntries(
   fbLog('processEntries done');
 }
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+function money(value: number, currency: string): string {
+  const code = (currency || 'BDT').toUpperCase();
+  return code === 'USD' ? `$${value.toFixed(2)}` : `${code} ${value.toFixed(2)}`;
+}
 
 /** Card titles are one line and roughly 30 visible characters — collapse before Meta does it badly. */
 function cardLine(value: string, max = 60): string {
@@ -870,7 +933,7 @@ async function handleDetailsPostback(
           };
           return {
             title: label,
-            subtitle: `${usd.format(price)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+            subtitle: `${money(price, product.currency)} — ${variant.stock} in stock${variant.variantId ? ` — ${variant.variantId}` : ''}`,
             imageUrl: variant.imageUrl as string,
             ...(buyable
               ? {
@@ -896,7 +959,7 @@ async function handleDetailsPostback(
       const variantText = product.variants
         .map(
           (variant) =>
-            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${usd.format(variant.price ?? product.price)}, ${variant.stock} in stock`,
+            `${variant.name}${variant.variantId ? ` (${variant.variantId})` : ''} — ${money(variant.price ?? product.price, product.currency)}, ${variant.stock} in stock`,
         )
         .join('; ');
       await createMessage({
@@ -905,7 +968,7 @@ async function handleDetailsPostback(
         sentBy: 'ai',
         content: [
           `Showing product details of ${product.id}, ${product.name}`,
-          `${usd.format(product.price)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
+          `${money(product.price, product.currency)}, SKU ${product.sku}${product.category ? `, category ${product.category.name}` : ''}, ${stockTotal} in stock across ${product.variants.length} variants`,
           `variants: ${variantText}`,
           ...(optionsText ? [`options: ${optionsText}`] : []),
         ].join(' — '),
@@ -930,7 +993,7 @@ async function handleDetailsPostback(
     const buyable = variant.isAvailable && variant.stock > 0;
     const cards = images.map((imageUrl, index) => ({
       title: label,
-      subtitle: `${usd.format(price)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
+      subtitle: `${money(price, product.currency)} — ${variant.stock} in stock${images.length > 1 ? ` — photo ${index + 1} of ${images.length}` : ''}${variant.variantId ? ` — ${variant.variantId}` : ''}`,
       imageUrl,
       ...(buyable
         ? {
@@ -952,7 +1015,7 @@ async function handleDetailsPostback(
       conversationId: conversation.id,
       from: 'self',
       sentBy: 'ai',
-      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${usd.format(price)}, total price ${usd.format(price * variant.stock)} (${images.length} images).`,
+      content: `Showing all variant images of ${product.id} with variant of ${variant.variantId ?? variant.name} (${variant.name}) — ${variant.stock} in stock, unit price ${money(price, product.currency)}, total price ${money(price * variant.stock, product.currency)} (${images.length} images).`,
       state: 'done',
     });
     return { handled: true };

@@ -144,7 +144,7 @@ export const createConversationOrderInputSchema = z.object({
   customerAddress: z.string().min(1).max(1000),
   shippingCost: z.number().min(0).optional(),
   paymentMethod: z.string().min(1).max(40).optional(),
-  /** Required by the API when the payment method is bKash/Nagad. */
+  /** Required by the API when the chosen payment method is configured to need one. */
   transactionId: z.string().min(1).max(120).optional(),
 });
 
@@ -153,6 +153,7 @@ export const createConversationOrderOutputSchema = z.object({
   totalPrice: z.number(),
   customerId: uuidSchema.nullable(),
   state: z.string(),
+  paymentStrategy: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).optional(),
 });
 
 export const conversationOrderDefaultsSchema = z.object({

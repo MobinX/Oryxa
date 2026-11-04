@@ -1,56 +1,110 @@
 import { KeyRound } from 'lucide-react';
-import { redirect } from 'next/navigation';
-import { logsBearer, operatorAccountEmail } from '@/lib/logs-session';
 import { AdminPageHeader } from '@/components/admin-page-header';
+import { Card } from '@/components/ui/card';
+import { requireConsoleUser } from '@/lib/console-session';
 import { getBrand } from '@/lib/brand-server';
-import { PasswordSettingsForm } from './password-form';
+import { changeConsolePasswordAction } from '@/app/actions/console-password';
+
+export const instant = false;
 
 export async function generateMetadata() {
   const { companyName } = await getBrand();
   return {
-    title: 'Admin — settings',
-    description: `The ${companyName} console operator's account settings.`,
+    title: `Admin — settings — ${companyName}`,
+    description: 'Change the signed-in console admin password.',
   };
 }
 
-/**
- * The one page that changes who can walk in, so it opens only behind the console session.
- *
- * The password here belongs to the Firebase account the console signs in as — the same account
- * `apps/api/scripts/create-operator.ts` created and the same one that owns the sandbox store. It is
- * changed in the browser by Firebase itself after the operator proves the current one, so the new
- * password never crosses this app's servers.
- *
- * It is deliberately not the console cookie's secret: `LOGS_UI_PASSWORD` signs every operator
- * session and lives in env on two apps. Rotating that is a deploy, not a form — mixing the two on
- * one page would make an env change look like it had happened because a box was filled in.
- */
-export const instant = false;
-
-export default async function SettingsPage() {
-  if (!(await logsBearer())) redirect('/admin/login');
-  const operatorEmail = operatorAccountEmail();
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
+  const user = await requireConsoleUser();
+  const params = await searchParams;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl space-y-6">
       <AdminPageHeader
         icon={KeyRound}
         title="Settings"
         description={
           <span>
-            The operator account — <code>{operatorEmail}</code> — signs into this console and owns
-            the sandbox store. Changing its password changes what you type at the sign-in page; it
-            does not touch the session this browser is already holding.
+            Signed in as <code>{user.email}</code>. This changes the password stored in the console
+            admin database, not the legacy Firebase operator account.
           </span>
         }
       />
 
-      <PasswordSettingsForm operatorEmail={operatorEmail} />
+      {user.legacy ? (
+        <Card className="border-amber-500/40">
+          <p className="text-sm text-muted-foreground">
+            This browser is using the legacy environment console password. Its password cannot be
+            changed here; sign in with a DB admin account to manage a password.
+          </p>
+        </Card>
+      ) : (
+        <Card>
+          <form action={changeConsolePasswordAction} className="space-y-4">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">Current password</span>
+              <input
+                name="current"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+              />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">New password</span>
+                <input
+                  name="next"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">Repeat it</span>
+                <input
+                  name="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                />
+              </label>
+            </div>
+
+            {params.saved ? (
+              <p className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                Password changed. Other admin sessions were revoked.
+              </p>
+            ) : null}
+            {params.error ? (
+              <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {params.error === 'match' ? 'The new passwords do not match.' : params.error}
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Change password
+            </button>
+          </form>
+        </Card>
+      )}
 
       <p className="text-xs text-muted-foreground">
-        After a change, sign-ins from other browsers need the new password. If this browser is not
-        holding the operator account, the form refuses — sign in again at{' '}
-        <code>/admin/login</code> first.
+        The superuser can also reset an admin password from <code>/superuser</code>, which revokes
+        that admin’s active sessions.
       </p>
     </div>
   );

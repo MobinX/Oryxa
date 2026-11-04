@@ -529,8 +529,11 @@ async function postMessengerSend(pageToken: string, payload: SendPayload): Promi
 
 export type SendMessageOptions = {
   /**
-   * Set by the inbox UI send path only. Always uses Meta's HUMAN_AGENT tag.
-   * Automated agent replies must omit this — Meta forbids the tag for bots.
+   * Meta's HUMAN_AGENT tag, for sends meant for a person rather than a bot reply: the merchant's
+   * inbox send path and the store-owner notice alerts. A plain RESPONSE is only deliverable for
+   * 24 hours after that person last messaged the page, so an hours-later alert sent without the
+   * tag is refused by Meta. Automated customer answers must still omit it — Meta forbids it for
+   * bots.
    */
   humanAgent?: boolean;
   /**

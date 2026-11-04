@@ -184,6 +184,8 @@ async function InboxContent({
               initialMessages={messages}
               initialAutoPilot={selected.autoPilot ?? true}
               businessAgentOn={businessAgentOn}
+              paymentMethods={business?.paymentMethods ?? []}
+              paymentStrategy={business?.paymentStrategy ?? 'cod'}
             />
           </>
         ) : (

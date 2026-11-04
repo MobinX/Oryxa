@@ -2,6 +2,13 @@ import type { MiddlewareHandler } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { authMiddleware } from './auth';
 import { emit } from '../lib/log';
+import { isConsoleSessionToken } from '../lib/console-auth';
+import {
+  capabilityForRequest,
+  consoleUserFromBearer,
+  enforceConsoleCapability,
+  legacyConsoleUser,
+} from './console-session';
 
 /**
  * Log events carry other tenants' customer text, run ids and stacks, so a valid
@@ -80,7 +87,23 @@ export const logsAccessMiddleware: MiddlewareHandler = async (c, next) => {
  */
 export const logsAuthMiddleware: MiddlewareHandler = async (c, next) => {
   const header = c.req.header('Authorization');
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
+
+  if (bearer && isConsoleSessionToken(bearer)) {
+    const user = await consoleUserFromBearer(bearer);
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+    const capability = capabilityForRequest(c);
+    if (!enforceConsoleCapability(c, user, capability)) {
+      emit('auth', { reason: 'console_capability', uid: user.id });
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+    c.set('consoleUser', user);
+    emit('auth', { reason: 'console_admin', uid: user.id });
+    return next();
+  }
+
   if (isOperatorBearer(header)) {
+    c.set('consoleUser', legacyConsoleUser());
     emit('auth', { reason: 'logs_operator', uid: logsOperatorUser() });
     return next();
   }

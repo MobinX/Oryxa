@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+.env
+.env.*
+!.env.example
+.rollback-snapshot.json
+wrangler.local.json
+wrangler.ci.json

@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { businesses, products, variants } from '@db/schema';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { createOrder, deleteOrder } from './order';
+import { PAYMENT_STRATEGY_LABELS, resolvePaymentStrategy, type PaymentStrategy } from '@repo/shared';
 
 export async function getBusinessBySlug(slug: string) {
   return db.query.businesses.findFirst({
@@ -23,6 +24,7 @@ async function mapProduct(p: {
   name: string;
   price: string;
   description: string | null;
+  paymentStrategyOverride?: string | null;
   createdAt: Date;
   category: { name: string; deletedAt: Date | null } | null;
   variants: Array<{
@@ -54,6 +56,7 @@ async function mapProduct(p: {
     name: p.name,
     price: parseFloat(p.price),
     description: p.description,
+    paymentStrategyOverride: p.paymentStrategyOverride ?? null,
     categoryName: p.category && !p.category.deletedAt ? p.category.name : null,
     thumbnailUrl: await resolveStoredImageUrl(firstImage),
     inStock: p.variants.length === 0 ? true : p.variants.some((v) => v.isAvailable && v.stock > 0),
@@ -115,6 +118,7 @@ export async function getPublicStore(slug: string, filters: StoreFilters = {}) {
     name: business.name,
     description: business.description ?? null,
     phone: business.phone ?? null,
+    paymentStrategy: (business as { paymentStrategy?: string | null }).paymentStrategy ?? 'cod',
     theme: business.storeTheme ?? null,
     categories,
     products: filtered.map(({ _createdAt, ...rest }) => rest),
@@ -164,6 +168,19 @@ export async function createPublicCheckout(
       with: { variants: { where: isNull(variants.deletedAt) } },
     });
     if (!product) throw new CheckoutError('Product not found');
+    // The storefront collects no payment, so an item that needs money before ordering cannot
+    // be checked out here at all — say so plainly instead of placing a cash-on-delivery order
+    // the merchant's strategy forbids. The customer can still order it through the store's chat.
+    const itemStrategy = resolvePaymentStrategy(
+      (business as { paymentStrategy?: PaymentStrategy | null }).paymentStrategy,
+      (product as { paymentStrategyOverride?: PaymentStrategy | null }).paymentStrategyOverride,
+    );
+    if (itemStrategy.effective !== 'cod') {
+      throw new CheckoutError(
+        `${product.name} needs ${PAYMENT_STRATEGY_LABELS[itemStrategy.effective].toLowerCase()} — `
+        + 'please message the store to pay and place this order.',
+      );
+    }
     const variant = item.variantId
       ? product.variants.find((v) => v.id === item.variantId)
       : product.variants.length === 1

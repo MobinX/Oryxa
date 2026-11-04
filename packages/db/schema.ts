@@ -2,6 +2,26 @@ import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgE
 import { relations, sql } from 'drizzle-orm';
 import type { ConversationAgentState } from '@repo/shared';
 
+/** One region the merchant delivers to and the charge they quote for it. */
+export type DeliveryZone = {
+  label: string;
+  price: number;
+};
+
+/**
+ * One way the merchant takes money. Cash on delivery is always available and needs no entry
+ * here; anything else is merchant-named, carries the account or number the customer pays into,
+ * and may demand a transaction id before an order may exist.
+ */
+export type PaymentMethod = {
+  name: string;
+  info?: string;
+  requiresTransactionId?: boolean;
+};
+
+/** How much must be paid before an order may exist; the rest (if any) is paid on delivery. */
+export type PaymentStrategy = 'cod' | 'delivery_prepaid' | 'full_prepaid';
+
 export type StoreTheme = {
   accentColor?: string;
   font?: 'sans' | 'serif' | 'mono';
@@ -478,6 +498,22 @@ export const businesses = pgTable('businesses', {
    */
   agentProductGuidance: text('agent_product_guidance'),
   agentBargainGuidance: text('agent_bargain_guidance'),
+  /**
+   * The merchant's delivery price list, region by region. The agent reads it to quote a
+   * charge and the order tool receives the matching amount as shippingCost.
+   */
+  deliveryZones: jsonb('delivery_zones').$type<DeliveryZone[]>().default(sql`'[]'::jsonb`).notNull(),
+  /**
+   * How the merchant takes money beyond cash on delivery. The agent offers only these, shows the
+   * customer the `info` it collects into, and must collect a transaction id when the method says
+   * `requiresTransactionId`. Empty means the store has set nothing up yet.
+   */
+  paymentMethods: jsonb('payment_methods').$type<PaymentMethod[]>().default(sql`'[]'::jsonb`).notNull(),
+  /**
+   * How much a customer must pay before an order may exist, for every product that does not
+   * override it: cash on delivery, the delivery charge prepaid, or everything prepaid.
+   */
+  paymentStrategy: varchar('payment_strategy', { length: 30 }).$type<PaymentStrategy>().default('cod').notNull(),
   employeeCount: integer('employee_count'),
   type: varchar('type', { length: 100 }),
   foundedDate: timestamp('founded_date'),
@@ -533,6 +569,8 @@ export const products = pgTable('products', {
   customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   price: numeric('price', { precision: 10, scale: 2 }).notNull(),
+  /** ISO code the price is quoted in; BDT unless the merchant chooses otherwise. */
+  currency: varchar('currency', { length: 8 }).default('BDT').notNull(),
   slug: varchar('slug', { length: 255 }).notNull(),
   sku: varchar('sku', { length: 100 }).notNull(),
   description: text('description'),
@@ -546,6 +584,11 @@ export const products = pgTable('products', {
   tags: text('tags').array().default(sql`'{}'::text[]`).notNull(),
   /** False hides the product from the public store without deleting it from the catalog. */
   showInStorefront: boolean('show_in_storefront').default(true).notNull(),
+  /**
+   * This product's own payment strategy, when it breaks the store default. NULL follows the
+   * store: most products never override, and a store-wide change then reaches them all.
+   */
+  paymentStrategyOverride: varchar('payment_strategy_override', { length: 30 }).$type<PaymentStrategy>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -634,6 +677,8 @@ export const orders = pgTable('orders', {
   variantId: uuid('variant_id').references(() => variants.id, { onDelete: 'set null' }),
   count: integer('count').default(1).notNull(),
   variantPrice: numeric('variant_price', { precision: 10, scale: 2 }).notNull(),
+  /** The currency the product was priced in when this order was placed. */
+  currency: varchar('currency', { length: 8 }).default('BDT').notNull(),
   // The company's customer this order matched by phone. Written wherever the order
   // came from — agent tool call, dashboard form, storefront checkout — so one person
   // stays one person across stores instead of a fresh name on every row.
@@ -659,8 +704,10 @@ export const orders = pgTable('orders', {
   shippingCost: numeric('shipping_cost', { precision: 10, scale: 2 }).default('0').notNull(),
   /** How the buyer said they will pay — "Cash on delivery", "bKash" — in their own words, not a code. */
   paymentMethod: varchar('payment_method', { length: 40 }),
-  /** The bKash/Nagad transaction id the buyer gave before the order was placed. */
+  /** The transaction id the buyer gave when their chosen method demands one. */
   transactionId: varchar('transaction_id', { length: 120 }),
+  /** The payment strategy this order was placed under, snapshotted so a later store change cannot rewrite history. */
+  paymentStrategy: varchar('payment_strategy', { length: 30 }).$type<PaymentStrategy>(),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
@@ -760,6 +807,13 @@ export const messengerNotificationUsers = pgTable('messenger_notification_user_i
   channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }).notNull(),
   platformUserId: varchar('platform_user_id', { length: 255 }).notNull(),
   name: varchar('name', { length: 255 }),
+  /**
+   * When this account last sent PING to the page it subscribed on. Meta only lets a page message
+   * a person for seven days after that person's last message, so an alert older than this window
+   * is refused — the ping is what keeps the door open, and the deadline is this instant plus
+   * seven days. NULL means never pinged, only connected.
+   */
+  lastPingAt: timestamp('last_ping_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   uniq: uniqueIndex('messenger_notification_user_business_platform_uniq_idx').on(t.businessId, t.platformUserId),
@@ -1131,6 +1185,19 @@ export const notifications = pgTable('notifications', {
   title: varchar('title', { length: 120 }).notNull(),
   body: text('body').notNull(),
   link: varchar('link', { length: 300 }),
+  /**
+   * What happened when this notice was also sent to the merchant's Messenger accounts. A stored
+   * notice and a delivered notice are different facts: without this, a notice Meta refused
+   * (the merchant had not messaged the page inside its window) looked identical to one that
+   * arrived. NULL means no Messenger copy was attempted.
+   */
+  messengerStatus: varchar('messenger_status', { length: 16 }),
+  /** How many accounts were addressed, so "nobody is following" is distinguishable from "all failed". */
+  messengerRecipients: integer('messenger_recipients'),
+  /** How many of those accepted the message. Equal to recipients when nothing failed. */
+  messengerDelivered: integer('messenger_delivered'),
+  /** Why it did not go through, in the merchant's terms rather than a Graph API payload. */
+  messengerDetail: text('messenger_detail'),
   readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
@@ -1190,3 +1257,40 @@ export const planAssignmentsRelations = relations(planAssignments, ({ one }) => 
   previousPlan: one(plans, { fields: [planAssignments.previousPlanId], references: [plans.id], relationName: 'previousPlan' }),
 }));
 
+
+/**
+ * Console identities are separate from merchant `users`. The old console was one shared
+ * password; these rows are the DB login, per-admin mail identity, and route capabilities.
+ */
+export const consoleRoleEnum = pgEnum('console_role', ['superuser', 'admin']);
+
+export const consoleUsers = pgTable('console_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }),
+  passwordHash: text('password_hash').notNull(),
+  role: consoleRoleEnum('role').default('admin').notNull(),
+  capabilities: jsonb('capabilities').$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdBy: uuid('created_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const consoleSessions = pgTable('console_sessions', {
+  tokenHash: varchar('token_hash', { length: 64 }).primaryKey(),
+  userId: uuid('user_id').references(() => consoleUsers.id, { onDelete: 'cascade' }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  userIdx: index('console_sessions_user_idx').on(t.userId),
+  expiryIdx: index('console_sessions_expiry_idx').on(t.expiresAt),
+}));
+
+export const consoleUserRelations = relations(consoleUsers, ({ many }) => ({
+  sessions: many(consoleSessions),
+}));
+
+export const consoleSessionRelations = relations(consoleSessions, ({ one }) => ({
+  user: one(consoleUsers, { fields: [consoleSessions.userId], references: [consoleUsers.id] }),
+}));

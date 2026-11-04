@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getConsoleToken } from '@/lib/console-cookie';
 
 export const LOGS_COOKIE = 'oryxa_logs_session';
 
@@ -39,7 +40,12 @@ export function isOperatorEmail(email?: string | null): boolean {
     .split(',')
     .map((e) => e.toLowerCase().trim())
     .filter(Boolean);
-  return allowed.includes(normalized);
+  if (allowed.includes(normalized)) return true;
+
+  // The shared Firebase account is only a backward-compatibility bridge for the
+  // playground/sandbox. DB admin login is the actual console door.
+  const fallback = process.env.ADMIN_FALLBACK_FIREBASE_EMAIL?.trim().toLowerCase();
+  return Boolean(fallback && normalized === fallback);
 }
 
 /** Undefined unless `LOGS_UI_PASSWORD` is set — no default password in any environment. */
@@ -130,5 +136,7 @@ export async function hasLogsSession(): Promise<boolean> {
  * its proof is the signature above.
  */
 export async function logsBearer(): Promise<string | null> {
+  const consoleToken = await getConsoleToken();
+  if (consoleToken) return consoleToken;
   return (await hasLogsSession()) ? (logsOperatorPassword() ?? null) : null;
 }

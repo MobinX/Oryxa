@@ -1,4 +1,7 @@
 import { AIMessage } from '@langchain/core/messages';
+import type { BaseMessage } from '@langchain/core/messages';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ChatResult } from '@langchain/core/outputs';
 import { FakeStreamingChatModel } from '@langchain/core/utils/testing';
 
 /**
@@ -71,4 +74,36 @@ export function createErrorFakeLlm(errorMessage = 'rate limit exceeded') {
     thrownErrorString: errorMessage,
     responses: [],
   });
+}
+
+/**
+ * A model that answers `firstReply`, then switches to `secondReply` once the conversation carries
+ * the duplicate alert — the corrective prompt the guard sends when the agent restates an answer the
+ * customer already has. `FakeStreamingChatModel` replays its scripted list from the start of every
+ * call and does not expose `_generate`, so the branch is decided from the messages themselves.
+ */
+export function createRepeatThenCorrectedLlm(firstReply: string, secondReply: string) {
+  class ScriptedChatModel extends BaseChatModel {
+    _llmType(): string {
+      return 'scripted';
+    }
+
+    // The graph binds tools it will never be asked to call here; answering needs no binding.
+    bindTools(): this {
+      return this;
+    }
+
+    async _generate(messages: BaseMessage[]): Promise<ChatResult> {
+      const alerted = messages.some((message) =>
+        String(message.content ?? '').includes('NOT sent'),
+      );
+      const text = alerted ? secondReply : firstReply;
+      return {
+        generations: [{ text, message: new AIMessage(text), output: text }],
+        llmOutput: {},
+      };
+    }
+  }
+
+  return new ScriptedChatModel({});
 }

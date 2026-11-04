@@ -5,15 +5,17 @@ import { seedTestWorld } from '../helpers/seed';
 import { createAgentTools } from '@repo/agent/tools';
 import { getOrderById, updateOrderState } from '@repo/db/crud/order';
 import { createProduct } from '@repo/db/crud/product';
+import { updateBusiness } from '@repo/db/crud/business';
 import { listMessages } from '@repo/db/crud/conversation';
 import { parseConversationAgentState } from '@repo/shared';
 import { db } from '@db/client';
-import { notifications } from '@db/schema';
+import { notifications, orders } from '@db/schema';
 import type { MessengerCard } from '@repo/integrations/facebook';
 
 const orderDefaults = {
   variantId: null,
   count: 1,
+  requestedPrice: 99999,
   customerPhone: '555-0000',
   customerAddress: '1 Test Street',
 };
@@ -51,7 +53,7 @@ function agentContext(
 }
 
 describe('Agent Tools', () => {
-  withPglite();
+  withPglite({ timeoutMs: 120_000 });
 
   it('get_product tool searches catalog', async () => {
     const seed = await seedTestWorld();
@@ -97,24 +99,185 @@ describe('Agent Tools', () => {
     expect(result).toContain('"id"');
   });
 
-  it('requires a bKash/Nagad transaction id and stores it on the order', async () => {
+  it('refuses an order whose requested price is below the listed price', async () => {
     const seed = await seedTestWorld();
-    const tool = createAgentTools(agentContext(seed)).find((t) => t.name === 'create_order')!;
+    const tool = createAgentTools(agentContext(seed)).find((item) => item.name === 'create_order')!;
     const base = {
       ...orderDefaults,
       productId: seed.productDetail.id,
       variantId: seed.productDetail.variants[0]?.id,
-      paymentMethod: 'bKash',
+    };
+
+    const before = await db.select().from(orders).where(eq(orders.businessId, seed.business.id));
+    const refused = JSON.parse(await tool.invoke({ ...base, requestedPrice: 19.99 }));
+    expect(refused.created).toBe(false);
+    expect(refused.refused).toBe(true);
+    expect(refused.reason).toBe('price_below_listed');
+    expect(refused.listedPrice).toBe(29.99);
+
+    const afterRefusal = await db.select().from(orders).where(eq(orders.businessId, seed.business.id));
+    expect(afterRefusal.length).toBe(before.length);
+
+    const accepted = JSON.parse(await tool.invoke({ ...base, requestedPrice: 29.99 }));
+    expect(accepted.id).toBeTruthy();
+    expect(Number(accepted.totalPrice)).toBe(29.99);
+  });
+
+  it('requires the delivery charge to match a configured zone', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools({
+      ...agentContext(seed),
+      deliveryZones: [
+        { label: 'Inside Dhaka', price: 60 },
+        { label: 'Outside Dhaka', price: 120 },
+      ],
+    }).find((item) => item.name === 'create_order')!;
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
     };
 
     const missing = JSON.parse(await tool.invoke(base));
     expect(missing.created).toBe(false);
-    expect(missing.missing).toContain('payment transaction id');
+    expect(missing.missing).toContain('delivery price');
 
-    const created = JSON.parse(await tool.invoke({ ...base, transactionId: 'TRX123' }));
+    const wrong = JSON.parse(await tool.invoke({ ...base, shippingCost: 100 }));
+    expect(wrong.refused).toBe(true);
+    expect(wrong.reason).toBe('delivery_price_not_in_zones');
+
+    const accepted = JSON.parse(await tool.invoke({ ...base, shippingCost: 60 }));
+    expect(accepted.id).toBeTruthy();
+    expect(Number(accepted.shippingCost)).toBe(60);
+  });
+
+  it('refuses an order until a configured method gets its transaction id', async () => {
+    const seed = await seedTestWorld();
+    const tool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: [
+        { name: 'bKash Personal', info: '01712-345678', requiresTransactionId: true },
+        { name: 'Nogad Agent', requiresTransactionId: true },
+        { name: 'Bank transfer' },
+      ],
+    }).find((t) => t.name === 'create_order')!;
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+    };
+
+    // The customer's loose words still resolve to the method, and the refusal carries the
+    // account to pay plus the instruction to come back with the id.
+    const missing = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'bkash personal number' }));
+    expect(missing.created).toBe(false);
+    expect(missing.missing).toContain('payment transaction id');
+    expect(missing.paymentMethod).toBe('bKash Personal');
+    expect(missing.paymentInfo).toBe('01712-345678');
+    expect(missing.instruction).toContain('01712-345678');
+
+    const created = JSON.parse(
+      await tool.invoke({ ...base, paymentMethod: 'Nogad Agent', transactionId: 'TRX123' }),
+    );
     expect(created.id).toBeTruthy();
     const order = await getOrderById(seed.business.id, created.id);
     expect(order?.transactionId).toBe('TRX123');
+
+    // Cash on delivery and a method the merchant did not mark are never blocked for lacking an id.
+    const cod = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'Cash on delivery' }));
+    expect(cod.id).toBeTruthy();
+    const bank = JSON.parse(await tool.invoke({ ...base, paymentMethod: 'Bank transfer' }));
+    expect(bank.id).toBeTruthy();
+  });
+
+  it('create_order enforces the payment strategy before any order exists', async () => {
+    const seed = await seedTestWorld();
+    const methods = [{ name: 'bKash Personal', info: '01712-345678', requiresTransactionId: true }];
+    const base = {
+      ...orderDefaults,
+      productId: seed.productDetail.id,
+      variantId: seed.productDetail.variants[0]?.id,
+    };
+
+    // Full prepaid: cash on delivery alone is refused with the strategy named, a prepaid
+    // method without its id is refused, and method + id places the order. The store row is
+    // set to match the tool context, as the runner always hands it the merchant's real row.
+    await updateBusiness(seed.business.id, seed.business.userId, {
+      paymentMethods: methods,
+      paymentStrategy: 'full_prepaid',
+    });
+    const fullTool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: methods,
+      paymentStrategy: 'full_prepaid',
+    }).find((t) => t.name === 'create_order')!;
+    const cod = JSON.parse(await fullTool.invoke({ ...base, paymentMethod: 'Cash on delivery' }));
+    expect(cod.created).toBe(false);
+    expect(cod.paymentStrategy).toBe('full_prepaid');
+    expect(cod.missing).toContain('payment method');
+    expect(cod.instruction).toContain('Do not place the order as cash on delivery');
+
+    const noTxn = JSON.parse(await fullTool.invoke({ ...base, paymentMethod: 'bKash Personal' }));
+    expect(noTxn.created).toBe(false);
+    expect(noTxn.missing).toContain('payment transaction id');
+
+    const paid = JSON.parse(
+      await fullTool.invoke({ ...base, paymentMethod: 'bKash Personal', transactionId: 'TRX-FULL-1' }),
+    );
+    expect(paid.id).toBeTruthy();
+    expect(paid.paymentStrategy).toBe('full_prepaid');
+
+    // Delivery prepaid: the same refusals while a delivery charge applies.
+    await updateBusiness(seed.business.id, seed.business.userId, { paymentStrategy: 'delivery_prepaid' });
+    const deliveryTool = createAgentTools({
+      ...agentContext(seed),
+      paymentMethods: methods,
+      paymentStrategy: 'delivery_prepaid',
+    }).find((t) => t.name === 'create_order')!;
+    const deliveryCod = JSON.parse(
+      await deliveryTool.invoke({ ...base, shippingCost: 60, paymentMethod: 'Cash on delivery' }),
+    );
+    expect(deliveryCod.created).toBe(false);
+    expect(deliveryCod.paymentStrategy).toBe('delivery_prepaid');
+    const deliveryPaid = JSON.parse(
+      await deliveryTool.invoke({
+        ...base,
+        shippingCost: 60,
+        paymentMethod: 'bKash Personal',
+        transactionId: 'TRX-DEL-1',
+      }),
+    );
+    expect(deliveryPaid.id).toBeTruthy();
+  });
+
+  it('product tools name the strategy and shout when a product overrides the store', async () => {
+    const seed = await seedTestWorld();
+    const special = await createProduct({
+      businessId: seed.business.id,
+      name: 'Strategy Special',
+      price: 80,
+      sku: `SPEC-${Date.now()}`,
+      paymentStrategyOverride: 'full_prepaid',
+      variants: [{ name: 'Only', stock: 2, isAvailable: true }],
+    });
+    const tools = createAgentTools({ ...agentContext(seed), paymentStrategy: 'cod' });
+
+    const found = JSON.parse(await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'Strategy Special' }));
+    expect(found[0].id).toBe(special.id);
+    expect(found[0].paymentStrategy).toBe('full_prepaid');
+    expect(found[0].paymentStrategySource).toBe('product_override');
+    expect(found[0].paymentStrategyAlert).toContain('PAYMENT STRATEGY OVERRIDE');
+
+    // The seeded product follows the store, so it carries the rule without the alarm.
+    const plain = JSON.parse(await tools.find((t) => t.name === 'get_product')!.invoke({ query: 'T-Shirt' }));
+    expect(plain[0].paymentStrategy).toBe('cod');
+    expect(plain[0].paymentStrategyAlert).toBeUndefined();
+
+    const options = JSON.parse(
+      await tools.find((t) => t.name === 'get_product_options')!.invoke({ productId: special.id }),
+    );
+    expect(options.paymentStrategy).toBe('full_prepaid');
+    expect(options.paymentStrategyAlert).toContain('PAYMENT STRATEGY OVERRIDE');
   });
 
   it('notifies the owner when money moved but order creation fails', async () => {
@@ -266,6 +429,56 @@ describe('Agent Tools', () => {
     expect(JSON.stringify(suggestionTool?.description)).toContain('tappable answer chips');
   });
 
+  it('refuses a reply that restates the last answer and demands a different one', async () => {
+    const seed = await seedTestWorld();
+    const sent: string[] = [];
+    const previous =
+      'We have these categories. Which would you like to browse? (Accessories / Apparel / Beauty / Electronics)';
+    const tools = createAgentTools(
+      {
+        ...agentContext(seed),
+        lastSelfReply: previous,
+        sendMessageOverride: async (_page, _psid, text) => {
+          sent.push(text);
+        },
+      },
+      (text) => sent.push(`tracked:${text}`),
+    );
+    const messageTool = tools.find((tool) => String(tool.name) === 'send_message')!;
+    const suggestionTool = tools.find((tool) => String(tool.name) === 'send_suggestions')!;
+
+    // The fragment "Have" answered with the same sentence minus the chips the customer already saw.
+    const repeated = JSON.parse(
+      await messageTool.invoke({ message: 'We have these categories. Which would you like to browse?' }),
+    );
+    expect(repeated.sent).toBe(false);
+    expect(repeated.duplicate).toBe(true);
+    expect(repeated.alreadySaid).toContain('categories');
+    expect(repeated.instruction).toContain('NOT sent');
+    expect(sent.filter((t) => !t.startsWith('tracked:'))).toHaveLength(0);
+
+    // The chip row is the same kind of send, so its sentence is held to the same rule.
+    const chipsRepeated = JSON.parse(
+      await suggestionTool.invoke({
+        message: 'We have these categories. Which would you like to browse?',
+        suggestions: ['Electronics', 'Apparel'],
+      }),
+    );
+    expect(chipsRepeated.duplicate).toBe(true);
+
+    // A new answer goes out — and a SECOND copy of that same new answer is refused within the run.
+    const freshText =
+      'Electronics has the Bluetooth Speaker at BDT 59.99 with 168 in stock. Want me to show it?';
+    const fresh = JSON.parse(await messageTool.invoke({ message: freshText }));
+    expect(fresh.sent).toBe(true);
+    expect(sent).toContain(freshText);
+
+    const secondCopy = JSON.parse(await messageTool.invoke({ message: freshText }));
+    expect(secondCopy.sent).toBe(false);
+    expect(secondCopy.duplicate).toBe(true);
+    expect(sent.filter((t) => t === freshText)).toHaveLength(1);
+  });
+
   it('show_products sends a card per product, with the Order button carrying its id', async () => {
     const seed = await seedTestWorld();
     await createProduct({
@@ -294,7 +507,7 @@ describe('Agent Tools', () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({
       title: 'Photo Hoodie',
-      subtitle: '$59.00 — Warm fleece lining, with a roomy pocket',
+      subtitle: 'BDT 59.00 — Warm fleece lining, with a roomy pocket',
       imageUrl: 'https://cdn.test/hoodie.jpg',
     });
     expect(cards[0]!.button.title).toBe('Order');
@@ -302,7 +515,7 @@ describe('Agent Tools', () => {
 
     // The thread keeps what the cards said, so the merchant inbox and the next
     // turn of history are not left reading an empty bubble.
-    expect(sent).toEqual(['Photo Hoodie — $59.00 — Warm fleece lining, with a roomy pocket']);
+    expect(sent).toEqual(['Photo Hoodie — BDT 59.00 — Warm fleece lining, with a roomy pocket']);
     const messages = await listMessages(seed.conversation.id, seed.business.id);
     // The stored line also keeps the window that went out, because a tool result does not survive the
     // turn: without it, "and the rest?" in a later message has nothing to page from and sends page one.
@@ -350,7 +563,7 @@ describe('Agent Tools', () => {
 
     expect(result.sent).toBe(true);
     expect(sendMessageMock).not.toHaveBeenCalled();
-    expect(delivered).toEqual(['Dry Hoodie — $44.00 — For the test panel']);
+    expect(delivered).toEqual(['Dry Hoodie — BDT 44.00 — For the test panel']);
   });
 
   it('create_order automatically sends the Track order button', async () => {
@@ -375,11 +588,11 @@ describe('Agent Tools', () => {
     expect(sendButtonsMock).toHaveBeenCalledWith(
       'page-tok',
       'fb-user-1',
-      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98$/),
+      expect.stringMatching(/^Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total BDT 59\.98$/),
       [{ title: 'Track order', payload: `please track order with id ${order.id}` }],
     );
     const messages = await listMessages(seed.conversation.id, seed.business.id);
-    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total \$59\.98 \(Track order\)/);
+    expect(messages?.at(-1)?.content).toMatch(/Test T-Shirt — 2 pcs · #[A-Z0-9]{5} · Red M · Total BDT 59\.98 \(Track order\)/);
   });
 
   it('show_orders cards the customer\'s own past orders and stamps them at creation', async () => {
@@ -457,7 +670,7 @@ describe('Agent Tools', () => {
       ['Acknowledged', 'Done', 'On delivery', 'Pending'],
     );
     for (const card of cards) {
-      expect(card.subtitle).toMatch(/^(Pending|Acknowledged|On delivery|Done) · \$50\.00 · \d{4}-\d{2}-\d{2}$/);
+      expect(card.subtitle).toMatch(/^(Pending|Acknowledged|On delivery|Done) · BDT 50\.00 · \d{4}-\d{2}-\d{2}$/);
     }
     expect(JSON.stringify(cards).toLowerCase()).not.toMatch(/just placed|recently|today|hours ago/);
     // The prose the model writes comes from this same field, so a card cannot be honest beside a lie.
@@ -534,7 +747,7 @@ describe('Agent Tools', () => {
     const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
     // A sold-out size gets no button: the customer would tap Order and be refused.
     expect(cards.map((c) => c.title)).toEqual(['Sizing Shirt — S', 'Sizing Shirt — M']);
-    expect(cards.map((c) => c.subtitle)).toEqual(['$38.00 · 3 in stock', '$42.00 · 5 in stock']);
+    expect(cards.map((c) => c.subtitle)).toEqual(['BDT 38.00 · 3 in stock', 'BDT 42.00 · 5 in stock']);
     expect(cards[1]!.imageUrl).toBe('https://cdn.test/m.jpg');
     expect(result.hiddenOutOfStock).toEqual(['XL']);
 
@@ -582,9 +795,9 @@ describe('Agent Tools', () => {
     // photo position differs — otherwise the list reads as three identical messages.
     expect([...new Set(cards.map((c) => c.title))]).toEqual(['Gallery Jacket — M']);
     expect(cards.map((c) => c.subtitle)).toEqual([
-      '$80.00 · 4 in stock · photo 1 of 3',
-      '$80.00 · 4 in stock · photo 2 of 3',
-      '$80.00 · 4 in stock · photo 3 of 3',
+      'BDT 80.00 · 4 in stock · photo 1 of 3',
+      'BDT 80.00 · 4 in stock · photo 2 of 3',
+      'BDT 80.00 · 4 in stock · photo 3 of 3',
     ]);
     expect(new Set(cards.map((c) => c.button.payload))).toEqual(
       new Set([`place order with ${productId} and Gallery Jacket — M variant ${variantId}`]),
@@ -931,7 +1144,7 @@ describe('Agent Tools', () => {
     // "all the pictures": the customer asked twice for more and was promised a set that does not exist.
     const cards = lastSend(sendMessageMock)[2] as MessengerCard[];
     expect(cards).toHaveLength(1);
-    expect(cards[0]!.subtitle).toBe('$25.00 · 7 in stock · the only photo');
+    expect(cards[0]!.subtitle).toBe('BDT 25.00 · 7 in stock · the only photo');
     expect(result.photosTotal).toBe(1);
   });
 
@@ -1018,7 +1231,7 @@ describe('Agent Tools', () => {
     // that there is nothing to show — which is what the next turn needs to answer instead of asking.
     expect(result.sent).toBe(false);
     expect(result.variants).toEqual([
-      { id: seed.productDetail.variants[0]!.id, name: 'Red M', label: seed.productDetail.variants[0]!.variantId ?? null, price: '$29.99', stock: 10, photos: 0 },
+      { id: seed.productDetail.variants[0]!.id, name: 'Red M', label: seed.productDetail.variants[0]!.variantId ?? null, price: 'BDT 29.99', stock: 10, photos: 0 },
     ]);
   });
 

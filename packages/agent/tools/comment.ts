@@ -64,6 +64,8 @@ export function createCommentAgentTools(
      * reaches Meta must not spend a unit of the message allowance.
      */
     sendPrivateMessageOverride?: (pageToken: string, commentId: string, text: string) => Promise<void>;
+    /** Store-wide default payment strategy, so product reads price payment the same way here. */
+    paymentStrategy?: import('@repo/shared').PaymentStrategy;
   },
   onSent?: (text: string, kind: 'public' | 'private') => void,
 ) {
@@ -290,6 +292,7 @@ export function createCommentAgentTools(
       businessId: context.businessId,
       customerName: context.customerName,
       emitSse: context.emitSse,
+      paymentStrategy: context.paymentStrategy,
     }, { includeOrderTools: false }),
     replyCommentTool,
     sendPrivateMessageTool,

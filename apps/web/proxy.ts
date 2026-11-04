@@ -4,6 +4,13 @@ import { BRAND_HEADERS, brandForHost, normalizeBrandHost } from '@/lib/brand';
 
 const AUTH_COOKIE = 'oryxa_token';
 
+/** Dedicated hosts and the route each one opens. */
+const HOST_DOORS: Record<string, { root: string; login: string }> = {
+  'mail.onlyorders.tech': { root: '/mails', login: '/mails/login' },
+  'admin.onlyorders.tech': { root: '/admin', login: '/admin/login' },
+  'sudo.onlyorders.tech': { root: '/superuser', login: '/superuser/login' },
+};
+
 /**
  * The brand is decided per request from the host and passed to server components as request
  * headers. There is deliberately no redirect: `oryxa.rrcomputer.com.bd` and `onlyorders.tech`
@@ -21,6 +28,18 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
+  // Each dedicated host is a door, not a second site: its root and `/login` lead to the
+  // route it exists for, so the marketing homepage and merchant login never stand in.
+  const door = HOST_DOORS[requestHost];
+  if (door) {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL(door.root, request.url));
+    }
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL(door.login, request.url));
+    }
+  }
+
   const brand = brandForHost(requestHost);
 
   // Overwrite rather than append: a client must not be able to choose its own brand by sending
@@ -29,6 +48,7 @@ export function proxy(request: NextRequest) {
   requestHeaders.set(BRAND_HEADERS.company, brand.companyName);
   requestHeaders.set(BRAND_HEADERS.parent, brand.parentCompanyName);
   requestHeaders.set(BRAND_HEADERS.host, brand.host);
+  requestHeaders.set('x-pathname', pathname);
 
   const token = request.cookies.get(AUTH_COOKIE)?.value;
   const isProtected = pathname.startsWith('/businesses') || pathname.startsWith('/b/');

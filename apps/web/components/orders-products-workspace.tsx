@@ -76,7 +76,8 @@ export function OrdersProductsWorkspace({
     unitPrice: Number.isFinite(Number(o.variantPrice)) ? Number(o.variantPrice) : 0,
     shippingCost: Number.isFinite(Number(o.shippingCost)) ? Number(o.shippingCost) : 0,
     totalPrice: typeof o.totalPrice === 'number' ? o.totalPrice : parseFloat(o.totalPrice || '0') || 0,
-    amount: formatTaka(o.totalPrice),
+    currency: o.currency || 'BDT',
+    amount: formatTaka(o.totalPrice, o.currency || 'BDT'),
     state: stateOverrides[o.id] ?? (normalizeOrderState(o.state) as string),
     paymentMethod: o.paymentMethod || null,
     paymentReference: o.transactionId || o.paymentReference || o.txId || null,
@@ -509,7 +510,7 @@ export function OrdersProductsWorkspace({
                     {activeOrder.variantShortId ? ` · #${activeOrder.variantShortId}` : ''}
                   </p>
                   <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                    Qty {activeOrder.count} × {formatTaka(activeOrder.unitPrice)} ={' '}
+                    Qty {activeOrder.count} × {formatTaka(activeOrder.unitPrice, activeOrder.currency)} ={' '}
                     {activeOrder.amount}
                   </p>
                 </div>
@@ -542,8 +543,8 @@ export function OrdersProductsWorkspace({
                 </div>
                 {activeOrder.count > 0 && (
                   <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                    <span>Item {activeOrder.count} × {formatTaka(activeOrder.unitPrice)}</span>
-                    <span>{formatTaka(activeOrder.unitPrice * activeOrder.count)}</span>
+                    <span>Item {activeOrder.count} × {formatTaka(activeOrder.unitPrice, activeOrder.currency)}</span>
+                    <span>{formatTaka(activeOrder.unitPrice * activeOrder.count, activeOrder.currency)}</span>
                   </div>
                 )}
                 {activeOrder.shippingCost > 0 && (

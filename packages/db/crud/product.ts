@@ -251,6 +251,7 @@ export async function createProduct(input: unknown) {
       customerId: parsed.customerId ?? null,
       name: parsed.name,
       price: parsed.price.toFixed(2),
+      currency: parsed.currency,
       slug,
       sku: parsed.sku,
       description: parsed.description,
@@ -258,6 +259,7 @@ export async function createProduct(input: unknown) {
       discountPercent: parsed.discountPercent.toFixed(2),
       tags: parsed.tags,
       showInStorefront: parsed.showInStorefront,
+      paymentStrategyOverride: parsed.paymentStrategyOverride ?? null,
     })
     .returning();
 
@@ -412,6 +414,7 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
           customerId: null,
           name: item.name,
           price: price.toFixed(2),
+          currency: item.currency,
           slug,
           sku,
           description: item.description,
@@ -419,6 +422,7 @@ export async function bulkCreateProducts(businessId: string, items: BulkImportPr
           discountPercent: item.discountPercent.toFixed(2),
           tags: item.tags,
           showInStorefront: item.showInStorefront,
+          paymentStrategyOverride: item.paymentStrategyOverride ?? null,
         })
         .returning();
 
@@ -662,6 +666,12 @@ export async function listProducts(
         slug: p.slug,
         sku: p.sku,
         description: p.description,
+        currency: p.currency,
+        hasDiscount: p.hasDiscount,
+        discountPercent: parseFloat(p.discountPercent),
+        tags: p.tags,
+        showInStorefront: p.showInStorefront,
+        paymentStrategyOverride: p.paymentStrategyOverride ?? null,
         createdAt: p.createdAt,
         categoryName: p.category && !p.category.deletedAt ? p.category.name : null,
         customerName: p.customer?.name ?? null,
@@ -687,6 +697,7 @@ export interface ExportProduct {
   tags: string[];
   categoryName: string | null;
   showInStorefront: boolean;
+  paymentStrategyOverride: string | null;
   options: Array<{ name: string; values: string[] }>;
   variants: Array<{
     options: Record<string, string>;
@@ -752,6 +763,7 @@ export async function exportProducts(businessId: string): Promise<ExportProduct[
         tags: product.tags,
         categoryName: product.category && !product.category.deletedAt ? product.category.name : null,
         showInStorefront: product.showInStorefront,
+        paymentStrategyOverride: product.paymentStrategyOverride ?? null,
         options,
         variants: variantsOut,
       };
@@ -802,7 +814,8 @@ export async function updateProduct(businessId: string, productId: string, input
     productFields.showInStorefront !== undefined ||
     productFields.slug !== undefined ||
     categoryId !== undefined ||
-    productFields.customerId !== undefined;
+    productFields.customerId !== undefined ||
+    productFields.paymentStrategyOverride !== undefined;
 
   if (hasProductUpdate) {
     await db

@@ -46,6 +46,14 @@ export const billingOverviewSchema = z.object({
   options: z.array(planSchema),
 }).openapi('BillingOverview');
 
+/** How the Messenger copy of a notice went, so "stored" and "received" stay different facts. */
+export const notificationMessengerDeliverySchema = z.object({
+  status: z.enum(['delivered', 'partial', 'failed', 'no_recipients']),
+  recipients: z.number().int().nonnegative(),
+  delivered: z.number().int().nonnegative(),
+  detail: z.string().nullable().optional(),
+}).openapi('NotificationMessengerDelivery');
+
 export const notificationItemSchema = z.object({
   id: uuidSchema,
   kind: notificationKindSchema,
@@ -53,6 +61,8 @@ export const notificationItemSchema = z.object({
   title: z.string(),
   body: z.string(),
   link: z.string().nullable(),
+  /** Null when no Messenger copy was attempted — older notices, or a notice type never pushed. */
+  messenger: notificationMessengerDeliverySchema.nullable(),
   readAt: z.string().nullable(),
   createdAt: z.string(),
 }).openapi('NotificationItem');

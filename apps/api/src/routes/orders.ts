@@ -51,12 +51,21 @@ ordersRouter.openapi(createOrderRoute, async (c) => {
     return c.json(order, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create order';
+    if (message.includes('not found')) {
+      return c.json({ error: message }, 404);
+    }
+    // A method the merchant marked as needing a receipt number, or a payment strategy that
+    // needs money before ordering, is the caller's fixable mistake, not a server fault: the
+    // inbox and dashboard show this sentence to the person filling the form.
     if (
-      message.includes('not found') ||
-      message.includes('Insufficient stock')
+      message.includes('Insufficient stock') ||
+      message.includes('transaction id') ||
+      message.includes('Cash on delivery alone') ||
+      message.includes('payment_strategy') ||
+      message.includes('configured methods') ||
+      message.includes('not configured any payment method')
     ) {
-      const status = message.includes('not found') ? 404 : 400;
-      return c.json({ error: message }, status);
+      return c.json({ error: message }, 400);
     }
     throw err;
   }

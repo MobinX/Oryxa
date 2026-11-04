@@ -1,12 +1,22 @@
 import { z } from '@hono/zod-openapi';
 import { timestampSchema, uuidSchema } from '@shared/schemas/base';
 
+const currencySchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(8)
+  .regex(/^[A-Za-z]{3,8}$/, 'Use an ISO currency code such as BDT or USD')
+  .transform((value) => value.toUpperCase());
+
 export const baseProductSchema = z.object({
   businessId: uuidSchema,
   categoryId: uuidSchema.nullable().optional(),
   customerId: uuidSchema.nullable().optional(),
   name: z.string().min(1).max(255).openapi({ example: 'Premium Cotton T-Shirt' }),
   price: z.coerce.number().positive().openapi({ example: 29.99 }),
+  /** ISO currency code the price is quoted in; BDT unless the merchant picked another. */
+  currency: currencySchema.default('BDT').openapi({ example: 'BDT' }),
   slug: z.string().regex(/^[a-z0-9-]+$/),
   sku: z.string().max(100).openapi({ example: 'TS-COT-001' }),
   description: z.string().optional(),
@@ -15,6 +25,8 @@ export const baseProductSchema = z.object({
   discountPercent: z.coerce.number().min(0).max(100).default(0),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
   showInStorefront: z.boolean().default(true),
+  /** This product's own payment strategy; null/absent follows the store default. */
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
 }).openapi('Product');
 
 /** One knob a product is sold in — "Color", "Size" — and the values it may take. */
@@ -145,6 +157,7 @@ export const updateVariantInputSchema = variantInputSchema.extend({
 export const updateProductInputSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   price: z.coerce.number().positive().optional(),
+  currency: currencySchema.optional(),
   sku: z.string().max(100).optional(),
   description: z.string().optional(),
   categoryId: uuidSchema.optional(),
@@ -155,6 +168,8 @@ export const updateProductInputSchema = z.object({
   discountPercent: z.coerce.number().min(0).max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   showInStorefront: z.boolean().optional(),
+  /** Present replaces the override (null clears it back to the store default); absent leaves it alone. */
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   /** Present means replace the product's options wholesale; absent leaves them alone. */
   options: z.array(productOptionInputSchema).max(3).optional(),
   variants: z.array(updateVariantInputSchema).optional(),
@@ -171,10 +186,12 @@ export const bulkImportProductSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(100000).optional(),
   price: z.coerce.number().min(0).optional(),
+  currency: currencySchema.default('BDT'),
   slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
   sku: z.string().max(100).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
   showInStorefront: z.boolean().default(true),
+  paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
   /** A shelf to find or create for this business, e.g. the CSV's product type. */
   categoryName: z.string().min(1).max(255).optional(),
   /** Percent off the listed price; zero means no discount. */

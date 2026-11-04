@@ -81,6 +81,16 @@ export const getMe = (token: string) =>
   apiFetch<{ id: string; name: string; email: string | null }>('/api/v1/users/me', { token });
 
 // Business
+/** One merchant-defined way of taking money, as configured on the Payments page. */
+export type PaymentMethod = {
+  name: string;
+  info?: string;
+  requiresTransactionId?: boolean;
+};
+
+/** How much must be paid before an order may exist; the rest (if any) is paid on delivery. */
+export type PaymentStrategy = 'cod' | 'delivery_prepaid' | 'full_prepaid';
+
 export type Business = {
   id: string;
   userId: string;
@@ -101,6 +111,11 @@ export type Business = {
   description?: string | null;
   agentProductGuidance?: string | null;
   agentBargainGuidance?: string | null;
+  deliveryZones?: Array<{ label: string; price: number }>;
+  /** Merchant-defined ways of taking money; cash on delivery is always available on top. */
+  paymentMethods?: PaymentMethod[];
+  /** Store-wide default for how much is paid before ordering; a product may override it. */
+  paymentStrategy?: PaymentStrategy;
   employeeCount?: number | null;
   type?: string | null;
   foundedDate?: string | null;
@@ -195,6 +210,10 @@ export type ProductListItem = {
   name: string;
   sku: string;
   price: number;
+  /** ISO currency code the price is quoted in. */
+  currency: string;
+  /** This product's own payment strategy; null follows the store default. */
+  paymentStrategyOverride?: PaymentStrategy | null;
   slug: string;
   description?: string | null;
   categoryId?: string | null;
@@ -224,6 +243,9 @@ export type ProductDetail = {
   name: string;
   sku: string;
   price: number;
+  currency: string;
+  /** This product's own payment strategy; null follows the store default. */
+  paymentStrategyOverride?: PaymentStrategy | null;
   description?: string | null;
   category: { id: string; name: string } | null;
   customerId?: string | null;
@@ -262,6 +284,8 @@ export type ProductDetail = {
 export type CreateProductInput = {
   name: string;
   price: number;
+  currency?: string;
+  paymentStrategyOverride?: PaymentStrategy | null;
   sku: string;
   description?: string;
   categoryName?: string;
@@ -291,6 +315,8 @@ export type CreateProductInput = {
 export type UpdateProductInput = {
   name?: string;
   price?: number;
+  currency?: string;
+  paymentStrategyOverride?: PaymentStrategy | null;
   sku?: string;
   description?: string;
   categoryId?: string;
@@ -814,7 +840,7 @@ export const createConversationOrder = (
     transactionId?: string;
   },
 ) =>
-  apiFetch<{ id: string; totalPrice: number; customerId: string | null; state: string }>(
+  apiFetch<{ id: string; totalPrice: number; customerId: string | null; state: string; paymentStrategy?: PaymentStrategy }>(
     `/api/v1/${businessId}/conversations/${conversationId}/orders`,
     { method: 'POST', token, body: JSON.stringify(input) },
   );
@@ -834,9 +860,11 @@ export type OrderListItem = {
   customerPhone?: string | null;
   customerAddress?: string | null;
   totalPrice: number;
+  currency: string;
   shippingCost?: number;
   paymentMethod?: string | null;
   transactionId?: string | null;
+  paymentStrategy?: PaymentStrategy | null;
   state: string;
   createdAt: string;
 };
@@ -858,9 +886,11 @@ export type OrderDetail = {
   customerAddress?: string | null;
   state: string;
   totalPrice: number;
+  currency: string;
   shippingCost?: number;
   paymentMethod?: string | null;
   transactionId?: string | null;
+  paymentStrategy?: PaymentStrategy | null;
   conversationId?: string | null;
   createdAt: string;
 };
@@ -881,9 +911,12 @@ export const createOrder = (
     customerName: string;
     customerPhone?: string;
     customerAddress?: string;
+    shippingCost?: number;
+    paymentMethod?: string;
+    transactionId?: string;
   },
 ) =>
-  apiFetch<{ id: string; totalPrice: number; state: string; customerId: string | null }>(
+  apiFetch<{ id: string; totalPrice: number; state: string; customerId: string | null; paymentStrategy?: PaymentStrategy }>(
     `/api/v1/${businessId}/orders`,
     { method: 'POST', token, body: JSON.stringify(data) },
   );
@@ -1362,6 +1395,13 @@ export type NotificationItem = {
   title: string;
   body: string;
   link: string | null;
+  /** How the Messenger copy of this notice went. Null when none was attempted. */
+  messenger: {
+    status: 'delivered' | 'partial' | 'failed' | 'no_recipients';
+    recipients: number;
+    delivered: number;
+    detail?: string | null;
+  } | null;
   readAt: string | null;
   createdAt: string;
 };
