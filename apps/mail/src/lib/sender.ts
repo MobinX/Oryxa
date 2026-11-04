@@ -47,6 +47,7 @@ function uniqueFilename(filename: string, used: Set<string>): string {
 export async function sendWithSenderNet(
   env: Env,
   input: SenderNetInput,
+  options?: { timeoutMs?: number },
 ): Promise<{ messageId: string }> {
   const apiKey = (env.SENDER_API_KEY || "").trim();
   if (!apiKey) {
@@ -78,7 +79,7 @@ export async function sendWithSenderNet(
         accept: "application/json",
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 30_000),
     });
   } catch (error) {
     throw new ApiError(

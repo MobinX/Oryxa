@@ -2,6 +2,7 @@ import { app } from "./app";
 import type { Env } from "./types";
 import { ensureMailbox, findInboundDuplicate, persistEmail } from "./lib/store";
 import { MimeParseError, parseInboundEmail } from "./lib/mime";
+import { scoreInboundSpam, spamThresholdFromEnv } from "./lib/spam";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -56,6 +57,29 @@ export default {
       }
     }
 
+    const threshold = spamThresholdFromEnv(env.SPAM_THRESHOLD);
+    const spam = scoreInboundSpam(
+      {
+        from: parsed.from,
+        to: parsed.to,
+        cc: parsed.cc,
+        replyTo: parsed.replyTo,
+        subject: parsed.subject,
+        text: parsed.text,
+        html: parsed.html,
+        headers: parsed.headers,
+        attachments: parsed.attachments.map((attachment) => ({
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          size: attachment.content.byteLength,
+        })),
+        inReplyTo: parsed.inReplyTo,
+        references: parsed.references,
+        messageId: parsed.messageId,
+      },
+      threshold,
+    );
+
     const result = await persistEmail(env, {
       mailboxId: mailbox.id,
       direction: "inbound",
@@ -84,6 +108,7 @@ export default {
       provider: "cloudflare-email-routing",
       providerRawSize: message.rawSize,
       status: "received",
+      spam: { score: spam.score, isSpam: spam.isSpam, reasons: spam.reasons, threshold },
     });
 
     console.log(
@@ -93,6 +118,9 @@ export default {
         mailboxId: mailbox.id,
         attachments: result.row.attachment_count,
         sizeBytes: result.row.size_bytes,
+        spamScore: spam.score,
+        isSpam: spam.isSpam,
+        spamReasons: spam.reasons,
       }),
     );
   },

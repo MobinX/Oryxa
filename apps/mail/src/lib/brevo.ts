@@ -17,6 +17,7 @@ interface BrevoSendInput {
 export async function sendWithBrevo(
   env: Env,
   input: BrevoSendInput,
+  options?: { timeoutMs?: number },
 ): Promise<{ messageId: string }> {
   const apiKey = (env.BREVO_API_KEY || "").trim();
   if (!apiKey) {
@@ -43,6 +44,7 @@ export async function sendWithBrevo(
         }
       : {}),
     ...(input.tags?.length ? { tags: input.tags } : {}),
+    headers: { "X-Mailer": "OnlyOrders-mail" },
   };
 
   let response: Response;
@@ -55,7 +57,7 @@ export async function sendWithBrevo(
         accept: "application/json",
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 30_000),
     });
   } catch (error) {
     throw new ApiError(

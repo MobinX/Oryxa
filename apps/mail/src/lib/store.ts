@@ -149,6 +149,16 @@ export async function persistEmail(
       },
       sizeBytes: 0,
       createdAt: timestamp,
+      ...(input.spam
+        ? {
+            spam: {
+              score: input.spam.score,
+              isSpam: input.spam.isSpam,
+              reasons: input.spam.reasons,
+              threshold: input.spam.threshold,
+            },
+          }
+        : {}),
     };
 
     const attachmentBytes = storedAttachments.reduce((sum, item) => sum + item.size, 0);
@@ -161,34 +171,61 @@ export async function persistEmail(
     await putObject(env, jsonKey, json, "application/json");
 
     const toEmail = input.to[0]?.email || "";
+    const spamScore = input.spam?.score ?? 0;
+    const isSpam = input.spam?.isSpam ? 1 : 0;
+    const spamReason = input.spam && input.spam.reasons.length > 0 ? input.spam.reasons.join(",").slice(0, 500) : null;
+    const legacyValues = [
+      id,
+      input.mailboxId,
+      input.direction,
+      input.from.email,
+      input.from.name || null,
+      toEmail,
+      input.subject,
+      input.messageId,
+      input.provider,
+      input.providerMessageId || null,
+      jsonKey,
+      `/api/emails/${id}/content`,
+      storedBytes,
+      storedAttachments.length,
+      input.status,
+      input.receivedAt,
+      timestamp,
+    ];
     try {
-      await env.DB.prepare(
-        `INSERT INTO emails (
-          id, mailbox_id, direction, from_email, from_name, to_email, subject,
-          message_id, provider, provider_message_id, json_key, json_url,
-          size_bytes, attachment_count, status, is_trashed, received_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      )
-        .bind(
-          id,
-          input.mailboxId,
-          input.direction,
-          input.from.email,
-          input.from.name || null,
-          toEmail,
-          input.subject,
-          input.messageId,
-          input.provider,
-          input.providerMessageId || null,
-          jsonKey,
-          `/api/emails/${id}/content`,
-          storedBytes,
-          storedAttachments.length,
-          input.status,
-          input.receivedAt,
-          timestamp,
+      try {
+        await env.DB.prepare(
+          `INSERT INTO emails (
+            id, mailbox_id, direction, from_email, from_name, to_email, subject,
+            message_id, provider, provider_message_id, json_key, json_url,
+            size_bytes, attachment_count, status, is_trashed,
+            spam_score, is_spam, spam_reason, received_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
         )
-        .run();
+          .bind(...legacyValues.slice(0, 15), spamScore, isSpam, spamReason, input.receivedAt, timestamp)
+          .run();
+      } catch (insertError) {
+        // Pre-migration databases (0001 only) lack the spam columns. Fall
+        // back to the legacy column set; the spam verdict still lives in
+        // the B2 JSON document, so nothing is lost.
+        if (
+          insertError instanceof Error &&
+          /no such column/i.test(insertError.message)
+        ) {
+          await env.DB.prepare(
+            `INSERT INTO emails (
+              id, mailbox_id, direction, from_email, from_name, to_email, subject,
+              message_id, provider, provider_message_id, json_key, json_url,
+              size_bytes, attachment_count, status, is_trashed, received_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          )
+            .bind(...legacyValues)
+            .run();
+        } else {
+          throw insertError;
+        }
+      }
     } catch (error) {
       if (error instanceof Error && /UNIQUE constraint failed/i.test(error.message)) {
         await safeCleanup(env, input.mailboxId, id);
@@ -338,8 +375,27 @@ export async function markEmailSent(env: Env, id: string, providerMessageId: str
   return await getEmailRow(env, id);
 }
 
-export async function markEmailFailed(env: Env, id: string): Promise<void> {
-  await env.DB.prepare("UPDATE emails SET status = 'failed' WHERE id = ?").bind(id).run();
+export async function markEmailFailed(
+  env: Env,
+  id: string,
+  failure?: { code?: string | null; message?: string | null },
+): Promise<void> {
+  const code = (failure?.code || "").slice(0, 100) || null;
+  const message = (failure?.message || "").slice(0, 500) || null;
+  try {
+    await env.DB.prepare(
+      "UPDATE emails SET status = 'failed', failure_code = ?, failure_message = ? WHERE id = ?",
+    )
+      .bind(code, message, id)
+      .run();
+  } catch (error) {
+    // Pre-migration databases (0001 only) lack the failure columns.
+    if (error instanceof Error && /no such column/i.test(error.message)) {
+      await env.DB.prepare("UPDATE emails SET status = 'failed' WHERE id = ?").bind(id).run();
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function mailboxStorage(env: Env, mailboxId: string): Promise<MailboxStorage | null> {
@@ -415,6 +471,11 @@ export function serializeEmailRow(row: EmailRow): Record<string, unknown> {
     size_bytes: row.size_bytes,
     attachment_count: row.attachment_count,
     status: row.status,
+    spam_score: Number(row.spam_score ?? 0),
+    is_spam: (row.is_spam ?? 0) === 1,
+    spam_reason: row.spam_reason ?? null,
+    failure_code: row.failure_code ?? null,
+    failure_message: row.failure_message ?? null,
     is_trashed: row.is_trashed === 1,
     trashed_at: row.trashed_at,
     received_at: row.received_at,

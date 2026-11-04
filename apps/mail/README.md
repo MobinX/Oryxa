@@ -50,11 +50,44 @@ fields plus the B2 JSON key/link and byte counter.
 | size_bytes | INTEGER | JSON bytes + all attachment bytes |
 | attachment_count | INTEGER | |
 | status | TEXT | `received`, `sending`, `sent`, `failed` |
+| spam_score | REAL | 0..10 rule-based spam score (migration 0002) |
+| is_spam | INTEGER | 0/1, score >= threshold (migration 0002) |
+| spam_reason | TEXT | comma-separated rule codes, e.g. `subject_spam_words,link_heavy` |
+| failure_code / failure_message | TEXT | outbound failure detail for `status=failed` |
 | is_trashed | INTEGER | 0/1 |
 | trashed_at | TEXT | |
 | received_at / created_at | TEXT | ISO-8601 |
 
-Indexes: mailbox timeline, mailbox+trash, unique `(mailbox_id, message_id)`.
+Indexes: mailbox timeline, mailbox+trash, unique `(mailbox_id, message_id)`,
+mailbox+spam.
+
+Migrations live in `migrations/` and are applied manually per environment:
+
+```sh
+wrangler d1 execute onlyorders-mail-db --local  --file=./migrations/0002_spam_and_failures.sql
+wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0002_spam_and_failures.sql
+```
+
+The Worker tolerates a pre-0002 database (spam verdicts still land in the B2
+JSON document; `?spam=` filtering reports `spam_unavailable: true`), but
+applying 0002 is required for spam/failure columns and filtering.
+
+## Inbound spam filtering
+
+Every received message is scored by `src/lib/spam.ts` (rule/heuristic based,
+no external calls): auth-result failures, Reply-To/From domain mismatch,
+brand-impersonating display names, spammy subjects (keywords, all-caps,
+`!!!`), phish phrases, link-heavy/shortener/IP-literal/mismatched-link bodies,
+embedded password forms, image-only HTML, risky/double-extension/archive
+attachments, bulk precedence, recipient count and missing Message-ID. Thread
+replies and `List-Unsubscribe` mail score as ham. Scores clamp to 0..10 and
+`SPAM_THRESHOLD` (default 5, see `/health`) decides `is_spam`.
+
+Spam is never rejected or deleted — it is flagged on the row
+(`spam_score`, `is_spam`, `spam_reason`), stored in the B2 JSON document
+(`spam: { score, isSpam, reasons, threshold }`), returned by the list/detail
+APIs, and filterable via `GET /api/mailboxes/:id/emails?spam=true|false|all`
+(default `all`, so existing clients are unaffected).
 
 ## B2 layout and JSON
 
@@ -126,7 +159,7 @@ All `/api/*` routes require `x-api-key: <MAIL_API_KEY>` or `Authorization: Beare
 | GET | `/api/mailboxes` | List mailboxes with storage |
 | GET | `/api/mailboxes/lookup?address=` | Find a user's mailbox |
 | GET | `/api/mailboxes/:id` | Mailbox + storage |
-| GET | `/api/mailboxes/:id/emails` | List mail of one user (`trashed`, `direction`, `q`, `since`, `limit`, `offset`) |
+| GET | `/api/mailboxes/:id/emails` | List mail of one user (`trashed`, `direction`, `spam`, `q`, `since`, `limit`, `offset`) |
 | POST | `/api/emails/send` | Send through Brevo (Sender.net fallback), store JSON in B2 |
 | POST | `/api/emails/:id/reply` | Reply to a received email through the active provider |
 | POST | `/api/emails/:id/forward` | Forward an email; original B2 attachments are copied |
@@ -166,6 +199,31 @@ Sender.net fallback is used only when Brevo is absent or forced via `MAIL_SEND_P
 it supports exactly one `to` recipient, no `cc`/`bcc`, and URL attachments. Attachments
 are limited by `MAX_SEND_BYTES` (default 10 MiB), max 20 files, body max 2M chars.
 
+### Send reliability
+
+`src/lib/outbound.ts` is the single send path for send/reply/forward:
+
+- Per-provider retries with exponential backoff (`MAIL_SEND_MAX_ATTEMPTS`,
+  default 3; `MAIL_SEND_TIMEOUT_MS` per attempt, default 30000). Only
+  transport errors and retryable statuses (408/425/429/5xx) are retried;
+  provider 4xx validation failures fail fast so a rejected message is never
+  double-sent.
+- Real provider failover: when both keys are configured and Brevo fails
+  retryably, the send fails over to Sender.net (skipped for multi-recipient
+  mail, which Sender.net cannot carry). A forced `MAIL_SEND_PROVIDER` stays
+  strict — no failover.
+- Failed sends keep their D1 row with `status=failed` plus `failure_code` /
+  `failure_message` instead of being deleted, and every attempt/sent/failed
+  outcome is logged as structured JSON (`outbound_attempt_failed`,
+  `outbound_sent`, `outbound_failed`).
+- Deliverability guards: `X-Mailer` header on Brevo sends, Reply-To defaults
+  to From when omitted, the `from` address is validated before anything is
+  stored, and an optional `ALLOWED_FROM_DOMAINS` allowlist rejects
+  unauthenticated From domains with `400 unverified_sender` (unset =
+  unrestricted). The `apps/api` bridge (`mailWorkerResponse`) retries the
+  Worker on 408/429/502–599 with backoff (`MAIL_WORKER_TIMEOUT_MS`,
+  `MAIL_WORKER_MAX_ATTEMPTS`).
+
 ## Local development
 
 ```sh
@@ -174,6 +232,7 @@ bun install
 # .dev.vars contains B2_* (copied from the repo root .env), MAIL_API_KEY,
 # DEFAULT_FROM_*, BREVO_API_KEY and optional SENDER_API_KEY / MAILOSAUR_*.
 bun run db:migrate:local
+bun run db:migrate:local:0002   # spam + failure columns (existing DBs)
 bun run dev                     # http://127.0.0.1:8787
 bun run scripts/test-api.ts     # 54 end-to-end checks incl. local inbound delivery
 MAIL_BASE_URL=http://127.0.0.1:8787 bun run scripts/test-provider.ts
@@ -195,6 +254,7 @@ Secure mode (recommended):
 cd apps/mail
 wrangler d1 create onlyorders-mail-db        # done; id is in wrangler.jsonc
 wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0001_init.sql
+wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0002_spam_and_failures.sql
 wrangler secret put B2_KEY_ID
 wrangler secret put B2_APPLICATION_KEY
 wrangler secret put B2_BUCKET_NAME
