@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './lightpanda-fixture';
+import { snapPage } from './snap';
 
 const BASE = process.env.TEMPLATE_URL || 'http://127.0.0.1:3410';
 const OUT = '/workspace/oryxa-shots';
@@ -43,10 +44,7 @@ for (const device of VIEWPORTS) {
     );
     expect(overflow).toBeLessThanOrEqual(1);
 
-    await page.screenshot({
-      path: `${OUT}/template-ui-${device.name}.png`,
-      fullPage: true,
-    });
+    await snapPage(page, `${OUT}/template-ui-${device.name}.png`);
 
     await context.close();
   });

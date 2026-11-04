@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './lightpanda-fixture';
+import { snapPage } from './snap';
 
 /**
  * Admin console pages (spec L: "Playwright e2e: log in and check new admin pages").
@@ -11,7 +12,7 @@ const PASSWORD = process.env.ONLYORDERS_OPERATOR_PASSWORD;
 const SHOTS = process.env.E2E_SHOTS_DIR || '/workspace/oryxa-shots';
 
 async function shot(page: Page, name: string) {
-  await page.screenshot({ path: `${SHOTS}/${test.info().project.name}-${name}.png`, fullPage: false });
+  await snapPage(page, `${SHOTS}/${test.info().project.name}-${name}.png`);
 }
 
 /** Desktop shows the real rail; phones collapse it to a hamburger, so either counts. */
