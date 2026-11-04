@@ -52,7 +52,7 @@ describe('notification ping window', () => {
 
     expect(renewed?.renewed).toBe(2);
     expect(renewed?.deadlineAt.toISOString()).toBe('2026-11-09T10:00:00.000Z');
-    expect(renewed?.deadlineAt.getTime() - at.getTime()).toBe(MESSENGER_WINDOW_DAYS * DAY_MS);
+    expect(renewed?.deadlineAt?.getTime()).toBe(at.getTime() + MESSENGER_WINDOW_DAYS * DAY_MS);
 
     const rows = await db
       .select({ pinged: messengerNotificationUsers.lastPingAt })

@@ -99,7 +99,7 @@ export function createRepeatThenCorrectedLlm(firstReply: string, secondReply: st
       );
       const text = alerted ? secondReply : firstReply;
       return {
-        generations: [{ text, message: new AIMessage(text), output: text }],
+        generations: [{ text, message: new AIMessage(text) }],
         llmOutput: {},
       };
     }
