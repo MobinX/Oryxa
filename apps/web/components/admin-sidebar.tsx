@@ -130,6 +130,7 @@ export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: A
   const railClass = collapsed ? 'lg:w-16' : 'lg:w-60';
   const activeClass = 'bg-primary/10 font-semibold text-primary';
   const idleClass = 'text-muted-foreground hover:bg-muted hover:text-foreground';
+  const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
@@ -153,7 +154,7 @@ export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: A
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 title={item.label}
-                className={`flex items-center gap-2.5 whitespace-nowrap rounded-element px-3 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-2.5 whitespace-nowrap rounded-element px-3 py-2 text-sm transition-colors ${focusRing} ${
                   collapsed ? 'lg:justify-center lg:px-2' : ''
                 } ${active ? activeClass : idleClass}`}
               >
@@ -181,13 +182,13 @@ export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: A
   return (
     <>
       {/* Phone: the hamburger is a row of the layout column, so nothing rides on the content. */}
-      <div className="sticky top-[4.4rem] z-40 -mx-4 px-4 pb-3 pt-3 sm:-mx-6 sm:px-6 lg:hidden">
+      <div className="sticky top-[4.4rem] z-40 -mx-4 border-b border-border/40 bg-background px-4 pb-3 pt-3 sm:-mx-6 sm:px-6 lg:hidden">
         <button
           type="button"
           aria-label="Open navigation"
           aria-expanded={open}
           onClick={() => setOpen(true)}
-          className="flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card px-3 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+          className={`flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card px-3 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground active:scale-95 ${focusRing}`}
         >
           <PanelRightOpen className="h-4 w-4" />
           Menu
@@ -205,7 +206,7 @@ export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: A
             type="button"
             aria-label="Close navigation"
             onClick={() => setOpen(false)}
-            className="fixed right-3 top-[4.4rem] z-50 flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground active:scale-95 lg:hidden"
+            className={`fixed right-3 top-[4.4rem] z-50 flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground active:scale-95 ${focusRing} lg:hidden`}
           >
             <X className="h-4 w-4" />
           </button>
@@ -223,7 +224,7 @@ export function AdminSidebar({ signedIn = true, allowedCapabilities = 'all' }: A
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="flex w-full items-center justify-center gap-2 rounded-element px-2 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className={`flex w-full items-center justify-center gap-2 rounded-element px-2 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${focusRing}`}
             aria-label={collapsed ? 'Expand navigation labels' : 'Collapse navigation to icons'}
           >
             <ChevronLeft className={`h-4 w-4 ${collapsed ? 'rotate-180' : ''}`} />

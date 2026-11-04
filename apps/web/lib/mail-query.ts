@@ -1,4 +1,4 @@
-export type MailFolder = 'inbox' | 'sent' | 'all' | 'trash';
+export type MailFolder = 'inbox' | 'sent' | 'all' | 'trash' | 'spam';
 
 export type RawMailParams = Record<string, string | string[] | undefined>;
 
@@ -8,7 +8,15 @@ export function one(value: string | string[] | undefined): string | undefined {
 
 export function readFolder(value: string | string[] | undefined): MailFolder {
   const raw = one(value);
-  return raw === 'sent' ? 'sent' : raw === 'all' ? 'all' : raw === 'trash' ? 'trash' : 'inbox';
+  return raw === 'sent'
+    ? 'sent'
+    : raw === 'all'
+      ? 'all'
+      : raw === 'trash'
+        ? 'trash'
+        : raw === 'spam'
+          ? 'spam'
+          : 'inbox';
 }
 
 export function readOffset(value: string | string[] | undefined): number {

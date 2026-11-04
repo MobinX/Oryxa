@@ -117,22 +117,25 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                 Download CSV
               </Button>
             </Link>
-            <div className="flex items-center rounded-full border border-border/40 bg-muted/40 p-1">
+            <nav
+              aria-label="Range"
+              className="flex items-center gap-0.5 rounded-full border border-border/40 bg-muted/40 p-1"
+            >
               {RANGES.map((range) => (
                 <Link
                   key={range}
                   href={`/admin?days=${range}`}
                   aria-current={days === range ? 'page' : undefined}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:text-sm ${
                     days === range
                       ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-muted-foreground hover:bg-card/60 hover:text-foreground'
                   }`}
                 >
                   {range}d
                 </Link>
               ))}
-            </div>
+            </nav>
             <Link href={`/admin?days=${days}`}>
               <Button variant="outline" size="sm">
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -144,8 +147,8 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
       />
 
       {result.error && (
-        <Card className="border-destructive/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Card className="border-destructive/40">
+          <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             The numbers did not load
           </p>
@@ -221,14 +224,14 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
             />
           </section>
 
-          <Card className="hover:shadow-card">
+          <Card>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Every account, all time
               </h2>
               <Link
                 href="/admin/logs"
-                className="text-xs font-medium text-primary hover:underline"
+                className="rounded text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 Event log →
               </Link>
@@ -246,7 +249,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
             </div>
           </Card>
 
-          <Card className="hover:shadow-card">
+          <Card>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-base font-semibold">Per day, on your clock</h2>
               <p className="text-xs text-muted-foreground">
@@ -266,7 +269,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
           </Card>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <Card className="min-w-0 px-0 py-0 lg:col-span-2 hover:shadow-card">
+            <Card className="min-w-0 px-0 py-0 lg:col-span-2">
               <div className="border-b border-border/40 px-5 py-3">
                 <h2 className="text-base font-semibold">Busiest businesses</h2>
                 <p className="text-xs text-muted-foreground">
@@ -274,9 +277,15 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                 </p>
               </div>
               {stats.topBusinesses.length === 0 ? (
-                <p className="px-5 py-10 text-center text-muted-foreground">
-                  No business had a message, an order or a visit in this window.
-                </p>
+                <div className="px-5 py-10 text-center">
+                  <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                    <Store className="h-5 w-5 text-muted-foreground" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold">A quiet window</p>
+                  <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                    No business had a message, an order or a visit in this window.
+                  </p>
+                </div>
               ) : (
                 <div className="min-w-0 overflow-x-auto rounded-b-card lg:max-h-96 lg:overflow-y-auto">
                   {/* Phones let the table grow and scroll as one page; only desktop caps its
@@ -285,20 +294,20 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                   <table className="w-full min-w-[620px] text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <th className="px-5 py-2.5 font-medium">Business</th>
-                        <th className="px-3 py-2.5 text-right font-medium">Chats</th>
-                        <th className="px-3 py-2.5 text-right font-medium">Messages</th>
-                        <th className="px-3 py-2.5 text-right font-medium">Orders</th>
-                        <th className="px-5 py-2.5 text-right font-medium">Revenue</th>
+                        <th scope="col" className="px-5 py-2.5 font-medium">Business</th>
+                        <th scope="col" className="px-3 py-2.5 text-right font-medium">Chats</th>
+                        <th scope="col" className="px-3 py-2.5 text-right font-medium">Messages</th>
+                        <th scope="col" className="px-3 py-2.5 text-right font-medium">Orders</th>
+                        <th scope="col" className="px-5 py-2.5 text-right font-medium">Revenue</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
                       {stats.topBusinesses.map((row) => (
                         <tr key={row.id} className="transition-colors hover:bg-muted/40">
-                          <td className="px-5 py-3">
+                          <td className="px-5 py-3 align-middle">
                             <Link
                               href={`/b/${row.id}/analytics`}
-                              className="font-medium text-foreground hover:text-primary hover:underline"
+                              className="rounded font-medium text-foreground outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
                             >
                               {row.name}
                             </Link>
@@ -306,12 +315,12 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
                               {row.slug ?? 'no store published'}
                             </p>
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums">
+                          <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">
                             {whole(row.conversations)}
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums">{whole(row.messages)}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{whole(row.orders)}</td>
-                          <td className="px-5 py-3 text-right font-medium tabular-nums">
+                          <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">{whole(row.messages)}</td>
+                          <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">{whole(row.orders)}</td>
+                          <td className="px-5 py-3 text-right align-middle font-medium tabular-nums whitespace-nowrap">
                             {money(row.revenue)}
                           </td>
                         </tr>
@@ -322,7 +331,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<RawParams>
               )}
             </Card>
 
-            <Card className="px-0 py-0 hover:shadow-card">
+            <Card className="px-0 py-0">
               <div className="border-b border-border/40 px-5 py-3">
                 <h2 className="text-base font-semibold">Health</h2>
                 <p className="text-xs text-muted-foreground">
@@ -410,12 +419,12 @@ function Kpi({
         : 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300';
 
   return (
-    <Card className="hover:shadow-card">
+    <Card>
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-primary/10 text-primary">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-muted text-muted-foreground">
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -474,7 +483,7 @@ function Anomaly({
   return (
     <Link
       href={href}
-      className="bg-card px-6 py-4 transition-colors hover:bg-muted/40"
+      className="bg-card px-6 py-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
       title={`Open the event log filtered to ${label.toLowerCase()}`}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

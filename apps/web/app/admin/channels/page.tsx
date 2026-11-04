@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Facebook, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -52,22 +51,29 @@ export default async function AdminChannelsPage({
 
       {error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">
-          Connect failed{detail ? `: ${detail}` : '.'}
+          <p role="alert">Connect failed{detail ? `: ${detail}` : '.'}</p>
         </Card>
       )}
       {connected && (
         <Card className="border-primary/30 p-4 text-sm">
-          {connected} page{connected === '1' ? '' : 's'} connected as admin-only.
-          {failed && Number(failed) > 0 && detail ? ` ${failed} failed: ${detail}` : ''}
+          <p role="status">
+            {connected} page{connected === '1' ? '' : 's'} connected as admin-only.
+            {failed && Number(failed) > 0 && detail ? ` ${failed} failed: ${detail}` : ''}
+          </p>
         </Card>
       )}
       {loadError && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
       )}
 
       {!loadError && channels.length === 0 && (
         <Card className="py-12 text-center">
-          <p className="font-semibold">No admin channel yet</p>
+          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+            <Radio className="h-5 w-5 text-muted-foreground" />
+          </span>
+          <p className="mt-3 font-semibold">No admin channel yet</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             Connect a Page above. Merchants then send their notification code to it as a message,
             and each notice arrives in their Messenger as well.
@@ -103,11 +109,7 @@ export default async function AdminChannelsPage({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Need another Page? The picker lists every Page your Facebook login manages.{' '}
-        <Link href="/admin/channels" className="text-primary hover:underline">
-          Back to channels
-        </Link>
-        .
+        Need another Page? The picker lists every Page your Facebook login manages.
       </p>
     </div>
   );

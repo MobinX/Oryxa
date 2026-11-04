@@ -52,7 +52,7 @@ export default async function OfficialProspectsPage({
           <form className="flex items-end gap-2">
             <label className="text-sm">
               <span className="mb-1 block font-medium">Status</span>
-              <select name="status" defaultValue={params.status ?? 'all'} className="h-10 rounded-md border bg-card px-3 text-sm">
+              <select name="status" defaultValue={params.status ?? 'all'} className="h-10 rounded-element border border-border bg-card px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
                 {['all', ...STATUSES].map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -64,15 +64,19 @@ export default async function OfficialProspectsPage({
       />
 
       {params.error && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{params.error}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{params.error}</p>
+        </Card>
       )}
       {params.weights && (
         <Card className="border-primary/30 p-4 text-sm">
-          Weights saved and every live prospect re-scored.
+          <p role="status">Weights saved and every live prospect re-scored.</p>
         </Card>
       )}
       {loadError && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
       )}
       {migrationPending && <OfficialMigrationCard />}
 
@@ -106,7 +110,10 @@ export default async function OfficialProspectsPage({
 
           {prospects.length === 0 ? (
             <Card className="py-12 text-center">
-              <p className="font-semibold">No prospects here yet</p>
+              <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <Users className="h-5 w-5 text-muted-foreground" />
+              </span>
+              <p className="mt-3 font-semibold">No prospects here yet</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                 When a customer tells the official AI who they are and what they sell, a row
                 appears with the score the weights above produce.
@@ -129,7 +136,7 @@ export default async function OfficialProspectsPage({
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                             prospect.consent
-                              ? 'bg-emerald-500/15 text-emerald-600'
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                               : 'bg-muted text-muted-foreground'
                           }`}
                         >
@@ -162,7 +169,7 @@ export default async function OfficialProspectsPage({
                     {prospect.conversationId && (
                       <Link
                         href={`/admin/official/inbox/${prospect.conversationId}`}
-                        className="mt-2 inline-block text-xs text-primary hover:underline"
+                        className="mt-2 inline-block rounded text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
                       >
                         Open conversation
                       </Link>
@@ -176,7 +183,7 @@ export default async function OfficialProspectsPage({
                       <select
                         name="status"
                         defaultValue={prospect.status}
-                        className="rounded-md border bg-card px-2 py-1 text-xs"
+                        className="rounded-md border border-border bg-card px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         aria-label={`Status of prospect ${prospect.id}`}
                       >
                         {STATUSES.map((status) => (

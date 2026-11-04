@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useRef, useState } from 'react';
-import { Loader2, Paperclip, X } from 'lucide-react';
+import { CircleAlert, Loader2, Paperclip, X } from 'lucide-react';
 import { formatMailBytes } from '@/lib/mail-format';
 import type { UploadedAttachmentRef } from '@/lib/mail-attachments';
 
@@ -157,29 +157,30 @@ export function MailAttachmentField() {
       />
       <input type="hidden" name="uploaded_attachments" value={JSON.stringify(files)} />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           type="button"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 motion-reduce:transition-none"
         >
           {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
           ) : (
             <Paperclip className="h-3.5 w-3.5" aria-hidden />
           )}
           {busy ? 'Uploading…' : 'Attach files'}
         </button>
-        <span className="text-[10px] text-muted-foreground">
-          Up to 10 MB total · uploaded straight to private storage
+        <span className="text-[11px] text-muted-foreground">
+          Up to {MAX_FILES} files · 10 MB total · uploaded straight to private storage
         </span>
       </div>
 
       {progress ? (
-        <div className="space-y-1">
-          <p className="truncate text-[10px] text-muted-foreground">
-            {progress.name} · {progress.percent}%
+        <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+          <p className="truncate text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">{progress.name}</span> ·{' '}
+            {progress.percent}%
           </p>
           <div
             role="progressbar"
@@ -187,10 +188,10 @@ export function MailAttachmentField() {
             aria-valuenow={progress.percent}
             aria-valuemin={0}
             aria-valuemax={100}
-            className="h-1 w-full overflow-hidden rounded-full bg-muted"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
           >
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-200"
+              className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
@@ -198,15 +199,17 @@ export function MailAttachmentField() {
       ) : null}
 
       {files.length ? (
-        <ul className="space-y-1">
+        <ul className="space-y-1" aria-label="Attached files">
           {files.map((file) => (
             <li
               key={file.key}
-              className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 text-xs"
+              className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
             >
-              <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <Paperclip className="h-3 w-3" aria-hidden />
+              </span>
               <span className="min-w-0 flex-1 truncate font-medium">{file.filename}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">
+              <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
                 {formatMailBytes(file.size)}
               </span>
               <button
@@ -214,9 +217,9 @@ export function MailAttachmentField() {
                 disabled={busy}
                 onClick={() => setFiles((current) => current.filter((item) => item.key !== file.key))}
                 aria-label={`Remove ${file.filename}`}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none"
               >
-                <X className="h-3 w-3" aria-hidden />
+                <X className="h-3.5 w-3.5" aria-hidden />
               </button>
             </li>
           ))}
@@ -224,7 +227,8 @@ export function MailAttachmentField() {
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="flex items-start gap-1.5 text-xs leading-relaxed text-destructive">
+          <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
           {error}
         </p>
       ) : null}

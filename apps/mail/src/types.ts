@@ -1,3 +1,5 @@
+import type { D1Database } from '@cloudflare/workers-types';
+
 export interface Env {
   DB: D1Database;
   B2_KEY_ID: string;
@@ -10,6 +12,10 @@ export interface Env {
   SENDER_API_KEY?: string;
   BREVO_API_KEY?: string;
   MAIL_SEND_PROVIDER?: string;
+  MAIL_SEND_TIMEOUT_MS?: string;
+  MAIL_SEND_MAX_ATTEMPTS?: string;
+  ALLOWED_FROM_DOMAINS?: string;
+  SPAM_THRESHOLD?: string;
   DEFAULT_FROM_EMAIL: string;
   DEFAULT_FROM_NAME: string;
   MAX_SEND_BYTES?: string;
@@ -43,6 +49,13 @@ export interface EmailRow {
   trashed_at: string | null;
   received_at: string | null;
   created_at: string;
+  // Migration 0002 columns; optional so rows read from a pre-migration
+  // database (or SELECT projections) still typecheck.
+  spam_score?: number | null;
+  is_spam?: number | null;
+  spam_reason?: string | null;
+  failure_code?: string | null;
+  failure_message?: string | null;
 }
 
 export interface StoredAddress {
@@ -87,6 +100,12 @@ export interface StoredEmail {
   };
   sizeBytes: number;
   createdAt: string;
+  spam?: {
+    score: number;
+    isSpam: boolean;
+    reasons: string[];
+    threshold: number;
+  };
 }
 
 export interface MailboxStorage {
@@ -132,4 +151,10 @@ export interface PersistInput {
   providerMessageId?: string | null;
   providerRawSize?: number;
   status: string;
+  spam?: {
+    score: number;
+    isSpam: boolean;
+    reasons: string[];
+    threshold: number;
+  };
 }

@@ -37,13 +37,15 @@ export default async function OfficialThreadPage({
   if (loadError || migrationPending || !thread) {
     return (
       <div className="space-y-4">
-        <Link href="/admin/official/inbox" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/admin/official/inbox" className="inline-flex items-center gap-2 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50">
           <ArrowLeft className="h-4 w-4" /> Back to inbox
         </Link>
         {migrationPending ? (
           <OfficialMigrationCard />
         ) : (
-          <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+          <Card className="border-destructive/40 p-4 text-sm text-destructive">
+            <p role="alert">{loadError}</p>
+          </Card>
         )}
       </div>
     );
@@ -56,7 +58,7 @@ export default async function OfficialThreadPage({
       <div>
         <Link
           href="/admin/official/inbox"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-2 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <ArrowLeft className="h-4 w-4" /> Back to inbox
         </Link>
@@ -66,19 +68,19 @@ export default async function OfficialThreadPage({
             {conversation.platform}
           </span>
           {conversation.aiPaused ? (
-            <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+            <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">
               AI taken over
             </span>
           ) : (
-            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
               AI active
             </span>
           )}
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
               conversation.status === 'pending'
-                ? 'bg-amber-500/15 text-amber-600'
-                : 'bg-emerald-500/15 text-emerald-600'
+                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
             }`}
           >
             {conversation.status}
@@ -88,7 +90,7 @@ export default async function OfficialThreadPage({
 
       {error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">
-          {error === 'empty' ? 'A reply needs text.' : `Reply failed: ${error}`}
+          <p role="alert">{error === 'empty' ? 'A reply needs text.' : `Reply failed: ${error}`}</p>
         </Card>
       )}
 
@@ -133,7 +135,7 @@ export default async function OfficialThreadPage({
           <div className="flex flex-wrap items-center gap-4">
             <Button type="submit">Send reply</Button>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="checkbox" name="pauseAi" />
+              <input type="checkbox" name="pauseAi" className="h-4 w-4 rounded border-border accent-primary" />
               Take over — stop the AI replies on this thread
             </label>
           </div>
@@ -156,7 +158,7 @@ export default async function OfficialThreadPage({
           <h2 className="mb-3 text-base font-semibold">Tickets from this thread</h2>
           <ul className="space-y-2 text-sm">
             {tickets.map((ticket) => (
-              <li key={ticket.id} className="flex flex-wrap items-center gap-2 rounded-md border p-3">
+              <li key={ticket.id} className="flex flex-wrap items-center gap-2 rounded-element border border-border/60 p-3">
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                   {ticket.type}
                 </span>
@@ -164,7 +166,7 @@ export default async function OfficialThreadPage({
                 <span className="text-xs text-muted-foreground">({ticket.status}, {ticket.priority})</span>
                 <Link
                   href={`/admin/official/tickets/${ticket.id}`}
-                  className="ml-auto text-xs text-primary hover:underline"
+                  className="ml-auto rounded text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   Open
                 </Link>

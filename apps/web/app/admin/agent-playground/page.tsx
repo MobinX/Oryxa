@@ -6,7 +6,7 @@ import { PlaygroundClient } from '@/components/playground-client';
 import { operatorAccountEmail } from '@/lib/logs-session';
 import { Card } from '@/components/ui/card';
 import { AdminPageHeader } from '@/components/admin-page-header';
-import { FlaskConical, AlertTriangle } from 'lucide-react';
+import { FlaskConical, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 /**
  * Mirrors `ADMIN_SANDBOX_SLUG` in `packages/db/crud/business.ts`. Spelled out rather than
@@ -35,8 +35,8 @@ export default async function AdminAgentPlaygroundPage() {
     return (
       <div className="space-y-6">
         <AdminPageHeader icon={FlaskConical} title="Agent playground" />
-        <Card className="border-amber-500/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold">
+        <Card className="border-amber-500/40">
+          <p role="note" className="flex items-center gap-2 font-semibold">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             The sandbox store is not on this account
           </p>
@@ -52,9 +52,9 @@ export default async function AdminAgentPlaygroundPage() {
           </p>
           <Link
             href="/admin"
-            className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+            className="mt-3 inline-flex items-center gap-1.5 rounded text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
           >
-            ← Back to the platform dashboard
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to the platform dashboard
           </Link>
         </Card>
       </div>
@@ -63,7 +63,7 @@ export default async function AdminAgentPlaygroundPage() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-border/60 px-5 py-4 hover:shadow-card">
+      <Card className="border-border/60 px-5 py-4">
         <p className="text-sm font-semibold">
           Testing against <span className="font-mono text-primary">{SANDBOX_SLUG}</span>
         </p>

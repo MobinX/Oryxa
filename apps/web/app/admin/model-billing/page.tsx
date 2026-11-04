@@ -63,13 +63,13 @@ async function BillingContent({ searchParams }: { searchParams: Promise<RawParam
       />
 
       {one(params.saved) === '1' && (
-        <div className="flex items-start gap-2.5 rounded-card border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-700 dark:text-emerald-400">
+        <div role="status" className="flex items-start gap-2.5 rounded-card border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <p>Rates saved. Token analytics has been repriced with the new card.</p>
         </div>
       )}
       {one(params.error) && (
-        <div className="flex items-start gap-2.5 rounded-card border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+        <div role="alert" className="flex items-start gap-2.5 rounded-card border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             {one(params.error) === 'invalid'
@@ -86,7 +86,7 @@ async function BillingContent({ searchParams }: { searchParams: Promise<RawParam
         </div>
       ) : (
         <Card className="border-destructive/40 p-5 text-sm text-destructive">
-          {read.error ?? 'The rate card could not be read.'}
+          <p role="alert">{read.error ?? 'The rate card could not be read.'}</p>
         </Card>
       )}
     </div>

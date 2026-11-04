@@ -20,24 +20,69 @@ function apiKey(): string {
   return key;
 }
 
+function timeoutMs(): number {
+  const parsed = Number(process.env.MAIL_WORKER_TIMEOUT_MS);
+  if (!Number.isFinite(parsed)) return 30_000;
+  return Math.min(120_000, Math.max(5_000, Math.floor(parsed)));
+}
+
+function maxAttempts(): number {
+  const parsed = Number(process.env.MAIL_WORKER_MAX_ATTEMPTS);
+  if (!Number.isFinite(parsed)) return 3;
+  return Math.min(5, Math.max(1, Math.floor(parsed)));
+}
+
+function retryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || (status >= 502 && status <= 599);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logRetry(path: string, attempt: number, attempts: number, detail: string): void {
+  console.warn(JSON.stringify({ event: 'mail_worker_retry', path, attempt, attempts, detail }));
+}
+
 export async function mailWorkerResponse(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('x-api-key', apiKey());
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl()}${path}`, {
-      ...init,
-      headers,
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch (error) {
+  const attempts = maxAttempts();
+  const timeout = timeoutMs();
+  let lastError: unknown = null;
+  // Retries are safe here: the Worker only answers 5xx when the provider
+  // send failed (nothing was delivered) or the request never completed;
+  // 4xx validation failures are returned immediately without retry.
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl()}${path}`, {
+        ...init,
+        headers,
+        signal: AbortSignal.timeout(timeout),
+      });
+      if (!retryableStatus(response.status) || attempt === attempts) return response;
+      logRetry(path, attempt, attempts, `status ${response.status}`);
+      await response.arrayBuffer().catch(() => null);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      logRetry(
+        path,
+        attempt,
+        attempts,
+        error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      );
+    }
+    await sleep(Math.min(8_000, 250 * 2 ** (attempt - 1)));
+  }
+  if (lastError) {
     throw new MailWorkerError(
-      `Mail Worker unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      `Mail Worker unreachable: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
       502,
     );
   }
-  return response;
+  throw new MailWorkerError('Mail Worker is unavailable', 502);
 }
 
 export async function mailWorkerJson<T = Record<string, unknown>>(
@@ -85,6 +130,11 @@ export interface WorkerEmailRow {
   size_bytes: number;
   attachment_count: number;
   status: string;
+  spam_score?: number;
+  is_spam?: boolean;
+  spam_reason?: string | null;
+  failure_code?: string | null;
+  failure_message?: string | null;
   is_trashed: boolean;
   trashed_at: string | null;
   received_at: string | null;

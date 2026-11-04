@@ -24,6 +24,9 @@ export interface MailRow {
   size_bytes: number;
   attachment_count: number;
   status: string;
+  spam_score?: number;
+  is_spam?: boolean;
+  spam_reason?: string | null;
   is_trashed: boolean;
   received_at: string | null;
   created_at: string;

@@ -41,24 +41,31 @@ export default async function AdminFacebookPickerPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
-          <Facebook className="h-6 w-6 text-primary" />
-          Choose Pages
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Each chosen Page becomes an admin-only channel: no agent answers it, and merchants send
-          their notification codes to it as a message.
-        </p>
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card shadow-sm"
+        >
+          <Facebook className="h-5 w-5 text-muted-foreground" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight text-balance sm:text-2xl">Choose Pages</h1>
+          <p className="mt-1 max-w-2xl text-sm text-pretty text-muted-foreground sm:text-[15px]">
+            Each chosen Page becomes an admin-only channel: no agent answers it, and merchants send
+            their notification codes to it as a message.
+          </p>
+        </div>
       </div>
 
       {error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">
-          {error === 'no-selection' ? 'Choose at least one Page.' : `Facebook sign-in failed${detail ? `: ${detail}` : '.'}`}
+          <p role="alert">{error === 'no-selection' ? 'Choose at least one Page.' : `Facebook sign-in failed${detail ? `: ${detail}` : '.'}`}</p>
         </Card>
       )}
       {loadError && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
       )}
 
       {!loadError && (
@@ -67,8 +74,8 @@ export default async function AdminFacebookPickerPage({
             {pages.map((page) => (
               <li key={page.id}>
                 <label
-                  className={`flex items-center gap-3 rounded-card border border-border bg-card p-4 ${
-                    page.heldByStore ? 'opacity-60' : 'cursor-pointer hover:bg-muted/60'
+                  className={`flex items-center gap-3 rounded-card border border-border bg-card p-4 transition-colors ${
+                    page.heldByStore ? 'opacity-60' : 'cursor-pointer hover:bg-muted/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/50'
                   }`}
                 >
                   <input
@@ -77,7 +84,7 @@ export default async function AdminFacebookPickerPage({
                     value={page.id}
                     disabled={page.heldByStore}
                     defaultChecked={page.connected}
-                    className="h-4 w-4"
+                    className="h-4 w-4 shrink-0 rounded border-border accent-primary"
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{page.name}</span>

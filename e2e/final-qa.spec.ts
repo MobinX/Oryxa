@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './lightpanda-fixture';
+import { snapPage } from './snap';
 import { appendFileSync, writeFileSync } from 'fs';
 const BASE = process.env.BASE!;
 const REPORT = '/workspace/oryxa-shots/final-qa-report.md';
@@ -19,7 +20,7 @@ for (const [vp, size] of VPS) {
       const text = (await p.locator('body').innerText().catch(() => '')).trim();
       if (text.length < 50) errs.push('blank page');
       appendFileSync(REPORT, `| ${vp} | ${name} | ${status} | ${errs.join('; ') || 'ok'} |\n`);
-      await p.screenshot({ path: `/workspace/oryxa-shots/final-${vp}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home'}.png`, fullPage: false });
+      await snapPage(p, `/workspace/oryxa-shots/final-${vp}-${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home'}.png`);
       errs.length = 0;
     };
     const r = await p.goto(BASE + '/', { waitUntil: 'networkidle' });

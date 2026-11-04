@@ -39,24 +39,26 @@ export function DefaultAgentOverrides({ report }: { report: AgentOverrideReport 
         <h2 className="text-sm font-semibold">
           {report.following.toLocaleString()} stores follow the default
         </h2>
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+        <p className="mt-1 text-xs text-muted-foreground">
           Everything below answers with its own words instead. Those stores are not touched by edits on
           this page, and one click puts any of them back — its own text is kept in its row, not deleted.
         </p>
       </div>
 
       {report.overrides.length === 0 ? (
-        <p className="text-sm">Nobody. Every store on the platform is answering with the text above.</p>
+        <p className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-sm text-muted-foreground">
+          Nobody. Every store on the platform is answering with the text above.
+        </p>
       ) : (
         <ul className="space-y-2">
           {report.overrides.map((row) => (
             <li
               key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-muted/20 px-3 py-2"
             >
               <span className="min-w-0 break-words text-sm">
                 <span className="font-medium">{row.businessName}</span>
-                <span className="text-[var(--muted-foreground)]">
+                <span className="text-muted-foreground">
                   {' · '}
                   {row.agentName} · {row.systemPromptChars.toLocaleString()} chars ·{' '}
                   {row.pages} {row.pages === 1 ? 'page' : 'pages'}
@@ -78,8 +80,9 @@ export function DefaultAgentOverrides({ report }: { report: AgentOverrideReport 
 
       {notice ? (
         <p
+          role={notice.tone === 'ok' ? 'status' : 'alert'}
           className={
-            notice.tone === 'ok' ? 'text-xs text-[var(--success)]' : 'text-xs text-[var(--destructive)]'
+            notice.tone === 'ok' ? 'text-xs text-emerald-600 dark:text-emerald-400' : 'text-xs text-destructive'
           }
         >
           {notice.text}

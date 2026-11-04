@@ -29,12 +29,12 @@ export default async function OfficialTicketDetailPage({
       <div>
         <Link
           href="/admin/official/tickets"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-2 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <ArrowLeft className="h-4 w-4" /> Back to tickets
         </Link>
         <h1 className="mt-2 flex flex-wrap items-center gap-3 text-xl font-bold sm:text-2xl">
-          <LifeBuoy className="h-6 w-6 text-primary" />
+          <LifeBuoy className="h-6 w-6 shrink-0 text-muted-foreground" />
           {ticket.subject || '(no subject)'}
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
             {ticket.type}
@@ -53,7 +53,7 @@ export default async function OfficialTicketDetailPage({
       {ticket.conversationId && (
         <Link
           href={`/admin/official/inbox/${ticket.conversationId}`}
-          className="text-sm text-primary hover:underline"
+          className="rounded text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           Open the conversation this came from
         </Link>
@@ -65,7 +65,7 @@ export default async function OfficialTicketDetailPage({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1 block font-medium">Status</span>
-              <select name="status" defaultValue={ticket.status} className="w-full rounded-md border bg-card px-3 py-2 text-sm">
+              <select name="status" defaultValue={ticket.status} className="h-10 w-full rounded-element border border-border bg-card px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
                 {['open', 'in_progress', 'waiting', 'resolved', 'closed'].map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -73,7 +73,7 @@ export default async function OfficialTicketDetailPage({
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium">Priority</span>
-              <select name="priority" defaultValue={ticket.priority} className="w-full rounded-md border bg-card px-3 py-2 text-sm">
+              <select name="priority" defaultValue={ticket.priority} className="h-10 w-full rounded-element border border-border bg-card px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
                 {['low', 'normal', 'high', 'urgent'].map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}

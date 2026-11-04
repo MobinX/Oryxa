@@ -34,7 +34,7 @@ export function MailSubmitButton({
       type="submit"
       disabled={blocked}
       aria-busy={blocked}
-      className={`inline-flex items-center justify-center bg-primary font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${sizeClass}`}
+      className={`inline-flex shrink-0 items-center justify-center bg-primary font-semibold text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${sizeClass}`}
     >
       {blocked ? (
         <Loader2 className={`${iconClass} animate-spin`} aria-hidden />

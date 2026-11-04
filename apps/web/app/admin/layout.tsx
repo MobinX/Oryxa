@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { LogOut } from 'lucide-react';
+import { LogOut, ShieldAlert } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { SignOutForm } from '@/components/sign-out-button';
@@ -40,7 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-background text-foreground transition-colors duration-200">
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-card/85 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-card/95 backdrop-blur-sm">
         <div className="relative mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <Link
@@ -75,18 +75,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           neighbour, so the two can never paint over each other again. */}
       <div className="mx-auto flex w-full max-w-7xl flex-col px-0 lg:flex-row lg:items-start">
         <AdminSidebar signedIn={signedIn} allowedCapabilities={allowedCapabilities} />
-        <main className="min-w-0 flex-1 px-4 pb-10 pt-2 sm:px-6 sm:pt-6">
+        <main className="min-w-0 flex-1 px-4 pb-10 pt-4 sm:px-6 sm:pt-6 lg:pt-8">
           {allowed ? (
             children
           ) : (
-            <div className="mx-auto mt-12 max-w-md rounded-2xl border border-border/70 bg-card p-6 text-center shadow-sm">
-              <h1 className="text-lg font-semibold">Access not permitted</h1>
+            <div
+              role="alert"
+              className="mx-auto mt-12 max-w-md rounded-2xl border border-border/70 bg-card p-6 text-center shadow-sm"
+            >
+              <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+              </span>
+              <h1 className="mt-3 text-lg font-semibold">Access not permitted</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Your console role does not include this section. Ask the superuser to grant it.
               </p>
               <Link
                 href={firstAllowedAdminHref(user)}
-                className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 Go to an allowed page
               </Link>

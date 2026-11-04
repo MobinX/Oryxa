@@ -2,8 +2,9 @@ import { Hono, type Context } from "hono";
 import type { AttachmentInput, EmailRow, Env, MailboxRow, MailboxStorage, StoredAddress } from "./types";
 import { ApiError, assert, errorPayload } from "./lib/errors";
 import { getObject, presignGet } from "./lib/b2";
-import { sendWithBrevo } from "./lib/brevo";
-import { activeSendProvider, sendWithSenderNet } from "./lib/sender";
+import { activeSendProvider } from "./lib/sender";
+import { providerFallbackOrder } from "./lib/send-policy";
+import { spamThresholdFromEnv } from "./lib/spam";
 import { sendStoredOutbound } from "./lib/outbound";
 import {
   allMailboxStorage,
@@ -13,9 +14,6 @@ import {
   getMailboxByAddress,
   hardDeleteEmails,
   mailboxStorage,
-  markEmailFailed,
-  markEmailSent,
-  persistEmail,
   readEmailDocument,
   restoreEmails,
   serializeEmailRow,
@@ -465,6 +463,9 @@ app.get("/health", async (c) => {
       sender_configured: Boolean((c.env.SENDER_API_KEY || "").trim()),
       brevo_configured: Boolean((c.env.BREVO_API_KEY || "").trim()),
       send_provider: activeSendProvider(c.env),
+      send_provider_order: providerFallbackOrder(c.env),
+      spam_threshold: spamThresholdFromEnv(c.env.SPAM_THRESHOLD),
+      from_domain_restricted: Boolean((c.env.ALLOWED_FROM_DOMAINS || "").trim()),
       time: new Date().toISOString(),
     },
     ready ? 200 : 503,
@@ -554,6 +555,13 @@ app.get("/api/mailboxes/:id/emails", async (c) => {
       "direction must be inbound or outbound",
     );
   }
+  const spam = (c.req.query("spam") || "all").toLowerCase();
+  assert(
+    ["true", "false", "all"].includes(spam),
+    400,
+    "invalid_query",
+    "spam must be true, false or all",
+  );
   const limit = intQuery(c.req.query("limit"), 50, 1, 100);
   const offset = intQuery(c.req.query("offset"), 0, 0, 1_000_000);
   const query = (c.req.query("q") || "").trim().slice(0, 200);
@@ -570,6 +578,12 @@ app.get("/api/mailboxes/:id/emails", async (c) => {
     conditions.push("direction = ?");
     bindings.push(direction);
   }
+  let spamBindingIndex = -1;
+  if (spam !== "all") {
+    conditions.push("is_spam = ?");
+    spamBindingIndex = bindings.length;
+    bindings.push(spam === "true" ? 1 : 0);
+  }
   if (query) {
     conditions.push("(subject LIKE ? ESCAPE '\\' OR from_email LIKE ? ESCAPE '\\')");
     const escaped = query.replace(/[\\%_]/g, (character) => `\\${character}`);
@@ -582,24 +596,47 @@ app.get("/api/mailboxes/:id/emails", async (c) => {
   }
 
   const where = conditions.join(" AND ");
-  const [total, rows] = await Promise.all([
-    c.env.DB.prepare(`SELECT COUNT(*) AS count FROM emails WHERE ${where}`)
-      .bind(...bindings)
-      .first<{ count: number }>(),
-    c.env.DB.prepare(
-      `SELECT * FROM emails WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
-    )
-      .bind(...bindings, limit, offset)
-      .all<EmailRow>(),
-  ]);
+  async function runList(conditionSql: string, conditionBindings: Array<string | number>) {
+    const [total, rows] = await Promise.all([
+      c.env.DB.prepare(`SELECT COUNT(*) AS count FROM emails WHERE ${conditionSql}`)
+        .bind(...conditionBindings)
+        .first<{ count: number }>(),
+      c.env.DB.prepare(
+        `SELECT * FROM emails WHERE ${conditionSql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+      )
+        .bind(...conditionBindings, limit, offset)
+        .all<EmailRow>(),
+    ]);
+    return { total: Number(total?.count || 0), rows: rows.results };
+  }
 
-  return ok({
-    mailbox: serializeMailbox(mailbox),
-    emails: rows.results.map(serializeEmailRow),
-    total: Number(total?.count || 0),
-    limit,
-    offset,
-  });
+  try {
+    const result = await runList(where, bindings);
+    return ok({
+      mailbox: serializeMailbox(mailbox),
+      emails: result.rows.map(serializeEmailRow),
+      total: result.total,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    // Pre-migration databases (0001 only) lack is_spam. Retry unfiltered so
+    // the list keeps working, and say so in the response.
+    if (spam !== "all" && error instanceof Error && /no such column/i.test(error.message)) {
+      const fallbackConditions = conditions.filter((condition) => condition !== "is_spam = ?");
+      const fallbackBindings = bindings.filter((_, index) => index !== spamBindingIndex);
+      const result = await runList(fallbackConditions.join(" AND "), fallbackBindings);
+      return ok({
+        mailbox: serializeMailbox(mailbox),
+        emails: result.rows.map(serializeEmailRow),
+        total: result.total,
+        limit,
+        offset,
+        spam_unavailable: true,
+      });
+    }
+    throw error;
+  }
 });
 
 app.post("/api/emails/send", async (c) => {
@@ -617,31 +654,23 @@ app.post("/api/emails/send", async (c) => {
     email: env.DEFAULT_FROM_EMAIL,
     name: env.DEFAULT_FROM_NAME || "",
   };
+  if (!isEmail(from.email)) {
+    return fail(400, "invalid_address", "from must be a valid email address");
+  }
   const to = parseAddressList(body.to, "to", true, 50);
   const cc = parseAddressList(body.cc, "cc", false, 50);
   const bcc = parseAddressList(body.bcc, "bcc", false, 50);
   const replyTo =
     parseAddressList(body.reply_to ?? body.replyTo, "reply_to", false, 1)[0] || null;
 
-  const provider = activeSendProvider(env);
-  if (!provider) {
+  // Provider capability checks (recipient limits, from-domain allowlist) live
+  // in sendStoredOutbound so send/reply/forward share one policy.
+  if (providerFallbackOrder(env).length === 0) {
     return fail(
       503,
       "provider_not_configured",
       "Neither SENDER_API_KEY nor BREVO_API_KEY is configured on this Worker",
     );
-  }
-  if (provider === "sender.net") {
-    if (to.length !== 1) {
-      return fail(
-        400,
-        "recipient_limit",
-        "Sender.net sending supports exactly one recipient per request",
-      );
-    }
-    if (cc.length || bcc.length) {
-      return fail(400, "unsupported_field", "Sender.net sending does not support cc/bcc");
-    }
   }
 
   let mailbox: MailboxRow;
@@ -697,23 +726,18 @@ app.post("/api/emails/send", async (c) => {
     base64Attachments.length,
   );
   const attachments = [...base64Attachments, ...uploadedAttachments];
-  const now = new Date().toISOString();
   const tags = Array.isArray(body.tags)
     ? body.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 20)
     : [];
 
-  const { row, document } = await persistEmail(env, {
+  const result = await sendStoredOutbound(env, {
     mailboxId: mailbox.id,
-    direction: "outbound",
-    messageId: null,
     from,
     to,
     cc,
     bcc,
-    replyTo: replyTo ? [replyTo] : [],
+    replyTo,
     subject,
-    date: now,
-    receivedAt: now,
     text,
     html,
     attachments: attachments.map((attachment) => ({
@@ -724,66 +748,15 @@ app.post("/api/emails/send", async (c) => {
       contentId: null,
       content: attachment.bytes,
     })),
-    provider,
-    status: "sending",
+    tags,
   });
-
-  let result: { messageId: string };
-  try {
-    if (provider === "sender.net") {
-      const senderAttachments = await Promise.all(
-        document.attachments.map(async (attachment) => ({
-          filename: attachment.filename,
-          url: await presignGet(env, attachment.b2Key, 86400),
-        })),
-      );
-      result = await sendWithSenderNet(env, {
-        from,
-        to: to[0],
-        subject,
-        html,
-        text,
-        attachments: senderAttachments,
-      });
-    } else {
-      result = await sendWithBrevo(env, {
-        from,
-        to,
-        cc,
-        bcc,
-        replyTo,
-        subject,
-        html,
-        text,
-        attachments: attachments.map((attachment) => ({
-          filename: attachment.filename,
-          contentBase64: attachment.base64,
-        })),
-        tags,
-      });
-    }
-  } catch (error) {
-    const cleanup = await hardDeleteEmails(env, [row.id]).catch(() => null);
-    if (!cleanup || cleanup.deleted === 0) {
-      await markEmailFailed(env, row.id).catch(() => {});
-    }
-    throw error;
-  }
-
-  let updated: EmailRow | null = null;
-  let warning: string | undefined;
-  try {
-    updated = await markEmailSent(env, row.id, result.messageId);
-  } catch {
-    warning = "Email was sent, but the metadata status update failed";
-  }
 
   return ok(
     {
-      email: serializeEmailRow(updated || row),
-      provider,
-      provider_message_id: result.messageId,
-      ...(warning ? { warning } : {}),
+      email: serializeEmailRow(result.row),
+      provider: result.provider,
+      provider_message_id: result.providerMessageId,
+      ...(result.statusWarning ? { warning: result.statusWarning } : {}),
     },
     201,
   );

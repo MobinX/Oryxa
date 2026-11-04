@@ -12,21 +12,24 @@ export function AdminMonthPills({ hrefBase, month }: { hrefBase: string; month: 
   const pills = months.includes(month) ? months : [month, ...months.slice(0, 3)];
 
   return (
-    <div className="flex items-center rounded-full border border-border/40 bg-muted/40 p-1">
+    <nav
+      aria-label="Month"
+      className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full border border-border/40 bg-muted/40 p-1"
+    >
       {pills.map((key) => (
         <Link
           key={key}
           href={`${hrefBase}?month=${key}`}
           aria-current={key === month ? 'page' : undefined}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+          className={`rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:text-sm ${
             key === month
               ? 'bg-card text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              : 'text-muted-foreground hover:bg-card/60 hover:text-foreground'
           }`}
         >
           {key === months[0] ? 'This month' : monthLabel(key)}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }

@@ -44,7 +44,7 @@ export default async function DefaultAgentPage() {
 
       {!agent ? (
         <Card className="border-amber-500/40">
-          <p className="text-sm text-muted-foreground">
+          <p role="alert" className="text-sm text-muted-foreground">
             The API would not answer, so nothing here is what your stores are replying with. Try again in a
             moment.
           </p>

@@ -8,7 +8,7 @@ describe('mail folders (apps/web/lib/mail-query.ts)', () => {
   });
 
   it('falls back to inbox for unknown folders', () => {
-    expect(readFolder('spam')).toBe('inbox');
+    expect(readFolder('junk')).toBe('inbox');
     expect(readFolder(undefined)).toBe('inbox');
   });
 
@@ -16,6 +16,11 @@ describe('mail folders (apps/web/lib/mail-query.ts)', () => {
     expect(readFolder('inbox')).toBe('inbox');
     expect(readFolder('sent')).toBe('sent');
     expect(readFolder('all')).toBe('all');
+  });
+
+  it('reads the spam folder param', () => {
+    expect(readFolder('spam')).toBe('spam');
+    expect(mailHref({ folder: 'spam' })).toBe('/mails?folder=spam');
   });
 
   it('builds trash hrefs like other folders', () => {

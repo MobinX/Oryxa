@@ -1,11 +1,12 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './lightpanda-fixture';
+import { snapPage } from './snap';
 
 const EMAIL = process.env.ONLYORDERS_TEST_EMAIL;
 const PASSWORD = process.env.ONLYORDERS_TEST_PASSWORD;
 const SHOTS = process.env.E2E_SHOTS_DIR || '/workspace/oryxa-shots';
 
 async function shot(page: Page, name: string) {
-  await page.screenshot({ path: `${SHOTS}/${test.info().project.name}-${name}.png`, fullPage: false });
+  await snapPage(page, `${SHOTS}/${test.info().project.name}-${name}.png`);
 }
 
 test.describe('public pages', () => {

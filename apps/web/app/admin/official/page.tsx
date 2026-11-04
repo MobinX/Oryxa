@@ -62,34 +62,48 @@ export default async function OfficialChannelsPage({
 
       {params.error && (
         <Card className="border-destructive/40 p-4 text-sm text-destructive">
-          {params.error === 'no-credentials'
-            ? 'A WhatsApp number needs both the token and the phone number id.'
-            : params.error === 'wa-verify'
-              ? `Meta refused the token${params.detail ? `: ${params.detail}` : ''}`
-              : params.error === 'saved'
-                ? ''
-                : `Failed${params.detail ? `: ${params.detail}` : ''}`}
+          <p role="alert">
+            {params.error === 'no-credentials'
+              ? 'A WhatsApp number needs both the token and the phone number id.'
+              : params.error === 'wa-verify'
+                ? `Meta refused the token${params.detail ? `: ${params.detail}` : ''}`
+                : params.error === 'saved'
+                  ? ''
+                  : `Failed${params.detail ? `: ${params.detail}` : ''}`}
+          </p>
         </Card>
       )}
       {params.saved && (
-        <Card className="border-primary/30 p-4 text-sm">Settings saved.</Card>
+        <Card className="border-primary/30 p-4 text-sm">
+          <p role="status">Settings saved.</p>
+        </Card>
       )}
       {params.disconnected && (
-        <Card className="border-primary/30 p-4 text-sm">Channel disconnected.</Card>
+        <Card className="border-primary/30 p-4 text-sm">
+          <p role="status">Channel disconnected.</p>
+        </Card>
       )}
       {params.verified === '1' && (
-        <Card className="border-primary/30 p-4 text-sm">The platform confirmed this token: connected.</Card>
+        <Card className="border-primary/30 p-4 text-sm">
+          <p role="status">The platform confirmed this token: connected.</p>
+        </Card>
       )}
       {params.verified === '0' && (
-        <Card className="border-amber-500/40 p-4 text-sm text-amber-600">
-          The health check failed{params.detail ? `: ${params.detail}` : ''}. Reconnect to refresh the token.
+        <Card className="border-amber-500/40 p-4 text-sm text-amber-700 dark:text-amber-400">
+          <p role="alert">
+            The health check failed{params.detail ? `: ${params.detail}` : ''}. Reconnect to refresh the token.
+          </p>
         </Card>
       )}
       {params.connected === 'whatsapp' && (
-        <Card className="border-primary/30 p-4 text-sm">WhatsApp number connected to Official channels.</Card>
+        <Card className="border-primary/30 p-4 text-sm">
+          <p role="status">WhatsApp number connected to Official channels.</p>
+        </Card>
       )}
       {loadError && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
       )}
       {migrationPending && <OfficialMigrationCard />}
 
@@ -115,10 +129,10 @@ export default async function OfficialChannelsPage({
                           })}
                         </p>
                         <p className="mt-2 flex gap-3 text-xs">
-                          <Link href="/admin/official/inbox" className="text-primary hover:underline">
+                          <Link href="/admin/official/inbox" className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50">
                             Inbox
                           </Link>
-                          <Link href="/admin/official/tickets" className="text-primary hover:underline">
+                          <Link href="/admin/official/tickets" className="rounded font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50">
                             Tickets
                           </Link>
                         </p>
@@ -149,7 +163,10 @@ export default async function OfficialChannelsPage({
 
           {channels.length === 0 && (
             <Card className="py-10 text-center">
-              <p className="font-semibold">No official channel yet</p>
+              <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <Globe className="h-5 w-5 text-muted-foreground" />
+              </span>
+              <p className="mt-3 font-semibold">No official channel yet</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                 Connect a Facebook Page the console already holds, or a WhatsApp number below.
                 Customer DMs then arrive in the official inbox instead of any store.
@@ -184,7 +201,7 @@ export default async function OfficialChannelsPage({
                     <select
                       name="availability"
                       defaultValue={settings.availability}
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="h-10 w-full rounded-element border border-border bg-card px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     >
                       <option value="available">Available for new clients</option>
                       <option value="taking_onboarding_requests">
@@ -203,11 +220,11 @@ export default async function OfficialChannelsPage({
                   </label>
                   <div className="flex flex-col gap-2 pt-5 text-sm">
                     <label className="flex items-center gap-2">
-                      <input type="checkbox" name="aiEnabled" defaultChecked={settings.aiEnabled} />
+                      <input type="checkbox" name="aiEnabled" defaultChecked={settings.aiEnabled} className="h-4 w-4 rounded border-border accent-primary" />
                       AI enabled
                     </label>
                     <label className="flex items-center gap-2">
-                      <input type="checkbox" name="autoReply" defaultChecked={settings.autoReply} />
+                      <input type="checkbox" name="autoReply" defaultChecked={settings.autoReply} className="h-4 w-4 rounded border-border accent-primary" />
                       Auto-reply on new messages
                     </label>
                   </div>

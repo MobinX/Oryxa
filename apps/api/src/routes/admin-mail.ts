@@ -150,6 +150,7 @@ adminMailRouter.get('/admin/mail/emails', async (c) => {
   if (!mailbox) return c.json({ error: 'Unauthorized' }, 401);
   const direction = c.req.query('direction');
   const trashed = c.req.query('trashed') || 'false';
+  const spam = c.req.query('spam') || 'all';
   const q = (c.req.query('q') || '').trim();
   const limit = Math.min(Math.max(Number(c.req.query('limit') || 40), 1), 100);
   const offset = Math.max(Number(c.req.query('offset') || 0), 0);
@@ -159,9 +160,13 @@ adminMailRouter.get('/admin/mail/emails', async (c) => {
   if (!['true', 'false', 'all'].includes(trashed)) {
     return c.json({ error: 'trashed must be true, false or all' }, 400);
   }
+  if (!['true', 'false', 'all'].includes(spam)) {
+    return c.json({ error: 'spam must be true, false or all' }, 400);
+  }
   const result = await listMailboxEmails(mailbox.id, {
     direction,
     trashed,
+    spam: spam === 'all' ? undefined : spam,
     q: q || undefined,
     limit,
     offset,
