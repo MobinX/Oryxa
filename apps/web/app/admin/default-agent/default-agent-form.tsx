@@ -52,14 +52,16 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
 
   return (
     <form action={save} className="space-y-6">
-      <Card className="space-y-2">
-        <label className="block text-sm font-medium" htmlFor="systemPrompt">
-          System prompt
-        </label>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Who the agent is, and the rules it works by. Required — a store with its own prompt keeps that
-          instead, and this box stops speaking for it.
-        </p>
+      <Card className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium" htmlFor="systemPrompt">
+            System prompt
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Who the agent is, and the rules it works by. Required — a store with its own prompt keeps that
+            instead, and this box stops speaking for it.
+          </p>
+        </div>
         <Textarea
           id="systemPrompt"
           name="systemPrompt"
@@ -68,16 +70,18 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
           defaultValue={agent.systemPrompt}
           className="font-mono text-xs leading-relaxed"
         />
-        <p className="text-[11px] text-[var(--muted-foreground)]">
+        <p className="text-[11px] text-muted-foreground">
           {agent.systemPrompt.length.toLocaleString()} characters, limit {PROMPT_LIMIT.toLocaleString()}.
         </p>
       </Card>
 
-      <Card className="space-y-2">
-        <label className="block text-sm font-medium" htmlFor="replyGuidance">
-          Messenger wording
-        </label>
-        <p className="text-xs text-[var(--muted-foreground)]">{wordingState(agent.replyGuidance, agent.guidanceDefaults?.replyGuidance, companyName)}</p>
+      <Card className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium" htmlFor="replyGuidance">
+            Messenger wording
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">{wordingState(agent.replyGuidance, agent.guidanceDefaults?.replyGuidance, companyName)}</p>
+        </div>
         <Textarea
           id="replyGuidance"
           name="replyGuidance"
@@ -89,14 +93,16 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
         />
       </Card>
 
-      <Card className="space-y-2">
-        <label className="block text-sm font-medium" htmlFor="commentReplyGuidance">
-          Public comment wording
-        </label>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          The block a comment reply answers with, including which things go to Messenger instead of the
-          thread. {wordingState(agent.commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance, companyName)}
-        </p>
+      <Card className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium" htmlFor="commentReplyGuidance">
+            Public comment wording
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The block a comment reply answers with, including which things go to Messenger instead of the
+            thread. {wordingState(agent.commentReplyGuidance, agent.guidanceDefaults?.commentReplyGuidance, companyName)}
+          </p>
+        </div>
         <Textarea
           id="commentReplyGuidance"
           name="commentReplyGuidance"
@@ -114,10 +120,11 @@ export function DefaultAgentForm({ agent }: { agent: PlatformAgent }) {
         </Button>
         {notice ? (
           <p
+            role={notice.tone === 'ok' ? 'status' : 'alert'}
             className={
               notice.tone === 'ok'
-                ? 'text-sm text-[var(--success)]'
-                : 'text-sm text-[var(--destructive)]'
+                ? 'text-sm text-emerald-600 dark:text-emerald-400'
+                : 'text-sm text-destructive'
             }
           >
             {notice.text}

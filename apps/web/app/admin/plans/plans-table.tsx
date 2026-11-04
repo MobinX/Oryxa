@@ -276,6 +276,7 @@ export function PlanCard({ plan }: { plan: AdminPlanRow }) {
       )}
       {message && (
         <p
+          role={message.kind === 'ok' ? 'status' : 'alert'}
           className={`mt-3 text-xs ${
             message.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
           }`}
@@ -284,7 +285,7 @@ export function PlanCard({ plan }: { plan: AdminPlanRow }) {
         </p>
       )}
       {conflict && (
-        <div className="mt-3 rounded-element border border-destructive/40 bg-destructive/5 p-3 text-xs">
+        <div role="alert" className="mt-3 rounded-element border border-destructive/40 bg-destructive/5 p-3 text-xs">
           <p className="font-semibold text-destructive">{conflict.error}</p>
           <ul className="mt-1 list-inside list-disc text-muted-foreground">
             {conflict.businesses.slice(0, 5).map((business) => (
@@ -623,6 +624,7 @@ function BusinessCapsEditor({ row }: { row: AdminBusinessPlan }) {
       </div>
       {feedback && (
         <p
+          role={feedback.ok ? 'status' : 'alert'}
           className={`mt-1 text-[10px] ${
             feedback.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
           }`}
@@ -693,6 +695,7 @@ export function BusinessPlansTable({
 
       {feedback && (
         <p
+          role={feedback.kind === 'ok' ? 'status' : 'alert'}
           className={`mt-3 flex items-center gap-2 text-sm ${
             feedback.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
           }`}
@@ -754,7 +757,7 @@ export function BusinessPlansTable({
                   onChange={(event) =>
                     assign(row.businessId, row.businessName, event.target.value || null)
                   }
-                  className="mt-1.5 h-12 w-full rounded-element border border-border bg-background px-3 text-base disabled:opacity-60"
+                  className="mt-1.5 h-12 w-full rounded-element border border-border bg-background px-3 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
                 >
                   <option value="">Unlimited (no plan)</option>
                   {plans.map((option) => (
@@ -782,44 +785,44 @@ export function BusinessPlansTable({
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border/50">
-              <th className="pb-2 pr-3 font-semibold">Business</th>
-              <th className="pb-2 pr-3 font-semibold">Plan</th>
-              <th className="pb-2 pr-3 font-semibold">Cycle</th>
-              <th className="pb-2 pr-3 font-semibold">Messenger</th>
-              <th className="pb-2 pr-3 font-semibold">Comments</th>
-              <th className="pb-2 pr-3 font-semibold">Custom caps</th>
-              <th className="pb-2 font-semibold">Actions</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Business</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Plan</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Cycle</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Messenger</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Comments</th>
+              <th scope="col" className="pb-2 pr-3 font-semibold">Custom caps</th>
+              <th scope="col" className="pb-2 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.businessId} className="border-b border-border/50">
-                <td className="py-2.5 pr-3">
+              <tr key={row.businessId} className="border-b border-border/50 transition-colors last:border-0 hover:bg-muted/40">
+                <td className="py-2.5 pr-3 align-middle">
                   <p className="font-medium">{row.businessName}</p>
                   <p className="font-mono text-xs text-muted-foreground">
                     {row.businessId.slice(0, 8)}
                   </p>
                 </td>
-                <td className="py-2.5 pr-3">
+                <td className="py-2.5 pr-3 align-middle">
                   {row.planName ?? <span className="text-muted-foreground">no plan</span>}
                 </td>
-                <td className="py-2.5 pr-3 text-xs text-muted-foreground">{row.period}</td>
-                <td className="py-2.5 pr-3 tabular-nums">
+                <td className="py-2.5 pr-3 align-middle text-xs whitespace-nowrap text-muted-foreground">{row.period}</td>
+                <td className="py-2.5 pr-3 align-middle tabular-nums whitespace-nowrap">
                   {row.messagesUsed.toLocaleString()} / {limitLabel(row.messageLimit)}
                   {row.messageLimitOverride !== null && (
                     <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
                   )}
                 </td>
-                <td className="py-2.5 pr-3 tabular-nums">
+                <td className="py-2.5 pr-3 align-middle tabular-nums whitespace-nowrap">
                   {row.commentsUsed.toLocaleString()} / {limitLabel(row.commentLimit)}
                   {row.commentLimitOverride !== null && (
                     <span className="ml-1 text-[10px] font-semibold text-primary">custom</span>
                   )}
                 </td>
-                <td className="py-2.5 pr-3">
+                <td className="py-2.5 pr-3 align-middle">
                   <BusinessCapsEditor row={row} />
                 </td>
-                <td className="py-2.5">
+                <td className="py-2.5 align-middle">
                   <div className="flex items-center gap-1.5">
                     <select
                       defaultValue={row.planId ?? ''}
@@ -827,7 +830,7 @@ export function BusinessPlansTable({
                       onChange={(event) =>
                         assign(row.businessId, row.businessName, event.target.value || null)
                       }
-                      className="h-9 max-w-36 rounded-md border border-border bg-background px-2 text-xs disabled:opacity-60"
+                      className="h-9 max-w-36 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
                     >
                       <option value="">Unlimited (no plan)</option>
                       {plans.map((option) => (
@@ -883,8 +886,9 @@ export function PlansConsole({
           </div>
         </div>
         {plans.length === 0 ? (
-          <Card className="border-dashed p-6 text-center text-sm text-muted-foreground">
-            No plans yet. Add the first tier below.
+          <Card className="border-dashed p-6 text-center">
+            <p className="text-sm font-semibold">No plans yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">Add the first tier below.</p>
           </Card>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">

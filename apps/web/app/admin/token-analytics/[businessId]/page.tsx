@@ -80,10 +80,10 @@ async function DetailContent({
   if (read.missing) {
     return (
       <div className="space-y-6">
-        <Link href={back} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={back} className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50">
           <ArrowLeft className="h-4 w-4" /> All businesses
         </Link>
-        <Card className="hover:shadow-card">
+        <Card>
           <p className="font-semibold">No live store with that id</p>
           <p className="mt-1 text-sm text-muted-foreground">
             It was deleted, or the address was typed. Usage rows are kept for a deleted store, but
@@ -97,11 +97,11 @@ async function DetailContent({
   if (read.error || !read.value) {
     return (
       <div className="space-y-6">
-        <Link href={back} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={back} className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50">
           <ArrowLeft className="h-4 w-4" /> All businesses
         </Link>
-        <Card className="border-destructive/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Card className="border-destructive/40">
+          <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             The usage did not load
           </p>
@@ -124,7 +124,7 @@ async function DetailContent({
     <div className="space-y-6">
       <Link
         href={back}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <ArrowLeft className="h-4 w-4" /> All businesses
       </Link>
@@ -187,7 +187,7 @@ async function DetailContent({
         />
       </section>
 
-      <Card className="px-0 py-0 hover:shadow-card">
+      <Card className="px-0 py-0">
         <div className="border-b border-border/40 px-6 py-3">
           <h2 className="text-base font-semibold">Which pipeline spent it</h2>
           <p className="text-xs text-muted-foreground">
@@ -195,43 +195,49 @@ async function DetailContent({
           </p>
         </div>
         {usage.byIntegration.length === 0 ? (
-          <p className="px-6 py-10 text-center text-muted-foreground">
-            Nothing ran for this store in {monthLabel(month)}.
-          </p>
+          <div className="px-6 py-10 text-center">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+              <Bot className="h-5 w-5 text-muted-foreground" />
+            </span>
+            <p className="mt-3 text-sm font-semibold">Nothing ran here</p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+              Nothing ran for this store in {monthLabel(month)}.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-border/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-6 py-2.5 font-medium">Integration</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Runs</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Tokens</th>
-                  <th className="px-3 py-2.5 text-right font-medium">In / Out</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Avg / run</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Cache hit</th>
-                  <th className="px-6 py-2.5 text-right font-medium">Cost</th>
+                  <th scope="col" className="px-6 py-2.5 font-medium">Integration</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Runs</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Tokens</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">In / Out</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Avg / run</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Cache hit</th>
+                  <th scope="col" className="px-6 py-2.5 text-right font-medium">Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {usage.byIntegration.map((row) => (
                   <tr key={row.integrationType} className="transition-colors hover:bg-muted/40">
-                    <td className="px-6 py-3 font-medium">
+                    <td className="px-6 py-3 font-medium align-middle">
                       {INTEGRATION_LABELS[row.integrationType] ?? row.integrationType}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">{whole(row.runCount)}</td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">{whole(row.runCount)}</td>
+                    <td className="px-3 py-3 text-right align-middle font-medium tabular-nums whitespace-nowrap">
                       {whole(row.totalTokens)}
                     </td>
-                    <td className="px-3 py-3 text-right text-xs tabular-nums text-muted-foreground">
+                    <td className="px-3 py-3 text-right align-middle text-xs tabular-nums whitespace-nowrap text-muted-foreground">
                       {whole(row.inputTokens)} / {whole(row.outputTokens)}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">
                       {whole(Math.round(row.avgTokensPerRun))}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">
                       {row.cacheHitPercent.toFixed(1)}%
                     </td>
-                    <td className="px-6 py-3 text-right font-medium tabular-nums">
+                    <td className="px-6 py-3 text-right align-middle font-medium tabular-nums whitespace-nowrap">
                       {tokenMoney(row.estimatedCostUsd)}
                     </td>
                   </tr>
@@ -242,7 +248,7 @@ async function DetailContent({
         )}
       </Card>
 
-      <Card className="px-0 py-0 hover:shadow-card">
+      <Card className="px-0 py-0">
         <div className="border-b border-border/40 px-6 py-3">
           <h2 className="text-base font-semibold">Day by day</h2>
           <p className="text-xs text-muted-foreground">
@@ -250,7 +256,10 @@ async function DetailContent({
           </p>
         </div>
         {usage.daily.length === 0 ? (
-          <p className="px-6 py-10 text-center text-muted-foreground">No usage to break down.</p>
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm font-semibold">No daily breakdown</p>
+            <p className="mt-1 text-sm text-muted-foreground">No usage to break down.</p>
+          </div>
         ) : (
           <ul className="divide-y divide-border/40">
             {usage.daily.map((day) => (
@@ -300,12 +309,12 @@ function Kpi({
   icon: LucideIcon;
 }) {
   return (
-    <Card className="hover:shadow-card">
+    <Card>
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-primary/10 text-primary">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-muted text-muted-foreground">
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -317,8 +326,8 @@ function Kpi({
 
 function DetailSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="h-8 w-56 animate-pulse rounded bg-muted" />
+    <div role="status" aria-label="Loading store usage" className="space-y-6">
+      <div className="h-8 w-56 max-w-full animate-pulse rounded bg-muted" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 8 }, (_, index) => (
           <div key={index} className="h-28 animate-pulse rounded-element bg-muted" />

@@ -58,7 +58,7 @@ export default async function OfficialTicketsPage({
               <select
                 name="status"
                 defaultValue={status}
-                className="h-10 rounded-md border bg-card px-3 text-sm"
+                className="h-10 rounded-element border border-border bg-card px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
                 {['all', 'open', 'in_progress', 'waiting', 'resolved', 'closed'].map((value) => (
                   <option key={value} value={value}>
@@ -75,16 +75,26 @@ export default async function OfficialTicketsPage({
       />
 
       {params.error && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{params.error}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{params.error}</p>
+        </Card>
       )}
       {loadError && (
-        <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
       )}
       {migrationPending && <OfficialMigrationCard />}
 
       {!loadError && !migrationPending && tickets.length === 0 && (
         <Card className="py-12 text-center">
-          <p className="font-semibold">No tickets{status === 'all' ? '' : ` in ${STATUS_LABEL[status] ?? status}`} right now</p>
+          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+            <LifeBuoy className="h-5 w-5 text-muted-foreground" />
+          </span>
+          <p className="mt-3 font-semibold">No tickets{status === 'all' ? '' : ` in ${STATUS_LABEL[status] ?? status}`} right now</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+            When the official AI logs a problem while talking to someone, it lands here.
+          </p>
         </Card>
       )}
 
@@ -95,13 +105,14 @@ export default async function OfficialTicketsPage({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                    ticket.type === 'security' ? 'text-red-600' : 'text-primary'
+                    ticket.type === 'security'
+                      ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+                      : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
                   }`}
-                  style={{ backgroundColor: ticket.type === 'security' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)' }}
                 >
                   {ticket.type}
                 </span>
-                <Link href={`/admin/official/tickets/${ticket.id}`} className="font-semibold hover:underline">
+                <Link href={`/admin/official/tickets/${ticket.id}`} className="rounded font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50">
                   {ticket.subject || '(no subject)'}
                 </Link>
                 <span className="text-xs text-muted-foreground">
@@ -110,8 +121,8 @@ export default async function OfficialTicketsPage({
                 <span
                   className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     ticket.status === 'resolved' || ticket.status === 'closed'
-                      ? 'bg-emerald-500/15 text-emerald-600'
-                      : 'bg-amber-500/15 text-amber-600'
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
                   }`}
                 >
                   {ticket.status}
@@ -119,9 +130,9 @@ export default async function OfficialTicketsPage({
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     ticket.priority === 'urgent'
-                      ? 'bg-red-500/15 text-red-600'
+                      ? 'bg-red-500/15 text-red-600 dark:text-red-400'
                       : ticket.priority === 'high'
-                        ? 'bg-amber-500/15 text-amber-600'
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
                         : 'bg-muted text-muted-foreground'
                   }`}
                 >
@@ -136,7 +147,7 @@ export default async function OfficialTicketsPage({
                 <select
                   name="status"
                   defaultValue={ticket.status}
-                  className="rounded-md border bg-background px-2 py-1 text-xs"
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   aria-label={`Status of ticket ${ticket.id}`}
                 >
                   {['open', 'in_progress', 'waiting', 'resolved', 'closed'].map((value) => (
@@ -148,7 +159,7 @@ export default async function OfficialTicketsPage({
                 <select
                   name="priority"
                   defaultValue={ticket.priority}
-                  className="rounded-md border bg-background px-2 py-1 text-xs"
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   aria-label={`Priority of ticket ${ticket.id}`}
                 >
                   {['low', 'normal', 'high', 'urgent'].map((value) => (

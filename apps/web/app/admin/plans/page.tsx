@@ -34,8 +34,8 @@ export default async function AdminPlansPage() {
         description="What each plan allows, who is on it, and what happens to them the moment you change it."
       />
 
-      <Card className="border-amber-500/40 hover:shadow-card">
-        <p className="flex items-center gap-2 font-semibold">
+      <Card className="border-amber-500/40">
+        <p role="note" className="flex items-center gap-2 font-semibold">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           Saving a plan is a fleet-wide action
         </p>
@@ -54,8 +54,8 @@ export default async function AdminPlansPage() {
       </Card>
 
       {error ? (
-        <Card className="border-destructive/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Card className="border-destructive/40">
+          <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             The plans did not load
           </p>

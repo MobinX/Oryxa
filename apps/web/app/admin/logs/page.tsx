@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Suspense } from 'react';
-import { AlertTriangle, HardDrive, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { AlertTriangle, HardDrive, RefreshCw, ScrollText, Search, SearchX } from 'lucide-react';
 import { requireConsoleBearer } from '@/lib/admin-access';
 
 export const instant = false;
@@ -154,7 +154,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
 
       {storage && <StoragePanel storage={storage} zone={zone} />}
 
-      <Card className="hover:shadow-card">
+      <Card>
         <form method="get" action="/admin/logs" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block text-sm">
             <span className="font-medium text-muted-foreground">Type</span>
@@ -217,7 +217,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
             {HOURS.map((hours) => (
               <Link
                 key={hours}
-                className="rounded-element border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="rounded-element border border-border px-3 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
                 href={hrefFor({
                   type: filter.type,
                   limit: filter.limit,
@@ -228,7 +228,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
               </Link>
             ))}
             <Link
-              className="rounded-element px-2 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+              className="rounded-element px-2 py-2 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
               href="/admin/logs"
             >
               reset
@@ -238,8 +238,8 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
       </Card>
 
       {result.error && (
-        <Card className="border-destructive/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Card className="border-destructive/40">
+          <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             The query did not answer
           </p>
@@ -254,7 +254,7 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
       )}
 
       {page && (
-        <Card className="px-0 py-0 hover:shadow-card">
+        <Card className="px-0 py-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-6 py-3 text-xs text-muted-foreground">
             <span>
               {page.events.length} event{page.events.length === 1 ? '' : 's'} · newest first · page
@@ -269,10 +269,16 @@ async function LogsContent({ searchParams }: { searchParams: Promise<RawParams> 
           </div>
 
           {page.events.length === 0 ? (
-            <p className="px-6 py-10 text-center text-muted-foreground">
-              Nothing was recorded in this window. Widen the range, or check that the events you
-              expect have a type the logger is allowed to emit.
-            </p>
+            <div className="px-6 py-10 text-center">
+              <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <SearchX className="h-5 w-5 text-muted-foreground" />
+              </span>
+              <p className="mt-3 text-sm font-semibold">Nothing recorded here</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                Nothing was recorded in this window. Widen the range, or check that the events you
+                expect have a type the logger is allowed to emit.
+              </p>
+            </div>
           ) : (
             <ul className="divide-y divide-border/40">
               {page.events.map((row, index) => (
@@ -335,11 +341,11 @@ function StoragePanel({ storage, zone }: { storage: AxiomStorage; zone: string }
         }.`;
 
   return (
-    <Card className="hover:shadow-card">
+    <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 font-semibold">
-            <HardDrive className="h-4 w-4 text-primary" />
+            <HardDrive className="h-4 w-4 text-muted-foreground" />
             Axiom storage
           </p>
           <p className="mt-1 text-sm text-muted-foreground">

@@ -59,8 +59,8 @@ async function UsageContent({ searchParams }: { searchParams: Promise<RawParams>
       {read.value ? (
         <UsageTable usage={read.value} month={month} />
       ) : (
-        <Card className="border-destructive/40 hover:shadow-card">
-          <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Card className="border-destructive/40">
+          <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             The usage did not load
           </p>
@@ -116,7 +116,7 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
         />
       </section>
 
-      <Card className="px-0 py-0 hover:shadow-card">
+      <Card className="px-0 py-0">
         <div className="border-b border-border/40 px-5 py-3">
           <h2 className="text-base font-semibold">Every store that spent tokens</h2>
           <p className="text-xs text-muted-foreground">
@@ -126,30 +126,36 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
         </div>
 
         {usage.businesses.length === 0 ? (
-          <p className="px-5 py-10 text-center text-muted-foreground">
-            Nothing was spent in {monthLabel(month)}.
-          </p>
+          <div className="px-5 py-10 text-center">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+              <Cpu className="h-5 w-5 text-muted-foreground" />
+            </span>
+            <p className="mt-3 text-sm font-semibold">No spend this month</p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+              Nothing was spent in {monthLabel(month)}.
+            </p>
+          </div>
         ) : (
           <div className="max-h-[480px] overflow-auto rounded-b-card">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-border/40 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-2.5 font-medium">Business</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Runs</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Tokens</th>
-                  <th className="px-3 py-2.5 text-right font-medium">In / Out</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Cache hit</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Avg / run</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Cost</th>
+                  <th scope="col" className="px-5 py-2.5 font-medium">Business</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Runs</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Tokens</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">In / Out</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Cache hit</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Avg / run</th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {usage.businesses.map((row) => (
                   <tr key={row.businessId} className="transition-colors hover:bg-muted/40">
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3 align-middle">
                       <Link
                         href={`/admin/token-analytics/${row.businessId}?month=${month}`}
-                        className="font-medium text-foreground hover:text-primary hover:underline"
+                        className="rounded font-medium text-foreground outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
                       >
                         {row.name}
                       </Link>
@@ -157,20 +163,20 @@ function UsageTable({ usage, month }: { usage: AdminTokenUsage; month: string })
                         {row.slug ?? 'no store published'}
                       </p>
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">{whole(row.runCount)}</td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">{whole(row.runCount)}</td>
+                    <td className="px-3 py-3 text-right align-middle font-medium tabular-nums whitespace-nowrap">
                       {whole(row.totalTokens)}
                     </td>
-                    <td className="px-3 py-3 text-right text-xs tabular-nums text-muted-foreground">
+                    <td className="px-3 py-3 text-right align-middle text-xs tabular-nums whitespace-nowrap text-muted-foreground">
                       {whole(row.inputTokens)} / {whole(row.outputTokens)}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">
                       {row.cacheHitPercent.toFixed(1)}%
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
+                    <td className="px-3 py-3 text-right align-middle tabular-nums whitespace-nowrap">
                       {whole(Math.round(row.avgTokensPerRun))}
                     </td>
-                    <td className="px-5 py-3 text-right font-medium tabular-nums">
+                    <td className="px-5 py-3 text-right align-middle font-medium tabular-nums whitespace-nowrap">
                       {tokenMoney(row.estimatedCostUsd)}
                     </td>
                   </tr>
@@ -205,12 +211,12 @@ function Kpi({
   icon: LucideIcon;
 }) {
   return (
-    <Card className="hover:shadow-card">
+    <Card>
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-primary/10 text-primary">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-element bg-muted text-muted-foreground">
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -222,8 +228,8 @@ function Kpi({
 
 function UsageSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+    <div role="status" aria-label="Loading token usage" className="space-y-6">
+      <div className="h-8 w-48 max-w-full animate-pulse rounded bg-muted" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index} className="h-28 animate-pulse rounded-element bg-muted" />

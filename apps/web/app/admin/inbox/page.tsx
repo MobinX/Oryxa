@@ -122,13 +122,13 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href={hrefFor({ folder, id: selectedId, compose: true, q: queryText })}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <Plus className="h-3.5 w-3.5" /> Compose
               </Link>
               <Link
                 href={hrefFor({ folder, q: queryText })}
-                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 Refresh
               </Link>
@@ -159,7 +159,7 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
           <section className={activePane ? 'hidden min-h-0 min-w-0 lg:block' : 'block min-h-0 min-w-0'}>
             <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               <div className="border-b border-border/50 p-3">
-                <div className="flex rounded-xl bg-muted/50 p-1">
+                <div role="tablist" aria-label="Mail folder" className="flex rounded-xl bg-muted/50 p-1">
                   {[
                     { key: 'inbox', label: 'Inbox', icon: Inbox },
                     { key: 'sent', label: 'Sent', icon: Send },
@@ -171,7 +171,10 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
                       <Link
                         key={tab.key}
                         href={hrefFor({ folder: tab.key, q: queryText })}
-                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                        role="tab"
+                        aria-selected={active}
+                        aria-current={active ? 'page' : undefined}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 ${
                           active
                             ? 'bg-card text-foreground shadow-sm'
                             : 'text-muted-foreground hover:text-foreground'
@@ -196,7 +199,7 @@ export default async function AdminInboxPage({ searchParams }: { searchParams: P
                   </label>
                   <button
                     type="submit"
-                    className="rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50"
                   >
                     Search
                   </button>
@@ -305,8 +308,9 @@ async function MailList({
               <li key={row.id}>
                 <Link
                   href={hrefFor({ folder, id: row.id, q: queryText })}
-                  className={`block px-4 py-3 transition-colors hover:bg-muted/40 ${
-                    selectedId === row.id ? 'bg-primary/5' : ''
+                  aria-current={selectedId === row.id ? 'true' : undefined}
+                  className={`block px-4 py-3 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 ${
+                    selectedId === row.id ? 'bg-primary/[0.07]' : ''
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -355,11 +359,11 @@ async function MailList({
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t border-border/40 px-4 py-2">
+      <nav aria-label="Mail pages" className="flex items-center justify-between border-t border-border/40 px-4 py-2">
         {offset > 0 ? (
           <Link
             href={hrefFor({ folder, q: queryText, offset: Math.max(offset - limit, 0) })}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
+            className="inline-flex items-center gap-1 rounded text-xs font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Newer
           </Link>
@@ -369,14 +373,14 @@ async function MailList({
         {offset + limit < total ? (
           <Link
             href={hrefFor({ folder, q: queryText, offset: offset + limit })}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
+            className="inline-flex items-center gap-1 rounded text-xs font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             Older <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         ) : (
           <span />
         )}
-      </div>
+      </nav>
     </>
   );
 }
@@ -556,13 +560,13 @@ function MessageErrorPane({
   queryText: string;
 }) {
   return (
-    <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
+    <div role="alert" className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
       <p className="font-semibold">This email could not be opened.</p>
       <p className="mt-0.5">{message}</p>
       <p className="mt-1 text-xs">Please try again.</p>
       <Link
         href={hrefFor({ folder, q: queryText })}
-        className="mt-4 inline-flex items-center gap-1 text-xs font-semibold underline"
+        className="mt-4 inline-flex items-center gap-1 rounded text-xs font-semibold underline outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to the list
       </Link>
@@ -669,8 +673,8 @@ function MessagePane({
 
       {email.direction === 'inbound' ? (
         <details className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-          <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
-            <CornerUpLeft className="h-4 w-4 text-primary" /> Reply
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/50 [&::-webkit-details-marker]:hidden">
+            <CornerUpLeft className="h-4 w-4 text-muted-foreground" /> Reply
           </summary>
           <AttachmentUploadProvider>
             <form action={replyMailAction} className="mt-3 space-y-3">
@@ -715,8 +719,8 @@ function MessagePane({
       ) : null}
 
       <details className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-        <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
-          <Forward className="h-4 w-4 text-primary" /> Forward
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/50 [&::-webkit-details-marker]:hidden">
+          <Forward className="h-4 w-4 text-muted-foreground" /> Forward
         </summary>
         <AttachmentUploadProvider>
           <form action={forwardMailAction} className="mt-3 space-y-3">

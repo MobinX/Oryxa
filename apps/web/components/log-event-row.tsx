@@ -25,7 +25,7 @@ export function EventRow({
   return (
     <li className={`px-6 ${compact ? 'py-1.5' : 'py-2.5'} ${lane.row ?? ''}`}>
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-start gap-x-3">
+        <summary className="flex cursor-pointer list-none items-start gap-x-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/50 [&::-webkit-details-marker]:hidden">
           {/* A phone row is the message and nothing else; the clock and lane chip are desktop
               context, and the whole row still opens the complete fields below. */}
           <span className="hidden shrink-0 pt-1 font-mono text-xs text-muted-foreground sm:inline">

@@ -39,12 +39,19 @@ export default async function OfficialInboxPage() {
         description="Every person who messaged an official channel. The AI answers as a person while it is enabled; a taken-over thread stays yours until you resume it."
       />
 
-      {loadError && <Card className="border-destructive/40 p-4 text-sm text-destructive">{loadError}</Card>}
+      {loadError && (
+        <Card className="border-destructive/40 p-4 text-sm text-destructive">
+          <p role="alert">{loadError}</p>
+        </Card>
+      )}
       {migrationPending && <OfficialMigrationCard />}
 
       {rows.length === 0 && !loadError && !migrationPending && (
         <Card className="py-12 text-center">
-          <p className="font-semibold">No conversations yet</p>
+          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+            <Inbox className="h-5 w-5 text-muted-foreground" />
+          </span>
+          <p className="mt-3 font-semibold">No conversations yet</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             Once a customer DMs an official channel on Facebook, Instagram or WhatsApp, their
             thread appears here.
@@ -57,7 +64,7 @@ export default async function OfficialInboxPage() {
           <li key={row.id}>
             <Link
               href={`/admin/official/inbox/${row.id}`}
-              className="block rounded-lg border bg-card p-4 transition hover:border-primary/40"
+              className="block rounded-element border border-border/60 bg-card p-4 shadow-sm outline-none transition-colors hover:border-primary/40 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -70,16 +77,16 @@ export default async function OfficialInboxPage() {
                 </div>
                 <div className="shrink-0 text-right text-xs">
                   <span
-                    className={`inline-block rounded-full px-2 py-0.5 font-semibold uppercase tracking-wider ${
+                    className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                       row.status === 'pending'
-                        ? 'bg-amber-500/15 text-amber-600'
-                        : 'bg-emerald-500/15 text-emerald-600'
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                        : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                     }`}
                   >
                     {row.status}
                   </span>
                   {row.aiPaused && (
-                    <span className="mt-1 inline-block rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                    <span className="mt-1 inline-block rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">
                       taken over
                     </span>
                   )}

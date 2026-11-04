@@ -58,7 +58,7 @@ export function AdminDailyChart({
                 type="button"
                 onClick={() => setKey(entry.key)}
                 aria-pressed={on}
-                className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                   on
                     ? entry.chip
                     : 'border-border/40 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -94,7 +94,7 @@ export function AdminDailyChart({
               <div key={point.date} className="group relative flex h-full flex-1 items-end">
                 <div
                   style={{ height: `${percent}%` }}
-                  className={`w-full rounded-t-sm transition-all duration-200 group-hover:opacity-100 ${
+                  className={`w-full rounded-t-sm motion-safe:transition-opacity motion-safe:duration-200 group-hover:opacity-100 ${
                     value > 0 ? `${series.bar} opacity-70` : 'bg-transparent'
                   }`}
                 />

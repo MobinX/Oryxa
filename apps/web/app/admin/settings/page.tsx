@@ -38,7 +38,7 @@ export default async function SettingsPage({
 
       {user.legacy ? (
         <Card className="border-amber-500/40">
-          <p className="text-sm text-muted-foreground">
+          <p role="note" className="text-sm text-muted-foreground">
             This browser is using the legacy environment console password. Its password cannot be
             changed here; sign in with a DB admin account to manage a password.
           </p>
@@ -53,7 +53,7 @@ export default async function SettingsPage({
                 type="password"
                 autoComplete="current-password"
                 required
-                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -65,7 +65,7 @@ export default async function SettingsPage({
                   autoComplete="new-password"
                   minLength={8}
                   required
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
               <label className="block space-y-1.5">
@@ -76,25 +76,25 @@ export default async function SettingsPage({
                   autoComplete="new-password"
                   minLength={8}
                   required
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
             </div>
 
             {params.saved ? (
-              <p className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+              <p role="status" className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
                 Password changed. Other admin sessions were revoked.
               </p>
             ) : null}
             {params.error ? (
-              <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {params.error === 'match' ? 'The new passwords do not match.' : params.error}
               </p>
             ) : null}
 
             <button
               type="submit"
-              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               Change password
             </button>
