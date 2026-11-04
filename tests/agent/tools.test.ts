@@ -444,8 +444,9 @@ describe('Agent Tools', () => {
       },
       (text) => sent.push(`tracked:${text}`),
     );
-    const messageTool = tools.find((tool) => String(tool.name) === 'send_message')!;
-    const suggestionTool = tools.find((tool) => String(tool.name) === 'send_suggestions')!;
+    type JsonTool = { invoke: (input: Record<string, unknown>) => Promise<string> };
+    const messageTool = tools.find((tool) => String(tool.name) === 'send_message')! as unknown as JsonTool;
+    const suggestionTool = tools.find((tool) => String(tool.name) === 'send_suggestions')! as unknown as JsonTool;
 
     // The fragment "Have" answered with the same sentence minus the chips the customer already saw.
     const repeated = JSON.parse(
