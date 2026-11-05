@@ -864,21 +864,30 @@ export async function fetchMessengerAudio(
   url: string,
   service = 'facebook',
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  try {
-    const res = await loggedFetch(url, undefined, service);
-    if (!res.ok) return null;
-    const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
-    const audioLike =
-      contentType.startsWith('audio/') ||
-      contentType.startsWith('video/') ||
-      contentType === 'application/octet-stream';
-    if (!audioLike) return null;
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength === 0 || buffer.byteLength > 25 * 1024 * 1024) return null;
-    return { buffer, contentType: contentType || 'audio/ogg' };
-  } catch {
-    return null;
+  // One retry on transport failure only: an HTTP error from Meta (expired URL,
+  // wrong object) will not heal, but a dropped connection might.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const res = await loggedFetch(
+        url,
+        { signal: AbortSignal.timeout(20_000) },
+        service,
+      );
+      if (!res.ok) return null;
+      const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+      const audioLike =
+        contentType.startsWith('audio/') ||
+        contentType.startsWith('video/') ||
+        contentType === 'application/octet-stream';
+      if (!audioLike) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.byteLength === 0 || buffer.byteLength > 25 * 1024 * 1024) return null;
+      return { buffer, contentType: contentType || 'audio/ogg' };
+    } catch {
+      if (attempt === 2) return null;
+    }
   }
+  return null;
 }
 
 /** Verifies a Meta webhook signature (HMAC-SHA256 of the raw request body using

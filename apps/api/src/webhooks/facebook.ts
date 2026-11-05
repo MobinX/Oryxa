@@ -1179,7 +1179,7 @@ async function processMessagingEvents(
       photoCount: images.length,
     });
 
-    if (platform === 'instagram' && audio) {
+    if (audio) {
       emit('instagram', {
         stage: 'audio',
         senderId,

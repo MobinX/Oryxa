@@ -16,6 +16,12 @@ import ffmpegStatic from 'ffmpeg-static';
  * conversion or service failure the original bytes go to the standard multilingual call —
  * voice transcription never silently dies.
  *
+ * Neither call pins a locale: mai-transcribe-2 auto-detects the language and keeps
+ * script accuracy for Bangla and English alike (verified live 2026-11-05). Pinning
+ * `locales: ['bn']` used to force English notes into Bangla-script garbage that read as a
+ * success, so the multilingual fallback never ran — that was the "can't identify the
+ * language" bug. Retries cover transient Azure failures (429/5xx, timeouts).
+ *
  * The caller gets the transcript or null; a failed transcription never blocks the webhook.
  */
 
@@ -148,6 +154,16 @@ async function transcodeForEnhanced(
   }
 }
 
+const MAX_TRANSCRIBE_ATTEMPTS = 3;
+
+function retryableTranscribeStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function requestTranscription(
   endpoint: string,
   key: string,
@@ -155,47 +171,55 @@ async function requestTranscription(
   definition: Record<string, unknown>,
 ): Promise<string | null> {
   const mime = audio.contentType.split(';')[0].trim() || 'audio/mp4';
-  const form = new FormData();
-  form.append(
-    'audio',
-    new Blob([new Uint8Array(audio.buffer)], { type: mime }),
-    `voice.${extensionFor(mime)}`,
-  );
-  form.append('definition', JSON.stringify(definition));
-
-  try {
-    const res = await fetch(
-      `${endpoint}/speechtotext/transcriptions:transcribe?api-version=${API_VERSION}`,
-      {
-        method: 'POST',
-        headers: { 'Ocp-Apim-Subscription-Key': key },
-        body: form,
-        signal: AbortSignal.timeout(45_000),
-      },
+  const tag = 'enhancedMode' in definition ? ' [enhanced]' : '';
+  for (let attempt = 1; attempt <= MAX_TRANSCRIBE_ATTEMPTS; attempt += 1) {
+    const form = new FormData();
+    form.append(
+      'audio',
+      new Blob([new Uint8Array(audio.buffer)], { type: mime }),
+      `voice.${extensionFor(mime)}`,
     );
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      console.warn(
-        `[speech] transcription attempt failed (${res.status})${
-          'enhancedMode' in definition ? ' [enhanced]' : ''
-        }: ${detail.slice(0, 300)}`,
+    form.append('definition', JSON.stringify(definition));
+    try {
+      const res = await fetch(
+        `${endpoint}/speechtotext/transcriptions:transcribe?api-version=${API_VERSION}`,
+        {
+          method: 'POST',
+          headers: { 'Ocp-Apim-Subscription-Key': key },
+          body: form,
+          signal: AbortSignal.timeout(45_000),
+        },
       );
-      return null;
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        console.warn(
+          `[speech] transcription attempt ${attempt}/${MAX_TRANSCRIBE_ATTEMPTS} failed (${res.status})${tag}: ${detail.slice(0, 300)}`,
+        );
+        if (!retryableTranscribeStatus(res.status) || attempt === MAX_TRANSCRIBE_ATTEMPTS) {
+          return null;
+        }
+      } else {
+        const data = (await res.json()) as {
+          combinedPhrases?: Array<{ text?: string }>;
+          phrases?: Array<{ text?: string }>;
+        };
+        const text = (data.combinedPhrases ?? data.phrases ?? [])
+          .map((phrase) => phrase.text?.trim() ?? '')
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        return text || null;
+      }
+    } catch (err) {
+      console.warn(
+        `[speech] transcription attempt ${attempt}/${MAX_TRANSCRIBE_ATTEMPTS} errored${tag}:`,
+        err instanceof Error ? err.message : err,
+      );
+      if (attempt === MAX_TRANSCRIBE_ATTEMPTS) return null;
     }
-    const data = (await res.json()) as {
-      combinedPhrases?: Array<{ text?: string }>;
-      phrases?: Array<{ text?: string }>;
-    };
-    const text = (data.combinedPhrases ?? data.phrases ?? [])
-      .map((phrase) => phrase.text?.trim() ?? '')
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    return text || null;
-  } catch (err) {
-    console.error('[speech] transcription request failed:', err);
-    return null;
+    await sleep(500 * 2 ** (attempt - 1));
   }
+  return null;
 }
 
 export async function transcribeAudio(buffer: Buffer, contentType: string): Promise<string | null> {
@@ -210,15 +234,15 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
   }
 
   const endpoint = (process.env.AZURE_SPEECH_ENDPOINT?.trim() || DEFAULT_ENDPOINT).replace(/\/+$/, '');
-  const locale = process.env.AZURE_SPEECH_LOCALE?.trim() || 'bn';
   const enhancedEnabled = process.env.AZURE_SPEECH_ENHANCED !== 'false';
   const mime = contentType.split(';')[0].trim() || 'audio/mp4';
 
   if (enhancedEnabled) {
     const prepared = await transcodeForEnhanced(buffer, mime);
     if (prepared) {
+      // No locales: mai-transcribe-2 identifies the language itself. (AZURE_SPEECH_LOCALE
+      // used to pin one language here, which garbled every note in another language.)
       const text = await requestTranscription(endpoint, key, prepared, {
-        locales: [locale],
         enhancedMode: {
           enabled: true,
           model: 'mai-transcribe-2',
