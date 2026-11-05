@@ -22,6 +22,11 @@ import ffmpegStatic from 'ffmpeg-static';
  * success, so the multilingual fallback never ran — that was the "can't identify the
  * language" bug. Retries cover transient Azure failures (429/5xx, timeouts).
  *
+ * ffmpeg-static is an optional dependency on purpose: its install script downloads a
+ * ~30MB binary from GitHub releases, and sandboxes that block or time out that fetch
+ * (Cloudflare's build image did) must still install green. Independently, the import
+ * stays static so Vercel's tracer ships the binary with the API when present.
+ *
  * The caller gets the transcript or null; a failed transcription never blocks the webhook.
  */
 
