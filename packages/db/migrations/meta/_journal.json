@@ -386,6 +386,13 @@
       "when": 1793781864789,
       "tag": "0054_default_agent_sales_service_parts",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793888760805,
+      "tag": "0055_default_agent_sales_closer",
+      "breakpoints": true
     }
   ]
 }
