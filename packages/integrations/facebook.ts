@@ -175,6 +175,133 @@ export async function getPortfolioPages(userToken: string): Promise<PortfolioPag
   return pages;
 }
 
+export type MetaAdAccount = {
+  id: string;
+  name: string;
+};
+
+/**
+ * Ad accounts this user token can read reporting for. Empty when the token carries no
+ * `ads_read` grant, or the user simply runs no ads — the caller cannot tell apart, and
+ * the Ads page says the same thing either way.
+ */
+export async function getAdAccounts(userToken: string): Promise<MetaAdAccount[]> {
+  const res = await loggedFetch(
+    `${GRAPH_API}/me/adaccounts?fields=id,name&limit=25&access_token=${encodeURIComponent(userToken)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch ad accounts: ${await res.text()}`);
+  const data = (await res.json()) as { data?: Array<{ id?: string; name?: string }> };
+  return (data.data ?? [])
+    .filter((account) => !!account.id)
+    .map((account) => ({ id: account.id!, name: account.name ?? account.id! }));
+}
+
+function adsWindow(days: number): string {
+  // Meta's presets cover the pills the page offers; anything else gets an explicit range.
+  if (days === 7) return 'date_preset=last_7d';
+  if (days === 30) return 'date_preset=last_30d';
+  if (days === 90) return 'date_preset=last_90d';
+  const until = new Date();
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const day = (value: Date) => value.toISOString().slice(0, 10);
+  return `time_range=${encodeURIComponent(JSON.stringify({ since: day(since), until: day(until) }))}`;
+}
+
+/** Meta hands every metric back as a string; the page wants numbers or nothing. */
+function metaNum(value: unknown): number {
+  const num = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  return Number.isFinite(num) ? num : 0;
+}
+
+export type AdsMetrics = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+};
+
+export type AdsCampaignRow = AdsMetrics & { id: string; name: string };
+
+export type AdsAgeGenderRow = {
+  age: string;
+  gender: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+};
+
+async function readInsights<T>(
+  accountId: string,
+  userToken: string,
+  query: string,
+  map: (row: Record<string, unknown>) => T,
+): Promise<T[]> {
+  const res = await loggedFetch(
+    `${GRAPH_API}/${encodeURIComponent(accountId)}/insights?${query}&access_token=${encodeURIComponent(userToken)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch ad insights: ${await res.text()}`);
+  const data = (await res.json()) as { data?: Record<string, unknown>[] };
+  return (data.data ?? []).map(map);
+}
+
+/** Account-level totals for the window: one row in, one totals object out. */
+export async function getAdsTotals(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsMetrics> {
+  const rows = await readInsights(accountId, userToken, `${adsWindow(days)}&fields=spend,impressions,clicks,reach`, (row) => ({
+    spend: metaNum(row.spend),
+    impressions: metaNum(row.impressions),
+    clicks: metaNum(row.clicks),
+    reach: metaNum(row.reach),
+  }));
+  const [first] = rows;
+  return first ?? { spend: 0, impressions: 0, clicks: 0, reach: 0 };
+}
+
+/** One row per campaign, priciest first. */
+export async function getAdsCampaigns(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsCampaignRow[]> {
+  const rows = await readInsights(
+    accountId,
+    userToken,
+    `${adsWindow(days)}&level=campaign&limit=50&fields=campaign_id,campaign_name,spend,impressions,clicks,reach`,
+    (row) => ({
+      id: String(row.campaign_id ?? ''),
+      name: String(row.campaign_name ?? ''),
+      spend: metaNum(row.spend),
+      impressions: metaNum(row.impressions),
+      clicks: metaNum(row.clicks),
+      reach: metaNum(row.reach),
+    }),
+  );
+  return rows.filter((row) => row.id).sort((a, b) => b.spend - a.spend);
+}
+
+/** Delivery split by age and gender. */
+export async function getAdsAgeGender(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsAgeGenderRow[]> {
+  return readInsights(
+    accountId,
+    userToken,
+    `${adsWindow(days)}&breakdowns=age,gender&fields=spend,impressions,clicks`,
+    (row) => ({
+      age: String(row.age ?? 'unknown'),
+      gender: String(row.gender ?? 'unknown'),
+      spend: metaNum(row.spend),
+      impressions: metaNum(row.impressions),
+      clicks: metaNum(row.clicks),
+    }),
+  );
+}
+
 /** Webhook fields subscribed when a Facebook Page is connected in Oryxa. */
 export const FACEBOOK_PAGE_WEBHOOK_FIELDS = [
   'messages',

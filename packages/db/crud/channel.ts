@@ -1,4 +1,4 @@
-import { eq, and, isNull, ne, or, isNotNull, asc } from 'drizzle-orm';
+import { eq, and, isNull, ne, or, isNotNull, asc, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, channels } from '@db/schema';
 import {
@@ -39,6 +39,24 @@ export function decryptChannelToken(stored: string): string {
 /** Reveals the resolved bearer token on a fetched channel row, in place. */
 function revealChannelToken(row: { apiToken: string } | null | undefined) {
   if (row) row.apiToken = decryptChannelToken(row.apiToken);
+}
+
+/**
+ * The newest live Facebook channel's Ads token, revealed for the platform call. Null when no
+ * channel banked one — the connect never asked for `ads_read`, or every such channel is gone.
+ */
+export async function getBusinessAdsToken(businessId: string): Promise<string | null> {
+  const row = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.businessId, businessId),
+      eq(channels.platform, 'facebook'),
+      isNull(channels.deletedAt),
+      isNotNull(channels.metaUserToken),
+    ),
+    orderBy: desc(channels.createdAt),
+  });
+  if (!row?.metaUserToken) return null;
+  return decryptChannelToken(row.metaUserToken);
 }
 
 /**
