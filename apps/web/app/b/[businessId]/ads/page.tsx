@@ -8,12 +8,24 @@ import { Card } from '@/components/ui/card';
 import { CircleDollarSign, Eye, MousePointerClick, Users } from 'lucide-react';
 import { money, whole } from '@/lib/format';
 
-const PERIODS = [7, 30, 90];
+const PERIODS = [
+  { days: 7, label: '7d' },
+  { days: 30, label: '30d' },
+  { days: 90, label: '90d' },
+  { days: 365, label: '1Y' },
+  { days: 730, label: '2Y' },
+];
 
-/** The pills offer three windows; anything inside the API's own bound is accepted. */
+/** The pills offer five windows; anything inside the API's own bound is accepted. */
 function readDays(value: string | undefined): number {
   const days = Number.parseInt(value ?? '', 10);
-  return Number.isInteger(days) && days > 0 ? Math.min(days, 365) : 30;
+  return Number.isInteger(days) && days > 0 ? Math.min(days, 730) : 30;
+}
+
+function windowLabel(days: number, capitalize = false): string {
+  const label =
+    days === 365 ? 'last year' : days === 730 ? 'last 2 years' : `last ${days} days`;
+  return capitalize ? label[0]!.toUpperCase() + label.slice(1) : label;
 }
 
 export default async function AdsPage({
@@ -124,10 +136,11 @@ async function AdsContent({
             {overview.account ? (
               <>
                 <strong className="text-foreground">{overview.account.name}</strong>
-                {' — '}last {days} days, read live from Meta.
+                {' — '}
+                {windowLabel(days)}, read live from Meta.
               </>
             ) : (
-              <>Last {days} days, read live from Meta.</>
+              <>{windowLabel(days, true)}, read live from Meta.</>
             )}
           </p>
         </div>
@@ -163,19 +176,43 @@ async function AdsContent({
           <div className="flex items-center rounded-xl border border-border/60 bg-muted/40 p-1">
             {PERIODS.map((period) => (
               <Link
-                key={period}
-                href={windowHref(period, currentAccount, currentChannel)}
-                aria-current={period === days ? 'page' : undefined}
+                key={period.days}
+                href={windowHref(period.days, currentAccount, currentChannel)}
+                aria-current={period.days === days ? 'page' : undefined}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  period === days
+                  period.days === days
                     ? 'bg-card text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {period}d
+                {period.label}
               </Link>
             ))}
           </div>
+          <form
+            action={base}
+            method="get"
+            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/40 p-1"
+          >
+            {currentAccount && <input type="hidden" name="accountId" value={currentAccount} />}
+            {currentChannel && <input type="hidden" name="channelId" value={currentChannel} />}
+            <input
+              type="number"
+              name="days"
+              min={1}
+              max={730}
+              defaultValue={PERIODS.some((period) => period.days === days) ? undefined : days}
+              placeholder="Days"
+              aria-label="Custom days"
+              className="h-8 w-20 rounded-lg border border-transparent bg-card px-2 text-xs font-semibold text-foreground placeholder:font-normal placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Go
+            </button>
+          </form>
         </div>
       </div>
 

@@ -68,7 +68,7 @@ const adsOverviewRoute = createRoute({
   request: {
     params: z.object({ businessId: z.string().uuid() }),
     query: z.object({
-      days: z.coerce.number().int().min(1).max(365).optional().default(30),
+      days: z.coerce.number().int().min(1).max(730).optional().default(30),
       accountId: z.string().min(1).max(64).optional(),
       channelId: z.string().uuid().optional(),
     }),
