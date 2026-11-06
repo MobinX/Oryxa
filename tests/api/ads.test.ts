@@ -115,6 +115,29 @@ describe('Ads overview', () => {
     expect(graphUrls().some((url) => url.includes('date_preset=last_7d'))).toBe(true);
   });
 
+  it('asks Meta for an explicit range when days=365', async () => {
+    const business = await seedWithAdsToken();
+    graphAnswers({ accounts: ACCOUNTS, totals: TOTALS, campaigns: CAMPAIGNS, breakdown: BREAKDOWN });
+
+    const res = await app.request(`/api/v1/${business.id}/ads/overview?days=365`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).connected).toBe(true);
+    const urls = graphUrls();
+    expect(urls.some((url) => url.includes('time_range='))).toBe(true);
+    expect(urls.some((url) => url.includes('date_preset='))).toBe(false);
+  });
+
+  it('rejects windows past two years', async () => {
+    const business = await seedWithAdsToken();
+
+    const res = await app.request(`/api/v1/${business.id}/ads/overview?days=731`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('falls back to the first ad account when accountId names nothing', async () => {
     const business = await seedWithAdsToken();
     graphAnswers({ accounts: ACCOUNTS, totals: TOTALS, campaigns: CAMPAIGNS, breakdown: BREAKDOWN });
