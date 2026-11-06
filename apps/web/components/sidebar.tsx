@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Search,
   Plus,
+  Target,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ const primaryNav: Array<{
   { href: 'customers', label: 'Customers', icon: Users },
   { href: 'posts', label: 'Social Media', icon: Megaphone },
   { href: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { href: 'ads', label: 'Ads', icon: Target },
   { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
   { href: 'channels', label: 'Integrations', icon: Blocks },
   { href: 'categories', label: 'Categories', icon: FolderTree },

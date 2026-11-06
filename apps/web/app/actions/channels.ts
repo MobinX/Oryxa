@@ -33,10 +33,11 @@ export async function deleteChannelsBulkAction(businessId: string, formData: For
   redirect(`/b/${businessId}/channels?deleted=facebook`);
 }
 
-export async function connectFacebookAction(businessId: string, portfolio?: boolean) {
+export async function connectFacebookAction(businessId: string, portfolio?: boolean, ads?: boolean) {
   const token = await requireAuth();
   const { url } = await getFacebookAuthUrl(token, businessId, {
     portfolio,
+    ads,
     returnOrigin: await currentWebOrigin(),
   });
   redirect(url);

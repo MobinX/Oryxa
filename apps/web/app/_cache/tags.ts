@@ -5,6 +5,7 @@ export const cacheTags = {
   businesses: () => 'businesses',
   business: (businessId: string) => `business-${businessId}`,
   analytics: (businessId: string) => `analytics-${businessId}`,
+  ads: (businessId: string) => `ads-${businessId}`,
   products: (businessId: string) => `products-${businessId}`,
   product: (productId: string) => `product-${productId}`,
   categories: (businessId: string) => `categories-${businessId}`,

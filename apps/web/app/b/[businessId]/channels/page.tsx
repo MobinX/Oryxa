@@ -154,6 +154,7 @@ async function ChannelsContent({
             <FacebookConnectButton
               businessId={businessId}
               portfolioAvailable={process.env.META_BUSINESS_MANAGEMENT === 'true'}
+              adsAvailable={process.env.META_ADS_READ === 'true'}
             />
           </div>
         </Card>

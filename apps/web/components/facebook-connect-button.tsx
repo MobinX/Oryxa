@@ -11,6 +11,11 @@ interface FacebookConnectButtonProps {
    * choice would only fail the login, so it is not offered.
    */
   portfolioAvailable?: boolean;
+  /**
+   * Whether this deployment may ask for ad reporting (`ads_read`). Off hides the opt-in
+   * for the same reason: an unapproved scope fails the whole login.
+   */
+  adsAvailable?: boolean;
 }
 
 type Step = 'closed' | 'consent' | 'source' | 'data-deletion';
@@ -19,15 +24,21 @@ type PageSource = 'personal' | 'portfolio';
 export function FacebookConnectButton({
   businessId,
   portfolioAvailable = false,
+  adsAvailable = false,
 }: FacebookConnectButtonProps) {
   const { companyName: COMPANY_NAME } = useBrand();
   const [step, setStep] = useState<Step>('closed');
   const [source, setSource] = useState<PageSource>('personal');
+  const [withAds, setWithAds] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleConnect = () => {
     startTransition(async () => {
-      await connectFacebookAction(businessId, portfolioAvailable ? source === 'portfolio' : undefined);
+      await connectFacebookAction(
+        businessId,
+        portfolioAvailable ? source === 'portfolio' : undefined,
+        adsAvailable ? withAds : undefined,
+      );
     });
   };
 
@@ -119,6 +130,33 @@ export function FacebookConnectButton({
                     </div>
                   ))}
                 </div>
+
+                {adsAvailable && (
+                  <label
+                    className={`flex cursor-pointer gap-3 rounded-xl p-3 transition-colors ${
+                      withAds
+                        ? 'bg-[var(--primary)]/5 ring-1 ring-[var(--primary)]/40'
+                        : 'bg-[var(--muted)]/50 hover:bg-[var(--muted)]/70'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={withAds}
+                      onChange={(e) => setWithAds(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-[var(--foreground)]">
+                        📊 Also connect ad reporting
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)] mt-0.5">
+                        Reads spend, impressions, clicks and reach for your ad accounts so the
+                        Ads page can show them. Read-only — {COMPANY_NAME} never creates or
+                        edits ads.
+                      </span>
+                    </span>
+                  </label>
+                )}
 
                 <div className="rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
                   🔒 <strong>Your data is private.</strong> We never post anything without your agent configuration and never share your data with third parties.

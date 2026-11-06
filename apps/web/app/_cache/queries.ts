@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import {
+  getAdsOverview,
   getBusiness,
   getBusinessAnalytics,
   getMe,
@@ -56,6 +57,18 @@ export async function cachedAnalytics(token: string, businessId: string, days: n
   cacheLife('minutes');
   cacheTag(cacheTags.analytics(businessId));
   return getBusinessAnalytics(token, businessId, days);
+}
+
+export async function cachedAdsOverview(
+  token: string,
+  businessId: string,
+  days: number,
+  accountId?: string,
+) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.ads(businessId));
+  return getAdsOverview(token, businessId, days, accountId);
 }
 
 /**
