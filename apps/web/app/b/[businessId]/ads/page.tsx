@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
 import { cachedAdsChannels, cachedAdsOverview } from '@/app/_cache/queries';
+import { AdsChannelSelect } from '@/components/ads-channel-select';
 import AdsSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { CircleDollarSign, Eye, MousePointerClick, Users } from 'lucide-react';
@@ -15,15 +16,18 @@ function readDays(value: string | undefined): number {
   return Number.isInteger(days) && days > 0 ? Math.min(days, 365) : 30;
 }
 
-export default function AdsPage({
+export default async function AdsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
   searchParams: Promise<{ days?: string; accountId?: string; channelId?: string }>;
 }) {
+  // Keyed on the channel: picking another one remounts the boundary, so the
+  // skeleton shows until the new numbers arrive instead of stale ones lingering.
+  const { channelId } = await searchParams;
   return (
-    <Suspense fallback={<AdsSkeleton />}>
+    <Suspense key={channelId ?? 'auto'} fallback={<AdsSkeleton />}>
       <AdsContent params={params} searchParams={searchParams} />
     </Suspense>
   );
@@ -64,11 +68,11 @@ async function AdsContent({
           </p>
         </div>
         {channels.length > 0 && (
-          <ChannelPills
+          <AdsChannelSelect
+            businessId={businessId}
             channels={channels}
             days={days}
             current={currentChannel}
-            href={windowHref}
           />
         )}
         <Card className="border-border/60 p-6">
@@ -129,11 +133,11 @@ async function AdsContent({
         </div>
 
         {channels.length > 0 && (
-          <ChannelPills
+          <AdsChannelSelect
+            businessId={businessId}
             channels={channels}
             days={days}
             current={currentChannel}
-            href={windowHref}
           />
         )}
 
@@ -283,42 +287,6 @@ async function AdsContent({
           </div>
         )}
       </Card>
-    </div>
-  );
-}
-
-function ChannelPills({
-  channels,
-  days,
-  current,
-  href,
-}: {
-  channels: Array<{ id: string; pageName: string; hasAds: boolean }>;
-  days: number;
-  current?: string;
-  href: (windowDays: number, account?: string, channel?: string) => string;
-}) {
-  return (
-    <div className="flex items-center gap-2 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1">
-      {channels.map((channel) => (
-        <Link
-          key={channel.id}
-          href={href(days, undefined, channel.id)}
-          aria-current={channel.id === current ? 'page' : undefined}
-          title={
-            channel.hasAds
-              ? channel.pageName
-              : `${channel.pageName} — connected without ad reporting`
-          }
-          className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            channel.id === current
-              ? 'bg-card text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          } ${channel.hasAds ? '' : 'opacity-60'}`}
-        >
-          {channel.pageName}
-        </Link>
-      ))}
     </div>
   );
 }
