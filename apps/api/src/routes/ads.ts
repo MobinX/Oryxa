@@ -87,7 +87,24 @@ adsRouter.openapi(adsOverviewRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const { days, accountId } = c.req.valid('query');
 
-  const token = await getBusinessAdsToken(businessId);
+  // A lookup failure (a deployment whose database predates the token column, a
+  // blip) must read as unavailable reporting, not as a broken page.
+  let token: string | null;
+  try {
+    token = await getBusinessAdsToken(businessId);
+  } catch (err) {
+    console.error('[ads] token lookup failed', {
+      businessId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json(
+      {
+        connected: false as const,
+        error: 'Ad reporting is temporarily unavailable — try again soon.',
+      },
+      200,
+    );
+  }
   if (!token) return c.json({ connected: false as const }, 200);
 
   try {

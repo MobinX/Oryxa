@@ -103,6 +103,30 @@ describe('Ads overview', () => {
     expect(graphUrls().some((url) => url.includes('/act_2/insights'))).toBe(true);
   });
 
+  it('asks Meta for last_7d when days=7', async () => {
+    const business = await seedWithAdsToken();
+    graphAnswers({ accounts: ACCOUNTS, totals: TOTALS, campaigns: CAMPAIGNS, breakdown: BREAKDOWN });
+
+    const res = await app.request(`/api/v1/${business.id}/ads/overview?days=7`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).connected).toBe(true);
+    expect(graphUrls().some((url) => url.includes('date_preset=last_7d'))).toBe(true);
+  });
+
+  it('falls back to the first ad account when accountId names nothing', async () => {
+    const business = await seedWithAdsToken();
+    graphAnswers({ accounts: ACCOUNTS, totals: TOTALS, campaigns: CAMPAIGNS, breakdown: BREAKDOWN });
+
+    const res = await app.request(`/api/v1/${business.id}/ads/overview?accountId=act_nope`, {
+      headers: authHeaders(),
+    });
+    const body = (await res.json()) as any;
+    expect(body.connected).toBe(true);
+    expect(body.account).toEqual({ id: 'act_1', name: 'Shop ads' });
+  });
+
   it('reports unconnected, without calling Meta, when no channel banked an ads token', async () => {
     const { business } = await seedTestWorld();
     graphAnswers({});
