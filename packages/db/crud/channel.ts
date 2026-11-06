@@ -183,6 +183,8 @@ export async function createChannel(businessId: string, input: unknown) {
       .set({
         deletedAt: null,
         apiToken: encryptChannelToken(parsed.apiToken)!,
+        // Absent on a connect that never asked for ads: leave whatever the row holds.
+        metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
         agentId,
         extraInfo: parsed.extraInfo ?? null,
       })
@@ -193,7 +195,13 @@ export async function createChannel(businessId: string, input: unknown) {
 
   const [channel] = await db
     .insert(channels)
-    .values({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken)!, agentId, businessId })
+    .values({
+      ...parsed,
+      apiToken: encryptChannelToken(parsed.apiToken)!,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+      agentId,
+      businessId,
+    })
     .returning();
   return { id: channel.id, status: 'linked' as const };
 }
@@ -342,7 +350,11 @@ export async function updateChannel(businessId: string, channelId: string, input
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
+    .set({
+      ...parsed,
+      apiToken: encryptChannelToken(parsed.apiToken) ?? undefined,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+    })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };
@@ -363,7 +375,12 @@ export async function reactivateChannel(businessId: string, channelId: string, i
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set({ ...parsed, deletedAt: null, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
+    .set({
+      ...parsed,
+      deletedAt: null,
+      apiToken: encryptChannelToken(parsed.apiToken) ?? undefined,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+    })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };

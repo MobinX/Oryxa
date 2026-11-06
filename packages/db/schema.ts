@@ -762,6 +762,11 @@ export const channels = pgTable('channels', {
   businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }),
   platform: platformEnum('platform').notNull(),
   apiToken: text('api_token').notNull(),
+  /**
+   * Long-lived user token for Ads Insights, encrypted with the same envelope as `apiToken`.
+   * Null unless the login asked for `ads_read` — Page tokens cannot read ad accounts.
+   */
+  metaUserToken: text('meta_user_token'),
   platformChannelId: varchar('platform_channel_id', { length: 255 }).notNull(),
   extraInfo: text('extra_info'),
   agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),

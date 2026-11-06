@@ -393,6 +393,13 @@
       "when": 1793888760805,
       "tag": "0055_default_agent_sales_closer",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793957300000,
+      "tag": "0056_channels_meta_user_token",
+      "breakpoints": true
     }
   ]
 }

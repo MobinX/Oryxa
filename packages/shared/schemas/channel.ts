@@ -91,6 +91,8 @@ export const createChannelInputSchema = z.object({
   platformChannelId: z.string().min(1),
   agentId: uuidSchema.optional(),
   extraInfo: z.string().optional(),
+  /** Long-lived user token for Ads Insights, set only when the login asked for `ads_read`. */
+  metaUserToken: z.string().min(1).optional(),
 });
 
 export const createChannelOutputSchema = z.object({
@@ -117,6 +119,11 @@ export const facebookAuthQuerySchema = z.object({
    * an old link, or an entry point without the choice — and the deployment decides instead.
    */
   portfolio: z.enum(['true', 'false']).optional(),
+  /**
+   * The connector's ad-reporting answer. Absent means the caller never chose and the
+   * deployment decides via `META_ADS_READ` instead.
+   */
+  ads: z.enum(['true', 'false']).optional(),
   /** The web origin the merchant started from, so OAuth returns to the same brand domain. */
   returnOrigin: z.string().max(200).optional(),
 });
