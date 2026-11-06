@@ -157,6 +157,52 @@ export const getBusinessStats = (token: string, businessId: string) =>
 export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
 
+export type AdsOverview = {
+  connected: boolean;
+  error?: string;
+  days?: number;
+  accounts?: Array<{ id: string; name: string }>;
+  account?: { id: string; name: string };
+  totals?: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    reach: number;
+    ctr: number;
+    cpc: number;
+    cpm: number;
+  };
+  campaigns?: Array<{
+    id: string;
+    name: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+    reach: number;
+    ctr: number;
+    cpc: number;
+    cpm: number;
+  }>;
+  byAgeGender?: Array<{
+    age: string;
+    gender: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+  }>;
+};
+
+export const getAdsOverview = (
+  token: string,
+  businessId: string,
+  days: number = 30,
+  accountId?: string,
+) => {
+  const query = new URLSearchParams({ days: String(days) });
+  if (accountId) query.set('accountId', accountId);
+  return apiFetch<AdsOverview>(`/api/v1/${businessId}/ads/overview?${query.toString()}`, { token });
+};
+
 export const searchBusiness = (token: string, businessId: string, query: string) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/search?q=${encodeURIComponent(query)}`, { token });
 
@@ -473,10 +519,11 @@ export const deleteChannel = (token: string, businessId: string, channelId: stri
 export const getFacebookAuthUrl = (
   token: string,
   businessId: string,
-  options?: { portfolio?: boolean; returnOrigin?: string },
+  options?: { portfolio?: boolean; ads?: boolean; returnOrigin?: string },
 ) => {
   const query = new URLSearchParams();
   if (options?.portfolio !== undefined) query.set('portfolio', String(options.portfolio));
+  if (options?.ads !== undefined) query.set('ads', String(options.ads));
   if (options?.returnOrigin) query.set('returnOrigin', options.returnOrigin);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return apiFetch<{ url: string }>(`/api/v1/${businessId}/channels/facebook/auth${suffix}`, {

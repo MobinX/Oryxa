@@ -45,8 +45,11 @@ function timingSafeEqual(a: string, b: string): boolean {
  * A Live app that asks for a permission Meta has not approved stops the whole login for that
  * user, not just for the permission — so the portfolio scope stays switched off until
  * Advanced Access is granted, and one env var turns it on once it is.
+ *
+ * `ads` follows the same rule for `ads_read` (read-only Ads Insights reporting): true asks
+ * for it, false deliberately does not, and undefined lets `META_ADS_READ` decide.
  */
-export function getFacebookOAuthUrl(state: string, portfolio?: boolean): string {
+export function getFacebookOAuthUrl(state: string, portfolio?: boolean, ads?: boolean): string {
   const appId = process.env.META_APP_ID;
   const redirectUri = process.env.META_REDIRECT_URI;
   const scopes = [
@@ -61,6 +64,9 @@ export function getFacebookOAuthUrl(state: string, portfolio?: boolean): string 
   if (portfolio ?? process.env.META_BUSINESS_MANAGEMENT === 'true') {
     scopes.push('business_management');
   }
+  if (ads ?? process.env.META_ADS_READ === 'true') {
+    scopes.push('ads_read');
+  }
   return `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri!)}&scope=${scopes.join(',')}&state=${encodeURIComponent(state)}`;
 }
 
@@ -74,6 +80,25 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
 
   const res = await loggedFetch(`${GRAPH_API}/oauth/access_token?${params}`);
   if (!res.ok) throw new Error(`Facebook token exchange failed: ${await res.text()}`);
+  const data = (await res.json()) as { access_token: string };
+  return data.access_token;
+}
+
+/**
+ * Swaps the short-lived user token from the OAuth callback for a long-lived one (~60 days),
+ * so the Ads page can keep reading Insights without a fresh login every few hours. Stored
+ * beside the channel it was connected with; when it finally lapses the page says reconnect.
+ */
+export async function exchangeForLongLivedToken(userToken: string): Promise<string> {
+  const params = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: process.env.META_APP_ID!,
+    client_secret: process.env.META_APP_SECRET!,
+    fb_exchange_token: userToken,
+  });
+
+  const res = await loggedFetch(`${GRAPH_API}/oauth/access_token?${params}`);
+  if (!res.ok) throw new Error(`Facebook long-lived token exchange failed: ${await res.text()}`);
   const data = (await res.json()) as { access_token: string };
   return data.access_token;
 }
@@ -148,6 +173,133 @@ export async function getPortfolioPages(userToken: string): Promise<PortfolioPag
     }
   }
   return pages;
+}
+
+export type MetaAdAccount = {
+  id: string;
+  name: string;
+};
+
+/**
+ * Ad accounts this user token can read reporting for. Empty when the token carries no
+ * `ads_read` grant, or the user simply runs no ads — the caller cannot tell apart, and
+ * the Ads page says the same thing either way.
+ */
+export async function getAdAccounts(userToken: string): Promise<MetaAdAccount[]> {
+  const res = await loggedFetch(
+    `${GRAPH_API}/me/adaccounts?fields=id,name&limit=25&access_token=${encodeURIComponent(userToken)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch ad accounts: ${await res.text()}`);
+  const data = (await res.json()) as { data?: Array<{ id?: string; name?: string }> };
+  return (data.data ?? [])
+    .filter((account) => !!account.id)
+    .map((account) => ({ id: account.id!, name: account.name ?? account.id! }));
+}
+
+function adsWindow(days: number): string {
+  // Meta's presets cover the pills the page offers; anything else gets an explicit range.
+  if (days === 7) return 'date_preset=last_7d';
+  if (days === 30) return 'date_preset=last_30d';
+  if (days === 90) return 'date_preset=last_90d';
+  const until = new Date();
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const day = (value: Date) => value.toISOString().slice(0, 10);
+  return `time_range=${encodeURIComponent(JSON.stringify({ since: day(since), until: day(until) }))}`;
+}
+
+/** Meta hands every metric back as a string; the page wants numbers or nothing. */
+function metaNum(value: unknown): number {
+  const num = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  return Number.isFinite(num) ? num : 0;
+}
+
+export type AdsMetrics = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  reach: number;
+};
+
+export type AdsCampaignRow = AdsMetrics & { id: string; name: string };
+
+export type AdsAgeGenderRow = {
+  age: string;
+  gender: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+};
+
+async function readInsights<T>(
+  accountId: string,
+  userToken: string,
+  query: string,
+  map: (row: Record<string, unknown>) => T,
+): Promise<T[]> {
+  const res = await loggedFetch(
+    `${GRAPH_API}/${encodeURIComponent(accountId)}/insights?${query}&access_token=${encodeURIComponent(userToken)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch ad insights: ${await res.text()}`);
+  const data = (await res.json()) as { data?: Record<string, unknown>[] };
+  return (data.data ?? []).map(map);
+}
+
+/** Account-level totals for the window: one row in, one totals object out. */
+export async function getAdsTotals(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsMetrics> {
+  const rows = await readInsights(accountId, userToken, `${adsWindow(days)}&fields=spend,impressions,clicks,reach`, (row) => ({
+    spend: metaNum(row.spend),
+    impressions: metaNum(row.impressions),
+    clicks: metaNum(row.clicks),
+    reach: metaNum(row.reach),
+  }));
+  const [first] = rows;
+  return first ?? { spend: 0, impressions: 0, clicks: 0, reach: 0 };
+}
+
+/** One row per campaign, priciest first. */
+export async function getAdsCampaigns(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsCampaignRow[]> {
+  const rows = await readInsights(
+    accountId,
+    userToken,
+    `${adsWindow(days)}&level=campaign&limit=50&fields=campaign_id,campaign_name,spend,impressions,clicks,reach`,
+    (row) => ({
+      id: String(row.campaign_id ?? ''),
+      name: String(row.campaign_name ?? ''),
+      spend: metaNum(row.spend),
+      impressions: metaNum(row.impressions),
+      clicks: metaNum(row.clicks),
+      reach: metaNum(row.reach),
+    }),
+  );
+  return rows.filter((row) => row.id).sort((a, b) => b.spend - a.spend);
+}
+
+/** Delivery split by age and gender. */
+export async function getAdsAgeGender(
+  accountId: string,
+  userToken: string,
+  days: number,
+): Promise<AdsAgeGenderRow[]> {
+  return readInsights(
+    accountId,
+    userToken,
+    `${adsWindow(days)}&breakdowns=age,gender&fields=spend,impressions,clicks`,
+    (row) => ({
+      age: String(row.age ?? 'unknown'),
+      gender: String(row.gender ?? 'unknown'),
+      spend: metaNum(row.spend),
+      impressions: metaNum(row.impressions),
+      clicks: metaNum(row.clicks),
+    }),
+  );
 }
 
 /** Webhook fields subscribed when a Facebook Page is connected in Oryxa. */
@@ -910,14 +1062,17 @@ export async function verifyWebhookSignature(
  * authenticated user and business. Replaces passing the raw businessId, which
  * let anyone complete OAuth against an arbitrary business.
  *
- * Format: `businessId.userId.exp[.p].sig` — the `p` segment carries the connector's
- * portfolio choice, and stays absent when the caller had no choice to make.
+ * Format: `businessId.userId.exp[.flags].sig` — the flags segment carries the connector's
+ * choices (`p` portfolio, `i` instagram, `a` ads reporting), and stays absent when the
+ * caller had no choice to make.
  */
 export async function createOAuthState(
   payload: {
     businessId: string;
     userId: string;
     portfolio?: boolean;
+    /** True asks for `ads_read` so the Ads page can read Insights for this business. */
+    ads?: boolean;
     /** Instagram rides the same Facebook Login; the flag only changes the scopes and the picker. */
     platform?: MessagingPlatform;
     /**
@@ -932,7 +1087,7 @@ export async function createOAuthState(
   if (!secret) throw new Error('INTERNAL_KEY is required to start Facebook OAuth');
   const exp = Date.now() + ttlSeconds * 1000;
   const flags =
-    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}` || null;
+    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}${payload.ads ? 'a' : ''}` || null;
   const origin = payload.returnOrigin
     ? toBase64Url(encoder.encode(payload.returnOrigin))
     : null;
@@ -961,6 +1116,7 @@ export async function verifyOAuthState(
   businessId: string;
   userId: string;
   portfolio: boolean;
+  ads: boolean;
   platform: MessagingPlatform;
   /** The signed origin the flow started from, when the caller supplied one. */
   returnOrigin?: string;
@@ -972,7 +1128,7 @@ export async function verifyOAuthState(
   const [businessId, userId, expStr] = parts;
   // 4 parts: no flags, no origin. 5: flags + signature. 6: flags + origin + signature.
   const flags = parts.length >= 5 ? parts[3]! : '';
-  if (flags !== '' && !/^(?:p|i|pi)$/.test(flags)) return null;
+  if (flags !== '' && !/^p?i?a?$/.test(flags)) return null;
   const originB64 = parts.length === 6 ? parts[4]! : '';
   const sig = parts[parts.length - 1]!;
   const exp = Number(expStr);
@@ -995,6 +1151,7 @@ export async function verifyOAuthState(
     businessId,
     userId,
     portfolio: flags.includes('p'),
+    ads: flags.includes('a'),
     platform: flags.includes('i') ? 'instagram' : 'facebook',
     ...(returnOrigin ? { returnOrigin } : {}),
   };
@@ -1044,6 +1201,8 @@ export async function createFacebookPagesSelectionToken(
     userId: string;
     pages: FacebookPageOption[];
     platform?: MessagingPlatform;
+    /** Long-lived user token for Ads Insights, present only when the login asked for `ads_read`. */
+    adsToken?: string;
   },
   ttlSeconds = 600,
 ): Promise<string> {
@@ -1058,6 +1217,7 @@ export async function createFacebookPagesSelectionToken(
         exp,
         platform: payload.platform ?? 'facebook',
         pages: payload.pages,
+        ...(payload.adsToken ? { adsToken: payload.adsToken } : {}),
       }),
     ),
   );
@@ -1073,6 +1233,7 @@ export async function verifyFacebookPagesSelectionToken(
   userId: string;
   pages: FacebookPageOption[];
   platform: MessagingPlatform;
+  adsToken?: string;
 } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !token) return null;
@@ -1089,6 +1250,7 @@ export async function verifyFacebookPagesSelectionToken(
       exp?: number;
       platform?: MessagingPlatform;
       pages?: FacebookPageOption[];
+      adsToken?: string;
     };
     if (
       !parsed.businessId ||
@@ -1105,6 +1267,7 @@ export async function verifyFacebookPagesSelectionToken(
       userId: parsed.userId,
       pages: parsed.pages,
       platform: parsed.platform === 'instagram' ? 'instagram' : 'facebook',
+      ...(typeof parsed.adsToken === 'string' && parsed.adsToken ? { adsToken: parsed.adsToken } : {}),
     };
   } catch {
     return null;

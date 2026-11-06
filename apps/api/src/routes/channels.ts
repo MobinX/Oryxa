@@ -45,6 +45,7 @@ import {
   ADMIN_FACEBOOK_FLOW,
   getFacebookOAuthUrl,
   exchangeCodeForToken,
+  exchangeForLongLivedToken,
   getUserPages,
   createOAuthState,
   verifyOAuthState,
@@ -470,11 +471,12 @@ const fbAuthRoute = createRoute({
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
-  const { portfolio, returnOrigin } = c.req.valid('query');
+  const { portfolio, ads, returnOrigin } = c.req.valid('query');
   // Meta echoes `state` back verbatim, so the user's answer survives the round trip inside
   // the same signed token that binds the flow to this business — no second token, and a
   // client cannot relabel someone else's flow as portfolio-aware.
   const choice = portfolio === undefined ? undefined : portfolio === 'true';
+  const adsChoice = ads === undefined ? undefined : ads === 'true';
   // state is a signed, short-lived token bound to this user + business, so the
   // OAuth callback can't be replayed to attach a page to a business the caller
   // doesn't own.
@@ -482,9 +484,10 @@ channelsRouter.openapi(fbAuthRoute, async (c) => {
     businessId,
     userId: user.id,
     portfolio: choice,
+    ads: adsChoice,
     returnOrigin: safeReturnOrigin(returnOrigin),
   });
-  const url = getFacebookOAuthUrl(state, choice);
+  const url = getFacebookOAuthUrl(state, choice, adsChoice);
   return c.json({ url });
 });
 
@@ -592,6 +595,8 @@ channelsRouter.openapi(fbConnectPagesRoute, async (c) => {
       apiToken: page.access_token,
       agentId: defaultAgent.id,
       extraInfo: JSON.stringify({ pageName: page.name }),
+      // Present only when the login asked for ad reporting; otherwise the row keeps its own.
+      metaUserToken: verified.adsToken,
     };
 
     try {
@@ -937,12 +942,16 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
       : adminFlow
         ? `${webOrigin}/admin/channels/connect-facebook`
         : `${webOrigin}/b/${verified.businessId}/channels/connect-facebook`;
+  // Banked below when the login asked for ad reporting; rides to the picker inside the
+  // signed selection token so the connect call can store it beside each channel.
+  let adsToken: string | undefined;
   const toPicker = async (pages: FacebookPageOption[]) => {
     const pagesToken = await createFacebookPagesSelectionToken({
       businessId: verified.businessId,
       userId: verified.userId,
       pages,
       platform,
+      ...(adsToken ? { adsToken } : {}),
     });
     return c.redirect(`${pickerUrl}?token=${encodeURIComponent(pagesToken)}`);
   };
@@ -956,6 +965,18 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
 
   try {
     const userToken = await exchangeCodeForToken(code);
+    // The Ads page reads with this token long after the login, so bank the long-lived form
+    // now — but a swap failure must not fail the Page connect, only the future Ads read.
+    if (verified.ads) {
+      try {
+        adsToken = await exchangeForLongLivedToken(userToken);
+      } catch (err) {
+        console.warn('[fb-callback] long-lived token exchange failed; Ads will stay unconnected', {
+          businessId: verified.businessId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     let pages = await getUserPages(userToken);
     console.log('[fb-callback] /me/accounts returned pages', {
       businessId: verified.businessId,

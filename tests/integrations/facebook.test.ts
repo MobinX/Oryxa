@@ -12,6 +12,7 @@ describe('Facebook Integration', () => {
     process.env.META_APP_SECRET = 'app-secret';
     process.env.META_REDIRECT_URI = 'http://localhost/callback';
     delete process.env.META_BUSINESS_MANAGEMENT;
+    delete process.env.META_ADS_READ;
     vi.resetModules();
   });
 
@@ -321,6 +322,61 @@ describe('Facebook Integration', () => {
 
     const tampered = `${flagged.slice(0, flagged.lastIndexOf('.'))}.x`;
     expect(await verifyOAuthState(tampered)).toBeNull();
+  });
+
+  it('getFacebookOAuthUrl asks for no ad scope while it is unapproved', async () => {
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    const url = getFacebookOAuthUrl('business-state-123');
+    expect(url).not.toContain('ads_read');
+  });
+
+  it('getFacebookOAuthUrl asks for ad reporting once the flag turns it on', async () => {
+    process.env.META_ADS_READ = 'true';
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    expect(getFacebookOAuthUrl('business-state-123')).toContain('ads_read');
+  });
+
+  it('lets the caller’s own ads choice override the deployment flag', async () => {
+    const { getFacebookOAuthUrl } = await import('@repo/integrations/facebook');
+    expect(getFacebookOAuthUrl('s', undefined, true)).toContain('ads_read');
+
+    process.env.META_ADS_READ = 'true';
+    expect(getFacebookOAuthUrl('s', undefined, false)).not.toContain('ads_read');
+  });
+
+  it('carries the ads choice through the signed state, and still reads a state without one', async () => {
+    const { createOAuthState, verifyOAuthState } = await import('@repo/integrations/facebook');
+
+    const flagged = await createOAuthState({ businessId: 'b1', userId: 'u1', ads: true });
+    expect(await verifyOAuthState(flagged)).toMatchObject({ businessId: 'b1', userId: 'u1', ads: true, portfolio: false });
+
+    const plain = await createOAuthState({ businessId: 'b1', userId: 'u1' });
+    expect(await verifyOAuthState(plain)).toMatchObject({ businessId: 'b1', userId: 'u1', ads: false });
+  });
+
+  it('carries the ads token through the page-selection token, and omits it when absent', async () => {
+    const { createFacebookPagesSelectionToken, verifyFacebookPagesSelectionToken } = await import('@repo/integrations/facebook');
+    const pages = [{ id: 'p1', name: 'P1', access_token: 'page-token' }];
+
+    const withAds = await createFacebookPagesSelectionToken({ businessId: 'b1', userId: 'u1', pages, adsToken: 'ads-token' });
+    expect(await verifyFacebookPagesSelectionToken(withAds)).toMatchObject({ businessId: 'b1', userId: 'u1', adsToken: 'ads-token' });
+
+    const withoutAds = await createFacebookPagesSelectionToken({ businessId: 'b1', userId: 'u1', pages });
+    const verified = await verifyFacebookPagesSelectionToken(withoutAds);
+    expect(verified).toMatchObject({ businessId: 'b1', userId: 'u1' });
+    expect(verified?.adsToken).toBeUndefined();
+  });
+
+  it('exchangeForLongLivedToken swaps a short-lived user token', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ access_token: 'long-lived-token' }), { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    const { exchangeForLongLivedToken } = await import('@repo/integrations/facebook');
+    const token = await exchangeForLongLivedToken('short-lived-token');
+    expect(token).toBe('long-lived-token');
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(String(fetchMock.mock.calls[0][0])).toContain('fb_exchange_token');
   });
 
   it('getGrantedPermissions returns the scopes Meta named', async () => {

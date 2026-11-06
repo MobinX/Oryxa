@@ -1,4 +1,4 @@
-import { eq, and, isNull, ne, or, isNotNull, asc } from 'drizzle-orm';
+import { eq, and, isNull, ne, or, isNotNull, asc, desc } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, channels } from '@db/schema';
 import {
@@ -39,6 +39,24 @@ export function decryptChannelToken(stored: string): string {
 /** Reveals the resolved bearer token on a fetched channel row, in place. */
 function revealChannelToken(row: { apiToken: string } | null | undefined) {
   if (row) row.apiToken = decryptChannelToken(row.apiToken);
+}
+
+/**
+ * The newest live Facebook channel's Ads token, revealed for the platform call. Null when no
+ * channel banked one — the connect never asked for `ads_read`, or every such channel is gone.
+ */
+export async function getBusinessAdsToken(businessId: string): Promise<string | null> {
+  const row = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.businessId, businessId),
+      eq(channels.platform, 'facebook'),
+      isNull(channels.deletedAt),
+      isNotNull(channels.metaUserToken),
+    ),
+    orderBy: desc(channels.createdAt),
+  });
+  if (!row?.metaUserToken) return null;
+  return decryptChannelToken(row.metaUserToken);
 }
 
 /**
@@ -183,6 +201,8 @@ export async function createChannel(businessId: string, input: unknown) {
       .set({
         deletedAt: null,
         apiToken: encryptChannelToken(parsed.apiToken)!,
+        // Absent on a connect that never asked for ads: leave whatever the row holds.
+        metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
         agentId,
         extraInfo: parsed.extraInfo ?? null,
       })
@@ -193,7 +213,13 @@ export async function createChannel(businessId: string, input: unknown) {
 
   const [channel] = await db
     .insert(channels)
-    .values({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken)!, agentId, businessId })
+    .values({
+      ...parsed,
+      apiToken: encryptChannelToken(parsed.apiToken)!,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+      agentId,
+      businessId,
+    })
     .returning();
   return { id: channel.id, status: 'linked' as const };
 }
@@ -342,7 +368,11 @@ export async function updateChannel(businessId: string, channelId: string, input
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set({ ...parsed, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
+    .set({
+      ...parsed,
+      apiToken: encryptChannelToken(parsed.apiToken) ?? undefined,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+    })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };
@@ -363,7 +393,12 @@ export async function reactivateChannel(businessId: string, channelId: string, i
   await assertAgentIsOwned(businessId, parsed.agentId);
   const [updated] = await db
     .update(channels)
-    .set({ ...parsed, deletedAt: null, apiToken: encryptChannelToken(parsed.apiToken) ?? undefined })
+    .set({
+      ...parsed,
+      deletedAt: null,
+      apiToken: encryptChannelToken(parsed.apiToken) ?? undefined,
+      metaUserToken: encryptChannelToken(parsed.metaUserToken) ?? undefined,
+    })
     .where(eq(channels.id, channelId))
     .returning();
   return { id: updated.id, updated: true };

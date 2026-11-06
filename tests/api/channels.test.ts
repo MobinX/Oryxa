@@ -177,21 +177,40 @@ describe('Channels & Agents API', () => {
       { headers: authHeaders() },
     );
     expect(res.status).toBe(200);
-    expect(asked).toHaveBeenLastCalledWith(expect.any(String), true);
+    expect(asked).toHaveBeenLastCalledWith(expect.any(String), true, undefined);
 
     const declined = await app.request(
       `/api/v1/${business.id}/channels/facebook/auth?portfolio=false`,
       { headers: authHeaders() },
     );
     expect(declined.status).toBe(200);
-    expect(asked).toHaveBeenLastCalledWith(expect.any(String), false);
+    expect(asked).toHaveBeenLastCalledWith(expect.any(String), false, undefined);
 
     asked.mockClear();
     const plain = await app.request(`/api/v1/${business.id}/channels/facebook/auth`, {
       headers: authHeaders(),
     });
     expect(plain.status).toBe(200);
-    expect(asked).toHaveBeenLastCalledWith(expect.any(String), undefined);
+    expect(asked).toHaveBeenLastCalledWith(expect.any(String), undefined, undefined);
+  });
+
+  it('hands the ads choice to the OAuth url alongside the portfolio choice', async () => {
+    const { business } = await seedTestWorld();
+    const asked = vi.mocked(getFacebookOAuthUrl);
+
+    const res = await app.request(
+      `/api/v1/${business.id}/channels/facebook/auth?ads=true`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    expect(asked).toHaveBeenLastCalledWith(expect.any(String), undefined, true);
+
+    const both = await app.request(
+      `/api/v1/${business.id}/channels/facebook/auth?portfolio=true&ads=false`,
+      { headers: authHeaders() },
+    );
+    expect(both.status).toBe(200);
+    expect(asked).toHaveBeenLastCalledWith(expect.any(String), true, false);
   });
 
   it('rejects a portfolio value that is not one of the two the connector offers', async () => {
