@@ -42,18 +42,72 @@ function revealChannelToken(row: { apiToken: string } | null | undefined) {
 }
 
 /**
- * The newest live Facebook channel's Ads token, revealed for the platform call. Null when no
- * channel banked one — the connect never asked for `ads_read`, or every such channel is gone.
+ * The newest live Facebook channel that banked an Ads token, with the token revealed for
+ * the platform call. Null when no channel banked one — the connect never asked for
+ * `ads_read`, or every such channel is gone.
  */
-export async function getBusinessAdsToken(businessId: string): Promise<string | null> {
-  const row = await db.query.channels.findFirst({
+export async function getBusinessAdsSource(
+  businessId: string,
+): Promise<{ token: string; channel: AdsChannelOption } | null> {
+  const selected = (await listAdsChannels(businessId)).find((o) => o.hasAds);
+  if (!selected) return null;
+  const token = await getChannelAdsToken(businessId, selected.id);
+  if (!token) return null;
+  return { token, channel: selected };
+}
+
+export type AdsChannelOption = {
+  id: string;
+  pageName: string;
+  platformChannelId: string;
+  hasAds: boolean;
+};
+
+/**
+ * Live Facebook channels for the Ads picker. Tokens never leave this module: `hasAds`
+ * only says whether the channel banked a user token for Insights.
+ */
+export async function listAdsChannels(businessId: string): Promise<AdsChannelOption[]> {
+  const rows = await db.query.channels.findMany({
     where: and(
       eq(channels.businessId, businessId),
       eq(channels.platform, 'facebook'),
       isNull(channels.deletedAt),
-      isNotNull(channels.metaUserToken),
     ),
     orderBy: desc(channels.createdAt),
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    pageName: pageNameOf(row.extraInfo) ?? row.platformChannelId,
+    platformChannelId: row.platformChannelId,
+    hasAds: !!row.metaUserToken,
+  }));
+}
+
+function pageNameOf(extraInfo: string | null): string | null {
+  if (!extraInfo) return null;
+  try {
+    const parsed = JSON.parse(extraInfo) as { pageName?: unknown };
+    return typeof parsed.pageName === 'string' && parsed.pageName ? parsed.pageName : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Ads token banked on one channel, or null when the channel is not this
+ * business's, is gone, or never asked for `ads_read`.
+ */
+export async function getChannelAdsToken(
+  businessId: string,
+  channelId: string,
+): Promise<string | null> {
+  const row = await db.query.channels.findFirst({
+    where: and(
+      eq(channels.id, channelId),
+      eq(channels.businessId, businessId),
+      isNull(channels.deletedAt),
+    ),
   });
   if (!row?.metaUserToken) return null;
   return decryptChannelToken(row.metaUserToken);

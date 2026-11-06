@@ -157,10 +157,21 @@ export const getBusinessStats = (token: string, businessId: string) =>
 export const getBusinessAnalytics = (token: string, businessId: string, days: number = 30) =>
   apiFetch<any>(`/api/v1/businesses/${businessId}/analytics?days=${days}`, { token });
 
+export type AdsChannel = {
+  id: string;
+  pageName: string;
+  platformChannelId: string;
+  hasAds: boolean;
+};
+
+export const listAdsChannels = (token: string, businessId: string) =>
+  apiFetch<{ channels: AdsChannel[] }>(`/api/v1/${businessId}/ads/channels`, { token });
+
 export type AdsOverview = {
   connected: boolean;
   error?: string;
   days?: number;
+  channel?: { id: string; pageName: string };
   accounts?: Array<{ id: string; name: string }>;
   account?: { id: string; name: string };
   totals?: {
@@ -197,9 +208,11 @@ export const getAdsOverview = (
   businessId: string,
   days: number = 30,
   accountId?: string,
+  channelId?: string,
 ) => {
   const query = new URLSearchParams({ days: String(days) });
   if (accountId) query.set('accountId', accountId);
+  if (channelId) query.set('channelId', channelId);
   return apiFetch<AdsOverview>(`/api/v1/${businessId}/ads/overview?${query.toString()}`, { token });
 };
 

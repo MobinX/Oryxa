@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { cachedAdsOverview } from '@/app/_cache/queries';
+import { cachedAdsChannels, cachedAdsOverview } from '@/app/_cache/queries';
 import AdsSkeleton from './skeleton';
 import { Card } from '@/components/ui/card';
 import { CircleDollarSign, Eye, MousePointerClick, Users } from 'lucide-react';
@@ -20,7 +20,7 @@ export default function AdsPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ days?: string; accountId?: string }>;
+  searchParams: Promise<{ days?: string; accountId?: string; channelId?: string }>;
 }) {
   return (
     <Suspense fallback={<AdsSkeleton />}>
@@ -34,18 +34,23 @@ async function AdsContent({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ days?: string; accountId?: string }>;
+  searchParams: Promise<{ days?: string; accountId?: string; channelId?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
   const days = readDays(query.days);
   const accountId = query.accountId || undefined;
+  const channelId = query.channelId || undefined;
   const token = await requireAuth();
-  const overview = await cachedAdsOverview(token, businessId, days, accountId);
+  const [overview, { channels }] = await Promise.all([
+    cachedAdsOverview(token, businessId, days, accountId, channelId),
+    cachedAdsChannels(token, businessId),
+  ]);
 
   const base = `/b/${businessId}/ads`;
-  const windowHref = (windowDays: number, account?: string) =>
-    `${base}?days=${windowDays}${account ? `&accountId=${encodeURIComponent(account)}` : ''}`;
+  const windowHref = (windowDays: number, account?: string, channel?: string) =>
+    `${base}?days=${windowDays}${account ? `&accountId=${encodeURIComponent(account)}` : ''}${channel ? `&channelId=${encodeURIComponent(channel)}` : ''}`;
+  const currentChannel = overview.channel?.id ?? channelId;
 
   if (!overview.connected) {
     return (
@@ -58,6 +63,14 @@ async function AdsContent({
             Spend and delivery for your Meta ad accounts, read live from Facebook.
           </p>
         </div>
+        {channels.length > 0 && (
+          <ChannelPills
+            channels={channels}
+            days={days}
+            current={currentChannel}
+            href={windowHref}
+          />
+        )}
         <Card className="border-border/60 p-6">
           <p className="font-semibold text-foreground">Ad reporting is not connected</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -98,6 +111,12 @@ async function AdsContent({
             Ads
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
+            {overview.channel && (
+              <>
+                <strong className="text-foreground">{overview.channel.pageName}</strong>
+                {' · '}
+              </>
+            )}
             {overview.account ? (
               <>
                 <strong className="text-foreground">{overview.account.name}</strong>
@@ -109,13 +128,22 @@ async function AdsContent({
           </p>
         </div>
 
+        {channels.length > 0 && (
+          <ChannelPills
+            channels={channels}
+            days={days}
+            current={currentChannel}
+            href={windowHref}
+          />
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           {accounts.length > 1 && (
             <div className="flex items-center rounded-xl border border-border/60 bg-muted/40 p-1">
               {accounts.map((account) => (
                 <Link
                   key={account.id}
-                  href={windowHref(days, account.id)}
+                  href={windowHref(days, account.id, currentChannel)}
                   aria-current={account.id === currentAccount ? 'page' : undefined}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                     account.id === currentAccount
@@ -132,7 +160,7 @@ async function AdsContent({
             {PERIODS.map((period) => (
               <Link
                 key={period}
-                href={windowHref(period, currentAccount)}
+                href={windowHref(period, currentAccount, currentChannel)}
                 aria-current={period === days ? 'page' : undefined}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   period === days
@@ -255,6 +283,42 @@ async function AdsContent({
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function ChannelPills({
+  channels,
+  days,
+  current,
+  href,
+}: {
+  channels: Array<{ id: string; pageName: string; hasAds: boolean }>;
+  days: number;
+  current?: string;
+  href: (windowDays: number, account?: string, channel?: string) => string;
+}) {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1">
+      {channels.map((channel) => (
+        <Link
+          key={channel.id}
+          href={href(days, undefined, channel.id)}
+          aria-current={channel.id === current ? 'page' : undefined}
+          title={
+            channel.hasAds
+              ? channel.pageName
+              : `${channel.pageName} — connected without ad reporting`
+          }
+          className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+            channel.id === current
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          } ${channel.hasAds ? '' : 'opacity-60'}`}
+        >
+          {channel.pageName}
+        </Link>
+      ))}
     </div>
   );
 }

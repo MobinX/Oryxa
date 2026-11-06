@@ -153,4 +153,70 @@ describe('Ads overview', () => {
     expect(body.connected).toBe(false);
     expect(body.error).toContain('reconnect');
   });
+
+  it('lists channels with their ads state, and leaks no token', async () => {
+    const business = await seedWithAdsToken();
+
+    const res = await app.request(`/api/v1/${business.id}/ads/channels`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    const raw = await res.text();
+    expect(raw).not.toContain('ads-user-token');
+    expect(raw).not.toContain('page-token-test');
+    const body = JSON.parse(raw) as any;
+    expect(body.channels).toHaveLength(1);
+    expect(body.channels[0]).toMatchObject({ hasAds: true });
+    expect(body.channels[0].id).toBeTruthy();
+    expect(body.channels[0].pageName).toBeTruthy();
+  });
+
+  it('reads with the selected channel token', async () => {
+    const business = await seedWithAdsToken();
+    const { createChannel } = await import('@repo/db/crud/channel');
+    const second = await createChannel(business.id, {
+      platform: 'facebook',
+      apiToken: 'page-token-2',
+      platformChannelId: `PAGE_${crypto.randomUUID()}`,
+      metaUserToken: 'ads-token-2',
+    });
+    graphAnswers({ accounts: ACCOUNTS, totals: TOTALS, campaigns: CAMPAIGNS, breakdown: BREAKDOWN });
+
+    const res = await app.request(
+      `/api/v1/${business.id}/ads/overview?channelId=${second.id}`,
+      { headers: authHeaders() },
+    );
+    const body = (await res.json()) as any;
+    expect(body.connected).toBe(true);
+    expect(body.channel.id).toBe(second.id);
+    expect(graphUrls().every((url) => url.includes('ads-token-2'))).toBe(true);
+  });
+
+  it('answers 404 for a channel of another business', async () => {
+    const business = await seedWithAdsToken();
+    const other = await seedTestWorld();
+    graphAnswers({});
+
+    const res = await app.request(
+      `/api/v1/${business.id}/ads/overview?channelId=${other.channel.id}`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('names the reconnect for a channel connected without ad reporting', async () => {
+    const { business, channel } = await seedTestWorld();
+    graphAnswers({});
+
+    const res = await app.request(
+      `/api/v1/${business.id}/ads/overview?channelId=${channel.id}`,
+      { headers: authHeaders() },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.connected).toBe(false);
+    expect(body.channel.id).toBe(channel.id);
+    expect(body.error).toContain('reconnect');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
 });

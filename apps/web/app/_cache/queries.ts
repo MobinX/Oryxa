@@ -4,6 +4,7 @@ import {
   getBusiness,
   getBusinessAnalytics,
   getMe,
+  listAdsChannels,
   getOrder,
   getProduct,
   listBusinesses,
@@ -64,11 +65,19 @@ export async function cachedAdsOverview(
   businessId: string,
   days: number,
   accountId?: string,
+  channelId?: string,
 ) {
   'use cache';
   cacheLife('minutes');
   cacheTag(cacheTags.ads(businessId));
-  return getAdsOverview(token, businessId, days, accountId);
+  return getAdsOverview(token, businessId, days, accountId, channelId);
+}
+
+export async function cachedAdsChannels(token: string, businessId: string) {
+  'use cache';
+  cacheLife('minutes');
+  cacheTag(cacheTags.channels(businessId));
+  return listAdsChannels(token, businessId);
 }
 
 /**

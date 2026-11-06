@@ -7,7 +7,7 @@ vi.mock('@repo/db/crud/channel', async () => {
   const actual = await import('../../packages/db/crud/channel');
   return {
     ...actual,
-    getBusinessAdsToken: async () => {
+    getBusinessAdsSource: async () => {
       throw new Error('column "channels.meta_user_token" does not exist');
     },
   };
