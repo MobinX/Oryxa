@@ -19,10 +19,10 @@ export type DisplayPlan = {
 
 /** Visual variation only; the plan data itself never chooses a colour. */
 const TAG_TONES = [
-  'border-white/10 bg-white/[0.06] text-slate-300',
-  'border-[#5B3DF5]/30 bg-[#5B3DF5]/15 text-[#A78BFA]',
-  'border-[#5B3DF5]/50 bg-[#5B3DF5]/20 text-[#A78BFA]',
-  'border-white/10 bg-white/[0.06] text-slate-300',
+  'border-white/10 bg-white/[0.06] text-neutral-300',
+  'border-white/20 bg-white/[0.08] text-white',
+  'border-white/25 bg-white/[0.10] text-white',
+  'border-white/10 bg-white/[0.06] text-neutral-300',
 ];
 
 export function toDisplayPlans(plans: PublicPlan[]): DisplayPlan[] {

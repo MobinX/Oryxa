@@ -26,7 +26,7 @@ export function MarketingNav() {
           <div className="flex items-center gap-8">
             <Link
               href="/"
-              className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+              className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
               <OnlyOrdesLogo lightText />
             </Link>
@@ -36,7 +36,7 @@ export function MarketingNav() {
                 <Link
                   key={link.label}
                   href={link.href}
-                  className="rounded-full px-3.5 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+                  className="rounded-full px-3.5 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                   {link.label}
                 </Link>
@@ -47,13 +47,13 @@ export function MarketingNav() {
           <div className="hidden items-center gap-2.5 md:flex">
             <Link
               href="/login"
-              className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
               Sign in
             </Link>
             <Link
               href="/login"
-              className="group inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-4.5 py-2 text-sm font-semibold text-white shadow-[0_0_28px_-6px_rgba(91,61,245,0.7)] transition hover:brightness-110 active:scale-97 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70"
+              className="group inline-flex items-center gap-1.5 rounded-full bg-white px-4.5 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 active:scale-97 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
               Get started
               <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -103,7 +103,7 @@ export function MarketingNav() {
             <Link
               href="/login"
               onClick={() => setOpen(false)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-sm font-semibold text-white shadow-[0_0_24px_-6px_rgba(91,61,245,0.7)] transition hover:brightness-110"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-white text-sm font-semibold text-black transition hover:bg-neutral-200"
             >
               Get started
               <ArrowRight className="h-3.5 w-3.5" />

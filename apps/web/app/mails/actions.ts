@@ -119,6 +119,7 @@ export async function trashMailAction(formData: FormData): Promise<void> {
     failTarget(`/mails/${encodeURIComponent(id)}`, error);
   }
   revalidatePath('/mails');
+  revalidatePath('/mails/[id]', 'page');
   redirect('/mails?folder=trash&trashed=1');
 }
 
@@ -133,6 +134,7 @@ export async function restoreMailAction(formData: FormData): Promise<void> {
     failTarget(`/mails/${encodeURIComponent(id)}`, error);
   }
   revalidatePath('/mails');
+  revalidatePath('/mails/[id]', 'page');
   redirect(`/mails/${encodeURIComponent(id)}?restored=1`);
 }
 
@@ -147,5 +149,6 @@ export async function deleteMailAction(formData: FormData): Promise<void> {
     failTarget(`/mails/${encodeURIComponent(id)}`, error);
   }
   revalidatePath('/mails');
+  revalidatePath('/mails/[id]', 'page');
   redirect('/mails?folder=trash&deleted=1');
 }

@@ -34,25 +34,21 @@ const HERO_PROOF_POINTS = [
 const TRUST_POINTS = [
   {
     icon: Lock,
-    tone: 'bg-violet-500/15 text-violet-300',
     title: 'Scoped access',
     copy: 'We request only the platform permissions needed to run your accounts.',
   },
   {
     icon: ShieldCheck,
-    tone: 'bg-sky-500/15 text-sky-300',
     title: 'Your data, your control',
     copy: 'Disconnect channels or delete your workspace any time.',
   },
   {
     icon: Layers,
-    tone: 'bg-emerald-500/15 text-emerald-300',
     title: 'Established providers',
     copy: 'Hosted on reputable cloud infrastructure. See our Privacy Policy for the list.',
   },
   {
     icon: Clock,
-    tone: 'bg-amber-500/15 text-amber-300',
     title: 'Human oversight',
     copy: 'Review, edit, pause or take over any AI reply.',
   },
@@ -71,7 +67,7 @@ export default function HomePageClient({
   const compareRows = toCompareRows(plans);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#08090A] font-inter text-slate-100 selection:bg-[#5B3DF5] selection:text-white">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#0B0C0F] font-inter text-neutral-100 selection:bg-white selection:text-black">
       <MarketingStyles />
       <GlowBackground />
       <MarketingNav />
@@ -91,21 +87,12 @@ export default function HomePageClient({
 
                 <Reveal delayMs={70}>
                   <h1 className="font-geist text-4xl font-extrabold leading-[1.06] tracking-tight text-white sm:text-5xl xl:text-[56px]">
-                    Your orders,{' '}
-                    <span className="relative inline-block">
-                      <span className="bg-gradient-to-r from-[#A78BFA] via-[#C084FC] to-[#5B3DF5] bg-clip-text text-transparent">
-                        on autopilot.
-                      </span>
-                      <span
-                        aria-hidden
-                        className="pointer-events-none absolute -inset-4 -z-10 rounded-full bg-[#5B3DF5]/25 blur-3xl"
-                      />
-                    </span>
+                    Your orders, on autopilot.
                   </h1>
                 </Reveal>
 
                 <Reveal delayMs={140}>
-                  <p className="max-w-xl text-balance text-base leading-relaxed text-slate-300 sm:text-[17px]">
+                  <p className="max-w-xl text-balance text-base leading-relaxed text-neutral-300 sm:text-[17px]">
                     {COMPANY_NAME} turns DMs and comments into confirmed orders
                     — automated replies, live catalog checks, order capture
                     and human handoff, all from one inbox.
@@ -116,14 +103,14 @@ export default function HomePageClient({
                   <div className="flex flex-wrap items-center gap-3.5 pt-1">
                     <Link
                       href="/login"
-                      className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_0_44px_-10px_rgba(91,61,245,0.95)] transition hover:brightness-110 active:scale-97 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70"
+                      className="group inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:bg-neutral-200 active:scale-97 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                     >
                       Start selling free
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                     </Link>
                     <a
                       href="#workflow"
-                      className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/[0.04] px-7 py-3.5 text-sm font-semibold text-slate-200 backdrop-blur transition hover:bg-white/[0.09] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+                      className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/[0.04] px-7 py-3.5 text-sm font-semibold text-neutral-200 backdrop-blur transition hover:bg-white/[0.09] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                     >
                       See it in action
                     </a>
@@ -131,7 +118,7 @@ export default function HomePageClient({
                 </Reveal>
 
                 <Reveal delayMs={280}>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-neutral-500">
                     Free plan available · Cancel anytime
                   </p>
                 </Reveal>
@@ -140,32 +127,28 @@ export default function HomePageClient({
               {/* Phone demo (right) */}
               <Reveal delayMs={120} className="lg:col-span-7">
                 <HeroInteractiveAd />
-                <p className="mx-auto mt-3 max-w-[440px] text-center text-[10px] leading-relaxed text-slate-500">
+                <p className="mx-auto mt-3 max-w-[440px] text-center text-[10px] leading-relaxed text-neutral-500">
                   Interactive preview. Screens are simulated illustrations; available features depend
                   on your connected channels and plan.
                 </p>
               </Reveal>
             </div>
 
-            {/* Glass value strip */}
+            {/* Value strip */}
             <Reveal delayMs={120} className="mt-16">
               <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-1.5 shadow-2xl backdrop-blur-xl">
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#A78BFA]/60 to-transparent"
-                />
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
                   {HERO_PROOF_POINTS.map(({ icon: Icon, title, copy }) => (
                     <div
                       key={title}
-                      className="flex items-center gap-4 rounded-2xl bg-white/[0.02] px-5 py-4 transition hover:bg-[#5B3DF5]/[0.08]"
+                      className="flex items-center gap-4 rounded-2xl bg-white/[0.02] px-5 py-4 transition hover:bg-white/[0.05]"
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#5B3DF5]/25 bg-[#5B3DF5]/12">
-                        <Icon className="h-4.5 w-4.5 text-[#A78BFA]" />
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04]">
+                        <Icon className="h-4.5 w-4.5 text-neutral-200" />
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-white">{title}</p>
-                        <p className="truncate text-xs text-slate-400">{copy}</p>
+                        <p className="truncate text-xs text-neutral-400">{copy}</p>
                       </div>
                     </div>
                   ))}
@@ -198,11 +181,6 @@ export default function HomePageClient({
 
         {/* 3. PRICING */}
         <section id="pricing" className="relative overflow-hidden py-20 lg:py-24">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-10 h-[420px] w-[min(900px,130vw)] -translate-x-1/2 rounded-full bg-[#5B3DF5]/[0.08] blur-3xl"
-          />
-
           <div className="relative mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
             <SectionHeading
               eyebrow="Simple, transparent pricing"
@@ -213,7 +191,7 @@ export default function HomePageClient({
 
             <Reveal delayMs={100}>
               <div className="mt-9 flex justify-center">
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-slate-400">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-neutral-400">
                   Live monthly plans from the admin catalogue
                 </span>
               </div>
@@ -221,7 +199,7 @@ export default function HomePageClient({
 
             {displayPlans.length === 0 ? (
               <Reveal delayMs={100}>
-                <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-slate-400">
+                <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-neutral-400">
                   {unavailable
                     ? 'Pricing is temporarily unavailable. Please check back shortly.'
                     : 'No plans are published yet.'}
@@ -234,23 +212,17 @@ export default function HomePageClient({
                   {displayPlans.map((plan, i) => (
                     <Reveal key={plan.slug} delayMs={i * 80} className="h-full">
                       {plan.featured ? (
-                        <div className="relative flex h-full flex-col rounded-3xl p-px shadow-[0_30px_80px_-30px_rgba(91,61,245,0.6)]">
+                        <div className="relative flex h-full flex-col rounded-3xl border border-white/30 bg-[#101114] p-6 shadow-2xl">
                           <span
                             aria-hidden
-                            className="absolute inset-0 rounded-3xl bg-gradient-to-b from-[#5B3DF5] via-[#7C3AED]/40 to-[#5B3DF5]/10"
-                          />
-                          <span
-                            aria-hidden
-                            className="absolute right-7 top-6 z-10 rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] px-3 py-1 text-[10px] font-bold text-white shadow-md"
+                            className="absolute right-7 top-6 z-10 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-black"
                           >
                             {plan.badge}
                           </span>
-                          <div className="relative flex h-full flex-col rounded-[calc(1.5rem-1px)] bg-[#0C0E1A] p-6">
-                            <PlanBody plan={plan} />
-                          </div>
+                          <PlanBody plan={plan} />
                         </div>
                       ) : (
-                        <div className="group flex h-full flex-col rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:border-[#7C3AED]/50 hover:bg-[#5B3DF5]/[0.06] hover:shadow-[0_24px_60px_-24px_rgba(91,61,245,0.45)]">
+                        <div className="group flex h-full flex-col rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.05]">
                           <PlanBody plan={plan} />
                         </div>
                       )}
@@ -262,14 +234,10 @@ export default function HomePageClient({
                 {compareRows.length > 0 ? (
                   <Reveal delayMs={100} className="mt-12">
                     <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl lg:p-8">
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-[#A78BFA]/50 to-transparent"
-                      />
                       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                         <div className="lg:col-span-3">
                           <h3 className="font-geist text-xl font-bold text-white">Compare plans</h3>
-                          <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                          <p className="mt-2 text-xs leading-relaxed text-neutral-400">
                             Every line item, up front — so you can decide in one scroll.
                           </p>
                         </div>
@@ -281,14 +249,14 @@ export default function HomePageClient({
                                 {displayPlans.map((plan) => (
                                   <th
                                     key={plan.slug}
-                                    className={`px-4 py-2.5 text-center ${plan.featured ? 'text-[#A78BFA]' : ''}`}
+                                    className="px-4 py-2.5 text-center"
                                   >
                                     {plan.name}
                                   </th>
                                 ))}
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/[0.06] text-slate-300">
+                            <tbody className="divide-y divide-white/[0.06] text-neutral-300">
                               {compareRows.map((row) => (
                                 <tr key={row.label} className="transition hover:bg-white/[0.02]">
                                   <td className="py-2.5 pr-4 font-medium text-white">{row.label}</td>
@@ -318,48 +286,52 @@ export default function HomePageClient({
             <Reveal delayMs={100} className="mt-10 flex justify-center">
               <Link
                 href="/pricing"
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-[#7C3AED]/50 hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-neutral-200 transition hover:border-white/30 hover:text-white"
               >
                 See full pricing
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Reveal>
 
-            {/* Trust grid */}
-            <section aria-label="How your data stays yours" className="mt-14 border-t border-white/10 pt-12">
-              <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-                <div className="lg:col-span-3">
-                  <Reveal>
-                    <h3 className="font-geist text-lg font-extrabold text-white">
-                      Your business data stays in your control
-                    </h3>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                      Best-practice security and privacy, plus the right to
-                      disconnect whenever you decide.
-                    </p>
-                  </Reveal>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
-                  {TRUST_POINTS.map((pt, i) => (
-                    <Reveal key={pt.title} delayMs={i * 70}>
-                      <div className="flex h-full items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 transition hover:border-[#7C3AED]/40 hover:bg-[#5B3DF5]/[0.05]">
-                        <span
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${pt.tone}`}
-                        >
-                          <pt.icon className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white">{pt.title}</p>
-                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                            {pt.copy}
-                          </p>
-                        </div>
-                      </div>
-                    </Reveal>
-                  ))}
-                </div>
+          </div>
+        </section>
+
+        {/* Trust band — the one light section */}
+        <section
+          aria-label="How your data stays yours"
+          className="bg-[#F4F4F5] py-16 text-neutral-900 lg:py-20"
+        >
+          <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+              <div className="lg:col-span-3">
+                <Reveal>
+                  <h3 className="font-geist text-lg font-extrabold tracking-tight text-black">
+                    Your business data stays in your control
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+                    Best-practice security and privacy, plus the right to
+                    disconnect whenever you decide.
+                  </p>
+                </Reveal>
               </div>
-            </section>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
+                {TRUST_POINTS.map((pt, i) => (
+                  <Reveal key={pt.title} delayMs={i * 70}>
+                    <div className="flex h-full items-start gap-3 rounded-2xl border border-black/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black text-white">
+                        <pt.icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-black">{pt.title}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-neutral-600">
+                          {pt.copy}
+                        </p>
+                      </div>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -374,9 +346,9 @@ export default function HomePageClient({
 }
 
 function compareCellClass(cell: string, featured: boolean): string {
-  if (cell === '✓') return 'text-emerald-400';
-  if (cell === '—') return 'text-slate-600';
-  return featured ? 'font-semibold text-[#A78BFA]' : 'text-slate-300';
+  if (cell === '✓') return 'font-bold text-white';
+  if (cell === '—') return 'text-neutral-600';
+  return featured ? 'font-semibold text-white' : 'text-neutral-300';
 }
 
 function PlanBody({ plan }: { plan: DisplayPlan }) {
@@ -389,17 +361,17 @@ function PlanBody({ plan }: { plan: DisplayPlan }) {
           {plan.custom ? 'Custom' : plan.priceCents === 0 ? 'Free' : 'Paid'}
         </span>
         <h3 className="mt-3 font-geist text-xl font-bold text-white">{plan.name}</h3>
-        <p className="mt-1.5 min-h-9 text-xs text-slate-400">{plan.copy}</p>
+        <p className="mt-1.5 min-h-9 text-xs text-neutral-400">{plan.copy}</p>
         <div className="mt-5 flex items-baseline gap-1 border-b border-white/[0.08] pb-5">
           <span className="font-geist text-4xl font-extrabold text-white">{plan.priceLabel}</span>
-          {plan.priceCents > 0 ? <span className="text-xs text-slate-400">/ month</span> : null}
+          {plan.priceCents > 0 ? <span className="text-xs text-neutral-400">/ month</span> : null}
         </div>
         <ul className="mt-5 space-y-2.5 text-xs">
           {plan.features.map((feature) => (
-            <li key={feature} className="flex items-center gap-2 text-slate-300">
+            <li key={feature} className="flex items-center gap-2 text-neutral-300">
               <Check
                 className={`h-4 w-4 shrink-0 ${
-                  plan.featured ? 'text-emerald-400' : 'text-[#818CF8]'
+                  plan.featured ? 'text-white' : 'text-neutral-500'
                 }`}
               />
               {feature}
@@ -409,10 +381,10 @@ function PlanBody({ plan }: { plan: DisplayPlan }) {
       </div>
       <Link
         href={plan.ctaHref}
-        className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]/70 ${
+        className={`mt-7 flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
           plan.featured
-            ? 'bg-gradient-to-r from-[#5B3DF5] to-[#7C3AED] text-white shadow-[0_0_28px_-6px_rgba(91,61,245,0.8)] hover:brightness-110'
-            : 'border border-white/15 bg-white/[0.04] text-slate-200 hover:bg-white/[0.09]'
+            ? 'bg-white text-black hover:bg-neutral-200'
+            : 'border border-white/15 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.09]'
         }`}
       >
         {plan.cta}

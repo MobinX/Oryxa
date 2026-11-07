@@ -166,12 +166,40 @@ export interface WorkerEmailDocument {
   sizeBytes: number;
 }
 
+/**
+ * Mailbox id memo. Every mail page load fires several API requests (list pane +
+ * detail pane), and each one used to POST /api/mailboxes before its real call —
+ * doubling Worker roundtrips. Mailboxes are never deleted through the UI, so a
+ * short-lived memo is safe; in-flight dedup collapses concurrent ensures (the
+ * list+detail pair) into a single POST even on a cold instance.
+ */
+const MAILBOX_MEMO_TTL_MS = 60_000;
+const mailboxMemo = new Map<string, { mailbox: WorkerMailbox; expiresAt: number }>();
+const mailboxInflight = new Map<string, Promise<WorkerMailbox>>();
+
 export async function ensureMailbox(email: string, name?: string | null): Promise<WorkerMailbox> {
-  const body = await mailWorkerJson<{ mailbox: WorkerMailbox }>('/api/mailboxes', {
+  const key = email.trim().toLowerCase();
+  const cached = mailboxMemo.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.mailbox;
+  mailboxMemo.delete(key);
+  const inflight = mailboxInflight.get(key);
+  if (inflight) return inflight;
+  const pending = mailWorkerJson<{ mailbox: WorkerMailbox }>('/api/mailboxes', {
     method: 'POST',
     body: JSON.stringify({ address: email, ...(name ? { name } : {}) }),
-  });
-  return body.mailbox;
+  }).then(
+    (body) => {
+      mailboxMemo.set(key, { mailbox: body.mailbox, expiresAt: Date.now() + MAILBOX_MEMO_TTL_MS });
+      mailboxInflight.delete(key);
+      return body.mailbox;
+    },
+    (error) => {
+      mailboxInflight.delete(key);
+      throw error;
+    },
+  );
+  mailboxInflight.set(key, pending);
+  return pending;
 }
 
 export async function listMailboxEmails(

@@ -4,13 +4,15 @@ import { siteUrl } from '@/lib/seo';
 
 /**
  * Site identity for search engines: Organization + WebSite. The logo is a crawlable
- * 512px raster file, because Google's Organization spec does not accept SVG.
+ * square 512px raster file, because Google's Organization spec does not accept SVG
+ * and wants a square mark for the knowledge panel. /logo.png is the stacked
+ * lockup (1200x1050), so it must NOT be used here — dimensions must be truthful.
  */
 export async function OrganizationJsonLd(): Promise<React.JSX.Element> {
   const brand = await getBrand();
   const base = siteUrl(brand.host);
   const supportEmail = supportEmailForHost(brand.host);
-  const logo = `${base}/logo.png`;
+  const logo = `${base}/icon-512.png`;
   const description = `${brand.companyName} answers DMs, comments and storefront questions with AI, manages catalog and orders for Facebook, Instagram and WhatsApp commerce.`;
 
   const data = {
