@@ -1,10 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Briefcase, Zap, Crown, Building2, Sparkles } from 'lucide-react';
+import { Tag, Briefcase, Zap, Crown, Building2, Sparkles, MessageCircle, ArrowRight } from 'lucide-react';
 import type { DisplayPlan, PlanCompareRow } from '@/lib/plan-display';
 import { CompareTable } from './compare';
 import { useLandingLang } from './theme';
+
+/** Display-only: 3000 -> 3,000 so saved copy matches the table formatting. */
+function formatBulletNumbers(text: string): string {
+  return text.replace(/\b\d{4,}\b/g, (digits) => Number(digits).toLocaleString('en-US'));
+}
 
 function PlanIcon({ slug }: { slug: string }) {
   const props = { size: 20, strokeWidth: 2 };
@@ -137,8 +142,8 @@ export function LandingPricing({
             {t.billingYearly}
             <span
               style={{
-                background: 'var(--oo-halo)',
-                color: 'var(--oo-accent)',
+                background: billing === 'yearly' ? 'rgba(255,255,255,0.25)' : 'var(--oo-halo)',
+                color: billing === 'yearly' ? '#fff' : 'var(--oo-accent)',
                 fontSize: 12,
                 fontWeight: 700,
                 borderRadius: 999,
@@ -321,7 +326,7 @@ export function LandingPricing({
                         >
                           ✓
                         </span>
-                        <span>{b}</span>
+                        <span>{formatBulletNumbers(b)}</span>
                       </span>
                     ))}
                     {isTrial ? <span style={{ fontSize: 12, color: 'var(--oo-muted)' }}>{t.trialNote}</span> : null}
@@ -371,8 +376,7 @@ export function LandingCta() {
       <div
         style={{
           position: 'relative',
-          textAlign: 'center',
-          padding: '80px 32px',
+          padding: '56px 48px',
           borderRadius: 28,
           border: '1px solid var(--oo-line)',
           background: 'var(--oo-surface)',
@@ -391,35 +395,103 @@ export function LandingCta() {
             pointerEvents: 'none',
           }}
         />
-        <h2
+        <span
+          aria-hidden="true"
           style={{
-            position: 'relative',
-            margin: '0 0 12px',
-            fontSize: 44,
-            lineHeight: 1.08,
-            letterSpacing: '-0.035em',
-            fontWeight: 700,
+            position: 'absolute',
+            top: 22,
+            right: 30,
+            color: 'var(--oo-accent)',
+            opacity: 0.8,
+            pointerEvents: 'none',
           }}
         >
-          {t.ctaH}
-        </h2>
-        <p style={{ position: 'relative', margin: '0 auto 28px', maxWidth: 520, color: 'var(--oo-muted)' }}>{t.ctaSub}</p>
-        <a
-          href="/login"
+          <Sparkles size={22} />
+        </span>
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: 54,
+            right: 68,
+            color: 'var(--oo-accent)',
+            opacity: 0.8,
+            pointerEvents: 'none',
+          }}
+        >
+          <Sparkles size={16} />
+        </span>
+        <div
           style={{
             position: 'relative',
-            display: 'inline-flex',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 28,
             alignItems: 'center',
-            minHeight: 50,
-            padding: '0 26px',
-            borderRadius: 12,
-            background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
-            color: '#fff',
-            fontWeight: 600,
+            justifyContent: 'space-between',
           }}
         >
-          {t.ctaBtn}
-        </a>
+          <div
+            style={{
+              display: 'flex',
+              gap: 20,
+              minWidth: 0,
+              flex: '1 1 420px',
+              alignItems: 'center',
+            }}
+          >
+            <span
+              style={{
+                width: 64,
+                height: 64,
+                flexShrink: 0,
+                borderRadius: 18,
+                background: 'var(--oo-halo)',
+                color: 'var(--oo-accent)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <MessageCircle size={30} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <h2
+                style={{
+                  margin: '0 0 10px',
+                  textAlign: 'left',
+                  fontSize: 36,
+                  lineHeight: 1.1,
+                  letterSpacing: '-0.03em',
+                  fontWeight: 700,
+                }}
+              >
+                {t.ctaH}
+              </h2>
+              <p style={{ margin: 0, maxWidth: 480, color: 'var(--oo-muted)', fontSize: 16 }}>{t.ctaSub}</p>
+            </div>
+          </div>
+          <a
+            href="/login"
+            style={{
+              position: 'relative',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 52,
+              padding: '0 28px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: 15,
+              flexShrink: 0,
+            }}
+          >
+            {t.ctaBtn}
+            <ArrowRight size={18} />
+          </a>
+        </div>
       </div>
     </section>
   );

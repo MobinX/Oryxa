@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Check, MessageCircle, ShoppingCart, Tag } from 'lucide-react';
 import { useLandingLang, usePrefersReducedMotion } from './theme';
 
 function SpeakerOnIcon() {
@@ -79,7 +80,22 @@ export function LandingVideo({ companyName }: { companyName: string }) {
         textAlign: 'center',
       }}
     >
-      <div style={{ fontSize: 14, color: 'var(--oo-accent)', fontWeight: 600 }}>{t.videoKicker}</div>
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 7,
+          padding: '6px 16px',
+          borderRadius: 999,
+          background: 'var(--oo-halo)',
+          color: 'var(--oo-accent)',
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        <Tag size={14} aria-hidden="true" />
+        {t.videoKicker}
+      </div>
       <h2
         style={{
           margin: '10px 0 12px',
@@ -122,6 +138,32 @@ export function LandingVideo({ companyName }: { companyName: string }) {
             cursor: 'pointer',
           }}
         >
+          <div
+            className="oo-order-float"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 18,
+              right: 18,
+              zIndex: 2,
+              width: 210,
+              boxSizing: 'border-box',
+              padding: 14,
+              borderRadius: 16,
+              border: '1px solid rgba(255,255,255,0.75)',
+              background: 'var(--oo-surface, #fff)',
+              boxShadow: '0 12px 36px rgba(10,20,40,0.18)',
+              textAlign: 'left',
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#15803d', fontSize: 13, fontWeight: 700 }}>
+              <span style={{ color: 'var(--oo-text, #111)' }}>{t.orderCreated}</span>
+              <Check size={14} color="#16a34a" />
+            </div>
+            <div style={{ marginTop: 5, color: 'var(--oo-muted)', fontSize: 12 }}>#1042</div>
+            <div style={{ marginTop: 3, color: 'var(--oo-text, #111)', fontSize: 20, fontWeight: 800 }}>৳1,850</div>
+          </div>
           <video
             ref={videoRef}
             src="/landing/onlyorders-commercial.mp4"
@@ -226,6 +268,38 @@ export function LandingVideo({ companyName }: { companyName: string }) {
           </button>
         </div>
       </div>
+      <div
+        aria-hidden="true"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          marginTop: 18,
+          color: 'var(--oo-muted)',
+        }}
+      >
+        {[MessageCircle, ShoppingCart, Check].map((Icon, index) => (
+          <span key={index} style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            {index > 0 ? <ArrowRight size={14} aria-hidden="true" /> : null}
+            <span
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                background: 'var(--oo-halo)',
+                color: 'var(--oo-accent)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon size={16} aria-hidden="true" />
+            </span>
+          </span>
+        ))}
+      </div>
+      <style>{'@media (max-width: 700px){.oo .oo-order-float{display:none}}'}</style>
     </section>
   );
 }
