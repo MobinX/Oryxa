@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Tag, Briefcase, Zap, Crown, Building2, Sparkles } from 'lucide-react';
 import type { DisplayPlan, PlanCompareRow } from '@/lib/plan-display';
 import { CompareTable } from './compare';
@@ -31,6 +32,7 @@ export function LandingPricing({
   unavailable: boolean;
 }) {
   const { strings: t } = useLandingLang();
+  const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly');
   return (
     <section id="pricing" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 96px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
@@ -66,7 +68,7 @@ export function LandingPricing({
       </h2>
       <p
         style={{
-          margin: '0 auto 48px',
+          margin: '0 auto 24px',
           maxWidth: 560,
           textAlign: 'center',
           color: 'var(--oo-muted)',
@@ -75,6 +77,80 @@ export function LandingPricing({
       >
         {t.pricingSub}
       </p>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
+        <div
+          role="group"
+          aria-label={t.billingGroup}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            border: '1px solid var(--oo-line)',
+            borderRadius: 999,
+            padding: 4,
+            background: 'var(--oo-surface)',
+          }}
+        >
+          <button
+            type="button"
+            aria-pressed={billing === 'monthly'}
+            onClick={() => setBilling('monthly')}
+            style={{
+              minHeight: 40,
+              padding: '0 22px',
+              borderRadius: 999,
+              border: 0,
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 600,
+              background:
+                billing === 'monthly'
+                  ? 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))'
+                  : 'transparent',
+              color: billing === 'monthly' ? '#fff' : 'var(--oo-muted)',
+            }}
+          >
+            {t.billingMonthly}
+          </button>
+          <button
+            type="button"
+            aria-pressed={billing === 'yearly'}
+            onClick={() => setBilling('yearly')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 40,
+              padding: '0 22px',
+              borderRadius: 999,
+              border: 0,
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 600,
+              background:
+                billing === 'yearly'
+                  ? 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))'
+                  : 'transparent',
+              color: billing === 'yearly' ? '#fff' : 'var(--oo-muted)',
+            }}
+          >
+            {t.billingYearly}
+            <span
+              style={{
+                background: 'var(--oo-halo)',
+                color: 'var(--oo-accent)',
+                fontSize: 12,
+                fontWeight: 700,
+                borderRadius: 999,
+                padding: '2px 10px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t.billingSave}
+            </span>
+          </button>
+        </div>
+      </div>
       {plans.length === 0 ? (
         <div
           style={{
@@ -101,7 +177,21 @@ export function LandingPricing({
           >
             {plans.map((p) => {
               const hot = p.featured;
-              const per = p.custom || p.priceCents === 0 ? '' : t.pricingPer;
+              let price: string;
+              let per: string;
+              if (p.custom) {
+                price = p.priceLabel;
+                per = '';
+              } else if (billing === 'monthly') {
+                price = p.priceLabel;
+                per = p.priceCents > 0 ? t.pricingPer : '';
+              } else if (p.priceCents === 0) {
+                price = '$0';
+                per = '';
+              } else {
+                price = '$' + Math.round((p.priceCents * 12 * 0.9) / 100);
+                per = t.pricingPerYear;
+              }
               const bullets = p.features.slice(0, 3);
               const isTrial = p.priceCents === 0 && !p.custom;
               return (
@@ -180,8 +270,8 @@ export function LandingPricing({
                   ) : null}
                   <div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em' }}>{p.priceLabel}</span>
-                      {per ? <span style={{ color: 'var(--oo-muted)' }}>{per}</span> : null}
+                      <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em' }}>{price}</span>
+                      {per ? <span style={{ color: 'var(--oo-muted)', fontSize: 15 }}>{per}</span> : null}
                     </div>
                     {isTrial ? (
                       <span

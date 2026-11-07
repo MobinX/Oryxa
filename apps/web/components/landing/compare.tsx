@@ -8,6 +8,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ChevronUp,
   Crown,
   Headphones,
   Layers,
@@ -47,19 +48,58 @@ function shortCompareCell(cell: string): string {
 }
 
 /**
- * Full feature matrix, collapsed by default (the Intercom pattern): the plan
- * cards stay the primary comparison, and this one-line disclosure expands to
- * an intro + dense table with an optional differences-only filter.
+ * Full feature matrix, expanded by default: an intro panel plus a dense
+ * table. A small hide button collapses it to a slim disclosure bar.
  */
 export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; compareRows: PlanCompareRow[] }) {
   const { strings: t } = useLandingLang();
-  const [open, setOpen] = useState(false);
-  const [diffOnly, setDiffOnly] = useState(false);
-  const rows = diffOnly ? compareRows.filter((row) => new Set(row.cells).size > 1) : compareRows;
+  const [open, setOpen] = useState(true);
   const bullets = [t.compareB1, t.compareB2, t.compareB3];
+  if (!open) {
+    return (
+      <div style={{ marginTop: 32 }}>
+        <div
+          style={{
+            borderRadius: 20,
+            border: '1px solid var(--oo-line)',
+            background: 'var(--oo-surface)',
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            onClick={() => setOpen(true)}
+            aria-expanded={false}
+            className="hov"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '18px 24px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--oo-ink)',
+              fontSize: 15,
+              fontWeight: 600,
+              textAlign: 'left',
+            }}
+          >
+            <span>
+              {t.compareH} ·{' '}
+              <span style={{ fontWeight: 400, color: 'var(--oo-muted)' }}>{t.compareExpand(compareRows.length)}</span>
+            </span>
+            <ChevronDown size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ marginTop: 32 }}>
       <div
+        className="pop"
         style={{
           borderRadius: 20,
           border: '1px solid var(--oo-line)',
@@ -67,60 +107,17 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
           overflow: 'hidden',
         }}
       >
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="hov"
-          style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '18px 24px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--oo-ink)',
-            fontSize: 15,
-            fontWeight: 600,
-            textAlign: 'left',
-          }}
-        >
-          <span>
-            {t.compareH} ·{' '}
-            <span style={{ fontWeight: 400, color: 'var(--oo-muted)' }}>
-              {open ? t.compareCollapse : t.compareExpand(compareRows.length)}
-            </span>
-          </span>
-          <ChevronDown
-            size={18}
-            aria-hidden="true"
-            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .25s', flexShrink: 0 }}
-          />
-        </button>
-      </div>
-      {open ? (
-        <div
-          className="pop"
-          style={{
-            marginTop: 16,
-            borderRadius: 20,
-            border: '1px solid var(--oo-line)',
-            background: 'var(--oo-surface)',
-            padding: 24,
-          }}
-        >
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-            <div style={{ flex: '0 1 260px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 1 260px', padding: 28, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', zIndex: 1 }}>
               <span
                 aria-hidden="true"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 44,
-                  height: 44,
+                  width: 48,
+                  height: 48,
                   borderRadius: '50%',
                   background: 'var(--oo-halo)',
                   color: 'var(--oo-accent)',
@@ -128,11 +125,14 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
               >
                 <BarChart3 size={22} />
               </span>
-              <h3 style={{ margin: '16px 0 8px', fontSize: 20, fontWeight: 700 }}>{t.compareH}</h3>
+              <h3 style={{ margin: '16px 0 8px', fontSize: 22, fontWeight: 800 }}>{t.compareH}</h3>
               <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--oo-muted)' }}>{t.compareSub}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {bullets.map((b) => (
-                  <span key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                  <span
+                    key={b}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 500 }}
+                  >
                     <span
                       aria-hidden="true"
                       style={{
@@ -143,8 +143,8 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: 'var(--oo-accent)',
-                        color: '#fff',
+                        background: 'var(--oo-halo)',
+                        color: 'var(--oo-accent)',
                       }}
                     >
                       <Check size={12} strokeWidth={3} />
@@ -154,147 +154,170 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
                 ))}
               </div>
             </div>
-            <div style={{ flex: '1 1 480px', minWidth: 0 }}>
-              <label
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 1440 70"
+              preserveAspectRatio="none"
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                width: '100%',
+                height: 70,
+                opacity: 0.7,
+                pointerEvents: 'none',
+              }}
+            >
+              <path
+                d="M0,40 C240,70 480,0 720,30 C960,60 1200,70 1440,40 L1440,70 L0,70 Z"
+                fill="var(--oo-halo)"
+              />
+            </svg>
+          </div>
+          <div style={{ flex: '1 1 520px', minWidth: 0, padding: 20 }}>
+            <div className="oo-table-scroll" style={{ overflowX: 'auto' }}>
+              <table
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '4px 0 12px',
-                  fontSize: 13,
-                  color: 'var(--oo-muted)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
+                  width: '100%',
+                  minWidth: 480,
+                  textAlign: 'left',
+                  fontSize: 14,
+                  borderCollapse: 'separate',
+                  borderSpacing: 0,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={diffOnly}
-                  onChange={(event) => setDiffOnly(event.target.checked)}
-                  style={{ width: 15, height: 15, accentColor: 'var(--oo-accent)' }}
-                />
-                {t.compareDiffOnly}
-              </label>
-              <div className="oo-table-scroll" style={{ overflowX: 'auto' }}>
-                <table
-                  style={{
-                    width: '100%',
-                    minWidth: 480,
-                    textAlign: 'left',
-                    fontSize: 13,
-                    borderCollapse: 'separate',
-                    borderSpacing: 0,
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      <th
+                <thead>
+                  <tr>
+                    <th
+                      style={{
+                        position: 'sticky',
+                        left: 0,
+                        background: 'var(--oo-surface)',
+                        padding: '10px 16px 10px 0',
+                        borderBottom: '1px solid var(--oo-line)',
+                        whiteSpace: 'nowrap',
+                        zIndex: 1,
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span
                         style={{
-                          position: 'sticky',
-                          left: 0,
-                          background: 'var(--oo-surface)',
-                          padding: '10px 16px 10px 0',
-                          borderBottom: '1px solid var(--oo-line)',
-                          fontWeight: 600,
-                          color: 'var(--oo-muted)',
-                          whiteSpace: 'nowrap',
-                          zIndex: 1,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          borderRadius: 10,
+                          background: 'var(--oo-surface2)',
+                          color: 'var(--oo-ink)',
+                          padding: '10px 14px',
+                          fontWeight: 700,
                         }}
                       >
                         {t.compareFeature}
+                      </span>
+                    </th>
+                    {plans.map((plan) => (
+                      <th
+                        key={plan.slug}
+                        style={{
+                          padding: '10px 6px',
+                          textAlign: 'center',
+                          borderBottom: '1px solid var(--oo-line)',
+                          whiteSpace: 'nowrap',
+                          background: plan.featured ? 'var(--oo-halo)' : 'transparent',
+                        }}
+                      >
+                        <span
+                          style={
+                            plan.featured
+                              ? {
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  borderRadius: 10,
+                                  padding: '10px 12px',
+                                  background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
+                                  color: '#fff',
+                                  fontWeight: 700,
+                                }
+                              : {
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  borderRadius: 10,
+                                  padding: '10px 12px',
+                                  background: 'var(--oo-surface2)',
+                                  color: 'var(--oo-ink)',
+                                  fontWeight: 700,
+                                }
+                          }
+                        >
+                          {plan.featured ? <Crown size={14} aria-hidden="true" /> : null}
+                          {plan.name}
+                        </span>
                       </th>
-                      {plans.map((plan) => (
-                        <th
-                          key={plan.slug}
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareRows.map((row) => {
+                    const LabelIcon = compareLabelIcon(row.label);
+                    return (
+                      <tr key={row.label}>
+                        <td
                           style={{
-                            padding: '10px 6px',
-                            textAlign: 'center',
+                            position: 'sticky',
+                            left: 0,
+                            background: 'var(--oo-surface)',
+                            padding: '7px 16px 7px 0',
+                            fontSize: 14,
+                            fontWeight: 500,
                             borderBottom: '1px solid var(--oo-line)',
                             whiteSpace: 'nowrap',
+                            zIndex: 1,
                           }}
                         >
-                          <span
-                            style={
-                              plan.featured
-                                ? {
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    borderRadius: 10,
-                                    padding: '8px 12px',
-                                    background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                  }
-                                : {
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    borderRadius: 10,
-                                    padding: '8px 12px',
-                                    background: 'var(--oo-surface2)',
-                                    color: 'var(--oo-ink)',
-                                    fontWeight: 600,
-                                  }
-                            }
-                          >
-                            {plan.featured ? <Crown size={14} aria-hidden="true" /> : null}
-                            {plan.name}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <LabelIcon size={16} color="var(--oo-accent)" aria-hidden="true" />
+                            {row.label}
                           </span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => {
-                      const LabelIcon = compareLabelIcon(row.label);
-                      return (
-                        <tr key={row.label}>
-                          <td
-                            style={{
-                              position: 'sticky',
-                              left: 0,
-                              background: 'var(--oo-surface)',
-                              padding: '7px 16px 7px 0',
-                              fontWeight: 500,
-                              borderBottom: '1px solid var(--oo-line)',
-                              whiteSpace: 'nowrap',
-                              zIndex: 1,
-                            }}
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <LabelIcon size={16} color="var(--oo-accent)" aria-hidden="true" />
-                              {row.label}
-                            </span>
-                          </td>
-                          {row.cells.map((cell, ci) => {
-                            const featured = plans[ci]?.featured === true;
-                            return (
-                              <td
-                                key={ci}
-                                style={{
-                                  padding: '7px 12px',
-                                  textAlign: 'center',
-                                  whiteSpace: 'nowrap',
-                                  borderBottom: '1px solid var(--oo-line)',
-                                  background: featured ? 'var(--oo-halo)' : 'transparent',
-                                  color: compareCellColor(cell, featured),
-                                  fontWeight: featured ? 600 : cell === '✓' ? 700 : 400,
-                                }}
-                              >
-                                {shortCompareCell(cell)}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        </td>
+                        {row.cells.map((cell, ci) => {
+                          const featured = plans[ci]?.featured === true;
+                          return (
+                            <td
+                              key={ci}
+                              style={{
+                                padding: '7px 12px',
+                                textAlign: 'center',
+                                fontSize: 14,
+                                whiteSpace: 'nowrap',
+                                borderBottom: '1px solid var(--oo-line)',
+                                background: featured ? 'var(--oo-halo)' : 'transparent',
+                                color: compareCellColor(cell, featured),
+                                fontWeight: cell === '✓' ? 700 : featured ? 600 : 400,
+                              }}
+                            >
+                              {shortCompareCell(cell)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      ) : null}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 20px 16px' }}>
+          <button
+            onClick={() => setOpen(false)}
+            className="oo-cookie-btn"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}
+          >
+            {t.compareHide}
+            <ChevronUp size={14} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
