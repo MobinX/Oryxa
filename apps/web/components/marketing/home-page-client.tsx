@@ -2,12 +2,13 @@
 
 import { useBrand } from '@/components/brand-provider';
 import type { PublicPlan } from '@/lib/api';
-import { toDisplayPlans } from '@/lib/plan-display';
+import { toCompareRows, toDisplayPlans } from '@/lib/plan-display';
 import { LandingDashboard } from '../landing/dashboard';
 import { LandingHeader } from '../landing/header';
 import { LandingHero, LandingTrustStrip } from '../landing/hero';
 import '../landing/landing.css';
-import { LandingCta, LandingFooter, LandingPricing } from '../landing/pricing';
+import { LandingFooter } from '../landing/footer';
+import { LandingCta, LandingPricing } from '../landing/pricing';
 import { LandingRoot } from '../landing/theme';
 import { LandingVideo } from '../landing/video';
 import { LandingWorkflow } from '../landing/workflow';
@@ -26,6 +27,7 @@ export default function HomePageClient({
 }) {
   const { companyName } = useBrand();
   const displayPlans = toDisplayPlans(plans);
+  const compareRows = toCompareRows(plans);
 
   return (
     <LandingRoot>
@@ -36,7 +38,7 @@ export default function HomePageClient({
         <LandingTrustStrip />
         <LandingVideo companyName={companyName} />
         <LandingWorkflow />
-        <LandingPricing plans={displayPlans} unavailable={unavailable} />
+        <LandingPricing plans={displayPlans} compareRows={compareRows} unavailable={unavailable} />
         <LandingCta />
       </main>
       <LandingFooter companyName={companyName} />

@@ -1,9 +1,11 @@
 'use client';
 
-import { Inter } from 'next/font/google';
+import { Inter, Noto_Sans_Bengali } from 'next/font/google';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { detectLandingLang, LANDING_STRINGS, type LandingLang, type LandingStrings } from './i18n';
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap' });
+const bengali = Noto_Sans_Bengali({ subsets: ['bengali'], weight: ['400', '500', '600', '700'], display: 'swap' });
 
 /** Theme tokens ported 1:1 from the mockup (`L` / `D` in Main.dc.html). */
 const LIGHT_VARS: CSSProperties = {
@@ -50,6 +52,16 @@ export function useLandingTheme() {
   return useContext(ThemeContext);
 }
 
+const LangContext = createContext<{ lang: LandingLang; strings: LandingStrings; toggleLang: () => void }>({
+  lang: 'en',
+  strings: LANDING_STRINGS.en,
+  toggleLang: () => {},
+});
+
+export function useLandingLang() {
+  return useContext(LangContext);
+}
+
 /** True when the OS asks for reduced motion; auto-play timers freeze then. */
 export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -66,25 +78,43 @@ export function usePrefersReducedMotion(): boolean {
 export function LandingRoot({ children }: { children: ReactNode }) {
   // The mockup starts in light mode (startDark defaults to false).
   const [dark, setDark] = useState(false);
+  const [lang, setLang] = useState<LandingLang>('en');
+  // Detect after mount so SSR and the first paint agree (English), then swap.
+  useEffect(() => {
+    setLang(detectLandingLang());
+  }, []);
   const toggle = () => setDark((value) => !value);
+  const toggleLang = () =>
+    setLang((value) => {
+      const next = value === 'en' ? 'bn' : 'en';
+      try {
+        window.localStorage.setItem('oo-lang', next);
+      } catch {
+        /* private mode — keep it in memory only */
+      }
+      return next;
+    });
   return (
     <ThemeContext.Provider value={{ dark, toggle }}>
-      <div
-        className={`oo ${inter.className}`}
-        style={{
-          ...(dark ? DARK_VARS : LIGHT_VARS),
-          background: 'var(--oo-bg)',
-          color: 'var(--oo-ink)',
-          fontSize: 16,
-          lineHeight: 1.55,
-          letterSpacing: '-0.01em',
-          boxSizing: 'border-box',
-          minHeight: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        {children}
-      </div>
+      <LangContext.Provider value={{ lang, strings: LANDING_STRINGS[lang], toggleLang }}>
+        <div
+          className={`oo ${inter.className} ${bengali.className}`}
+          style={{
+            ...(dark ? DARK_VARS : LIGHT_VARS),
+            background: 'var(--oo-bg)',
+            color: 'var(--oo-ink)',
+            fontFamily: `${inter.style.fontFamily}, ${bengali.style.fontFamily}, system-ui, sans-serif`,
+            fontSize: 16,
+            lineHeight: 1.55,
+            letterSpacing: '-0.01em',
+            boxSizing: 'border-box',
+            minHeight: '100%',
+            overflow: 'hidden',
+          }}
+        >
+          {children}
+        </div>
+      </LangContext.Provider>
     </ThemeContext.Provider>
   );
 }

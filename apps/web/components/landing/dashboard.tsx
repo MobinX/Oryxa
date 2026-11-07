@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePrefersReducedMotion } from './theme';
+import { useLandingLang, usePrefersReducedMotion } from './theme';
 
 type View = 'inbox' | 'orders' | 'stats';
 
@@ -35,15 +35,19 @@ const BARS2: Array<[string, number]> = [
 export function LandingDashboard({ companyName }: { companyName: string }) {
   const [tick, setTick] = useState(0);
   const [view, setView] = useState<View>('inbox');
+  const [paused, setPaused] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
+  const { strings: l } = useLandingLang();
 
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion || paused) return;
     const id = setInterval(() => setTick((value) => value + 1), 1300);
     return () => clearInterval(id);
-  }, [reducedMotion]);
+  }, [reducedMotion, paused]);
 
-  const t = (Math.max(tick, 2) - 2) % 16;
+  // 20-beat loop: the story builds on beats 1–9, then HOLDS the completed
+  // state through beat 19 so panels never sit empty; only beat 0 restarts.
+  const t = (Math.max(tick, 2) - 2) % 20;
   const s1 = t >= 1;
   const typing1 = t === 2;
   const s3 = t >= 3;
@@ -59,8 +63,6 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
     : t >= 4
       ? 'Is the blue kurti available in M?'
       : 'Assalamualaikum';
-  const r2 = t >= 2;
-  const r4 = t >= 4;
   const nBadge = t < 6;
   const nPrev = t >= 6 ? 'Photo matched · K-204 ✓' : 'Sent a photo';
   const tBadge = t < 7;
@@ -70,14 +72,13 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
   const revenue = orderDone ? '৳26,580' : '৳24,650';
   const toast = t >= 9 && t <= 13;
   const bars = [40, 56, 48, 70, 62, 80, orderDone ? 100 : 84];
-  const feed = FEED.filter((x) => t >= x[0])
-    .reverse()
-    .slice(0, 4);
+  // On the restart beat the feed keeps showing the full story, never blanks.
+  const feed = (t < 1 ? FEED : FEED.filter((x) => t >= x[0])).slice(-4).reverse();
 
   const nav: Array<{ key: View; label: string }> = [
-    { key: 'inbox', label: 'Inbox' },
-    { key: 'orders', label: 'Orders' },
-    { key: 'stats', label: 'Analytics' },
+    { key: 'inbox', label: l.dashInbox },
+    { key: 'orders', label: l.dashOrders },
+    { key: 'stats', label: l.dashStats },
   ];
 
   return (
@@ -126,7 +127,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                 color: 'var(--oo-muted)',
               }}
             >
-              Search chats, orders…
+              {l.dashSearch}
             </span>
             <span className="pill ok">
               <span
@@ -140,7 +141,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                   marginRight: 6,
                 }}
               />
-              AI agent on
+              {l.dashAgentOn}
             </span>
           </div>
 
@@ -218,8 +219,8 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 10px' }}>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>Inbox</span>
-                    <span className="pill ok">Live</span>
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>{l.dashInbox}</span>
+                    <span className="pill ok">{l.dashLive}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 12, background: 'var(--oo-halo)', border: '1px solid var(--oo-line)' }}>
                     <span style={{ width: 38, height: 38, flex: '0 0 38px', borderRadius: '50%', background: 'linear-gradient(135deg,#F59EC0,#B16CF0)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
@@ -236,8 +237,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                       <div style={{ fontSize: 11, color: 'var(--oo-accent)', marginTop: 2 }}>Messenger</div>
                     </div>
                   </div>
-                  {r2 ? (
-                    <div className="pop" style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 12 }}>
+                  <div className="pop" style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 12 }}>
                       <span style={{ width: 38, height: 38, flex: '0 0 38px', borderRadius: '50%', background: 'linear-gradient(135deg,#7CC5FF,#5B7CFF)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
                         N
                       </span>
@@ -250,9 +250,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                         <div style={{ fontSize: 11, color: '#D6409F', marginTop: 2 }}>Instagram</div>
                       </div>
                     </div>
-                  ) : null}
-                  {r4 ? (
-                    <div className="pop" style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 12 }}>
+                  <div className="pop" style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 12 }}>
                       <span style={{ width: 38, height: 38, flex: '0 0 38px', borderRadius: '50%', background: 'linear-gradient(135deg,#6EE7B7,#2FB67C)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
                         T
                       </span>
@@ -265,7 +263,6 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                         <div style={{ fontSize: 11, color: 'var(--oo-ok)', marginTop: 2 }}>WhatsApp</div>
                       </div>
                     </div>
-                  ) : null}
                 </div>
 
                 <div style={{ flex: '1 1 340px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -372,7 +369,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
             {view === 'orders' ? (
               <div className="pop" style={{ flex: '1 1 420px', minWidth: 0, padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Orders</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{l.dashOrders}</span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <span className="chip" style={{ color: 'var(--oo-accent)', borderColor: 'var(--oo-accent)' }}>All</span>
                     <span className="chip">Confirmed</span>
@@ -409,7 +406,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
 
             {view === 'stats' ? (
               <div className="pop" style={{ flex: '1 1 420px', minWidth: 0, padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Analytics</span>
+                <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{l.dashStats}</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                   <div style={{ flex: '1 1 120px', padding: 14, borderRadius: 14, border: '1px solid var(--oo-line)', background: 'var(--oo-surface2)' }}>
                     <div style={{ fontSize: 12, color: 'var(--oo-muted)' }}>Chats handled</div>
@@ -469,11 +466,11 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
             >
               <div style={{ display: 'flex', gap: 10 }}>
                 <div style={{ flex: 1, padding: 12, borderRadius: 14, border: `1px solid ${hotBorder}`, background: 'var(--oo-surface2)', transition: 'border-color .4s' }}>
-                  <div style={{ fontSize: 11, color: 'var(--oo-muted)' }}>Orders today</div>
+                  <div style={{ fontSize: 11, color: 'var(--oo-muted)' }}>{l.dashOrdersToday}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em' }}>{orders}</div>
                 </div>
                 <div style={{ flex: 1.3, padding: 12, borderRadius: 14, border: `1px solid ${hotBorder}`, background: 'var(--oo-surface2)', transition: 'border-color .4s' }}>
-                  <div style={{ fontSize: 11, color: 'var(--oo-muted)' }}>Revenue</div>
+                  <div style={{ fontSize: 11, color: 'var(--oo-muted)' }}>{l.dashRevenue}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em' }}>{revenue}</div>
                 </div>
               </div>
@@ -493,8 +490,8 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                 ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--oo-muted)' }}>ORDER</span>
-                <span className={`pill ${orderDone ? 'ok' : 'wait'}`}>{orderDone ? 'Confirmed' : 'Draft'}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--oo-muted)' }}>{l.dashOrder}</span>
+                <span className={`pill ${orderDone ? 'ok' : 'wait'}`}>{orderDone ? l.dashConfirmed : l.dashDraft}</span>
               </div>
               {s6 ? (
                 <div className="pop" style={{ padding: 12, borderRadius: 14, border: '1px solid var(--oo-line)', background: 'var(--oo-surface2)' }}>
@@ -505,7 +502,7 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                   </div>
                 </div>
               ) : null}
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--oo-muted)' }}>AI ACTIVITY</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--oo-muted)' }}>{l.dashActivity}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
                 {feed.map((f) => (
                   <div key={f[1]} className="slide" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
@@ -515,9 +512,9 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 'auto', padding: 10, borderRadius: 10, border: '1px solid var(--oo-lineStrong)', fontSize: 13, textAlign: 'center', fontWeight: 500 }}>
-                Take over chat
-              </div>
+              <button onClick={() => setPaused((v) => !v)} className="hov" style={{ marginTop: 'auto', padding: 10, borderRadius: 10, border: '1px solid var(--oo-lineStrong)', background: paused ? 'var(--oo-accent)' : 'transparent', color: paused ? '#fff' : 'var(--oo-ink)', fontSize: 13, textAlign: 'center', fontWeight: 600 }}>
+                {paused ? `▶ ${l.dashResume}` : `⏸ ${l.dashPause}`}
+              </button>
             </div>
           </div>
 

@@ -1,128 +1,153 @@
 'use client';
 
-import { useLandingTheme } from './theme';
+import { useLandingLang, useLandingTheme } from './theme';
+
+function MoonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4"></circle>
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+    </svg>
+  );
+}
+
+const iconButton: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  minWidth: 44,
+  minHeight: 44,
+  padding: '0 12px',
+  borderRadius: 12,
+  border: '1px solid var(--oo-line)',
+  background: 'var(--oo-surface)',
+  color: 'var(--oo-ink)',
+  fontSize: 13,
+  fontWeight: 600,
+};
 
 export function LandingHeader({ companyName }: { companyName: string }) {
   const { dark, toggle } = useLandingTheme();
+  const { lang, strings: t, toggleLang } = useLandingLang();
   return (
     <header
       style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-        maxWidth: 1200,
-        margin: '0 auto',
-        padding: '18px 32px',
-        boxSizing: 'border-box',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        background: dark ? 'rgba(28,30,48,0.82)' : 'rgba(238,240,248,0.82)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid var(--oo-line)',
       }}
     >
-      <a
-        href="#top"
+      <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          color: 'var(--oo-ink)',
-          fontWeight: 700,
-          fontSize: 18,
+          justifyContent: 'space-between',
+          gap: 12,
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '12px 32px',
+          boxSizing: 'border-box',
         }}
       >
-        <span
+        <a
+          href="#top"
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
-            color: '#fff',
-            display: 'inline-flex',
+            display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 14,
-          }}
-        >
-          O
-        </span>
-        {companyName}
-      </a>
-      <nav style={{ display: 'flex', flexWrap: 'wrap', gap: 28, fontSize: 14 }}>
-        <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
-          Product
-        </a>
-        <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
-          Features
-        </a>
-        <a href="#pricing" style={{ color: 'var(--oo-muted)' }}>
-          Pricing
-        </a>
-        <a href="/docs" style={{ color: 'var(--oo-muted)' }}>
-          Docs
-        </a>
-      </nav>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button
-          onClick={toggle}
-          aria-label="Switch between light and dark theme"
-          className="hov"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            minHeight: 44,
-            padding: '0 14px',
-            borderRadius: 10,
-            border: '1px solid var(--oo-line)',
-            background: 'var(--oo-surface)',
+            gap: 10,
             color: 'var(--oo-ink)',
-            fontSize: 14,
+            fontWeight: 700,
+            fontSize: 18,
+            flexShrink: 0,
           }}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
+          <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />
+          {companyName}
+        </a>
+        <nav
+          className="oo-nav-links"
+          style={{ display: 'flex', alignItems: 'center', gap: 28, fontSize: 14, whiteSpace: 'nowrap' }}
+        >
+          <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
+            {t.navProduct}
+          </a>
+          <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
+            {t.navFeatures}
+          </a>
+          <a href="#pricing" style={{ color: 'var(--oo-muted)' }}>
+            {t.navPricing}
+          </a>
+          <a href="/docs" style={{ color: 'var(--oo-muted)' }}>
+            {t.navDocs}
+          </a>
+        </nav>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={toggleLang}
+            aria-label={lang === 'en' ? 'বাংলায় দেখুন' : 'View in English'}
+            title={lang === 'en' ? 'বাংলা' : 'English'}
+            className="hov"
+            style={iconButton}
           >
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
-          </svg>
-          {dark ? 'Light' : 'Dark'}
-        </button>
-        <a
-          href="/login"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            minHeight: 44,
-            padding: '0 14px',
-            color: 'var(--oo-muted)',
-            fontSize: 14,
-          }}
-        >
-          Sign in
-        </a>
-        <a
-          href="/login"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            minHeight: 44,
-            padding: '0 18px',
-            borderRadius: 10,
-            background: 'var(--oo-ink)',
-            color: 'var(--oo-bg)',
-            fontSize: 14,
-            fontWeight: 600,
-          }}
-        >
-          Get started
-        </a>
+            {lang === 'en' ? 'বাং' : 'EN'}
+          </button>
+          <button
+            onClick={toggle}
+            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={dark ? t.themeToLight : t.themeToDark}
+            className="hov"
+            style={iconButton}
+          >
+            {dark ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <a
+            href="/login"
+            className="oo-signin"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: 44,
+              padding: '0 14px',
+              color: 'var(--oo-muted)',
+              fontSize: 14,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t.signIn}
+          </a>
+          <a
+            href="/login"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: 44,
+              padding: '0 18px',
+              borderRadius: 10,
+              background: 'var(--oo-ink)',
+              color: 'var(--oo-bg)',
+              fontSize: 14,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t.getStarted}
+          </a>
+        </div>
       </div>
+      <style>{`@media (max-width: 860px){.oo .oo-nav-links{display:none}}@media (max-width: 520px){.oo .oo-signin{display:none}}`}</style>
     </header>
   );
 }

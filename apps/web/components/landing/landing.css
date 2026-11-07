@@ -307,6 +307,22 @@
 .oo .pulse {
   animation: oo-pu 1.4s ease-in-out infinite;
 }
+.oo .oo-cookie-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: var(--oo-muted);
+}
+.oo .oo-cookie-btn:hover {
+  color: var(--oo-ink);
+}
+.oo a {
+  transition: color 0.2s;
+}
+.oo footer a:hover {
+  color: var(--oo-ink);
+}
 @keyframes oo-pu {
   50% {
     opacity: 0.45;

@@ -1,19 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePrefersReducedMotion } from './theme';
-
-/** [tab label, step title, step description, pipeline detail] */
-const DEFS: Array<[string, string, string, string]> = [
-  ['Greeting', 'Greets in the customer’s language', 'Replies to the salaam instantly and offers quick category buttons — in Bengali, English or both.', 'Language detected · 1s'],
-  ['Catalog', 'Asks first, then shows', 'Instead of dumping photos, it narrows down with buttons, then shows matching product cards with price and code.', 'Buttons → product cards'],
-  ['Photo match', 'Recognises products from photos', 'A customer sends a screenshot from anywhere. The AI matches it against your catalog by code, image and look.', 'Code + image match'],
-  ['Size check', 'Answers size and stock exactly', 'Pulls size charts and live stock from your catalog. It never invents a price.', 'Live stock lookup'],
-  ['Order', 'Takes the order, even by voice note', 'Name, phone and address are captured from text or voice, and the order is confirmed in the chat.', 'Voice → text → order'],
-  ['Receipt', 'Sends the receipt automatically', 'Totals, delivery charge and payment method go back to the customer as a clean receipt.', 'Receipt sent'],
-  ['Courier', 'Keeps the customer updated', 'Parcel updates reach the chat on their own, with a track button.', 'Tracking pushed'],
-  ['Review', 'Asks for a review after delivery', 'When the parcel lands, the AI says thanks and asks for a rating.', 'Review requested'],
-];
+import { useLandingLang, usePrefersReducedMotion } from './theme';
 
 type MsgKind = 'text' | 'chips' | 'carousel' | 'image' | 'voice' | 'receipt' | 'track';
 
@@ -40,6 +28,8 @@ export function LandingWorkflow() {
   const [tick, setTick] = useState(0);
   const [pinned, setPinned] = useState<number | null>(null);
   const reducedMotion = usePrefersReducedMotion();
+  const { strings: l } = useLandingLang();
+  const DEFS = l.wfDefs;
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -56,12 +46,12 @@ export function LandingWorkflow() {
 
   return (
     <section id="workflow" style={{ maxWidth: 1200, margin: '0 auto', padding: '96px 32px', boxSizing: 'border-box' }}>
-      <div style={{ fontSize: 14, color: 'var(--oo-accent)', fontWeight: 600 }}>An example order · start to finish</div>
+      <div style={{ fontSize: 14, color: 'var(--oo-accent)', fontWeight: 600 }}>{l.wfKicker}</div>
       <h2 style={{ margin: '10px 0 14px', maxWidth: 700, fontSize: 48, lineHeight: 1.05, letterSpacing: '-0.035em', fontWeight: 700 }}>
-        From first message to confirmed order.
+        {l.wfH2}
       </h2>
       <p style={{ margin: '0 0 32px', color: 'var(--oo-muted)', fontSize: 18, maxWidth: 640 }}>
-        Watch one order run itself. The phone shows what your customer sees; the pipeline shows what the AI does behind it.
+        {l.wfSub}
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
@@ -112,7 +102,7 @@ export function LandingWorkflow() {
         <div style={{ position: 'absolute', right: -80, top: -120, width: 560, height: 560, background: 'radial-gradient(closest-side, var(--oo-halo), transparent)', pointerEvents: 'none' }} />
 
         <div style={{ position: 'relative', flex: '1 1 420px', minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: 'var(--oo-accent)', fontWeight: 600 }}>Step {step + 1} of 8</div>
+          <div style={{ fontSize: 13, color: 'var(--oo-accent)', fontWeight: 600 }}>{l.wfStep(step + 1)}</div>
           <div style={{ margin: '6px 0 8px', fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.15 }}>
             {cur[1]}
           </div>

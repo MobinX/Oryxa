@@ -1,4 +1,9 @@
+'use client';
+
+import { useLandingLang } from './theme';
+
 export function LandingHero({ companyName }: { companyName: string }) {
+  const { strings: t } = useLandingLang();
   return (
     <section id="top" style={{ position: 'relative', textAlign: 'center', padding: '72px 32px 0', boxSizing: 'border-box' }}>
       <div
@@ -29,13 +34,13 @@ export function LandingHero({ companyName }: { companyName: string }) {
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--oo-ok)' }} />
-          AI commerce autopilot for Messenger, Instagram and WhatsApp
+          {t.heroBadge}
         </div>
         <h1
           className="up u2"
           style={{ margin: '26px 0 20px', fontSize: 76, lineHeight: 1.02, letterSpacing: '-0.045em', fontWeight: 700 }}
         >
-          Your orders,
+          {t.heroH1a}
           <br />
           <span
             style={{
@@ -45,12 +50,11 @@ export function LandingHero({ companyName }: { companyName: string }) {
               color: 'transparent',
             }}
           >
-            on autopilot.
+            {t.heroH1b}
           </span>
         </h1>
         <p className="up u3" style={{ margin: '0 auto 32px', maxWidth: 600, fontSize: 19, color: 'var(--oo-muted)' }}>
-          {companyName} turns DMs and comments into confirmed orders — automated replies, live catalog checks,
-          order capture and human handoff, all from one inbox.
+          {t.heroSub(companyName)}
         </p>
         <div className="up u3" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
           <a
@@ -67,7 +71,7 @@ export function LandingHero({ companyName }: { companyName: string }) {
               boxShadow: '0 10px 30px var(--oo-halo)',
             }}
           >
-            Start selling free
+            {t.heroCta}
           </a>
           <a
             href="#video"
@@ -88,11 +92,11 @@ export function LandingHero({ companyName }: { companyName: string }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5l12 7-12 7z"></path>
             </svg>
-            Watch the video
+            {t.heroVideo}
           </a>
         </div>
         <p className="up u3" style={{ margin: '14px 0 0', fontSize: 13, color: 'var(--oo-muted)' }}>
-          Free plan available · Cancel anytime
+          {t.heroMicro}
         </p>
       </div>
     </section>
@@ -100,6 +104,7 @@ export function LandingHero({ companyName }: { companyName: string }) {
 }
 
 export function LandingTrustStrip() {
+  const { strings: t } = useLandingLang();
   return (
     <section
       style={{
@@ -116,10 +121,9 @@ export function LandingTrustStrip() {
         borderBottom: '1px solid var(--oo-line)',
       }}
     >
-      <span>AI replies</span>
-      <span>One inbox</span>
-      <span>Chat to order</span>
-      <span>Clear analytics</span>
+      {t.trust.map((item) => (
+        <span key={item}>{item}</span>
+      ))}
     </section>
   );
 }
