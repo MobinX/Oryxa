@@ -437,3 +437,35 @@
     transform: none;
   }
 }
+/* Ambient page dressing: static washes + blooms so wide gutters don't look dead. */
+.oo {
+  position: relative;
+}
+.oo .oo-canvas {
+  background:
+    linear-gradient(180deg, var(--oo-surface2), transparent 520px),
+    radial-gradient(900px 620px at 50% 0%, var(--oo-halo), transparent 70%),
+    radial-gradient(
+      460px 720px at calc(50% - 760px) 320px,
+      color-mix(in srgb, var(--oo-accent2) 8%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(460px 720px at calc(50% + 760px) 900px, var(--oo-halo), transparent 70%);
+}
+.oo .oo-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--oo-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--oo-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: 0.5;
+  mask-image: radial-gradient(900px 700px at 50% 0%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(900px 700px at 50% 0%, #000 30%, transparent 75%);
+}
+@media (max-width: 640px) {
+  .oo .oo-canvas::before {
+    display: none;
+  }
+}

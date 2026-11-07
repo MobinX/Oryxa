@@ -110,9 +110,21 @@ export function LandingRoot({ children }: { children: ReactNode }) {
             boxSizing: 'border-box',
             minHeight: '100%',
             overflow: 'hidden',
+            position: 'relative',
           }}
         >
-          {children}
+          <div
+            aria-hidden="true"
+            className="oo-canvas"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 0,
+              pointerEvents: 'none',
+              overflow: 'hidden',
+            }}
+          />
+          <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
         </div>
       </LangContext.Provider>
     </ThemeContext.Provider>

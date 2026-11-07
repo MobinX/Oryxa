@@ -69,4 +69,104 @@ describe('web plan cards (apps/web/lib/plan-display.ts)', () => {
     expect(storefront[0].cells).toEqual(['✓', '✓']);
     expect(rows.find((row) => row.label === 'Priority support')?.cells).toEqual(['—', '✓']);
   });
+
+  it('keeps the limit rows first and exactly as saved', () => {
+    const rows = toCompareRows([
+      plan({ messageLimitLabel: '1,000 messenger replies', commentLimitLabel: '500 comment replies' }),
+      plan({ slug: 'starter', messageLimitLabel: 'Uncapped', commentLimitLabel: 'Uncapped' }),
+    ]);
+
+    expect(rows[0]).toEqual({
+      label: 'Messenger replies',
+      cells: ['1,000 messenger replies', 'Uncapped'],
+    });
+    expect(rows[1]).toEqual({
+      label: 'Comment replies',
+      cells: ['500 comment replies', 'Uncapped'],
+    });
+  });
+
+  it('groups quota-like agent replies into one row with per-plan values', () => {
+    const rows = toCompareRows([
+      plan({ features: ['1,000 agent replies per 30 days'] }),
+      plan({ slug: 'starter', features: ['Up to 3000 agent replies per 30 days'] }),
+      plan({ slug: 'enterprise', features: ['Unlimited agent replies'] }),
+    ]);
+
+    expect(rows[0]?.label).toBe('Messenger replies');
+    expect(rows[1]?.label).toBe('Comment replies');
+    const agent = rows.filter((row) => row.label.toLowerCase().includes('agent repl'));
+    expect(agent).toHaveLength(1);
+    expect(agent[0]?.label).toBe('Agent replies per 30 days');
+    expect(agent[0]?.cells).toEqual(['1,000', 'Up to 3,000', 'Unlimited']);
+  });
+
+  it('formats thousands separators and groups Unlimited with Uncapped', () => {
+    const rows = toCompareRows([
+      plan({ features: ['Up to 10000 seats'] }),
+      plan({ slug: 'starter', features: ['Unlimited seats'] }),
+      plan({ slug: 'enterprise', features: ['Uncapped seats'] }),
+    ]);
+
+    expect(rows.find((row) => row.label === 'Seats')?.cells).toEqual([
+      'Up to 10,000',
+      'Unlimited',
+      'Uncapped',
+    ]);
+  });
+
+  it('keeps boolean-only groups as checkmarks with — for missing plans', () => {
+    const rows = toCompareRows([
+      plan({ features: ['Priority support'] }),
+      plan({ slug: 'starter', features: [] }),
+      plan({ slug: 'pro', features: ['Priority support'] }),
+    ]);
+
+    expect(rows.find((row) => row.label === 'Priority support')?.cells).toEqual(['✓', '—', '✓']);
+  });
+
+  it('shows — when a plan lacks the quota group', () => {
+    const rows = toCompareRows([
+      plan({ features: ['500 exports per month'] }),
+      plan({ slug: 'starter', features: [] }),
+    ]);
+
+    expect(rows.find((row) => row.label === 'Exports per month')?.cells).toEqual(['500', '—']);
+  });
+
+  it('keeps mixed units in the cells instead of the label', () => {
+    const rows = toCompareRows([
+      plan({ features: ['100 exports per month'] }),
+      plan({ slug: 'starter', features: ['200 exports per 30 days'] }),
+    ]);
+
+    const row = rows.find((row) => row.label === 'Exports');
+    expect(row?.cells).toEqual(['100 per month', '200 per 30 days']);
+  });
+
+  it('keeps the full string when a quantity-less item lands in a quota group', () => {
+    const rows = toCompareRows([
+      plan({ features: ['500 seats per month'] }),
+      plan({ slug: 'enterprise', features: ['Seats per month'] }),
+    ]);
+
+    expect(rows.find((row) => row.label === 'Seats per month')?.cells).toEqual([
+      '500',
+      'Seats per month',
+    ]);
+  });
+
+  it('orders groups by first appearance after the limit rows', () => {
+    const rows = toCompareRows([
+      plan({ features: ['Priority support', '500 seats'] }),
+      plan({ slug: 'starter', features: ['500 seats', 'Priority support'] }),
+    ]);
+
+    expect(rows.map((row) => row.label)).toEqual([
+      'Messenger replies',
+      'Comment replies',
+      'Priority support',
+      'Seats',
+    ]);
+  });
 });

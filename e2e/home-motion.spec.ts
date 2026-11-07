@@ -15,8 +15,9 @@ for (const [name, vp] of [['desktop', { width: 1440, height: 900 }], ['android',
     const s = p.locator('#workflow');
     await s.scrollIntoViewIfNeeded();
     await expect(s).toBeVisible();
-    // Eight pipeline tabs, auto-advancing step counter.
-    await expect(s.getByRole('button')).toHaveCount(8);
+    // Eight pipeline tabs + tour pause button, auto-advancing step counter.
+    await expect(s.getByRole('button')).toHaveCount(9);
+    await expect(s.getByRole('button', { name: /tour/i })).toBeVisible();
     await expect(s.getByText(/Step \d of 8/)).toBeVisible();
     await p.waitForTimeout(name === 'desktop' ? 5000 : 2500);
     expect(await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
