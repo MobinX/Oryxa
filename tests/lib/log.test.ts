@@ -186,6 +186,21 @@ describe('closed field vocabulary and redaction', () => {
     expect(events[0]).toMatchObject({ method: 'GET', status: 200 });
   });
 
+  it('keeps the db failure cause so the next outage is instantly classifiable', async () => {
+    const { events, lines } = await captured(() => {
+      emit('db', {
+        operation: 'select',
+        table: 'channels',
+        durationMs: 30012.4,
+        errorName: 'NeonDbError',
+        causeName: 'TypeError',
+        causeCode: 'UND_ERR_CONNECT_TIMEOUT',
+      });
+    });
+    expect(events[0]).toMatchObject({ causeName: 'TypeError', causeCode: 'UND_ERR_CONNECT_TIMEOUT' });
+    expect(lines.join('\n')).toContain('UND_ERR_CONNECT_TIMEOUT');
+  });
+
   it('never carries a token-shaped value out of the process', async () => {
     const { events } = await captured(() => {
       emit('tool_result', { tool: 'publish_post', toolCallId: 'c1', result: 'failed: https://graph.facebook.com/v21.0/me/feed?access_token=EAAYabcdef123' });

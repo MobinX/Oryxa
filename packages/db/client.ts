@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from '@db/schema';
-import { instrumentSql } from './query-log';
+import { instrumentSql, withFetchTimeout } from './query-log';
 
 export type Database = NeonHttpDatabase<typeof schema>;
 
@@ -21,9 +21,11 @@ function getDb(): Database {
     throw new Error('DATABASE_URL is not set');
   }
 
-  // Instrumented at the one place every query passes through; inert until the API
-  // wires a sink, so this package on its own changes nothing.
-  const sql = instrumentSql(neon(connectionString));
+  // Timed out and instrumented at the one place every query passes through. The
+  // timeout is always on (a wedged connection must fail a query in seconds, not
+  // hang it for the fetch default of 300); the instrument stays inert until the
+  // API wires a sink.
+  const sql = instrumentSql(withFetchTimeout(neon(connectionString)));
   _db = drizzle(sql, { schema });
   return _db;
 }

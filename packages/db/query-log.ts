@@ -43,7 +43,12 @@ export function instrumentSql<T>(raw: T): T {
     try {
       result = client.apply(this, args);
     } catch (err) {
-      safeReport(report, { ...summary, durationMs: elapsed(started), errorName: nameOf(err) });
+      safeReport(report, {
+        ...summary,
+        durationMs: elapsed(started),
+        errorName: nameOf(err),
+        ...causeOf(err),
+      });
       throw err;
     }
 
@@ -66,7 +71,12 @@ export function instrumentSql<T>(raw: T): T {
             return value;
           },
           (err: unknown) => {
-            safeReport(report, { ...summary, durationMs: elapsed(started), errorName: nameOf(err) });
+            safeReport(report, {
+              ...summary,
+              durationMs: elapsed(started),
+              errorName: nameOf(err),
+              ...causeOf(err),
+            });
             throw err;
           },
         ));
@@ -86,7 +96,12 @@ export function instrumentSql<T>(raw: T): T {
           });
         },
         (err: unknown) => {
-          safeReport(report, { ...summary, durationMs: elapsed(started), errorName: nameOf(err) });
+          safeReport(report, {
+            ...summary,
+            durationMs: elapsed(started),
+            errorName: nameOf(err),
+            ...causeOf(err),
+          });
         },
       );
     } else {
@@ -157,6 +172,59 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 function nameOf(err: unknown): string {
   return err instanceof Error ? err.name : typeof err;
+}
+
+/**
+ * The reason one level down from the driver's wrapper: `fetch failed` on its own
+ * cannot tell DNS from a refused connection from our own timeout, but the cause
+ * code can. Names and codes only — never messages, which may carry SQL text.
+ */
+function causeOf(err: unknown): Fields {
+  const source = (err as { sourceError?: unknown } | null | undefined)?.sourceError;
+  if (typeof source !== 'object' || source === null) return {};
+  const fields: Fields = {};
+  const name = (source as { name?: unknown }).name;
+  if (typeof name === 'string' && name) fields.causeName = name;
+  const code = (source as { cause?: { code?: unknown } | null | undefined }).cause?.code;
+  if (typeof code === 'string' && code) fields.causeCode = code;
+  else if (typeof code === 'number') fields.causeCode = code;
+  return fields;
+}
+
+/** Budget for one database round trip. Past it the fetch is aborted and the query fails fast. */
+export const DB_QUERY_TIMEOUT_MS = 30_000;
+
+/**
+ * Gives every ordinary query its own abort signal, merged into the options the
+ * driver forwards to `fetch` — so a wedged connection fails the query in
+ * seconds instead of hanging the request for the fetch default of 300. The
+ * signal is minted per call (a shared one would fire once for all queries),
+ * and template-tag calls pass through untouched since they carry no options.
+ * Like the instrument above, this wrapper never touches the result, so layering
+ * the two cannot execute a lazy query twice.
+ */
+export function withFetchTimeout<T>(raw: T, timeoutMs: number = DB_QUERY_TIMEOUT_MS): T {
+  if (typeof raw !== 'function') return raw;
+
+  const client = raw as unknown as SqlClient;
+  const wrapped = function (this: unknown, ...args: unknown[]): unknown {
+    if (!args.length || typeof args[0] !== 'string') return client.apply(this, args);
+    const [query, params, opts] = args;
+    const base = (opts && typeof opts === 'object' ? opts : {}) as Record<string, unknown>;
+    const existing = base.fetchOptions as Record<string, unknown> | undefined;
+    return client.apply(this, [
+      query,
+      params,
+      { ...base, fetchOptions: { ...existing, signal: AbortSignal.timeout(timeoutMs) } },
+    ]);
+  } as unknown as SqlClient;
+
+  for (const key of Reflect.ownKeys(client)) {
+    if (key === 'length' || key === 'name' || key === 'prototype') continue;
+    Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(client, key) as PropertyDescriptor);
+  }
+
+  return wrapped as T;
 }
 
 function rowCountOf(value: unknown): number | undefined {
