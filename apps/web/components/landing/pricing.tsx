@@ -52,28 +52,58 @@ export function LandingPricing({
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+              paddingTop: 16,
+            }}
+          >
             {plans.map((p) => {
               const hot = p.featured;
               const per = p.custom || p.priceCents === 0 ? '' : t.pricingPer;
               const bullets = p.features.slice(0, 3);
+              const isTrial = p.priceCents === 0 && !p.custom;
               return (
                 <div
                   key={p.slug}
+                  className={hot ? 'oo-plan-card oo-plan-featured' : 'oo-plan-card'}
                   style={{
+                    position: 'relative',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 18,
                     padding: 28,
                     borderRadius: 20,
-                    border: `1px solid ${hot ? 'var(--oo-accent)' : 'var(--oo-line)'}`,
+                    border: hot ? '2px solid var(--oo-accent)' : '1px solid var(--oo-line)',
                     background: 'var(--oo-surface)',
-                    boxShadow: hot ? '0 20px 50px var(--oo-halo)' : 'none',
+                    minHeight: hot ? 420 : 380,
                   }}
                 >
+                  {hot && p.badge ? (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -15,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: '5px 16px',
+                        borderRadius: 999,
+                        background: 'var(--oo-accent)',
+                        color: '#fff',
+                        boxShadow: '0 8px 20px var(--oo-halo)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {p.badge}
+                    </span>
+                  ) : null}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontWeight: 600 }}>{p.name}</span>
-                    {p.badge ? (
+                    {!hot && p.badge ? (
                       <span
                         style={{
                           fontSize: 12,
@@ -89,34 +119,73 @@ export function LandingPricing({
                     ) : null}
                   </div>
                   <div>
-                    <span style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.04em' }}>{p.priceLabel}</span>
-                    {per ? <span style={{ color: 'var(--oo-muted)' }}> {per}</span> : null}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.04em' }}>{p.priceLabel}</span>
+                      {per ? <span style={{ color: 'var(--oo-muted)' }}>{per}</span> : null}
+                    </div>
+                    {isTrial ? (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          marginTop: 10,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '3px 12px',
+                          borderRadius: 999,
+                          border: '1px solid var(--oo-accent)',
+                          color: 'var(--oo-accent)',
+                          background: 'transparent',
+                        }}
+                      >
+                        {t.trialBadge}
+                      </span>
+                    ) : null}
                   </div>
                   <div
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8,
+                      gap: 10,
                       fontSize: 14,
                       flexGrow: 1,
                       color: 'var(--oo-muted)',
                     }}
                   >
                     {bullets.map((b) => (
-                      <span key={b}>{b}</span>
+                      <span key={b} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            flexShrink: 0,
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: 'var(--oo-halo)',
+                            color: 'var(--oo-ok)',
+                          }}
+                        >
+                          ✓
+                        </span>
+                        <span>{b}</span>
+                      </span>
                     ))}
+                    {isTrial ? <span style={{ fontSize: 12, color: 'var(--oo-muted)' }}>{t.trialNote}</span> : null}
                   </div>
                   <a
                     href={p.ctaHref}
+                    className={hot ? 'oo-plan-cta oo-plan-cta-hot' : 'oo-plan-cta'}
                     style={{
-                      display: 'inline-flex',
+                      display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      width: '100%',
                       minHeight: 46,
                       borderRadius: 10,
-                      border: `1px solid ${hot ? 'var(--oo-accent)' : 'var(--oo-line)'}`,
-                      background: hot ? 'var(--oo-accent)' : 'transparent',
-                      color: hot ? '#fff' : 'var(--oo-ink)',
                       fontWeight: 600,
                       fontSize: 14,
                     }}

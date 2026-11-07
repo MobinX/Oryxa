@@ -386,3 +386,54 @@
   pointer-events: none;
   background: linear-gradient(90deg, transparent, var(--oo-surface));
 }
+.oo .oo-plan-card {
+  box-shadow: none;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+.oo .oo-plan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px var(--oo-halo);
+}
+.oo .oo-plan-featured {
+  box-shadow: 0 24px 60px var(--oo-halo);
+}
+.oo .oo-plan-featured:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 32px 72px var(--oo-halo);
+}
+.oo .oo-plan-cta {
+  border: 1px solid var(--oo-lineStrong);
+  background: var(--oo-surface2);
+  color: var(--oo-ink);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+.oo .oo-plan-cta:hover {
+  background: var(--oo-accent);
+  border-color: var(--oo-accent);
+  color: #fff;
+}
+.oo .oo-plan-cta-hot {
+  background: var(--oo-accent);
+  border: 1px solid var(--oo-accent);
+  color: #fff;
+}
+.oo .oo-plan-cta-hot:hover {
+  background: var(--oo-accent);
+  border-color: var(--oo-accent);
+  color: #fff;
+  filter: brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .oo .oo-plan-card,
+  .oo .oo-plan-cta {
+    transition: none;
+  }
+  .oo .oo-plan-card:hover {
+    transform: none;
+  }
+}

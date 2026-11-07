@@ -11,6 +11,9 @@ for (const [name, vp] of [['desktop', { width: 1440, height: 900 }], ['android',
     await expect(p.locator('#video')).toBeVisible();
     await expect(p.locator('#workflow')).toBeVisible();
     await expect(p.locator('#pricing')).toBeVisible();
+    await expect(p.locator('#pricing')).toContainText('30-day free trial');
+    expect(await p.locator('#pricing .oo-plan-card').count()).toBeGreaterThanOrEqual(3);
+    await expect(p.locator('#pricing .oo-plan-card', { hasText: 'Most popular' })).toBeVisible();
     await expect(p.locator('#video video')).toHaveAttribute('src', /onlyorders-commercial\.mp4/);
     // Custom player: no native controls, mute button only.
     await expect(p.locator('#video video')).not.toHaveAttribute('controls', '');
