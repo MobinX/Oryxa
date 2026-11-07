@@ -144,8 +144,8 @@ export function LandingPricing({
                 <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{t.compareH}</h3>
                 <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--oo-muted)', lineHeight: 1.6 }}>{t.compareSub}</p>
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', textAlign: 'left', fontSize: 13, borderCollapse: 'collapse' }}>
+              <div className="oo-table-scroll" style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 560, textAlign: 'left', fontSize: 13, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--oo-line)', fontWeight: 700 }}>
                       <th style={{ padding: '10px 16px 10px 0' }}>{t.compareFeature}</th>

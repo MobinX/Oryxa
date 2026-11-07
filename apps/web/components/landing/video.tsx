@@ -102,6 +102,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
         }}
       >
         <div
+          className="oo-video-player"
           onClick={togglePlay}
           role="button"
           tabIndex={0}
@@ -119,12 +120,12 @@ export function LandingVideo({ companyName }: { companyName: string }) {
             overflow: 'hidden',
             background: '#000',
             cursor: 'pointer',
-            outline: 'none',
           }}
         >
           <video
             ref={videoRef}
             src="/landing/onlyorders-commercial.mp4"
+            poster="/landing/commercial-poster.jpg"
             muted={muted}
             loop
             playsInline

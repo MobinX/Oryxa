@@ -328,3 +328,61 @@
     opacity: 0.45;
   }
 }
+@media (max-width: 640px) {
+  .oo h1 {
+    font-size: clamp(2.6rem, 11vw, 4.75rem) !important;
+  }
+  .oo main > section h2 {
+    font-size: clamp(1.9rem, 7vw, 3rem) !important;
+  }
+  .oo main > section {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+}
+.oo .oo-video-player:focus-visible {
+  outline: 3px solid var(--oo-accent);
+  outline-offset: 3px;
+}
+.oo .oo-mobile-menu-btn {
+  display: none;
+}
+@media (max-width: 860px) {
+  .oo .oo-mobile-menu-btn {
+    display: inline-flex;
+  }
+  .oo .oo-mobile-menu {
+    position: absolute;
+    top: 100%;
+    left: 16px;
+    right: 16px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--oo-line);
+    background: var(--oo-surface);
+    box-shadow: 0 24px 60px var(--oo-shadow);
+  }
+  .oo .oo-mobile-menu a {
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+  }
+}
+.oo .oo-table-scroll {
+  position: relative;
+}
+.oo .oo-table-scroll::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--oo-surface));
+}

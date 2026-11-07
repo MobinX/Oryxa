@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useLandingLang, useLandingTheme } from './theme';
 
 function MoonIcon() {
@@ -38,6 +39,8 @@ const iconButton: React.CSSProperties = {
 export function LandingHeader({ companyName }: { companyName: string }) {
   const { dark, toggle } = useLandingTheme();
   const { lang, strings: t, toggleLang } = useLandingLang();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   return (
     <header
       style={{
@@ -84,8 +87,8 @@ export function LandingHeader({ companyName }: { companyName: string }) {
           <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
             {t.navProduct}
           </a>
-          <a href="#workflow" style={{ color: 'var(--oo-muted)' }}>
-            {t.navFeatures}
+          <a href="#video" style={{ color: 'var(--oo-muted)' }}>
+            {t.navDemo}
           </a>
           <a href="#pricing" style={{ color: 'var(--oo-muted)' }}>
             {t.navPricing}
@@ -145,8 +148,51 @@ export function LandingHeader({ companyName }: { companyName: string }) {
           >
             {t.getStarted}
           </a>
+          <button
+            onClick={() => setMenuOpen((value) => !value)}
+            aria-label={menuOpen ? t.menuClose : t.menuOpen}
+            aria-expanded={menuOpen}
+            className="oo-mobile-menu-btn hov"
+            style={{ ...iconButton, display: undefined }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              {menuOpen ? (
+                <path d="M6 6l12 12M18 6L6 18"></path>
+              ) : (
+                <path d="M4 7h16M4 12h16M4 17h16"></path>
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+      {menuOpen && (
+        <nav className="oo-mobile-menu" aria-label="Mobile">
+          <a href="#workflow" onClick={closeMenu} style={{ color: 'var(--oo-ink)' }}>
+            {t.navProduct}
+          </a>
+          <a href="#video" onClick={closeMenu} style={{ color: 'var(--oo-ink)' }}>
+            {t.navDemo}
+          </a>
+          <a href="#pricing" onClick={closeMenu} style={{ color: 'var(--oo-ink)' }}>
+            {t.navPricing}
+          </a>
+          <a href="/docs" onClick={closeMenu} style={{ color: 'var(--oo-ink)' }}>
+            {t.navDocs}
+          </a>
+          <a href="/login" onClick={closeMenu} style={{ color: 'var(--oo-ink)' }}>
+            {t.signIn}
+          </a>
+        </nav>
+      )}
       <style>{`@media (max-width: 860px){.oo .oo-nav-links{display:none}}@media (max-width: 520px){.oo .oo-signin{display:none}}`}</style>
     </header>
   );

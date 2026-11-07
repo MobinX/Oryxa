@@ -27,15 +27,16 @@ const ALL: Array<{ s: number; side: 'me' | 'bot'; kind: MsgKind; text?: string }
 export function LandingWorkflow() {
   const [tick, setTick] = useState(0);
   const [pinned, setPinned] = useState<number | null>(null);
+  const [paused, setPaused] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const { strings: l } = useLandingLang();
   const DEFS = l.wfDefs;
 
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion || paused) return;
     const id = setInterval(() => setTick((value) => value + 1), 1300);
     return () => clearInterval(id);
-  }, [reducedMotion]);
+  }, [reducedMotion, paused]);
 
   const step = pinned !== null ? pinned : Math.floor(tick / 3) % 8;
   const cur = DEFS[step]!;
@@ -82,6 +83,21 @@ export function LandingWorkflow() {
             </button>
           );
         })}
+        <button
+          onClick={() => setPaused((v) => !v)}
+          style={{
+            minHeight: 44,
+            padding: '0 16px',
+            borderRadius: 999,
+            border: '1px solid var(--oo-line)',
+            background: paused ? 'var(--oo-accent)' : 'transparent',
+            color: paused ? '#fff' : 'var(--oo-ink)',
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          {paused ? `▶ ${l.wfResume}` : `⏸ ${l.wfPause}`}
+        </button>
       </div>
 
       <div

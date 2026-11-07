@@ -144,6 +144,9 @@ export function LandingDashboard({ companyName }: { companyName: string }) {
               {l.dashAgentOn}
             </span>
           </div>
+          <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--oo-muted)', padding: '8px 16px 0' }}>
+            {l.dashDemoNote}
+          </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: 580 }}>
             <div
