@@ -39,7 +39,7 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
   http_out: ['host', 'targetPath', 'httpMethod', 'status', 'durationMs', 'ok', 'errorName', 'service'],
   // Official Channels' own pipeline lane: one row per stage of an operator-inbox turn.
   official: ['channel', 'channelId', 'conversationId', 'externalId', 'intent', 'outcome', 'reason', 'confidence'],
-  db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName'],
+  db: ['table', 'operation', 'durationMs', 'rowCount', 'slow', 'errorName', 'causeName', 'causeCode'],
   db_summary: ['table', 'count', 'totalMs'],
   agent_run: [
     'ok',
@@ -375,10 +375,11 @@ function describeEvent(evt: Evt, f: Fields): string {
     case 'db': {
       const verb = text(f.operation) || 'query';
       const writing = verb === 'insert' || verb === 'update' || verb === 'delete';
+      const cause = text(f.causeCode) || text(f.causeName);
       add(
         writing ? `writing (${verb})` : verb,
         f.table ? `${writing ? 'to' : 'on'} ${text(f.table)}` : '',
-        f.errorName ? `FAILED (${text(f.errorName)})` : plural(f.rowCount, 'row', 'rows'),
+        f.errorName ? `FAILED (${text(f.errorName)}${cause ? `: ${cause}` : ''})` : plural(f.rowCount, 'row', 'rows'),
         span(f.durationMs, 'in'),
         f.slow ? 'slow' : '',
       );

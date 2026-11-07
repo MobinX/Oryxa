@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { instrumentSql, setDatabaseLogSink } from '@repo/db/query-log';
+import { instrumentSql, setDatabaseLogSink, withFetchTimeout } from '@repo/db/query-log';
 import { emitDbSummary, wireDatabaseLogging } from '@api/lib/db-log';
 import { storedEvents, __testOnly as logging } from '@api/lib/log';
 import { startContext, withContext, type LogContext } from '@api/lib/ctx';
@@ -112,6 +112,34 @@ describe('the query instrument', () => {
     await expect(wrapped('select 1')).rejects.toBe(boom);
     expect(reports[0].errorName).toBe('Error');
     expect(reports[0].rowCount).toBeUndefined();
+  });
+
+  it('surfaces the driver’s underlying cause on a rejection', async () => {
+    const reports = recording();
+    const boom = Object.assign(new Error('Error connecting to database: fetch failed'), {
+      name: 'NeonDbError',
+      sourceError: Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' }),
+      }),
+    });
+    const wrapped = wrap(() => Promise.reject(boom));
+
+    await expect(wrapped('select 1')).rejects.toBe(boom);
+    expect(reports[0]).toMatchObject({
+      errorName: 'NeonDbError',
+      causeName: 'TypeError',
+      causeCode: 'UND_ERR_CONNECT_TIMEOUT',
+    });
+  });
+
+  it('leaves cause fields off a rejection without an underlying cause', async () => {
+    const reports = recording();
+    const wrapped = wrap(() => Promise.reject(new Error('plain failure')));
+
+    await expect(wrapped('select 1')).rejects.toThrow('plain failure');
+    expect(reports[0].errorName).toBe('Error');
+    expect(reports[0]).not.toHaveProperty('causeName');
+    expect(reports[0]).not.toHaveProperty('causeCode');
   });
 
   it('reports a synchronous throw and still raises it', () => {
@@ -352,4 +380,73 @@ describe('what the API decides to keep', () => {
 
     expect(events('db')[0].requestId).toBe('request-db');
   });
+});
+
+describe('the fetch timeout', () => {
+  it('merges a fresh abort signal into every ordinary call', () => {
+    const seen: unknown[][] = [];
+    const wrapped = withFetchTimeout(function (...args: unknown[]) {
+      seen.push(args);
+      return [];
+    }) as (sql: string, params?: unknown, config?: Record<string, unknown>) => unknown;
+
+    wrapped('select 1', [], { arrayMode: true });
+    wrapped('select 2');
+
+    expect(seen).toHaveLength(2);
+    for (const args of seen) {
+      const signal = (args[2] as { fetchOptions?: { signal?: unknown } })?.fetchOptions?.signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+    }
+    const [first, second] = seen.map(
+      (args) => (args[2] as { fetchOptions: { signal: unknown } }).fetchOptions.signal,
+    );
+    expect(first).not.toBe(second);
+    expect(seen[0]?.[2]).toMatchObject({ arrayMode: true });
+  });
+
+  it('passes template-tag calls through untouched', () => {
+    const seen: unknown[][] = [];
+    const wrapped = withFetchTimeout(function (...args: unknown[]) {
+      seen.push(args);
+      return [];
+    }) as (...args: unknown[]) => unknown;
+    const strings = Object.assign(['select ', ''], { raw: ['select ', ''] });
+
+    wrapped(strings, 1);
+
+    expect(seen).toEqual([[strings, 1]]);
+  });
+
+  it('keeps the receiver, the value and the own properties', () => {
+    const receiver = { name: 'neon' };
+    const value = [{ id: 1 }];
+    const inner = Object.assign(
+      function (this: unknown) {
+        return (this as { name?: string } | undefined)?.name === 'neon' ? value : null;
+      },
+      { transaction: () => 'tx' },
+    );
+    const wrapped = withFetchTimeout(inner) as unknown as {
+      (...args: unknown[]): unknown;
+      transaction: () => unknown;
+    };
+
+    expect(wrapped.call(receiver, 'select 1')).toBe(value);
+    expect(wrapped.transaction()).toBe('tx');
+  });
+
+  it('aborts a hung query once the budget lapses', async () => {
+    const wrapped = withFetchTimeout(
+      (_sql: unknown, _params: unknown, config?: { fetchOptions?: { signal?: AbortSignal } }) =>
+        new Promise((_resolve, reject) => {
+          config?.fetchOptions?.signal?.addEventListener('abort', () => {
+            reject(config?.fetchOptions?.signal?.reason);
+          });
+        }),
+      20,
+    ) as (sql: string) => Promise<unknown>;
+
+    await expect(wrapped('select pg_sleep(60)')).rejects.toThrow();
+  }, 10_000);
 });
