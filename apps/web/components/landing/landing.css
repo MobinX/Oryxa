@@ -469,3 +469,19 @@
     display: none;
   }
 }
+/* Pricing plan CTA (non-featured): transparent with strong-line border; halo hover. */
+.oo .oo-plan-cta:not(.oo-plan-cta-hot) {
+  background: transparent;
+  border: 1.5px solid var(--oo-lineStrong);
+  color: var(--oo-ink);
+}
+.oo .oo-plan-cta:not(.oo-plan-cta-hot):hover {
+  border-color: var(--oo-accent);
+  background: var(--oo-halo);
+  color: var(--oo-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .oo .oo-plan-cta:not(.oo-plan-cta-hot) {
+    transition: none;
+  }
+}
