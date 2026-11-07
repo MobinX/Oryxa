@@ -86,3 +86,6 @@ master-prompt.md
 # Playwright
 test-results/
 playwright-report/
+
+# Local AI Agent skills
+.agents/skills/
