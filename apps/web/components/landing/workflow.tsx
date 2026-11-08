@@ -46,7 +46,7 @@ export function LandingWorkflow() {
   const msgs = ALL.filter((m) => m.s <= step);
 
   return (
-    <section id="workflow" style={{ maxWidth: 1200, margin: '0 auto', padding: '96px 32px', boxSizing: 'border-box' }}>
+    <section id="workflow" className="oo-workflow" style={{ maxWidth: 1200, margin: '0 auto', padding: '96px 32px', boxSizing: 'border-box' }}>
       <div style={{ fontSize: 14, color: 'var(--oo-accent)', fontWeight: 600 }}>{l.wfKicker}</div>
       <h2 style={{ margin: '10px 0 14px', maxWidth: 700, fontSize: 48, lineHeight: 1.05, letterSpacing: '-0.035em', fontWeight: 700 }}>
         {l.wfH2}
@@ -55,7 +55,7 @@ export function LandingWorkflow() {
         {l.wfSub}
       </p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+      <div className="oo-step-strip" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
         {DEFS.map((d, i) => {
           const active = i === step;
           return (
@@ -101,6 +101,7 @@ export function LandingWorkflow() {
       </div>
 
       <div
+        className="oo-workflow-card"
         style={{
           position: 'relative',
           display: 'flex',
@@ -181,8 +182,8 @@ export function LandingWorkflow() {
         </div>
 
         <div style={{ position: 'relative', flex: '0 1 320px', margin: '0 auto' }}>
-          <div style={{ width: 312, maxWidth: '100%', boxSizing: 'border-box', padding: 9, borderRadius: 46, background: '#0E0F16', boxShadow: '0 40px 80px var(--oo-shadow), 0 0 0 1px var(--oo-lineStrong)' }}>
-            <div style={{ position: 'relative', height: 580, borderRadius: 38, background: 'var(--oo-surface)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="oo-phone" style={{ width: 312, maxWidth: '100%', boxSizing: 'border-box', padding: 9, borderRadius: 46, background: '#0E0F16', boxShadow: '0 40px 80px var(--oo-shadow), 0 0 0 1px var(--oo-lineStrong)' }}>
+            <div className="oo-phone-screen" style={{ position: 'relative', height: 580, borderRadius: 38, background: 'var(--oo-surface)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div style={{ position: 'absolute', left: '50%', top: 8, width: 92, height: 24, marginLeft: -46, borderRadius: 999, background: '#0E0F16', zIndex: 3 }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 24px 0', fontSize: 12, fontWeight: 600 }}>
                 <span>9:41</span>

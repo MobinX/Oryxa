@@ -1,81 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useLandingLang, usePrefersReducedMotion } from './theme';
-
-type View = 'inbox' | 'orders' | 'stats';
-
-const FEED: Array<[number, string, string]> = [
-  [1, 'Replied to Ayesha · Messenger', '1s'],
-  [2, 'Nabila sent a photo · Instagram', 'now'],
-  [4, 'Tania asked about size · WhatsApp', 'now'],
-  [6, 'Catalog checked · M in stock', '1.4s'],
-  [7, 'Photo matched to K-204', '1.1s'],
-  [9, 'Order #1042 captured', '2s'],
-  [10, 'Receipt sent to Ayesha', '1s'],
-];
-
-const ORDER_ROWS: Array<[string, string, string, string, string, string]> = [
-  ['#1042', 'Ayesha R.', 'Blue kurti · M', '৳1,850', 'Confirmed', 'ok'],
-  ['#1041', 'Nabila K.', 'Rose kurti · S', '৳1,650', 'Packing', 'wait'],
-  ['#1040', 'Tania S.', 'Panjabi · L', '৳1,390', 'Delivered', 'ok'],
-  ['#1039', 'Imran H.', 'Three-piece set', '৳3,200', 'Packing', 'wait'],
-];
-
-const BARS2: Array<[string, number]> = [
-  ['Mon', 50],
-  ['Tue', 64],
-  ['Wed', 58],
-  ['Thu', 82],
-  ['Fri', 70],
-  ['Sat', 104],
-  ['Sun', 92],
-];
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import { BARS2, ORDER_ROWS, useLandingDemoTimeline, useMediaQuery, type DemoTimeline, type DemoView } from './demo-timeline';
+import { PhoneDemo } from './phone-demo';
+import { useLandingLang } from './theme';
 
 export function LandingDashboard({ companyName }: { companyName: string }) {
-  const [tick, setTick] = useState(0);
-  const [view, setView] = useState<View>('inbox');
+  const [view, setView] = useState<DemoView>('inbox');
   const [paused, setPaused] = useState(false);
-  const reducedMotion = usePrefersReducedMotion();
+  const timeline = useLandingDemoTimeline(paused);
+  const isPhone = useMediaQuery('(max-width: 640px)');
+
+  if (isPhone) {
+    return <PhoneDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />;
+  }
+  return <DesktopDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />;
+}
+
+interface DemoProps {
+  timeline: DemoTimeline;
+  view: DemoView;
+  setView: Dispatch<SetStateAction<DemoView>>;
+  paused: boolean;
+  setPaused: Dispatch<SetStateAction<boolean>>;
+  companyName: string;
+}
+
+function DesktopDemo({ timeline, view, setView, paused, setPaused, companyName }: DemoProps) {
   const { strings: l } = useLandingLang();
+  const { tick, t, s1, typing1, s3, s4, typing2, s6, s7, s8, orderDone, preview, nPrev, tPrev, orders, revenue, toast, feed, bars } =
+    timeline;
 
-  useEffect(() => {
-    if (reducedMotion || paused) return;
-    const id = setInterval(() => setTick((value) => value + 1), 1300);
-    return () => clearInterval(id);
-  }, [reducedMotion, paused]);
-
-  // 20-beat loop: the story builds on beats 1–9, then HOLDS the completed
-  // state through beat 19 so panels never sit empty; only beat 0 restarts.
-  const t = (Math.max(tick, 2) - 2) % 20;
-  const s1 = t >= 1;
-  const typing1 = t === 2;
-  const s3 = t >= 3;
-  const s4 = t >= 4;
-  const typing2 = t === 5;
-  const s6 = t >= 6;
-  const s7 = t >= 8;
-  const s8 = t >= 9;
-  const orderDone = t >= 9;
-
-  const preview = orderDone
-    ? 'Order #1042 confirmed ✓'
-    : t >= 4
-      ? 'Is the blue kurti available in M?'
-      : 'Assalamualaikum';
   const nBadge = t < 6;
-  const nPrev = t >= 6 ? 'Photo matched · K-204 ✓' : 'Sent a photo';
   const tBadge = t < 7;
-  const tPrev = t >= 7 ? 'Size M in stock ✓' : 'M size ache?';
   const hotBorder = t >= 9 && t <= 12 ? 'var(--oo-accent)' : 'var(--oo-line)';
-  const orders = orderDone ? '13' : '12';
-  const revenue = orderDone ? '৳26,580' : '৳24,650';
-  const toast = t >= 9 && t <= 13;
-  const bars = [40, 56, 48, 70, 62, 80, orderDone ? 100 : 84];
-  // On the restart beat the feed keeps showing the full story, never blanks.
-  const feed = (t < 1 ? FEED : FEED.filter((x) => t >= x[0])).slice(-4).reverse();
 
-  const nav: Array<{ key: View; label: string }> = [
+  const nav: Array<{ key: DemoView; label: string }> = [
     { key: 'inbox', label: l.dashInbox },
     { key: 'orders', label: l.dashOrders },
     { key: 'stats', label: l.dashStats },

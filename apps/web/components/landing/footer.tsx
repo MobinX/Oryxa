@@ -37,8 +37,9 @@ export function LandingFooter({ companyName }: { companyName: string }) {
   ];
   return (
     <footer style={{ borderTop: '1px solid var(--oo-line)' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box' }}>
+      <div className="oo-footer-inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box' }}>
         <div
+          className="oo-footer-top"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -47,7 +48,7 @@ export function LandingFooter({ companyName }: { companyName: string }) {
             justifyContent: 'space-between',
           }}
         >
-          <div style={{ maxWidth: 320 }}>
+          <div className="oo-footer-brand" style={{ maxWidth: 320 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: 18 }}>
               <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />
               {companyName}
@@ -66,7 +67,7 @@ export function LandingFooter({ companyName }: { companyName: string }) {
             </p>
             <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.6, color: 'var(--oo-muted)' }}>{t.footBlurb}</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '32px 64px' }}>
+          <div className="oo-footer-links" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '32px 64px' }}>
             {columns.map((col) => (
               <div key={col.heading}>
                 <p

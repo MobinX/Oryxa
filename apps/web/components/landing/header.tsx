@@ -54,6 +54,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
       }}
     >
       <div
+        className="oo-header-inner"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -67,6 +68,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
       >
         <a
           href="#top"
+          className="oo-header-brand"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -78,7 +80,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
           }}
         >
           <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />
-          {companyName}
+          <span className="oo-header-name">{companyName}</span>
         </a>
         <nav
           className="oo-nav-links"
@@ -97,7 +99,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
             {t.navDocs}
           </a>
         </nav>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <div className="oo-header-controls" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <button
             onClick={toggleLang}
             aria-label={lang === 'en' ? 'বাংলায় দেখুন' : 'View in English'}
@@ -133,6 +135,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
           </a>
           <a
             href="/login"
+            className="oo-header-cta"
             style={{
               display: 'inline-flex',
               alignItems: 'center',

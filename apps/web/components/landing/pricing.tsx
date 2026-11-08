@@ -39,7 +39,7 @@ export function LandingPricing({
   const { strings: t } = useLandingLang();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly');
   return (
-    <section id="pricing" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 96px', boxSizing: 'border-box' }}>
+    <section id="pricing" className="oo-pricing" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 96px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
         <span
           style={{
@@ -173,6 +173,7 @@ export function LandingPricing({
       ) : (
         <>
           <div
+            className="oo-plan-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -274,8 +275,8 @@ export function LandingPricing({
                     </span>
                   ) : null}
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em' }}>{price}</span>
+                    <div className="oo-plan-price-row" style={{ display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
+                      <span className="oo-plan-price" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em' }}>{price}</span>
                       {per ? <span style={{ color: 'var(--oo-muted)', fontSize: 15 }}>{per}</span> : null}
                     </div>
                     {isTrial ? (

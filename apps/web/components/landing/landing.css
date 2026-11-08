@@ -485,3 +485,166 @@
     transition: none;
   }
 }
+/* ---- Responsive landing (mobile). All inline-style overrides need !important. ---- */
+/* Scroll cue above the compare table: mobile-only, hidden on desktop. */
+.oo .oo-scroll-cue {
+  display: none;
+}
+@media (max-width: 860px) {
+  /* HEADER: narrower container padding. */
+  .oo .oo-header-inner {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+}
+@media (max-width: 640px) {
+  /* HERO: tighter top padding (sides come from the main > section rule). */
+  .oo .oo-hero {
+    padding-top: 48px !important;
+  }
+  .oo .oo-hero-glow {
+    width: min(1100px, 160vw) !important;
+    margin-left: 0 !important;
+    left: 50% !important;
+    transform: translateX(-50%);
+  }
+  .oo .oo-hero-badge {
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .oo .oo-hero-ctas {
+    gap: 10px !important;
+  }
+  /* VIDEO */
+  .oo .oo-video {
+    padding: 64px 20px !important;
+  }
+  .oo .oo-video-frame {
+    border-radius: 21px !important;
+  }
+  .oo .oo-video-player {
+    border-radius: 20px !important;
+  }
+  .oo .oo-video-mute {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  /* WORKFLOW */
+  .oo .oo-workflow {
+    padding: 64px 20px !important;
+  }
+  .oo .oo-step-strip {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+  }
+  .oo .oo-step-strip > button {
+    flex-shrink: 0 !important;
+  }
+  .oo .oo-workflow-card {
+    padding: 20px !important;
+    gap: 24px !important;
+    border-radius: 20px !important;
+  }
+  .oo .oo-phone {
+    width: min(312px, 100%) !important;
+  }
+  /* PRICING */
+  .oo .oo-pricing {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  .oo .oo-plan-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .oo .oo-plan-card {
+    padding: 20px !important;
+    min-height: auto !important;
+  }
+  .oo .oo-plan-price {
+    font-size: clamp(32px, 10vw, 44px) !important;
+  }
+  .oo .oo-plan-price-row {
+    white-space: normal !important;
+    flex-wrap: wrap !important;
+  }
+  /* COMPARE: intro stacks above the table; table keeps its scroll + min-width. */
+  .oo .oo-scroll-cue {
+    display: block;
+    margin: 0 0 8px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--oo-muted);
+  }
+  .oo .oo-compare-intro {
+    flex: 1 1 100% !important;
+    padding: 20px !important;
+  }
+  .oo .oo-compare-main {
+    flex: 1 1 100% !important;
+  }
+  /* FOOTER: brand stacks above links; 2-column link grid; shorter padding. */
+  .oo .oo-footer-inner {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  .oo .oo-footer-top {
+    padding-top: 36px !important;
+    padding-bottom: 36px !important;
+  }
+  .oo .oo-footer-brand {
+    flex: 1 1 100% !important;
+    max-width: none !important;
+  }
+  .oo .oo-footer-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 20px !important;
+  }
+}
+@media (max-width: 520px) {
+  /* HEADER: single-row controls; the brand name shrinks so buttons fit. */
+  .oo .oo-header-controls {
+    gap: 8px !important;
+  }
+  .oo .oo-header-brand {
+    flex-shrink: 1 !important;
+    min-width: 0;
+  }
+  .oo .oo-header-brand img {
+    flex-shrink: 0;
+  }
+  .oo .oo-header-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .oo .oo-header-cta {
+    min-height: 44px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+}
+@media (max-width: 380px) {
+  /* HERO: CTAs go full-width only on very small screens. */
+  .oo .oo-hero-ctas > a {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+  /* WORKFLOW: shorter phone, tighter card sides. */
+  .oo .oo-phone-screen {
+    height: 520px !important;
+  }
+  .oo .oo-workflow-card {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  /* FOOTER: single-column links. */
+  .oo .oo-footer-links {
+    grid-template-columns: 1fr !important;
+  }
+}

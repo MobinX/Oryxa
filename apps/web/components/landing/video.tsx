@@ -72,6 +72,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
   return (
     <section
       id="video"
+      className="oo-video"
       style={{
         maxWidth: 1100,
         margin: '0 auto',
@@ -109,6 +110,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
       </h2>
       <p style={{ margin: '0 auto 36px', maxWidth: 560, color: 'var(--oo-muted)', fontSize: 18 }}>{t.videoSub}</p>
       <div
+        className="oo-video-frame"
         style={{
           position: 'relative',
           padding: 1,
@@ -246,6 +248,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
           ) : null}
           <button
             onClick={toggleMute}
+            className="oo-video-mute"
             aria-label={muted ? t.videoUnmute : t.videoMute}
             title={muted ? t.videoUnmute : t.videoMute}
             style={{

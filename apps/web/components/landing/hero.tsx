@@ -63,8 +63,9 @@ function WhatsAppGlyph() {
 export function LandingHero({ companyName }: { companyName: string }) {
   const { strings: t } = useLandingLang();
   return (
-    <section id="top" style={{ position: 'relative', textAlign: 'center', padding: '72px 32px 0', boxSizing: 'border-box' }}>
+    <section id="top" className="oo-hero" style={{ position: 'relative', textAlign: 'center', padding: '72px 32px 0', boxSizing: 'border-box' }}>
       <div
+        className="oo-hero-glow"
         style={{
           position: 'absolute',
           left: '50%',
@@ -78,7 +79,7 @@ export function LandingHero({ companyName }: { companyName: string }) {
       />
       <div style={{ position: 'relative', maxWidth: 900, margin: '0 auto' }}>
         <div
-          className="up"
+          className="up oo-hero-badge"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -114,7 +115,7 @@ export function LandingHero({ companyName }: { companyName: string }) {
         <p className="up u3" style={{ margin: '0 auto 32px', maxWidth: 600, fontSize: 19, color: 'var(--oo-muted)' }}>
           {t.heroSub(companyName)}
         </p>
-        <div className="up u3" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+        <div className="up u3 oo-hero-ctas" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
           <a
             href="/login"
             style={{

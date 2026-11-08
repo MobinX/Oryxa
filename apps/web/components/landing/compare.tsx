@@ -108,7 +108,7 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-          <div style={{ flex: '0 1 260px', padding: 28, position: 'relative', overflow: 'hidden' }}>
+          <div className="oo-compare-intro" style={{ flex: '0 1 260px', padding: 28, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'relative', zIndex: 1 }}>
               <span
                 aria-hidden="true"
@@ -174,7 +174,10 @@ export function CompareTable({ plans, compareRows }: { plans: DisplayPlan[]; com
               />
             </svg>
           </div>
-          <div style={{ flex: '1 1 520px', minWidth: 0, padding: 20 }}>
+          <div className="oo-compare-main" style={{ flex: '1 1 520px', minWidth: 0, padding: 20 }}>
+            <div className="oo-scroll-cue" aria-hidden="true">
+              Scroll for more →
+            </div>
             <div className="oo-table-scroll" style={{ overflowX: 'auto' }}>
               <table
                 style={{
