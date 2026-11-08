@@ -1,22 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
-  allowedDevOrigins: ['dev.oryxa.us', 'dev-api.oryxa.us'],
+  allowedDevOrigins: ["dev.oryxa.us", "dev-api.oryxa.us"],
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
-  transpilePackages: ['@repo/utils'],
+  transpilePackages: ["@repo/utils"],
   images: {
-    remotePatterns: [{ protocol: 'https', hostname: '**' }],
+    remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
   experimental: {
     useCache: true,
     cacheComponents: true,
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ["lucide-react"],
     serverActions: {
       // Variant images can be up to 4MB each (API limit), and a product form
       // may include several variant rows in one submit. The default 1MB would
       // reject most real images before the action runs.
-      bodySizeLimit: '20mb',
+      bodySizeLimit: "20mb",
     },
   },
   /**
@@ -37,21 +37,38 @@ const nextConfig = {
    */
   async headers() {
     return [
+      /**
+       * RFC 8288 agent discovery on the homepage only: advertises the real
+       * user docs as the service-doc entry point plus the sitemap. Only
+       * resources that actually exist are listed — no vapor catalog entries.
+       */
       {
-        source: '/:path*',
+        source: "/",
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
           {
-            key: 'Content-Security-Policy',
+            key: "Link",
+            value: '</docs>; rel="service-doc", </sitemap.xml>; rel="sitemap"',
+          },
+        ],
+      },
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy",
             value: [
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "object-src 'none'",
               "form-action 'self' https://*.firebaseapp.com",
-            ].join('; '),
+            ].join("; "),
           },
         ],
       },
@@ -59,8 +76,8 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      { source: '/logs', destination: '/admin/logs', permanent: false },
-      { source: '/logs/login', destination: '/admin/login', permanent: false },
+      { source: "/logs", destination: "/admin/logs", permanent: false },
+      { source: "/logs/login", destination: "/admin/login", permanent: false },
     ];
   },
   /**
@@ -76,12 +93,13 @@ const nextConfig = {
    * would be left asking the browser to reach the API after all.
    */
   async rewrites() {
-    const raw = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001';
-    const api = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+    const raw =
+      process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:3001";
+    const api = raw.endsWith("/") ? raw.slice(0, -1) : raw;
     return {
       afterFiles: [
-        { source: '/api/v1/:path*', destination: `${api}/api/v1/:path*` },
-        { source: '/api2/:path*', destination: `${api}/api2/:path*` },
+        { source: "/api/v1/:path*", destination: `${api}/api/v1/:path*` },
+        { source: "/api2/:path*", destination: `${api}/api2/:path*` },
       ],
     };
   },
