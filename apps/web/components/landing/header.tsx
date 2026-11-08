@@ -79,7 +79,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
             flexShrink: 0,
           }}
         >
-          <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />
+          <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />
           <span className="oo-header-name">{companyName}</span>
         </a>
         <nav

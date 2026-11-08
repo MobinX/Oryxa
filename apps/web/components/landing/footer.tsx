@@ -50,7 +50,7 @@ export function LandingFooter({ companyName }: { companyName: string }) {
         >
           <div className="oo-footer-brand" style={{ maxWidth: 320 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: 18 }}>
-              <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />
+              <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />
               {companyName}
             </div>
             <p
