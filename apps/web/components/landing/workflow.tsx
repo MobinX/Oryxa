@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useInView } from './demo-timeline';
 import { useLandingLang, usePrefersReducedMotion } from './theme';
 
 type MsgKind = 'text' | 'chips' | 'carousel' | 'image' | 'voice' | 'receipt' | 'track';
@@ -28,15 +29,16 @@ export function LandingWorkflow() {
   const [tick, setTick] = useState(0);
   const [pinned, setPinned] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
+  const [wfRef, wfVisible] = useInView<HTMLElement>();
   const reducedMotion = usePrefersReducedMotion();
   const { strings: l } = useLandingLang();
   const DEFS = l.wfDefs;
 
   useEffect(() => {
-    if (reducedMotion || paused) return;
+    if (reducedMotion || paused || !wfVisible) return;
     const id = setInterval(() => setTick((value) => value + 1), 1300);
     return () => clearInterval(id);
-  }, [reducedMotion, paused]);
+  }, [reducedMotion, paused, wfVisible]);
 
   const step = pinned !== null ? pinned : Math.floor(tick / 3) % 8;
   const cur = DEFS[step]!;
@@ -46,9 +48,9 @@ export function LandingWorkflow() {
   const msgs = ALL.filter((m) => m.s <= step);
 
   return (
-    <section id="workflow" className="oo-workflow" style={{ maxWidth: 1200, margin: '0 auto', padding: '96px 32px', boxSizing: 'border-box' }}>
+    <section id="workflow" ref={wfRef} className="oo-workflow" style={{ maxWidth: 1200, margin: '0 auto', padding: '96px 32px', boxSizing: 'border-box' }}>
       <div style={{ fontSize: 14, color: 'var(--oo-accent)', fontWeight: 600 }}>{l.wfKicker}</div>
-      <h2 style={{ margin: '10px 0 14px', maxWidth: 700, fontSize: 48, lineHeight: 1.05, letterSpacing: '-0.035em', fontWeight: 700 }}>
+      <h2 style={{ margin: '10px 0 14px', maxWidth: 700, fontSize: 'clamp(2rem, 5vw, 3rem)', lineHeight: 1.05, letterSpacing: '-0.035em', fontWeight: 700 }}>
         {l.wfH2}
       </h2>
       <p style={{ margin: '0 0 32px', color: 'var(--oo-muted)', fontSize: 18, maxWidth: 640 }}>

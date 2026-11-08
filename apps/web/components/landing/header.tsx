@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useLandingLang, useLandingTheme } from './theme';
 
 /**
@@ -9,9 +10,9 @@ import { useLandingLang, useLandingTheme } from './theme';
  */
 export function BrandMark({ companyName }: { companyName: string }) {
   if (companyName === 'OnlyOrders') {
-    return <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />;
+    return <Image src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />;
   }
-  return <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />;
+  return <Image src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />;
 }
 
 function MoonIcon() {
@@ -71,7 +72,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
-          maxWidth: 1200,
+          maxWidth: 1240,
           margin: '0 auto',
           padding: '12px 32px',
           boxSizing: 'border-box',
@@ -151,13 +152,16 @@ export function LandingHeader({ companyName }: { companyName: string }) {
               display: 'inline-flex',
               alignItems: 'center',
               minHeight: 44,
-              padding: '0 18px',
-              borderRadius: 10,
-              background: 'var(--oo-ink)',
-              color: 'var(--oo-bg)',
+              padding: '0 20px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
+              color: '#fff',
               fontSize: 14,
-              fontWeight: 600,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
               whiteSpace: 'nowrap',
+              boxShadow: '0 8px 22px var(--oo-halo), inset 0 1px 0 rgba(255,255,255,0.25)',
+              border: '1px solid transparent',
             }}
           >
             {t.getStarted}

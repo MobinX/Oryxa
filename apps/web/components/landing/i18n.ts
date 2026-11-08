@@ -109,6 +109,21 @@ const en = {
     ['Courier', 'Keeps the customer updated', 'Parcel updates reach the chat on their own, with a track button.', 'Tracking pushed'],
     ['Review', 'Asks for a review after delivery', 'When the parcel lands, the AI says thanks and asks for a rating.', 'Review requested'],
   ] as Array<[string, string, string, string]>,
+  pricingRetry: 'Try again',
+  pricingContact: 'Contact us',
+  midCtaH: 'See what the AI does with your inbox',
+  midCtaSub: 'Connect a channel and watch the first replies roll in.',
+  midCtaBtn: 'Start selling free',
+  faqKicker: 'FAQ',
+  faqH2: 'Questions sellers ask us',
+  faqSub: 'The short answers. Anything else — ask us on the demo call.',
+  faqItems: [
+    { q: 'Do my customers need to install anything?', a: 'No. Everything happens inside Messenger, Instagram or WhatsApp — the apps they already use. There is no new app to download.' },
+    { q: 'How do payments work — bKash?', a: 'You define payment rules per product: cash on delivery, bKash/Nagad advance, or full prepayment. The AI collects transaction IDs in chat and flags anything unclear for you.' },
+    { q: 'Will it reply in Bangla?', a: 'Yes. It detects the customer’s language per message and answers in Bangla, English, or Banglish — including voice notes, which it transcribes first.' },
+    { q: 'What if the AI gets stuck?', a: 'It hands the chat to you with a summary instead of guessing — and you can pause the autopilot on any conversation, anytime.' },
+    { q: 'Is there really a free plan?', a: 'Yes — start free, no card required. You only upgrade when your reply volume outgrows the free quota.' },
+  ],
 };
 
 export type LandingStrings = typeof en;
@@ -222,6 +237,21 @@ const bn: LandingStrings = {
     ['কুরিয়ার', 'কাস্টমারকে আপডেট রাখে', 'পার্সেল আপডেট নিজে নিজে চ্যাটে পৌঁছায়, ট্র্যাক বাটনসহ।', 'ট্র্যাকিং পাঠানো হয়েছে'],
     ['রিভিউ', 'ডেলিভারির পর রিভিউ চায়', 'পার্সেল পৌঁছালে ধন্যবাদ দিয়ে রেটিং চায়।', 'রিভিউ চাওয়া হয়েছে'],
   ] as Array<[string, string, string, string]>,
+  pricingRetry: 'আবার চেষ্টা করুন',
+  pricingContact: 'যোগাযোগ করুন',
+  midCtaH: 'দেখুন এআই আপনার ইনবক্স কীভাবে সামলায়',
+  midCtaSub: 'একটি চ্যানেল যুক্ত করুন আর প্রথম রিপ্লাইগুলো আসতে দেখুন।',
+  midCtaBtn: 'ফ্রিতে বিক্রি শুরু করুন',
+  faqKicker: 'সাধারণ জিজ্ঞাসা',
+  faqH2: 'বিক্রেতারা যা জানতে চান',
+  faqSub: 'সংক্ষিপ্ত উত্তর। আরও কিছু জানতে চাইলে ডেমো কলে জিজ্ঞেস করুন।',
+  faqItems: [
+    { q: 'আমার কাস্টমারদের কি কিছু ইনস্টল করতে হবে?', a: 'না। সবকিছু Messenger, Instagram বা WhatsApp-এর ভেতরেই হয় — যে অ্যাপ তারা এখনই ব্যবহার করে। নতুন কোনো অ্যাপ নামাতে হয় না।' },
+    { q: 'পেমেন্ট কীভাবে হয় — বিকাশ?', a: 'প্রতিটি পণ্যে আপনি পেমেন্ট নিয়ম ঠিক করে দেন: ক্যাশ অন ডেলিভারি, বিকাশ/নগদ অগ্রিম, বা সম্পূর্ণ অগ্রিম। এআই চ্যাটেই ট্রানজেকশন আইডি সংগ্রহ করে, অস্পষ্ট কিছু থাকলে আপনাকে জানায়।' },
+    { q: 'এটা কি বাংলায় জবাব দেবে?', a: 'হ্যাঁ। প্রতিটি মেসেজের ভাষা শনাক্ত করে বাংলায়, ইংরেজিতে বা বাংলিশে জবাব দেয় — ভয়েস নোটসহ, যা আগে লেখায় রূপান্তর করে নেয়।' },
+    { q: 'এআই আটকে গেলে কী হবে?', a: 'আন্দাজ না করে সামারিসহ চ্যাটটি আপনার কাছে হস্তান্তর করে — আর যেকোনো কথোপকথনে আপনি যেকোনো সময় অটোপাইলট থামাতে পারেন।' },
+    { q: 'সত্যিই কি ফ্রি প্ল্যান আছে?', a: 'হ্যাঁ — কার্ড ছাড়াই ফ্রিতে শুরু করুন। ফ্রি কোটা শেষ হলেই কেবল আপগ্রেড করবেন।' },
+  ],
 };
 
 export const LANDING_STRINGS: Record<LandingLang, LandingStrings> = { en, bn };

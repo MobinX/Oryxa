@@ -63,7 +63,7 @@ export function LandingPricing({
           margin: '0 auto 14px',
           maxWidth: 640,
           textAlign: 'center',
-          fontSize: 48,
+          fontSize: 'clamp(2rem, 5vw, 3rem)',
           lineHeight: 1.05,
           letterSpacing: '-0.035em',
           fontWeight: 700,
@@ -168,7 +168,46 @@ export function LandingPricing({
             color: 'var(--oo-muted)',
           }}
         >
-          {unavailable ? t.pricingUnavailable : t.pricingEmpty}
+          <p style={{ margin: '0 0 18px' }}>{unavailable ? t.pricingUnavailable : t.pricingEmpty}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+            {unavailable ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{
+                  minHeight: 44,
+                  padding: '0 22px',
+                  borderRadius: 12,
+                  border: 0,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
+                  color: '#fff',
+                }}
+              >
+                {t.pricingRetry}
+              </button>
+            ) : null}
+            <a
+              href="/contact"
+              className="hov"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 44,
+                padding: '0 22px',
+                borderRadius: 12,
+                border: '1px solid var(--oo-line)',
+                background: 'var(--oo-surface)',
+                color: 'var(--oo-ink)',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              {t.pricingContact}
+            </a>
+          </div>
         </div>
       ) : (
         <>
@@ -210,11 +249,14 @@ export function LandingPricing({
                     flexDirection: 'column',
                     gap: 18,
                     padding: 28,
-                    borderRadius: 20,
-                    border: hot ? '2px solid var(--oo-accent)' : '1px solid var(--oo-line)',
-                    background: 'var(--oo-surface)',
-                    minHeight: hot ? 420 : 380,
-                    boxShadow: hot ? '0 32px 72px var(--oo-halo)' : 'none',
+                    borderRadius: 22,
+                    border: hot ? '1.5px solid var(--oo-accent)' : '1px solid var(--oo-line)',
+                    background: hot
+                      ? 'linear-gradient(180deg, color-mix(in srgb, var(--oo-halo) 22%, var(--oo-surface)), var(--oo-surface) 42%)'
+                      : 'linear-gradient(180deg, var(--oo-surface), var(--oo-surface2))',
+                    minHeight: hot ? 430 : 390,
+                    boxShadow: hot ? '0 32px 72px var(--oo-halo)' : '0 10px 30px var(--oo-shadow)',
+                    overflow: 'hidden',
                   }}
                 >
                   {hot && p.badge ? (
@@ -377,22 +419,24 @@ export function LandingCta() {
       <div
         style={{
           position: 'relative',
-          padding: '56px 48px',
-          borderRadius: 28,
-          border: '1px solid var(--oo-line)',
-          background: 'var(--oo-surface)',
+          padding: '60px 52px',
+          borderRadius: 30,
+          border: '1px solid var(--oo-lineStrong)',
+          background: 'linear-gradient(135deg, var(--oo-ink) 0%, color-mix(in srgb, var(--oo-accent) 68%, var(--oo-ink)) 100%)',
+          color: '#fff',
           overflow: 'hidden',
+          boxShadow: '0 30px 80px var(--oo-halo2)',
         }}
       >
         <div
           style={{
             position: 'absolute',
             left: '50%',
-            top: '-60%',
-            width: 800,
-            height: 460,
-            marginLeft: -400,
-            background: 'radial-gradient(closest-side, var(--oo-halo), transparent)',
+            top: '-65%',
+            width: 860,
+            height: 480,
+            marginLeft: -430,
+            background: 'radial-gradient(closest-side, rgba(255,255,255,0.22), transparent)',
             pointerEvents: 'none',
           }}
         />
@@ -447,11 +491,13 @@ export function LandingCta() {
                 height: 64,
                 flexShrink: 0,
                 borderRadius: 18,
-                background: 'var(--oo-halo)',
-                color: 'var(--oo-accent)',
+                background: 'rgba(255,255,255,0.16)',
+                color: '#fff',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                border: '1px solid rgba(255,255,255,0.22)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
               }}
             >
               <MessageCircle size={30} />
@@ -463,13 +509,14 @@ export function LandingCta() {
                   textAlign: 'left',
                   fontSize: 36,
                   lineHeight: 1.1,
-                  letterSpacing: '-0.03em',
-                  fontWeight: 700,
+                  letterSpacing: '-0.035em',
+                  fontWeight: 800,
+                  color: '#fff',
                 }}
               >
                 {t.ctaH}
               </h2>
-              <p style={{ margin: 0, maxWidth: 480, color: 'var(--oo-muted)', fontSize: 16 }}>{t.ctaSub}</p>
+              <p style={{ margin: 0, maxWidth: 480, color: 'rgba(255,255,255,0.82)', fontSize: 17, lineHeight: 1.6 }}>{t.ctaSub}</p>
             </div>
           </div>
           <a
@@ -479,14 +526,15 @@ export function LandingCta() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
-              minHeight: 52,
-              padding: '0 28px',
-              borderRadius: 12,
-              background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
-              color: '#fff',
-              fontWeight: 600,
+              minHeight: 54,
+              padding: '0 30px',
+              borderRadius: 14,
+              background: '#fff',
+              color: 'var(--oo-accent)',
+              fontWeight: 700,
               fontSize: 15,
               flexShrink: 0,
+              boxShadow: '0 14px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.6)',
             }}
           >
             {t.ctaBtn}

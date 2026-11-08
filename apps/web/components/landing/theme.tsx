@@ -13,18 +13,18 @@ const LANDING_FONT_STACK = `'Inter', 'Noto Sans Bengali', system-ui, sans-serif`
 
 /** Theme tokens ported 1:1 from the mockup (`L` / `D` in Main.dc.html). */
 const LIGHT_VARS: CSSProperties = {
-  '--oo-bg': '#EEF0F8',
+  '--oo-bg': '#F6F7FC',
   '--oo-surface': '#FFFFFF',
-  '--oo-surface2': '#F3F4FA',
-  '--oo-line': 'rgba(30,30,70,0.10)',
-  '--oo-lineStrong': 'rgba(30,30,70,0.22)',
-  '--oo-ink': '#14152A',
-  '--oo-muted': '#575A74',
-  '--oo-accent': '#5B4BEA',
-  '--oo-accent2': '#3F8CFF',
-  '--oo-halo': 'rgba(91,75,234,0.18)',
-  '--oo-halo2': 'rgba(91,75,234,0.45)',
-  '--oo-shadow': 'rgba(40,40,100,0.16)',
+  '--oo-surface2': '#EEF0F8',
+  '--oo-line': 'rgba(23,25,70,0.09)',
+  '--oo-lineStrong': 'rgba(23,25,70,0.20)',
+  '--oo-ink': '#101230',
+  '--oo-muted': '#525873',
+  '--oo-accent': '#5846F6',
+  '--oo-accent2': '#3D8BFF',
+  '--oo-halo': 'rgba(88,70,246,0.16)',
+  '--oo-halo2': 'rgba(88,70,246,0.42)',
+  '--oo-shadow': 'rgba(35,35,95,0.14)',
   '--oo-ok': '#14805A',
   '--oo-okBg': 'rgba(20,128,90,0.12)',
   '--oo-wait': '#9A5B00',
@@ -32,18 +32,18 @@ const LIGHT_VARS: CSSProperties = {
 } as CSSProperties;
 
 const DARK_VARS: CSSProperties = {
-  '--oo-bg': '#1C1E30',
-  '--oo-surface': '#262941',
-  '--oo-surface2': '#2F3350',
+  '--oo-bg': '#12142A',
+  '--oo-surface': '#1D2038',
+  '--oo-surface2': '#262A45',
   '--oo-line': 'rgba(255,255,255,0.10)',
-  '--oo-lineStrong': 'rgba(255,255,255,0.24)',
-  '--oo-ink': '#EFF0FA',
-  '--oo-muted': '#AEB1CB',
+  '--oo-lineStrong': 'rgba(255,255,255,0.22)',
+  '--oo-ink': '#F1F2FB',
+  '--oo-muted': '#A7AAC6',
   '--oo-accent': '#8A7DFF',
   '--oo-accent2': '#4C9BFF',
-  '--oo-halo': 'rgba(120,105,255,0.24)',
+  '--oo-halo': 'rgba(120,105,255,0.26)',
   '--oo-halo2': 'rgba(138,125,255,0.5)',
-  '--oo-shadow': 'rgba(0,0,0,0.40)',
+  '--oo-shadow': 'rgba(0,0,0,0.45)',
   '--oo-ok': '#4ADE9B',
   '--oo-okBg': 'rgba(74,222,155,0.14)',
   '--oo-wait': '#FFC857',
@@ -79,13 +79,25 @@ export function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-export function LandingRoot({ children }: { children: ReactNode }) {
+/** Cookie read on the client; the server passes its own read as initialLang. */
+function cookieLang(): LandingLang | null {
+  try {
+    const hit = document.cookie.split('; ').find((part) => part.startsWith('oo-lang='));
+    const value = hit?.split('=')[1];
+    return value === 'bn' || value === 'en' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function LandingRoot({ children, initialLang = 'en' }: { children: ReactNode; initialLang?: LandingLang }) {
   // The mockup starts in light mode (startDark defaults to false).
   const [dark, setDark] = useState(false);
-  const [lang, setLang] = useState<LandingLang>('en');
-  // Detect after mount so SSR and the first paint agree (English), then swap.
+  const [lang, setLang] = useState<LandingLang>(initialLang);
+  // First paint already matches the server read (cookie); after mount prefer
+  // the cookie again, then localStorage / locale detection. No flash either way.
   useEffect(() => {
-    setLang(detectLandingLang());
+    setLang(cookieLang() ?? detectLandingLang());
   }, []);
   const toggle = () => setDark((value) => !value);
   const toggleLang = () =>
@@ -93,6 +105,8 @@ export function LandingRoot({ children }: { children: ReactNode }) {
       const next = value === 'en' ? 'bn' : 'en';
       try {
         window.localStorage.setItem('oo-lang', next);
+        // The server reads this cookie so the first paint already matches.
+        document.cookie = `oo-lang=${next}; path=/; max-age=31536000; samesite=lax`;
       } catch {
         /* private mode — keep it in memory only */
       }

@@ -75,4 +75,14 @@ describe('LANDING_STRINGS', () => {
       }
     }
   });
+
+  it('has 5 question/answer pairs in faqItems in both languages', () => {
+    for (const lang of ['en', 'bn'] as const) {
+      expect(LANDING_STRINGS[lang].faqItems).toHaveLength(5);
+      for (const item of LANDING_STRINGS[lang].faqItems) {
+        expect(typeof item.q).toBe('string');
+        expect(typeof item.a).toBe('string');
+      }
+    }
+  });
 });

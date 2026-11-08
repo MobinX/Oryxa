@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, Headphones, MessageCircle, Package, ShoppingCart } from 'lucide-react';
+import { PROOF_STATS } from './proof';
 import { useLandingLang } from './theme';
 
 function ChannelGlyph({ label, children }: { label: string; children: React.ReactNode }) {
@@ -69,35 +70,44 @@ export function LandingHero({ companyName }: { companyName: string }) {
         style={{
           position: 'absolute',
           left: '50%',
-          top: 0,
-          width: 1100,
-          height: 640,
-          marginLeft: -550,
-          background: 'radial-gradient(closest-side, var(--oo-halo), transparent)',
+          top: -80,
+          width: 1200,
+          height: 680,
+          marginLeft: -600,
+          background:
+            'radial-gradient(520px 300px at 50% 38%, var(--oo-halo2), transparent 70%), radial-gradient(closest-side, var(--oo-halo), transparent)',
           pointerEvents: 'none',
         }}
       />
-      <div style={{ position: 'relative', maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ position: 'relative', maxWidth: 920, margin: '0 auto' }}>
         <div
           className="up oo-hero-badge"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 8,
-            padding: '6px 14px',
+            gap: 9,
+            padding: '7px 16px 7px 12px',
             borderRadius: 999,
-            border: '1px solid var(--oo-line)',
-            background: 'var(--oo-surface)',
+            border: '1px solid var(--oo-lineStrong)',
+            background: 'color-mix(in srgb, var(--oo-surface) 82%, transparent)',
+            boxShadow: '0 6px 20px var(--oo-halo), inset 0 1px 0 rgba(255,255,255,0.6)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
             fontSize: 13,
-            color: 'var(--oo-muted)',
+            fontWeight: 600,
+            letterSpacing: '-0.01em',
+            color: 'var(--oo-ink)',
           }}
         >
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--oo-ok)' }} />
+          <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8 }}>
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--oo-ok)', animation: 'oo-pu 1.6s ease-in-out infinite' }} />
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--oo-ok)' }} />
+          </span>
           {t.heroBadge}
         </div>
         <h1
           className="up u2"
-          style={{ margin: '26px 0 20px', fontSize: 76, lineHeight: 1.02, letterSpacing: '-0.045em', fontWeight: 700 }}
+          style={{ margin: '28px 0 20px', fontSize: 'clamp(2.9rem, 7.2vw, 5rem)', lineHeight: 1.0, letterSpacing: '-0.055em', fontWeight: 800, textWrap: 'balance' }}
         >
           {t.heroH1a}
           <br />
@@ -112,40 +122,49 @@ export function LandingHero({ companyName }: { companyName: string }) {
             {t.heroH1b}
           </span>
         </h1>
-        <p className="up u3" style={{ margin: '0 auto 32px', maxWidth: 600, fontSize: 19, color: 'var(--oo-muted)' }}>
+        <p className="up u3" style={{ margin: '0 auto 34px', maxWidth: 620, fontSize: 20, lineHeight: 1.6, letterSpacing: '-0.015em', color: 'var(--oo-muted)', textWrap: 'balance' }}>
           {t.heroSub(companyName)}
         </p>
-        <div className="up u3 oo-hero-ctas" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+        <div className="up u3 oo-hero-ctas" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
           <a
             href="/login"
+            className="oo-hero-primary"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              minHeight: 50,
-              padding: '0 26px',
-              borderRadius: 12,
+              minHeight: 54,
+              padding: '0 30px',
+              borderRadius: 14,
               background: 'linear-gradient(135deg,var(--oo-accent),var(--oo-accent2))',
               color: '#fff',
-              fontWeight: 600,
-              boxShadow: '0 10px 30px var(--oo-halo)',
+              fontWeight: 700,
+              fontSize: 16,
+              letterSpacing: '-0.01em',
+              boxShadow: '0 14px 36px var(--oo-halo2), inset 0 1px 0 rgba(255,255,255,0.28)',
+              border: '1px solid transparent',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease',
             }}
           >
             {t.heroCta}
           </a>
           <a
             href="#video"
-            className="hov"
+            className="hov oo-hero-secondary"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
-              minHeight: 50,
-              padding: '0 26px',
-              borderRadius: 12,
-              border: '1px solid var(--oo-line)',
-              background: 'var(--oo-surface)',
+              gap: 9,
+              minHeight: 54,
+              padding: '0 28px',
+              borderRadius: 14,
+              border: '1px solid var(--oo-lineStrong)',
+              background: 'color-mix(in srgb, var(--oo-surface) 86%, transparent)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
               color: 'var(--oo-ink)',
-              fontWeight: 500,
+              fontWeight: 600,
+              fontSize: 16,
+              boxShadow: '0 6px 18px var(--oo-shadow), inset 0 1px 0 rgba(255,255,255,0.5)',
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -224,14 +243,16 @@ export function LandingTrustStrip() {
           return (
             <div
               key={card.title}
+              className="oo-trust-card"
               style={{
                 display: 'flex',
-                gap: 12,
+                gap: 13,
                 alignItems: 'center',
-                padding: '16px 18px',
-                borderRadius: 16,
+                padding: '17px 19px',
+                borderRadius: 18,
                 border: '1px solid var(--oo-line)',
-                background: 'var(--oo-surface)',
+                background: 'linear-gradient(180deg, var(--oo-surface), var(--oo-surface2))',
+                boxShadow: '0 8px 24px var(--oo-shadow), inset 0 1px 0 rgba(255,255,255,0.55)',
               }}
             >
               <span
@@ -255,6 +276,54 @@ export function LandingTrustStrip() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Proof numbers under the trust strip. Renders nothing until PROOF_STATS
+ * holds real figures — see proof.ts.
+ */
+export function LandingProofStrip() {
+  const { lang } = useLandingLang();
+  if (PROOF_STATS.length === 0) return null;
+  return (
+    <section
+      aria-label={lang === 'bn' ? 'ফলাফল' : 'Results'}
+      style={{
+        maxWidth: 1200,
+        margin: '0 auto',
+        padding: '0 32px 48px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {PROOF_STATS.map((stat) => (
+          <div
+            key={stat.en}
+            style={{
+              padding: '20px 22px',
+              borderRadius: 16,
+              border: '1px solid var(--oo-line)',
+              background: 'var(--oo-surface)',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--oo-accent)' }}>
+              {stat.value}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--oo-muted)' }}>
+              {lang === 'bn' ? stat.bn : stat.en}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
