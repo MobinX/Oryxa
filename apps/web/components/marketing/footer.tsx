@@ -39,15 +39,7 @@ export function MarketingFooter() {
   const { companyName } = useBrand();
 
   return (
-    <footer className="relative mt-24 border-t border-white/10 bg-[#060709]/80 backdrop-blur-xl">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#5B3DF5]/60 to-transparent"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 left-1/2 h-[180px] w-[min(560px,120vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(91,61,245,0.10),transparent)] blur-3xl"
-      />
+    <footer className="relative mt-24 border-t border-white/10 bg-black/40 backdrop-blur-xl">
       <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
 
         <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-12 py-14 md:flex-row md:justify-between">
@@ -75,7 +67,7 @@ export function MarketingFooter() {
                     <li key={link.label}>
                       <Link
                         href={link.href}
-                        className="text-slate-400 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]/70"
+                        className="text-slate-400 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                       >
                         {link.label}
                       </Link>

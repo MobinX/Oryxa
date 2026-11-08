@@ -86,7 +86,7 @@ export function HomeBento() {
             gradient="to confirmed order."
             copy="Everything a chat-first store needs, in one place."
           />
-          <p className="mx-auto mt-3 max-w-xl text-center text-[11px] leading-relaxed text-slate-500">
+          <p className="mx-auto mt-3 max-w-xl text-center text-[11px] leading-relaxed text-neutral-500">
             Illustrative preview. Screens are simulated; available features depend on your connected
             channels and plan.
           </p>
@@ -99,7 +99,7 @@ export function HomeBento() {
                   className="pointer-events-none absolute left-[12.5%] right-[12.5%] top-4 h-px -translate-y-1/2 bg-white/10"
                 >
                   <m.div
-                    className="h-full origin-left bg-gradient-to-r from-[#5B3DF5] to-[#A78BFA]"
+                    className="h-full origin-left bg-gradient-to-r from-white/80 to-white"
                     animate={{ scaleX: progress }}
                     transition={reduced ? { duration: 0 } : { duration: 0.45, ease: 'easeOut' }}
                   />
@@ -117,8 +117,8 @@ export function HomeBento() {
                         aria-pressed={isActive}
                         aria-label={`Show step ${index + 1}: ${step.title}`}
                         className={cn(
-                          'flex min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 py-1 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]',
-                          isActive ? 'text-white' : 'text-slate-400 hover:text-slate-200',
+                          'flex min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 py-1 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+                          isActive ? 'text-white' : 'text-neutral-400 hover:text-neutral-200',
                         )}
                       >
                         <span
@@ -127,8 +127,8 @@ export function HomeBento() {
                             isDone
                               ? 'border-emerald-400/40 bg-emerald-400/15 text-emerald-300'
                               : isActive
-                                ? 'border-[#5B3DF5] bg-[#5B3DF5] text-white shadow-[0_0_18px_-2px_rgba(91,61,245,0.8)]'
-                                : 'border-white/15 bg-[#0B0D18] text-slate-500',
+                                ? 'border-white bg-white text-black'
+                                : 'border-white/15 bg-[#0B0D18] text-neutral-500',
                           )}
                         >
                           {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
@@ -141,7 +141,7 @@ export function HomeBento() {
                   })}
                 </div>
               </div>
-              <p className="mb-4 text-center text-[11px] text-slate-500">
+              <p className="mb-4 text-center text-[11px] text-neutral-500">
                 Tap a step to preview it
               </p>
             </div>
@@ -153,7 +153,7 @@ export function HomeBento() {
                   className="pointer-events-none absolute bottom-7 left-[11px] top-7 w-px bg-white/10"
                 >
                   <m.div
-                    className="absolute inset-0 origin-top bg-gradient-to-b from-[#5B3DF5] via-[#7C3AED] to-[#A78BFA]"
+                    className="absolute inset-0 origin-top bg-gradient-to-b from-white/70 via-white to-white/70"
                     animate={{ scaleY: progress }}
                     transition={reduced ? { duration: 0 } : { duration: 0.45, ease: 'easeOut' }}
                   />
@@ -171,8 +171,8 @@ export function HomeBento() {
                           isDone
                             ? 'border-emerald-400/40 bg-emerald-400/15 text-emerald-300'
                             : isActive
-                              ? 'border-[#5B3DF5] bg-[#5B3DF5] text-white shadow-[0_0_20px_-2px_rgba(91,61,245,0.9)]'
-                              : 'border-white/15 bg-[#0B0D18] text-slate-500',
+                              ? 'border-white bg-white text-black'
+                              : 'border-white/15 bg-[#0B0D18] text-neutral-500',
                         )}
                       >
                         {isDone ? <Check className="h-3 w-3" /> : index + 1}
@@ -183,9 +183,9 @@ export function HomeBento() {
                         aria-pressed={isActive}
                         aria-label={`Show step ${index + 1}: ${step.title}`}
                         className={cn(
-                          'group flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left backdrop-blur transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]',
+                          'group flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left backdrop-blur transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
                           isActive
-                            ? 'border-[#5B3DF5]/50 bg-white/[0.07] shadow-[0_18px_50px_-28px_rgba(91,61,245,0.95)]'
+                            ? 'border-white/25 bg-white/[0.06]'
                             : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]',
                         )}
                       >
@@ -193,19 +193,19 @@ export function HomeBento() {
                           className={cn(
                             'grid h-10 w-10 shrink-0 place-items-center rounded-xl border transition-colors',
                             isActive
-                              ? 'border-[#5B3DF5]/30 bg-[#5B3DF5]/20 text-violet-200'
-                              : 'border-white/10 bg-white/[0.04] text-slate-400 group-hover:text-slate-300',
+                              ? 'border-white/15 bg-white/[0.06] text-neutral-200'
+                              : 'border-white/10 bg-white/[0.04] text-neutral-400 group-hover:text-neutral-300',
                           )}
                         >
                           <Icon className="h-5 w-5" />
                         </span>
                         <span className="min-w-0">
                           <span className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-violet-300/80">
+                            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-500">
                               0{index + 1}
                             </span>
                             {isActive ? (
-                              <span className="rounded-full bg-[#5B3DF5]/20 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-200">
+                              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white">
                                 Active
                               </span>
                             ) : null}
@@ -213,7 +213,7 @@ export function HomeBento() {
                           <span className="mt-1 block text-[15px] font-semibold text-white">
                             {step.title}
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-slate-400">
+                          <span className="mt-1 block text-xs leading-5 text-neutral-400">
                             {step.copy}
                           </span>
                         </span>
@@ -224,17 +224,13 @@ export function HomeBento() {
               </ol>
 
               <div className="relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-md sm:p-6">
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#5B3DF5]/10 blur-3xl"
-                />
                 <div className="relative flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5B3DF5]/15 text-violet-300">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-neutral-200">
                       <ActiveIcon className="h-4.5 w-4.5" />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
                         Step 0{active + 1} · live preview
                       </p>
                       <p className="truncate text-sm font-semibold text-white">{STEPS[active].title}</p>
@@ -343,12 +339,12 @@ function MessengerPreview({ reduced }: { reduced: boolean }) {
     <div className="flex h-full min-h-[342px] flex-col sm:min-h-[382px]">
       <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#5B3DF5] to-[#8B5CF6] text-white">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-black">
             <Bot className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{companyName} AI</p>
-            <p className="text-[10px] text-slate-500">Messenger · replies instantly</p>
+            <p className="text-[10px] text-neutral-500">Messenger · replies instantly</p>
           </div>
         </div>
         <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-300">
@@ -357,7 +353,7 @@ function MessengerPreview({ reduced }: { reduced: boolean }) {
         </span>
       </div>
 
-      <div className="mt-3 flex flex-1 flex-col justify-end gap-2.5 rounded-xl border border-white/10 bg-[radial-gradient(circle_at_80%_0%,rgba(91,61,245,0.14),transparent_55%)] p-3">
+      <div className="mt-3 flex flex-1 flex-col justify-end gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-3">
         <ChatBubble side="right" delay={0} reduced={reduced}>
           Is the blue kurti available in M?
         </ChatBubble>
@@ -380,7 +376,7 @@ function MessengerPreview({ reduced }: { reduced: boolean }) {
 
         {stage >= 4 ? (
           <ChatBubble side="left" delay={0.05} reduced={reduced}>
-            Done. Order <span className="font-semibold text-violet-200">#OO-2481</span> is confirmed ✓
+            Done. Order <span className="font-semibold text-white">#OO-2481</span> is confirmed ✓
           </ChatBubble>
         ) : null}
       </div>
@@ -391,8 +387,8 @@ function MessengerPreview({ reduced }: { reduced: boolean }) {
         animate={{ opacity: 1, y: 0 }}
         transition={enterDelay(0.1)}
       >
-        <span className="flex-1 truncate text-xs text-slate-500">Write a reply…</span>
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#5B3DF5] text-white">
+        <span className="flex-1 truncate text-xs text-neutral-500">Write a reply…</span>
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-white text-black">
           <Send className="h-3.5 w-3.5" />
         </span>
       </m.div>
@@ -422,8 +418,8 @@ function ChatBubble({
         className={cn(
           'max-w-[85%] break-words rounded-2xl px-3.5 py-2.5 text-sm leading-5',
           side === 'right'
-            ? 'rounded-br-md bg-[#5B3DF5] text-white'
-            : 'rounded-bl-md border border-white/10 bg-white/[0.06] text-slate-200',
+            ? 'rounded-br-md bg-white text-black'
+            : 'rounded-bl-md border border-white/10 bg-white/[0.06] text-neutral-200',
         )}
       >
         {children}
@@ -444,7 +440,7 @@ function TypingBubble({ reduced }: { reduced: boolean }) {
         {[0, 1, 2].map((dot) => (
           <m.span
             key={dot}
-            className="h-1.5 w-1.5 rounded-full bg-slate-400"
+            className="h-1.5 w-1.5 rounded-full bg-neutral-400"
             animate={reduced ? { opacity: 0.7, scale: 1 } : { opacity: [0.35, 1, 0.35], scale: [0.8, 1, 0.8] }}
             transition={
               reduced
@@ -481,7 +477,7 @@ function CheckoutPreview({ reduced }: { reduced: boolean }) {
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-white">Cart</p>
-          <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-slate-400">2 items</span>
+          <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-neutral-400">2 items</span>
         </div>
         <div className="mt-3 space-y-2.5">
           {lines.map((line, index) => (
@@ -494,7 +490,7 @@ function CheckoutPreview({ reduced }: { reduced: boolean }) {
               }
               className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5"
             >
-              <span className="min-w-0 truncate text-xs text-slate-200">{line.name}</span>
+              <span className="min-w-0 truncate text-xs text-neutral-200">{line.name}</span>
               <span className="shrink-0 text-xs font-semibold tabular-nums text-white">{line.price}</span>
             </m.div>
           ))}
@@ -504,25 +500,25 @@ function CheckoutPreview({ reduced }: { reduced: boolean }) {
             transition={
               reduced ? { duration: 0 } : { duration: 0.3, delay: 0.4, ease: 'easeOut' }
             }
-            className="flex items-center justify-between gap-3 px-1 text-xs text-slate-400"
+            className="flex items-center justify-between gap-3 px-1 text-xs text-neutral-400"
           >
             <span>Delivery · Dhaka</span>
-            <span className="font-semibold tabular-nums text-slate-200">৳60</span>
+            <span className="font-semibold tabular-nums text-neutral-200">৳60</span>
           </m.div>
         </div>
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] text-slate-400">
-          <CreditCard className="h-3.5 w-3.5 text-violet-300" />
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] text-neutral-400">
+          <CreditCard className="h-3.5 w-3.5 text-neutral-300" />
           Cash on delivery
         </div>
       </div>
 
       <div className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Order total</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Order total</p>
           <p className="mt-1 text-3xl font-bold tabular-nums text-white">
             ৳{total.toLocaleString('en-US')}
           </p>
-          <p className="mt-1 text-[11px] text-slate-500">Including delivery</p>
+          <p className="mt-1 text-[11px] text-neutral-500">Including delivery</p>
         </div>
 
         <div className="mt-4">
@@ -553,7 +549,7 @@ function CheckoutPreview({ reduced }: { reduced: boolean }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={reduced ? { duration: 0 } : { duration: 0.25, ease: 'easeOut' }}
-                className="flex items-center justify-center gap-2 rounded-lg border border-[#5B3DF5]/30 bg-[#5B3DF5]/15 px-3 py-2.5 text-xs font-semibold text-violet-200"
+                className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-xs font-semibold text-black"
               >
                 <CreditCard className="h-4 w-4" />
                 Confirm order
@@ -572,13 +568,13 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
   const done = useCountUp(21, reduced, 300, 900);
 
   const stats = [
-    { label: 'New', value: newOrders, ratio: 12 / 30, icon: Package, tone: 'text-violet-300 bg-[#5B3DF5]/15' },
+    { label: 'New', value: newOrders, ratio: 12 / 30, icon: Package, tone: 'text-neutral-200 bg-white/[0.06]' },
     { label: 'On delivery', value: onDelivery, ratio: 8 / 30, icon: Box, tone: 'text-amber-300 bg-amber-400/10' },
     { label: 'Done', value: done, ratio: 21 / 30, icon: Check, tone: 'text-emerald-300 bg-emerald-400/10' },
   ];
 
   const rows = [
-    { id: '#OO-2481', item: 'Linen kurti · M', status: 'New', tone: 'text-violet-200 bg-[#5B3DF5]/20' },
+    { id: '#OO-2481', item: 'Linen kurti · M', status: 'New', tone: 'text-white bg-white/10' },
     { id: '#OO-2478', item: 'Cotton panjabi · L', status: 'On delivery', tone: 'text-amber-200 bg-amber-400/15' },
     { id: '#OO-2470', item: 'Silk scarf · One size', status: 'Done', tone: 'text-emerald-200 bg-emerald-400/15' },
   ];
@@ -588,9 +584,9 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-white">Order board</p>
-          <p className="text-[10px] text-slate-500">Today · example view</p>
+          <p className="text-[10px] text-neutral-500">Today · example view</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] text-slate-400">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] text-neutral-400">
           <m.span
             className="h-1.5 w-1.5 rounded-full bg-emerald-400"
             animate={reduced ? { opacity: 1 } : { opacity: [1, 0.35, 1] }}
@@ -617,10 +613,10 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
                 <Icon className="h-4 w-4" />
               </span>
               <p className="mt-3 text-2xl font-bold tabular-nums text-white">{stat.value}</p>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">{stat.label}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-neutral-500">{stat.label}</p>
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
                 <m.div
-                  className="h-full origin-left rounded-full bg-gradient-to-r from-[#5B3DF5] to-[#A78BFA]"
+                  className="h-full origin-left rounded-full bg-gradient-to-r from-white/80 to-white"
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: stat.ratio }}
                   transition={reduced ? { duration: 0 } : { duration: 0.7, delay: 0.2 + index * 0.08, ease: 'easeOut' }}
@@ -643,8 +639,8 @@ function DashboardPreview({ reduced }: { reduced: boolean }) {
             className="flex items-center justify-between gap-3 py-2.5"
           >
             <div className="min-w-0">
-              <p className="truncate text-[11px] font-semibold text-slate-200">{row.id}</p>
-              <p className="truncate text-[10px] text-slate-500">{row.item}</p>
+              <p className="truncate text-[11px] font-semibold text-neutral-200">{row.id}</p>
+              <p className="truncate text-[10px] text-neutral-500">{row.item}</p>
             </div>
             <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold', row.tone)}>
               {row.status}
@@ -681,7 +677,7 @@ function ControlPreview() {
             </span>
             <div>
               <p className="text-sm font-semibold text-white">AI agent</p>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-neutral-400">
                 {agentOn ? 'Answering automatically' : 'Paused — you answer'}
               </p>
             </div>
@@ -696,7 +692,7 @@ function ControlPreview() {
           </span>
         </div>
 
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-300">
+        <p className="mt-3 text-[11px] leading-relaxed text-neutral-300">
           {agentOn
             ? 'Answers Messenger, Instagram and comments automatically.'
             : 'No automatic replies. New messages still land in your inbox for you to answer.'}
@@ -711,7 +707,7 @@ function ControlPreview() {
         className={cn(
           'flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-[11px] font-semibold transition',
           agentOn
-            ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.07]'
+            ? 'border-white/10 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.07]'
             : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/15',
         )}
       >
@@ -719,7 +715,7 @@ function ControlPreview() {
         <span
           className={cn(
             'relative h-5 w-9 shrink-0 rounded-full transition-colors',
-            agentOn ? 'bg-emerald-500' : 'bg-slate-600',
+            agentOn ? 'bg-emerald-500' : 'bg-neutral-600',
           )}
           aria-hidden
         >
@@ -732,8 +728,8 @@ function ControlPreview() {
         </span>
       </button>
 
-      <div className="mt-auto flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
-        <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300" />
+      <div className="mt-auto flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-neutral-400">
+        <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" />
         The switch works for the whole store or a single conversation, and suggestions stay
         available when the agent is paused.
       </div>

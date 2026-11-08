@@ -45,6 +45,8 @@ export async function MailMessage({
   try {
     detail = await consoleApiFetch<MailDetailResponse>(
       `/api2/admin/mail/emails/${encodeURIComponent(id)}`,
+      // Bodies are immutable; trash/restore/delete actions purge this path.
+      { next: { revalidate: 60 } },
     );
   } catch (failure) {
     if (failure instanceof ConsoleApiError && failure.status === 401) redirect('/mails/login');

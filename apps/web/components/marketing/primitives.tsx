@@ -61,10 +61,10 @@ export function Reveal({
   );
 }
 
-/** Small glowing eyebrow pill above section headings. */
+/** Small neutral eyebrow pill above section headings. */
 export function Eyebrow({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-[#5B3DF5]/30 bg-[#5B3DF5]/10 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#A78BFA] shadow-[0_0_24px_-6px_rgba(91,61,245,0.5)]">
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-300">
       {icon}
       {children}
     </span>
@@ -76,8 +76,8 @@ export function SectionHeading({
   eyebrow,
   icon,
   title,
-  copy,
   gradient,
+  copy,
 }: {
   eyebrow: string;
   icon?: ReactNode;
@@ -93,16 +93,12 @@ export function SectionHeading({
       <Reveal delayMs={60}>
         <h2 className="font-geist text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-[42px] lg:leading-[1.15]">
           {title}{' '}
-          {gradient ? (
-            <span className="bg-gradient-to-r from-[#A78BFA] via-[#C084FC] to-[#818CF8] bg-clip-text text-transparent">
-              {gradient}
-            </span>
-          ) : null}
+          {gradient ? <span className="text-[#A78BFA]">{gradient}</span> : null}
         </h2>
       </Reveal>
       {copy ? (
         <Reveal delayMs={120}>
-          <p className="mx-auto max-w-2xl text-balance text-sm leading-relaxed text-slate-400 sm:text-base">
+          <p className="mx-auto max-w-2xl text-balance text-sm leading-relaxed text-neutral-400 sm:text-base">
             {copy}
           </p>
         </Reveal>
@@ -111,7 +107,7 @@ export function SectionHeading({
   );
 }
 
-/** Glass panel with soft violet hover glow. */
+/** Hairline panel with a neutral hover lift. */
 export function GlowCard({
   children,
   className,
@@ -122,24 +118,14 @@ export function GlowCard({
   featured?: boolean;
 }) {
   return featured ? (
-    <div className="relative rounded-3xl p-px">
-      <span
-        aria-hidden
-        className="absolute inset-0 rounded-3xl bg-gradient-to-b from-[#5B3DF5] via-[#7C3AED]/40 to-[#5B3DF5]/10"
-      />
-      <div
-        aria-hidden
-        className="absolute -inset-8 -z-10 rounded-full bg-[#5B3DF5]/15 blur-3xl"
-      />
-      <div className={cn('relative rounded-[calc(1.5rem-1px)] bg-[#0C0E1A] p-6 shadow-2xl', className)}>
-        {children}
-      </div>
+    <div className="relative rounded-3xl border border-white/25 bg-[#101114] p-6 shadow-2xl">
+      <div className={cn(className)}>{children}</div>
     </div>
   ) : (
     <div
       className={cn(
         'group relative rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-md transition duration-300',
-        'hover:-translate-y-1 hover:border-[#7C3AED]/50 hover:bg-[#5B3DF5]/[0.07] hover:shadow-[0_24px_60px_-24px_rgba(91,61,245,0.45)]',
+        'hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.05]',
         className,
       )}
     >

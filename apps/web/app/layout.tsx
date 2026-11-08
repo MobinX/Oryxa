@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const brand = await getBrand();
   const { companyName } = brand;
   const title = `${companyName} — AI Auto-Reply for Messenger & Instagram`;
-  const description = `${companyName} answers DMs, comments and storefront questions with AI, manages catalog and orders — for Facebook, Instagram and WhatsApp commerce.`;
+  const description = `${companyName} answers DMs, comments and storefront questions with AI — catalog, orders and handoff for Facebook, Instagram and WhatsApp. Start free.`;
   return {
     metadataBase: new URL(siteUrl(brand.host)),
     title,
@@ -78,6 +78,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           }}
         />
         <OrganizationJsonLd />
+        {/* Landing fonts (see theme.tsx note): plain stylesheet, not next/font. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
       <body>
         <BrandProvider brand={brand}>
