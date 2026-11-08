@@ -1,11 +1,15 @@
 'use client';
 
-import { Inter, Noto_Sans_Bengali } from 'next/font/google';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { detectLandingLang, LANDING_STRINGS, type LandingLang, type LandingStrings } from './i18n';
 
-const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap' });
-const bengali = Noto_Sans_Bengali({ subsets: ['bengali'], weight: ['400', '500', '600', '700'], display: 'swap' });
+/**
+ * NOTE: fonts load via plain <link> in the root layout, NOT next/font. The
+ * Turbopack font pipeline (@vercel/turbopack-next font loader) fails under
+ * Vercel's Bun install with 28 "can't resolve font" errors; a stylesheet
+ * link sidesteps it deterministically. Keep this stack in sync with that link.
+ */
+const LANDING_FONT_STACK = `'Inter', 'Noto Sans Bengali', system-ui, sans-serif`;
 
 /** Theme tokens ported 1:1 from the mockup (`L` / `D` in Main.dc.html). */
 const LIGHT_VARS: CSSProperties = {
@@ -98,12 +102,12 @@ export function LandingRoot({ children }: { children: ReactNode }) {
     <ThemeContext.Provider value={{ dark, toggle }}>
       <LangContext.Provider value={{ lang, strings: LANDING_STRINGS[lang], toggleLang }}>
         <div
-          className={`oo ${inter.className} ${bengali.className}`}
+          className="oo"
           style={{
             ...(dark ? DARK_VARS : LIGHT_VARS),
             background: 'var(--oo-bg)',
             color: 'var(--oo-ink)',
-            fontFamily: `${inter.style.fontFamily}, ${bengali.style.fontFamily}, system-ui, sans-serif`,
+            fontFamily: LANDING_FONT_STACK,
             fontSize: 16,
             lineHeight: 1.55,
             letterSpacing: '-0.01em',
