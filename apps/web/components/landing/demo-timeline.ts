@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { usePrefersReducedMotion } from './theme';
 
 export type DemoView = 'inbox' | 'orders' | 'stats';
@@ -127,4 +127,25 @@ export function useMediaQuery(query: string): boolean {
     return () => mql.removeEventListener('change', onChange);
   }, [query]);
   return matches;
+}
+
+/**
+ * Visibility gate for the animated demos: timers run only while the wrapped
+ * element is near the viewport, so a single demo animates at a time and an
+ * off-screen one costs nothing. True until measured (SSR, old browsers).
+ */
+export function useInView<T extends HTMLElement>(): [RefObject<T | null>, boolean] {
+  const ref = useRef<T | null>(null);
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => setInView(entries[0]?.isIntersecting ?? true),
+      { rootMargin: '200px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return [ref, inView];
 }

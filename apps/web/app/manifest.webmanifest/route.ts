@@ -15,6 +15,8 @@ export async function GET(): Promise<Response> {
       background_color: '#0B0D1B',
       theme_color: '#5B3DF5',
       icons: [
+        // Transparent mark first so the install prompt / task switcher never shows a black box.
+        { src: '/onlyorders-mark.png', sizes: 'any', type: 'image/png', purpose: 'any' },
         { src: '/icon-48.png', sizes: '48x48', type: 'image/png', purpose: 'any' },
         { src: '/icon-96.png', sizes: '96x96', type: 'image/png', purpose: 'any' },
         { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

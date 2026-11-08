@@ -1,20 +1,25 @@
 'use client';
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { BARS2, ORDER_ROWS, useLandingDemoTimeline, useMediaQuery, type DemoTimeline, type DemoView } from './demo-timeline';
+import { BARS2, ORDER_ROWS, useInView, useLandingDemoTimeline, useMediaQuery, type DemoTimeline, type DemoView } from './demo-timeline';
 import { PhoneDemo } from './phone-demo';
 import { useLandingLang } from './theme';
 
 export function LandingDashboard({ companyName }: { companyName: string }) {
   const [view, setView] = useState<DemoView>('inbox');
   const [paused, setPaused] = useState(false);
-  const timeline = useLandingDemoTimeline(paused);
+  const [demoRef, demoVisible] = useInView<HTMLDivElement>();
+  // Off-screen the timeline freezes: one demo animates at a time, and a
+  // visitor who scrolled past stops paying for it.
+  const timeline = useLandingDemoTimeline(paused || !demoVisible);
   const isPhone = useMediaQuery('(max-width: 640px)');
 
-  if (isPhone) {
-    return <PhoneDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />;
-  }
-  return <DesktopDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />;
+  const demo = isPhone ? (
+    <PhoneDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />
+  ) : (
+    <DesktopDemo timeline={timeline} view={view} setView={setView} paused={paused} setPaused={setPaused} companyName={companyName} />
+  );
+  return <div ref={demoRef}>{demo}</div>;
 }
 
 interface DemoProps {

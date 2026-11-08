@@ -21,19 +21,31 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export async function ensureMailbox(env: Env, address: string, name?: string): Promise<MailboxRow> {
+export async function ensureMailbox(
+  env: Env,
+  address: string,
+  name?: string,
+): Promise<MailboxRow> {
   const normalized = normalizeEmail(address);
   if (!isEmail(normalized)) {
-    throw new ApiError(400, "invalid_mailbox", "Mailbox address is not a valid email address");
+    throw new ApiError(
+      400,
+      "invalid_mailbox",
+      "Mailbox address is not a valid email address",
+    );
   }
 
-  const existing = await env.DB.prepare("SELECT * FROM mailboxes WHERE address = ?")
+  const existing = await env.DB.prepare(
+    "SELECT * FROM mailboxes WHERE address = ?",
+  )
     .bind(normalized)
     .first<MailboxRow>();
   if (existing) {
     if (name && !existing.name) {
       const updatedAt = nowIso();
-      await env.DB.prepare("UPDATE mailboxes SET name = ?, updated_at = ? WHERE id = ?")
+      await env.DB.prepare(
+        "UPDATE mailboxes SET name = ?, updated_at = ? WHERE id = ?",
+      )
         .bind(name.slice(0, 200), updatedAt, existing.id)
         .run();
       return { ...existing, name: name.slice(0, 200), updated_at: updatedAt };
@@ -52,22 +64,40 @@ export async function ensureMailbox(env: Env, address: string, name?: string): P
   const row = await env.DB.prepare("SELECT * FROM mailboxes WHERE address = ?")
     .bind(normalized)
     .first<MailboxRow>();
-  if (!row) throw new ApiError(500, "mailbox_create_failed", "Could not create mailbox");
+  if (!row)
+    throw new ApiError(
+      500,
+      "mailbox_create_failed",
+      "Could not create mailbox",
+    );
   return row;
 }
 
-export async function getMailbox(env: Env, id: string): Promise<MailboxRow | null> {
-  return await env.DB.prepare("SELECT * FROM mailboxes WHERE id = ?").bind(id).first<MailboxRow>();
+export async function getMailbox(
+  env: Env,
+  id: string,
+): Promise<MailboxRow | null> {
+  return await env.DB.prepare("SELECT * FROM mailboxes WHERE id = ?")
+    .bind(id)
+    .first<MailboxRow>();
 }
 
-export async function getMailboxByAddress(env: Env, address: string): Promise<MailboxRow | null> {
+export async function getMailboxByAddress(
+  env: Env,
+  address: string,
+): Promise<MailboxRow | null> {
   return await env.DB.prepare("SELECT * FROM mailboxes WHERE address = ?")
     .bind(normalizeEmail(address))
     .first<MailboxRow>();
 }
 
-export async function getEmailRow(env: Env, id: string): Promise<EmailRow | null> {
-  return await env.DB.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first<EmailRow>();
+export async function getEmailRow(
+  env: Env,
+  id: string,
+): Promise<EmailRow | null> {
+  return await env.DB.prepare("SELECT * FROM emails WHERE id = ?")
+    .bind(id)
+    .first<EmailRow>();
 }
 
 export async function findInboundDuplicate(
@@ -83,7 +113,11 @@ export async function findInboundDuplicate(
   return row?.id ?? null;
 }
 
-async function safeCleanup(env: Env, mailboxId: string, emailId: string): Promise<void> {
+async function safeCleanup(
+  env: Env,
+  mailboxId: string,
+  emailId: string,
+): Promise<void> {
   try {
     await deletePrefix(env, emailPrefix(env, mailboxId, emailId));
   } catch (error) {
@@ -104,7 +138,10 @@ export async function persistEmail(
   const attachments = input.attachments || [];
 
   const storedAttachments = attachments.map((attachment, index) => {
-    const filename = keySafeFilename(attachment.filename, `attachment-${index + 1}`);
+    const filename = keySafeFilename(
+      attachment.filename,
+      `attachment-${index + 1}`,
+    );
     return {
       id: attachment.id,
       filename: attachment.filename,
@@ -119,7 +156,12 @@ export async function persistEmail(
 
   try {
     for (const attachment of storedAttachments) {
-      await putObject(env, attachment.b2Key, attachment.content, attachment.contentType);
+      await putObject(
+        env,
+        attachment.b2Key,
+        attachment.content,
+        attachment.contentType,
+      );
     }
 
     const document: StoredEmail = {
@@ -141,11 +183,15 @@ export async function persistEmail(
       text: input.text,
       html: input.html,
       headers: input.headers || [],
-      attachments: storedAttachments.map(({ content: _content, ...meta }) => meta),
+      attachments: storedAttachments.map(
+        ({ content: _content, ...meta }) => meta,
+      ),
       provider: {
         name: input.provider,
         messageId: input.providerMessageId || null,
-        ...(input.providerRawSize === undefined ? {} : { rawSize: input.providerRawSize }),
+        ...(input.providerRawSize === undefined
+          ? {}
+          : { rawSize: input.providerRawSize }),
       },
       sizeBytes: 0,
       createdAt: timestamp,
@@ -161,19 +207,27 @@ export async function persistEmail(
         : {}),
     };
 
-    const attachmentBytes = storedAttachments.reduce((sum, item) => sum + item.size, 0);
+    const attachmentBytes = storedAttachments.reduce(
+      (sum, item) => sum + item.size,
+      0,
+    );
     const initialJson = JSON.stringify(document);
-    const totalBytes = new TextEncoder().encode(initialJson).byteLength + attachmentBytes;
+    const totalBytes =
+      new TextEncoder().encode(initialJson).byteLength + attachmentBytes;
     document.sizeBytes = totalBytes;
     const json = JSON.stringify(document);
-    const storedBytes = new TextEncoder().encode(json).byteLength + attachmentBytes;
+    const storedBytes =
+      new TextEncoder().encode(json).byteLength + attachmentBytes;
 
     await putObject(env, jsonKey, json, "application/json");
 
     const toEmail = input.to[0]?.email || "";
     const spamScore = input.spam?.score ?? 0;
     const isSpam = input.spam?.isSpam ? 1 : 0;
-    const spamReason = input.spam && input.spam.reasons.length > 0 ? input.spam.reasons.join(",").slice(0, 500) : null;
+    const spamReason =
+      input.spam && input.spam.reasons.length > 0
+        ? input.spam.reasons.join(",").slice(0, 500)
+        : null;
     const legacyValues = [
       id,
       input.mailboxId,
@@ -203,7 +257,14 @@ export async function persistEmail(
             spam_score, is_spam, spam_reason, received_at, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
         )
-          .bind(...legacyValues.slice(0, 15), spamScore, isSpam, spamReason, input.receivedAt, timestamp)
+          .bind(
+            ...legacyValues.slice(0, 15),
+            spamScore,
+            isSpam,
+            spamReason,
+            input.receivedAt,
+            timestamp,
+          )
           .run();
       } catch (insertError) {
         // Pre-migration databases (0001 only) lack the spam columns. Fall
@@ -211,7 +272,7 @@ export async function persistEmail(
         // the B2 JSON document, so nothing is lost.
         if (
           insertError instanceof Error &&
-          /no such column/i.test(insertError.message)
+          /no such column|has no column named/i.test(insertError.message)
         ) {
           await env.DB.prepare(
             `INSERT INTO emails (
@@ -227,15 +288,27 @@ export async function persistEmail(
         }
       }
     } catch (error) {
-      if (error instanceof Error && /UNIQUE constraint failed/i.test(error.message)) {
+      if (
+        error instanceof Error &&
+        /UNIQUE constraint failed/i.test(error.message)
+      ) {
         await safeCleanup(env, input.mailboxId, id);
-        throw new ApiError(409, "duplicate_email", "An email with this Message-ID already exists");
+        throw new ApiError(
+          409,
+          "duplicate_email",
+          "An email with this Message-ID already exists",
+        );
       }
       throw error;
     }
 
     const row = await getEmailRow(env, id);
-    if (!row) throw new ApiError(500, "email_insert_failed", "Email metadata was not stored");
+    if (!row)
+      throw new ApiError(
+        500,
+        "email_insert_failed",
+        "Email metadata was not stored",
+      );
     return { document: { ...document, sizeBytes: storedBytes }, row };
   } catch (error) {
     if (!(error instanceof ApiError && error.code === "duplicate_email")) {
@@ -245,15 +318,31 @@ export async function persistEmail(
   }
 }
 
-export async function readEmailDocument(env: Env, row: EmailRow): Promise<StoredEmail | null> {
+export async function readEmailDocument(
+  env: Env,
+  row: EmailRow,
+): Promise<StoredEmail | null> {
   return await getJson<StoredEmail>(env, row.json_key);
 }
 
 export async function trashEmails(
   env: Env,
   ids: string[],
-): Promise<{ requested: number; found: number; updated: number; already_trashed: number; storage_freed_bytes: number }> {
-  if (ids.length === 0) return { requested: 0, found: 0, updated: 0, already_trashed: 0, storage_freed_bytes: 0 };
+): Promise<{
+  requested: number;
+  found: number;
+  updated: number;
+  already_trashed: number;
+  storage_freed_bytes: number;
+}> {
+  if (ids.length === 0)
+    return {
+      requested: 0,
+      found: 0,
+      updated: 0,
+      already_trashed: 0,
+      storage_freed_bytes: 0,
+    };
   const placeholders = ids.map(() => "?").join(",");
   const rows = await env.DB.prepare(
     `SELECT id, size_bytes, is_trashed FROM emails WHERE id IN (${placeholders})`,
@@ -283,8 +372,14 @@ export async function trashEmails(
 export async function restoreEmails(
   env: Env,
   ids: string[],
-): Promise<{ requested: number; found: number; restored: number; storage_added_bytes: number }> {
-  if (ids.length === 0) return { requested: 0, found: 0, restored: 0, storage_added_bytes: 0 };
+): Promise<{
+  requested: number;
+  found: number;
+  restored: number;
+  storage_added_bytes: number;
+}> {
+  if (ids.length === 0)
+    return { requested: 0, found: 0, restored: 0, storage_added_bytes: 0 };
   const placeholders = ids.map(() => "?").join(",");
   const rows = await env.DB.prepare(
     `SELECT id, size_bytes, is_trashed FROM emails WHERE id IN (${placeholders})`,
@@ -320,7 +415,8 @@ export async function hardDeleteEmails(
   freed_bytes: number;
   failed: Array<{ id: string; error: string }>;
 }> {
-  if (ids.length === 0) return { requested: 0, found: 0, deleted: 0, freed_bytes: 0, failed: [] };
+  if (ids.length === 0)
+    return { requested: 0, found: 0, deleted: 0, freed_bytes: 0, failed: [] };
   const placeholders = ids.map(() => "?").join(",");
   const rows = await env.DB.prepare(
     `SELECT id, mailbox_id, size_bytes FROM emails WHERE id IN (${placeholders})`,
@@ -338,13 +434,18 @@ export async function hardDeleteEmails(
       deletedIds.push(row.id);
       freedBytes += row.size_bytes;
     } catch (error) {
-      failed.push({ id: row.id, error: error instanceof Error ? error.message : String(error) });
+      failed.push({
+        id: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   if (deletedIds.length > 0) {
     const deletedPlaceholders = deletedIds.map(() => "?").join(",");
-    await env.DB.prepare(`DELETE FROM emails WHERE id IN (${deletedPlaceholders})`)
+    await env.DB.prepare(
+      `DELETE FROM emails WHERE id IN (${deletedPlaceholders})`,
+    )
       .bind(...deletedIds)
       .run();
   }
@@ -358,7 +459,11 @@ export async function hardDeleteEmails(
   };
 }
 
-export async function markEmailSent(env: Env, id: string, providerMessageId: string): Promise<EmailRow | null> {
+export async function markEmailSent(
+  env: Env,
+  id: string,
+  providerMessageId: string,
+): Promise<EmailRow | null> {
   try {
     await env.DB.prepare(
       "UPDATE emails SET status = 'sent', message_id = ?, provider_message_id = ? WHERE id = ?",
@@ -391,14 +496,19 @@ export async function markEmailFailed(
   } catch (error) {
     // Pre-migration databases (0001 only) lack the failure columns.
     if (error instanceof Error && /no such column/i.test(error.message)) {
-      await env.DB.prepare("UPDATE emails SET status = 'failed' WHERE id = ?").bind(id).run();
+      await env.DB.prepare("UPDATE emails SET status = 'failed' WHERE id = ?")
+        .bind(id)
+        .run();
       return;
     }
     throw error;
   }
 }
 
-export async function mailboxStorage(env: Env, mailboxId: string): Promise<MailboxStorage | null> {
+export async function mailboxStorage(
+  env: Env,
+  mailboxId: string,
+): Promise<MailboxStorage | null> {
   const mailbox = await getMailbox(env, mailboxId);
   if (!mailbox) return null;
   const row = await env.DB.prepare(
@@ -483,7 +593,9 @@ export function serializeEmailRow(row: EmailRow): Record<string, unknown> {
   };
 }
 
-export function sumStorage(rows: MailboxStorage[]): Omit<MailboxStorage, "mailbox_id" | "address" | "name"> {
+export function sumStorage(
+  rows: MailboxStorage[],
+): Omit<MailboxStorage, "mailbox_id" | "address" | "name"> {
   return rows.reduce(
     (total, row) => ({
       used_bytes: total.used_bytes + row.used_bytes,

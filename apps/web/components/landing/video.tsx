@@ -30,13 +30,40 @@ export function LandingVideo({ companyName }: { companyName: string }) {
   const [muted, setMuted] = useState(true);
   const [flash, setFlash] = useState<'play' | 'pause' | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  // The mp4 URL is attached only once the player nears the viewport, so a
+  // visitor who never scrolls here downloads the poster, not the video.
+  const [srcLoaded, setSrcLoaded] = useState(false);
 
-  // Autoplay (muted — browsers allow no other kind) unless reduced motion.
+  // Attach the file once the player nears the viewport; without IO support
+  // (SSR, old browsers) fall back to loading it immediately.
   useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || typeof IntersectionObserver === 'undefined') {
+      setSrcLoaded(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setSrcLoaded(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(frame);
+    return () => io.disconnect();
+  }, []);
+
+  // Autoplay (muted — browsers allow no other kind) once the file is attached,
+  // unless reduced motion.
+  useEffect(() => {
+    if (!srcLoaded || reducedMotion) return;
     const video = videoRef.current;
-    if (!video || reducedMotion) return;
+    if (!video) return;
     video.play().catch(() => setPlaying(false));
-  }, [reducedMotion]);
+  }, [reducedMotion, srcLoaded]);
 
   useEffect(
     () => () => {
@@ -100,7 +127,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
       <h2
         style={{
           margin: '10px 0 12px',
-          fontSize: 48,
+          fontSize: 'clamp(2rem, 5vw, 3rem)',
           lineHeight: 1.05,
           letterSpacing: '-0.035em',
           fontWeight: 700,
@@ -111,6 +138,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
       <p style={{ margin: '0 auto 36px', maxWidth: 560, color: 'var(--oo-muted)', fontSize: 18 }}>{t.videoSub}</p>
       <div
         className="oo-video-frame"
+        ref={frameRef}
         style={{
           position: 'relative',
           padding: 1,
@@ -142,12 +170,12 @@ export function LandingVideo({ companyName }: { companyName: string }) {
         >
           <video
             ref={videoRef}
-            src="/landing/onlyorders-commercial.mp4"
+            src={srcLoaded ? '/landing/onlyorders-commercial.mp4' : undefined}
             poster="/landing/commercial-poster.jpg"
             muted={muted}
             loop
             playsInline
-            preload="metadata"
+            preload={srcLoaded ? 'metadata' : 'none'}
             onPlay={() => {
               setPlaying(true);
               showFlash('play');
@@ -222,6 +250,11 @@ export function LandingVideo({ companyName }: { companyName: string }) {
           ) : null}
           <button
             onClick={toggleMute}
+            onKeyDown={(event) => {
+              // The player div handles Enter/Space itself; without this the
+              // mute button's keydown bubbles up and toggles play as well.
+              event.stopPropagation();
+            }}
             className="oo-video-mute"
             aria-label={muted ? t.videoUnmute : t.videoMute}
             title={muted ? t.videoUnmute : t.videoMute}

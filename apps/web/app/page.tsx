@@ -11,10 +11,14 @@ export const instant = false;
 
 export default async function HomePage() {
   const { plans, unavailable } = await cachedPublicPlans();
+  // The toggle persists oo-lang as a cookie; reading it here means the first
+  // paint already matches instead of flashing English and swapping post-mount.
+  const { cookies } = await import('next/headers');
+  const initialLang = (await cookies()).get('oo-lang')?.value === 'bn' ? 'bn' : 'en';
   return (
     <>
       <VideoObjectJsonLd />
-      <HomePageClient plans={plans} unavailable={Boolean(unavailable)} />
+      <HomePageClient plans={plans} unavailable={Boolean(unavailable)} initialLang={initialLang} />
     </>
   );
 }
