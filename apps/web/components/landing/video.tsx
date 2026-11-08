@@ -140,32 +140,6 @@ export function LandingVideo({ companyName }: { companyName: string }) {
             cursor: 'pointer',
           }}
         >
-          <div
-            className="oo-order-float"
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              top: 18,
-              right: 18,
-              zIndex: 2,
-              width: 210,
-              boxSizing: 'border-box',
-              padding: 14,
-              borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.75)',
-              background: 'var(--oo-surface, #fff)',
-              boxShadow: '0 12px 36px rgba(10,20,40,0.18)',
-              textAlign: 'left',
-              pointerEvents: 'none',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#15803d', fontSize: 13, fontWeight: 700 }}>
-              <span style={{ color: 'var(--oo-text, #111)' }}>{t.orderCreated}</span>
-              <Check size={14} color="#16a34a" />
-            </div>
-            <div style={{ marginTop: 5, color: 'var(--oo-muted)', fontSize: 12 }}>#1042</div>
-            <div style={{ marginTop: 3, color: 'var(--oo-text, #111)', fontSize: 20, fontWeight: 800 }}>৳1,850</div>
-          </div>
           <video
             ref={videoRef}
             src="/landing/onlyorders-commercial.mp4"
@@ -302,7 +276,7 @@ export function LandingVideo({ companyName }: { companyName: string }) {
           </span>
         ))}
       </div>
-      <style>{'@media (max-width: 700px){.oo .oo-order-float{display:none}}'}</style>
+
     </section>
   );
 }
