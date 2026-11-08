@@ -1,4 +1,5 @@
-import { BRAND_DEFAULT_HOST, normalizeBrandHost } from '@/lib/brand';
+import { BRAND_DEFAULT_HOST, normalizeBrandHost } from "@/lib/brand";
+import { DOC_SLUGS } from "./docs-content";
 
 /**
  * Canonical host for SEO: `www.` is transport, not identity, so both variants
@@ -7,7 +8,7 @@ import { BRAND_DEFAULT_HOST, normalizeBrandHost } from '@/lib/brand';
 export function canonicalHost(host: string | null | undefined): string {
   const normalized = normalizeBrandHost(host);
   if (!normalized) return BRAND_DEFAULT_HOST;
-  return normalized.replace(/^www\./, '') || BRAND_DEFAULT_HOST;
+  return normalized.replace(/^www\./, "") || BRAND_DEFAULT_HOST;
 }
 
 /** Absolute site origin for sitemaps, canonicals and schema URLs. */
@@ -27,34 +28,37 @@ export function socialMetadata(input: {
 }) {
   return {
     openGraph: {
-      type: 'website' as const,
+      type: "website" as const,
       siteName: input.siteName,
       title: input.title,
       description: input.description,
       url: input.path,
       images: [
-        { url: '/og-default.png', width: 1200, height: 630, alt: input.title },
+        { url: "/og-default.png", width: 1200, height: 630, alt: input.title },
       ],
     },
     twitter: {
-      card: 'summary_large_image' as const,
+      card: "summary_large_image" as const,
       title: input.title,
       description: input.description,
-      images: ['/og-default.png'],
+      images: ["/og-default.png"],
     },
   };
 }
 
 /**
- * Public routes worth indexing. Placeholder pages (features, solutions, docs,
- * developers) stay out until they ship real content; console routes are noindexed.
+ * Public routes worth indexing. Docs and solutions now ship real content.
+ * Features and developers stay out until they do; console routes are noindexed.
  */
-export const SITEMAP_ROUTES = [
-  '/',
-  '/pricing',
-  '/terms',
-  '/privacy',
-  '/contact',
-  '/cookies',
-  '/data-delete-instructions',
-] as const;
+export const SITEMAP_ROUTES: readonly string[] = [
+  "/",
+  "/pricing",
+  "/docs",
+  ...DOC_SLUGS.map((slug) => `/docs/${slug}`),
+  "/solutions",
+  "/terms",
+  "/privacy",
+  "/contact",
+  "/cookies",
+  "/data-delete-instructions",
+];
