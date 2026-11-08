@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { CookieSettingsButton } from '@/components/cookie-consent';
+import { BrandMark } from './header';
 import { useLandingLang } from './theme';
 
 export function LandingFooter({ companyName }: { companyName: string }) {
@@ -50,7 +51,7 @@ export function LandingFooter({ companyName }: { companyName: string }) {
         >
           <div className="oo-footer-brand" style={{ maxWidth: 320 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: 18 }}>
-              <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />
+              <BrandMark companyName={companyName} />
               {companyName}
             </div>
             <p

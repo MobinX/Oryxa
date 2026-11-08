@@ -3,6 +3,17 @@
 import { useState } from 'react';
 import { useLandingLang, useLandingTheme } from './theme';
 
+/**
+ * Host-aware brand mark: OnlyOrders gets the transparent cart lockup mark,
+ * every other brand (Oryxa, previews, localhost) gets the neutral cart icon.
+ */
+export function BrandMark({ companyName }: { companyName: string }) {
+  if (companyName === 'OnlyOrders') {
+    return <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />;
+  }
+  return <img src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />;
+}
+
 function MoonIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -79,7 +90,7 @@ export function LandingHeader({ companyName }: { companyName: string }) {
             flexShrink: 0,
           }}
         >
-          <img src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />
+          <BrandMark companyName={companyName} />
           <span className="oo-header-name">{companyName}</span>
         </a>
         <nav

@@ -1,5 +1,6 @@
 import { cachedPublicPlans } from '@/app/_cache/queries';
 import HomePageClient from '@/components/marketing/home-page-client';
+import { VideoObjectJsonLd } from '@/components/seo/json-ld';
 
 /**
  * The landing page is server-rendered so the price cards come from the operator's live plan
@@ -10,5 +11,10 @@ export const instant = false;
 
 export default async function HomePage() {
   const { plans, unavailable } = await cachedPublicPlans();
-  return <HomePageClient plans={plans} unavailable={Boolean(unavailable)} />;
+  return (
+    <>
+      <VideoObjectJsonLd />
+      <HomePageClient plans={plans} unavailable={Boolean(unavailable)} />
+    </>
+  );
 }

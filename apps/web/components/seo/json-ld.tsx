@@ -68,3 +68,32 @@ export async function OrganizationJsonLd(): Promise<React.JSX.Element> {
     />
   );
 }
+
+/**
+ * Video rich result for the homepage commercial. Render ONLY on pages that
+ * embed the video (home). Facts verified from the media file itself:
+ * 30s duration, 2026-11-07 publish, poster thumbnail.
+ */
+export async function VideoObjectJsonLd(): Promise<React.JSX.Element> {
+  const brand = await getBrand();
+  const base = siteUrl(brand.host);
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: `See ${brand.companyName} in action`,
+    description: 'A short look at how DMs and comments turn into confirmed orders.',
+    thumbnailUrl: `${base}/landing/commercial-poster.jpg`,
+    uploadDate: '2026-11-07',
+    duration: 'PT30S',
+    contentUrl: `${base}/landing/onlyorders-commercial.mp4`,
+    embedUrl: `${base}/#video`,
+    inLanguage: 'en',
+    publisher: { '@id': `${base}/#organization` },
+  };
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
+    />
+  );
+}

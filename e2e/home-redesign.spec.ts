@@ -22,7 +22,9 @@ for (const [name, vp] of [['desktop', { width: 1440, height: 900 }], ['android',
     await expect(p.getByRole('button', { name: 'বাংলায় দেখুন' })).toBeVisible();
     await expect(p.getByRole('button', { name: /Pause demo/ })).toBeVisible();
     await expect(p.locator('footer')).toContainText('Data deletion');
-    await expect(p.locator('header img[src="/onlyorders-mark.png"]')).toBeVisible();
+    // Localhost serves the Oryxa brand, so the nav shows the neutral cart icon
+    // (onlyorders.tech serves the transparent OnlyOrders mark instead).
+    await expect(p.locator('header img[src="/icon-96.png"]')).toBeVisible();
     // Icon-only theme toggle renders (moon in light mode). Clicks are not
     // asserted: this Lightpanda build cannot hydrate React 19 (readable.tee
     // gap, fails on every page), so client interactions need a real browser.
