@@ -62,7 +62,7 @@ export function OnlyOrdesLogo({ className, lightText = false }: { className?: st
   const { companyName } = useBrand();
   return (
     <div className={cn('inline-flex items-center gap-2.5 select-none', className)}>
-      <img src="/icon-96.png" alt="" width={36} height={36} className="h-9 w-9 shrink-0 select-none" draggable={false} />
+      <img src="/onlyorders-mark.png" alt="" width={36} height={36} className="h-9 w-9 shrink-0 select-none" draggable={false} />
       <span
         className={cn(
           'font-geist text-xl font-extrabold tracking-tight',

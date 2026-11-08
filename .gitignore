@@ -81,6 +81,12 @@ backups/
 readme.file
 README.file
 master-prompt.md
+PROJECT_CONTEXT.md
+RTK.md
+.codex/
+.qoder/
+OnlyOrders Landing-html/
+archive/
 
 
 # Playwright

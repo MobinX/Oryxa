@@ -5,14 +5,15 @@ import Image from 'next/image';
 import { useLandingLang, useLandingTheme } from './theme';
 
 /**
- * Host-aware brand mark: OnlyOrders gets the transparent cart lockup mark,
- * every other brand (Oryxa, previews, localhost) gets the neutral cart icon.
+ * Host-aware brand mark: transparent cart lockup mark for all brands.
+ * /onlyorders-mark.png is the designated transparent asset (no black box),
+ * so the header/footer never show a solid background in light or dark mode.
  */
 export function BrandMark({ companyName }: { companyName: string }) {
   if (companyName === 'OnlyOrders') {
     return <Image src="/onlyorders-mark.png" alt="" width={40} height={30} style={{ width: 'auto', height: 30 }} draggable={false} />;
   }
-  return <Image src="/icon-96.png" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 8 }} draggable={false} />;
+  return <Image src="/onlyorders-mark.png" alt="" width={30} height={30} style={{ width: 30, height: 30 }} draggable={false} />;
 }
 
 function MoonIcon() {
