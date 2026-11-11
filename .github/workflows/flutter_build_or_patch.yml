@@ -80,7 +80,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter SDK
+      - name: Setup Flutter SDK (Cached)
         if: steps.mode_check.outputs.mode != 'skip'
         uses: subosito/flutter-action@v2
         with:
@@ -89,24 +89,9 @@ jobs:
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
       # -------------------------------------------------------------
-      # Aggressive Caching: Gradle, Pub, Build Artifacts, Keys
+      # MAXIMUM AGGRESSIVE CACHING (Gradle, Wrappers, Daemon, Pub, Build Outputs, Node Modules, Keys)
       # -------------------------------------------------------------
-      - name: Aggressive Gradle & Pub Cache
-        if: steps.mode_check.outputs.mode != 'skip'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.pub-cache
-            ~/.android/build-cache
-            flutter/build
-            flutter/.dart_tool
-          key: aggressive-build-cache-${{ runner.os }}-${{ hashFiles('flutter/**/pubspec.lock', 'flutter/**/gradle-wrapper.properties') }}
-          restore-keys: |
-            aggressive-build-cache-${{ runner.os }}-
-
-      - name: Baseline Release & Patcher Keys Cache
+      - name: Signing Keystore, Baseline & Patcher Keys Cache
         if: steps.mode_check.outputs.mode != 'skip'
         id: baseline_cache
         uses: actions/cache@v4
@@ -115,16 +100,61 @@ jobs:
             flutter/.baseline
             flutter/keys
             flutter/android/app/release.keystore
-          key: patcher-baseline-${{ runner.os }}-${{ hashFiles('flutter/android/app/release.keystore') }}
+          key: signing-baseline-${{ runner.os }}-v1
           restore-keys: |
-            patcher-baseline-${{ runner.os }}-
+            signing-baseline-${{ runner.os }}-
 
-      - name: Ensure Signing Keystore Exists
+      - name: Aggressive Gradle & Android Build Cache
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/daemon
+            ~/.android/build-cache
+            flutter/android/.gradle
+          key: gradle-cache-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle') }}-${{ github.run_id }}
+          restore-keys: |
+            gradle-cache-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle') }}-
+            gradle-cache-${{ runner.os }}-
+
+      - name: Flutter Engine, Pub & Build Tree Cache
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            flutter/.dart_tool
+            flutter/build
+          key: flutter-build-cache-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            flutter-build-cache-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-
+            flutter-build-cache-${{ runner.os }}-
+
+      - name: Worker Node Modules Cache
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            flutter/worker/node_modules
+          key: worker-deps-${{ runner.os }}-${{ hashFiles('flutter/worker/package-lock.json') }}-${{ github.run_id }}
+          restore-keys: |
+            worker-deps-${{ runner.os }}-${{ hashFiles('flutter/worker/package-lock.json') }}-
+            worker-deps-${{ runner.os }}-
+
+      # -------------------------------------------------------------
+      # Ensure Keystores & Reusable Keys are Ready
+      # -------------------------------------------------------------
+      - name: Ensure Signing Keystore Exists & Reused
         if: steps.mode_check.outputs.mode != 'skip'
         working-directory: flutter
         run: |
-          mkdir -p android/app
-          if [ ! -f "android/app/release.keystore" ]; then
+          mkdir -p android/app keys .baseline
+          if [ -f "android/app/release.keystore" ]; then
+            echo "✅ Using existing persistent release keystore."
+          else
             echo "Generating persistent release keystore..."
             bash scripts/gen_keystore.sh
           fi
@@ -134,6 +164,16 @@ jobs:
         working-directory: flutter
         run: |
           flutter pub get
+
+      - name: Warm Worker Dependencies
+        if: steps.mode_check.outputs.mode != 'skip'
+        working-directory: flutter/worker
+        run: |
+          if [ ! -d "node_modules" ]; then
+            npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+          else
+            echo "✅ Worker node_modules restored from cache."
+          fi
 
       # =============================================================
       # BRANCH 1: FULL NATIVE BUILD (Triggered by {{native}})
@@ -153,24 +193,24 @@ jobs:
           if [ -z "$APP_VERSION_CODE" ]; then APP_VERSION_CODE="1"; fi
           echo "Configuring Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
 
-          # 2. Reset baseline and previous patcher keys (Fresh native baseline)
-          echo "Purging old baseline and previous patcher signing keys..."
-          rm -rf .baseline keys/private_key.pem keys/public_key.pem dist/
+          # 2. Preserve and reuse existing signing keys if available
           mkdir -p keys .baseline apk lastpatch patch
+          if [ ! -f "keys/private_key.pem" ]; then
+            echo "Initializing fresh Flutter Patcher signing keys..."
+            dart run flutter_patcher keys init || true
+          else
+            echo "✅ Reusing existing Flutter Patcher signing keys."
+          fi
 
-          # 3. Initialize fresh Flutter Patcher signing keys
-          echo "Initializing fresh Flutter Patcher signing keys for new baseline..."
-          dart run flutter_patcher keys init || true
-
-          # 4. Build release APK
-          echo "Compiling signed production release APK..."
+          # 3. Build release APK using aggressive Gradle caching
+          echo "Compiling signed production release APK (with Gradle build cache)..."
           flutter build apk --release --android-skip-build-dependency-validation
 
-          # 5. Copy release APK to /apk and archive baseline for diffing
+          # 4. Copy release APK to /apk and archive baseline for diffing
           cp build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
           cp build/app/outputs/flutter-apk/app-release.apk .baseline/base-app-release.apk
 
-          # 6. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
+          # 5. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
           rm -f lastpatch/patch.zip
           cat <<EOF > lastpatch/manifest.json
           {
@@ -210,7 +250,7 @@ jobs:
             cp apk/app-release.apk .baseline/base-app-release.apk
           fi
 
-          # Fast incremental compilation of updated Dart bundle
+          # Fast incremental compilation of updated Dart bundle (reuses cached Gradle & C++ objects)
           flutter build apk --release --android-skip-build-dependency-validation
 
           # Compute patch version based on timestamp / commit count
@@ -270,22 +310,28 @@ jobs:
           echo "✅ Patch $PATCH_VER generated and saved to flutter/lastpatch"
 
       # -------------------------------------------------------------
-      # Commit artifacts back to GitHub repository (Only if NOT skipped)
+      # Commit artifacts, keystores & keys back to GitHub repository
       # -------------------------------------------------------------
-      - name: Commit & Push Release Artifacts to GitHub
+      - name: Commit & Push Release Artifacts, Keystores & Keys to GitHub
         if: steps.mode_check.outputs.mode != 'skip'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add generated files inside flutter/ directory
-          git add -f flutter/apk/ flutter/patch/ flutter/lastpatch/ flutter/.baseline/ flutter/keys/ 2>/dev/null || git add -f flutter/apk/ flutter/patch/ flutter/lastpatch/
+          # Stage all flutter release artifacts, baseline, and keys
+          git add -f \
+            flutter/apk/ \
+            flutter/patch/ \
+            flutter/lastpatch/ \
+            flutter/.baseline/ \
+            flutter/keys/ \
+            flutter/android/app/release.keystore 2>/dev/null || true
 
           # Only commit if changes exist
           if git diff --staged --quiet; then
-            echo "No artifact changes to commit."
+            echo "No artifact or key changes to commit."
           else
-            git commit -m "ci(flutter): [skip ci] auto-published updated apk/patch artifacts"
+            git commit -m "ci(flutter): [skip ci] auto-published updated apk/patch/keys artifacts"
             git pull --rebase origin ${{ github.ref_name }} || true
             git push origin HEAD:${{ github.ref_name }}
           fi
