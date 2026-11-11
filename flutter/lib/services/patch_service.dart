@@ -95,9 +95,17 @@ class PatchService extends ChangeNotifier {
         _log('✓ MD5 Checksum verified successfully');
       }
 
+      final targetVersionCode = manifest['target_version_code'] is int
+          ? manifest['target_version_code'] as int
+          : int.tryParse(manifest['target_version_code']?.toString() ?? '');
+
       _log('Applying patch via FlutterPatcher...');
       try {
-        await FlutterPatcher.applyPatchBytes(bytes, version: patchVersion);
+        await FlutterPatcher.applyPatchBytes(
+          bytes,
+          version: patchVersion,
+          targetVersionCode: targetVersionCode,
+        );
         _log('🎉 Patch v$patchVersion applied! Restart app to load updated code.');
       } catch (err) {
         _log('FlutterPatcher install notice: $err');

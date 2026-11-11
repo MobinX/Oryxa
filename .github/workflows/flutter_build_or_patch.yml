@@ -258,29 +258,17 @@ jobs:
           PATCH_VER="${APP_VERSION}-h${PATCH_NUM}"
           echo "Generating Patch Version: $PATCH_VER"
 
-          # Run flutter_patcher pack / diff
-          mkdir -p dist
-          dart run flutter_patcher:pack \
-            --apk build/app/outputs/flutter-apk/app-release.apk \
-            --version "$PATCH_VER" \
-            --target-version-code $APP_VERSION_CODE || {
-              echo "Standard pack fallback: generating patch archive..."
-              mkdir -p dist
-              cd build/app/outputs/flutter-apk/
-              unzip -q -o app-release.apk "lib/arm64-v8a/libapp.so" -d /tmp/patch_extracted || true
-              cd -
-              if [ -d "/tmp/patch_extracted" ]; then
-                cd /tmp/patch_extracted && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" . && cd -
-              fi
-            }
-
-          # Verify patch file creation
-          if [ ! -f "dist/patch.zip" ]; then
-            echo "Creating patch bundle from compiled libapp.so..."
+          # Extract compiled Dart shared libraries for all target architectures (arm64-v8a and armeabi-v7a)
+          mkdir -p dist /tmp/patch_bundle
+          echo "Extracting compiled AOT bytecode from release APK..."
+          unzip -q -o build/app/outputs/flutter-apk/app-release.apk "lib/*/*.so" -d /tmp/patch_bundle || {
+            echo "Fallback extraction for arm64-v8a..."
             mkdir -p /tmp/patch_bundle/lib/arm64-v8a
             unzip -p build/app/outputs/flutter-apk/app-release.apk "lib/arm64-v8a/libapp.so" > /tmp/patch_bundle/lib/arm64-v8a/libapp.so
-            cd /tmp/patch_bundle && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" lib/ && cd -
-          fi
+          }
+
+          # Package patch archive
+          cd /tmp/patch_bundle && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" lib/ && cd -
 
           # Calculate MD5 checksum of the generated patch
           PATCH_MD5=$(md5sum dist/patch.zip | cut -d' ' -f1)
