@@ -12,8 +12,8 @@ class BusinessModel {
   final String? storePreset;
   final String? agentProductGuidance;
   final String? agentBargainGuidance;
-  final List<dynamic>? deliveryZones;
-  final List<dynamic>? paymentMethods;
+  final List<DeliveryZoneModel> deliveryZones;
+  final List<PaymentMethodModel> paymentMethods;
   final String? paymentStrategy;
   final DateTime? createdAt;
 
@@ -31,8 +31,8 @@ class BusinessModel {
     this.storePreset,
     this.agentProductGuidance,
     this.agentBargainGuidance,
-    this.deliveryZones,
-    this.paymentMethods,
+    this.deliveryZones = const [],
+    this.paymentMethods = const [],
     this.paymentStrategy,
     this.createdAt,
   });
@@ -52,8 +52,18 @@ class BusinessModel {
       storePreset: json['storePreset']?.toString(),
       agentProductGuidance: json['agentProductGuidance']?.toString(),
       agentBargainGuidance: json['agentBargainGuidance']?.toString(),
-      deliveryZones: json['deliveryZones'] is List ? json['deliveryZones'] : null,
-      paymentMethods: json['paymentMethods'] is List ? json['paymentMethods'] : null,
+      deliveryZones: json['deliveryZones'] is List
+          ? (json['deliveryZones'] as List)
+              .whereType<Map>()
+              .map((z) => DeliveryZoneModel.fromJson(Map<String, dynamic>.from(z)))
+              .toList()
+          : const [],
+      paymentMethods: json['paymentMethods'] is List
+          ? (json['paymentMethods'] as List)
+              .whereType<Map>()
+              .map((m) => PaymentMethodModel.fromJson(Map<String, dynamic>.from(m)))
+              .toList()
+          : const [],
       paymentStrategy: json['paymentStrategy']?.toString(),
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
@@ -104,6 +114,42 @@ class BusinessModel {
       paymentMethods: paymentMethods,
       paymentStrategy: paymentStrategy,
       createdAt: createdAt,
+    );
+  }
+}
+
+class DeliveryZoneModel {
+  final String label;
+  final double price;
+
+  DeliveryZoneModel({required this.label, required this.price});
+
+  factory DeliveryZoneModel.fromJson(Map<String, dynamic> json) {
+    return DeliveryZoneModel(
+      label: json['label']?.toString() ?? 'Delivery area',
+      price: (json['price'] as num?)?.toDouble() ??
+          double.tryParse(json['price']?.toString() ?? '') ??
+          0,
+    );
+  }
+}
+
+class PaymentMethodModel {
+  final String name;
+  final String? info;
+  final bool requiresTransactionId;
+
+  PaymentMethodModel({
+    required this.name,
+    this.info,
+    this.requiresTransactionId = false,
+  });
+
+  factory PaymentMethodModel.fromJson(Map<String, dynamic> json) {
+    return PaymentMethodModel(
+      name: json['name']?.toString() ?? '',
+      info: json['info']?.toString(),
+      requiresTransactionId: json['requiresTransactionId'] == true,
     );
   }
 }

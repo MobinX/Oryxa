@@ -20,6 +20,15 @@ class ProductsScreen extends StatefulWidget {
 class _ProductsScreenState extends State<ProductsScreen> {
   final _searchController = TextEditingController();
 
+  void _showNoStore(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No store is loaded yet. Pull to refresh, then try again.'),
+        backgroundColor: AppTheme.danger,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -40,14 +49,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         onPressed: () {
-          if (currentStore != null) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ProductFormScreen(businessId: currentStore.id),
-              ),
-            );
+          if (currentStore == null) {
+            _showNoStore(context);
+            return;
           }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProductFormScreen(businessId: currentStore.id),
+            ),
+          );
         },
         icon: const Icon(Icons.add, size: 20),
         label: const Text('Add Product'),
@@ -144,14 +155,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               'Add your first product to allow the AI sales agent to quote prices and close orders.',
                           buttonText: 'Add Product',
                           onButtonPressed: () {
-                            if (currentStore != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ProductFormScreen(businessId: currentStore.id),
-                                ),
-                              );
+                            if (currentStore == null) {
+                              _showNoStore(context);
+                              return;
                             }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProductFormScreen(businessId: currentStore.id),
+                              ),
+                            );
                           },
                         )
                       : ListView.separated(
@@ -163,17 +176,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
                             return AppCard(
                               onTap: () {
-                                if (currentStore != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ProductFormScreen(
-                                        businessId: currentStore.id,
-                                        product: p,
-                                      ),
-                                    ),
-                                  );
+                                if (currentStore == null) {
+                                  _showNoStore(context);
+                                  return;
                                 }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProductFormScreen(
+                                      businessId: currentStore.id,
+                                      product: p,
+                                    ),
+                                  ),
+                                );
                               },
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,

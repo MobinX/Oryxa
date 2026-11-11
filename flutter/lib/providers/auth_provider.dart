@@ -33,24 +33,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> demoLogin() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      await authService.demoLogin();
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
   Future<void> selectBusiness(String businessId) async {
     await authService.setSelectedBusinessId(businessId);
     notifyListeners();

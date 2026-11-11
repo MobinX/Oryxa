@@ -43,7 +43,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _nameController = TextEditingController(text: p?.name ?? '');
     _descController = TextEditingController(text: p?.description ?? '');
     _priceController = TextEditingController(text: p != null ? p.price.toStringAsFixed(0) : '');
-    _regularPriceController = TextEditingController(text: p?.regularPrice != null ? p!.regularPrice!.toStringAsFixed(0) : '');
+    final initialRegular = p != null && p.hasDiscount && p.discountPercent > 0 && p.discountPercent < 100
+        ? p.price / (1 - p.discountPercent / 100)
+        : p?.regularPrice;
+    _regularPriceController = TextEditingController(
+      text: initialRegular != null ? initialRegular.toStringAsFixed(0) : '',
+    );
     _stockController = TextEditingController(text: p != null ? p.stock.toString() : '10');
     _skuController = TextEditingController(text: p?.sku ?? '');
     _imageUrlController = TextEditingController(text: p?.imageUrl ?? '');
@@ -93,11 +98,22 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
     final price = double.tryParse(_priceController.text.trim()) ?? 0.0;
     final stock = int.tryParse(_stockController.text.trim()) ?? 0;
+    final regularPrice = double.tryParse(_regularPriceController.text.trim());
     final sku = _skuController.text.trim().isNotEmpty
         ? _skuController.text.trim()
         : 'SKU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final desc = _descController.text.trim();
     final imgUrl = _imageUrlController.text.trim();
+
+    // The API stores the selling price plus an optional discount percentage; the form asks
+    // for the pre-discount price because that is how merchants quote it. A "regular" price
+    // that is not above the selling price is not a discount, so it is ignored.
+    final hasDiscount = regularPrice != null && regularPrice > price;
+    final discountPercent = hasDiscount
+        ? double.parse(
+            (((regularPrice - price) / regularPrice) * 100).clamp(0, 100).toStringAsFixed(2),
+          )
+        : 0.0;
 
     final variantItem = <String, dynamic>{
       if (_existingVariantId != null && _existingVariantId!.isNotEmpty)
@@ -116,6 +132,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       if (desc.isNotEmpty) 'description': desc,
       if (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty)
         'categoryId': _selectedCategoryId,
+      'hasDiscount': hasDiscount,
+      'discountPercent': discountPercent,
+      'showInStorefront': widget.product?.showInStorefront ?? true,
       'variants': [variantItem],
     };
 
@@ -126,6 +145,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ok = await prods.createProduct(widget.businessId, payload);
     }
 
+    if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (ok && mounted) {
@@ -256,17 +276,31 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: _priceController,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: const InputDecoration(labelText: 'Sale Price (৳) *'),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Enter price' : null,
+                          validator: (v) {
+                            final value = double.tryParse((v ?? '').trim());
+                            if (value == null || value <= 0) return 'Enter a price above 0';
+                            return null;
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextFormField(
                           controller: _regularPriceController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Regular Price (৳)'),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Regular Price (৳)',
+                            helperText: 'Optional — shows a discount',
+                          ),
+                          validator: (v) {
+                            final text = (v ?? '').trim();
+                            if (text.isEmpty) return null;
+                            final value = double.tryParse(text);
+                            if (value == null || value <= 0) return 'Enter a valid price';
+                            return null;
+                          },
                         ),
                       ),
                     ],
@@ -279,7 +313,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           controller: _stockController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(labelText: 'Stock Units *'),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Enter stock count' : null,
+                          validator: (v) {
+                            final value = int.tryParse((v ?? '').trim());
+                            if (value == null || value < 0) return 'Enter stock (0 or more)';
+                            return null;
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),

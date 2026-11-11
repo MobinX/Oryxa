@@ -13,6 +13,11 @@ class ProductModel {
   final String? categoryName;
   final String? variantId;
   final int variantCount;
+  final String? paymentStrategyOverride;
+  final bool showInStorefront;
+  final bool hasDiscount;
+  final double discountPercent;
+  final List<ProductVariantModel> variants;
   final DateTime? createdAt;
 
   ProductModel({
@@ -30,6 +35,11 @@ class ProductModel {
     this.categoryName,
     this.variantId,
     this.variantCount = 1,
+    this.paymentStrategyOverride,
+    this.showInStorefront = true,
+    this.hasDiscount = false,
+    this.discountPercent = 0,
+    this.variants = const [],
     this.createdAt,
   });
 
@@ -68,14 +78,20 @@ class ProductModel {
 
     String? firstVarId;
     int parsedStock = 0;
-    if (json['variants'] is List && (json['variants'] as List).isNotEmpty) {
-      final firstVar = (json['variants'] as List).first;
-      if (firstVar is Map<String, dynamic>) {
-        firstVarId = firstVar['id']?.toString();
-        parsedStock = (firstVar['stock'] as num?)?.toInt() ?? 0;
-        if (singleImg == null || singleImg.isEmpty) {
-          singleImg = firstVar['imageUrl']?.toString();
+    final parsedVariants = <ProductVariantModel>[];
+    if (json['variants'] is List) {
+      for (final raw in json['variants'] as List) {
+        if (raw is Map) {
+          parsedVariants.add(ProductVariantModel.fromJson(Map<String, dynamic>.from(raw)));
         }
+      }
+    }
+    if (parsedVariants.isNotEmpty) {
+      final firstVar = parsedVariants.first;
+      firstVarId = firstVar.id;
+      parsedStock = firstVar.stock;
+      if (singleImg == null || singleImg.isEmpty) {
+        singleImg = firstVar.imageUrl;
       }
     } else {
       parsedStock = (json['stock'] as num?)?.toInt() ?? 0;
@@ -93,9 +109,17 @@ class ProductModel {
       imageUrl: singleImg,
       images: imgList,
       categoryId: json['categoryId']?.toString(),
-      categoryName: json['categoryName']?.toString(),
+      categoryName: (json['categoryName'] ?? (json['category'] is Map ? json['category']['name'] : null))?.toString(),
       variantId: firstVarId,
-      variantCount: (json['variantCount'] as num?)?.toInt() ?? 1,
+      variantCount: (json['variantCount'] as num?)?.toInt() ??
+          (parsedVariants.isNotEmpty ? parsedVariants.length : 1),
+      paymentStrategyOverride: json['paymentStrategyOverride']?.toString(),
+      showInStorefront: json['showInStorefront'] != false,
+      hasDiscount: json['hasDiscount'] == true,
+      discountPercent: (json['discountPercent'] as num?)?.toDouble() ??
+          double.tryParse(json['discountPercent']?.toString() ?? '') ??
+          0,
+      variants: parsedVariants,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
@@ -113,6 +137,39 @@ class ProductModel {
         'images': images,
         'categoryId': categoryId,
       };
+}
+
+class ProductVariantModel {
+  final String id;
+  final String name;
+  final double price;
+  final int stock;
+  final String? imageUrl;
+  final bool isAvailable;
+
+  ProductVariantModel({
+    required this.id,
+    required this.name,
+    this.price = 0.0,
+    this.stock = 0,
+    this.imageUrl,
+    this.isAvailable = true,
+  });
+
+  factory ProductVariantModel.fromJson(Map<String, dynamic> json) {
+    return ProductVariantModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Default',
+      price: (json['price'] as num?)?.toDouble() ??
+          double.tryParse(json['price']?.toString() ?? '') ??
+          0,
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      imageUrl: json['imageUrl']?.toString(),
+      isAvailable: json['isAvailable'] != false,
+    );
+  }
+
+  String get formattedPrice => '৳${price.toStringAsFixed(0)}';
 }
 
 class CategoryModel {

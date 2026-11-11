@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
 import '../../providers/business_provider.dart';
 import '../../widgets/app_card.dart';
@@ -58,7 +59,7 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
     final biz = context.watch<BusinessProvider>();
     final b = biz.currentBusiness;
     final slug = b?.slug ?? 'store';
-    final storeUrl = 'https://web.oryxa.us/store/$slug';
+    final storeUrl = '${ApiConfig.webOrigin()}/store/$slug';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Public Storefront')),

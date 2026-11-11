@@ -20,6 +20,15 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   final _searchController = TextEditingController();
 
+  void _showNoStore(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No store is loaded yet. Pull to refresh, then try again.'),
+        backgroundColor: AppTheme.danger,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -40,14 +49,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         onPressed: () {
-          if (currentStore != null) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-              ),
-            );
+          if (currentStore == null) {
+            _showNoStore(context);
+            return;
           }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CreateOrderScreen(businessId: currentStore.id),
+            ),
+          );
         },
         icon: const Icon(Icons.add_shopping_cart, size: 20),
         label: const Text('New Order'),
@@ -122,14 +133,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               : 'No orders currently in "${OrderModel.stateTitle(ordersProv.activeTab)}" state.',
                           buttonText: 'Create Order',
                           onButtonPressed: () {
-                            if (currentStore != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-                                ),
-                              );
+                            if (currentStore == null) {
+                              _showNoStore(context);
+                              return;
                             }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CreateOrderScreen(businessId: currentStore.id),
+                              ),
+                            );
                           },
                         )
                       : ListView.separated(

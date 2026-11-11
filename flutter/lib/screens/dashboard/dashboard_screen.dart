@@ -10,6 +10,15 @@ import '../orders/create_order_screen.dart';
 import '../products/product_form_screen.dart';
 import '../channels/channels_screen.dart';
 
+void _showStoreMissing(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('No store is loaded yet. Pull to refresh, then try again.'),
+      backgroundColor: AppTheme.danger,
+    ),
+  );
+}
+
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -260,14 +269,16 @@ class DashboardScreen extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    if (currentStore != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-                        ),
-                      );
+                    if (currentStore == null) {
+                      _showStoreMissing(context);
+                      return;
                     }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CreateOrderScreen(businessId: currentStore.id),
+                      ),
+                    );
                   },
                   icon: const Icon(Icons.add_shopping_cart, size: 18),
                   label: const Text('New Order'),
@@ -277,14 +288,16 @@ class DashboardScreen extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    if (currentStore != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ProductFormScreen(businessId: currentStore.id),
-                        ),
-                      );
+                    if (currentStore == null) {
+                      _showStoreMissing(context);
+                      return;
                     }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProductFormScreen(businessId: currentStore.id),
+                      ),
+                    );
                   },
                   icon: const Icon(Icons.add_box_outlined, size: 18),
                   label: const Text('Add Product'),

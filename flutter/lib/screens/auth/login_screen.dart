@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,8 +12,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: 'demo@onlyorders.io');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _serverUrlController = TextEditingController(text: ApiConfig.defaultBaseUrl);
   bool _showServerConfig = false;
   bool _obscurePassword = true;
@@ -52,14 +51,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     }
-  }
-
-  void _handleDemoLogin() async {
-    final auth = context.read<AuthProvider>();
-    if (_showServerConfig && _serverUrlController.text.isNotEmpty) {
-      await auth.authService.setCustomBaseUrl(_serverUrlController.text.trim());
-    }
-    await auth.demoLogin();
   }
 
   @override
@@ -125,6 +116,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autocorrect: false,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                       hintText: 'merchant@store.com',
                       prefixIcon: Icon(Icons.email_outlined, size: 20),
@@ -145,6 +139,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    onSubmitted: (_) => _handleLogin(),
                     decoration: InputDecoration(
                       hintText: '••••••••',
                       prefixIcon: const Icon(Icons.lock_outline, size: 20),
@@ -189,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _serverUrlController,
                       decoration: const InputDecoration(
                         labelText: 'API Base URL',
-                        hintText: 'https://web.oryxa.us/api/v1',
+                        hintText: 'https://onlyorders.tech/api/v1',
                         prefixIcon: Icon(Icons.dns_outlined, size: 20),
                       ),
                     ),
@@ -207,15 +204,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
                         : const Text('Sign In to Store'),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Demo Login
-                  OutlinedButton.icon(
-                    onPressed: auth.isLoading ? null : _handleDemoLogin,
-                    icon: const Icon(Icons.bolt, color: AppTheme.primaryColor, size: 18),
-                    label: const Text('1-Tap Demo Merchant Sign-in'),
                   ),
                 ],
               ),

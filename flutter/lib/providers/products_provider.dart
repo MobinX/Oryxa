@@ -67,7 +67,7 @@ class ProductsProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
     }
   }
@@ -97,7 +97,7 @@ class ProductsProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -116,7 +116,7 @@ class ProductsProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -129,7 +129,7 @@ class ProductsProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -160,7 +160,7 @@ class ProductsProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -175,7 +175,7 @@ class ProductsProvider extends ChangeNotifier {
       await fetchCategories(businessId);
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -188,7 +188,7 @@ class ProductsProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }

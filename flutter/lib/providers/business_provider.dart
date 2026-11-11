@@ -61,7 +61,7 @@ class BusinessProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
     }
   }
@@ -134,7 +134,7 @@ class BusinessProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _isTogglingKillSwitch = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -155,7 +155,7 @@ class BusinessProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -201,7 +201,7 @@ class BusinessProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -220,7 +220,7 @@ class BusinessProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }

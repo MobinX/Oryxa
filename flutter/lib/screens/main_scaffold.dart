@@ -41,9 +41,11 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   void _loadData() {
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final biz = context.read<BusinessProvider>();
     biz.fetchBusinesses(preferredBusinessId: auth.selectedBusinessId).then((_) {
+      if (!mounted) return;
       if (biz.currentBusiness != null) {
         final bId = biz.currentBusiness!.id;
         context.read<InboxProvider>().fetchConversations(bId);
@@ -57,15 +59,6 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final biz = context.watch<BusinessProvider>();
     final currentStore = biz.currentBusiness;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final pages = [
-      const DashboardScreen(),
-      const InboxScreen(),
-      const OrdersScreen(),
-      const ProductsScreen(),
-      _buildMoreMenu(context),
-    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -177,11 +170,10 @@ class _MainScaffoldState extends State<MainScaffold> {
         ],
       ),
       drawer: _buildDrawer(context),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
-      ),
-      bottomNavigationBar: NavigationBar(
+      body: _buildBody(biz),
+      bottomNavigationBar: currentStore == null
+          ? null
+          : NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
         destinations: const [
@@ -211,6 +203,79 @@ class _MainScaffoldState extends State<MainScaffold> {
             label: 'More',
           ),
         ],
+      ),
+    );
+  }
+
+  /// A signed-in merchant with no loaded store cannot create anything, so say why instead of
+  /// rendering tabs whose create buttons would silently do nothing.
+  Widget _buildBody(BusinessProvider biz) {
+    if (biz.currentBusiness != null) {
+      return IndexedStack(
+        index: _currentIndex,
+        children: [
+          const DashboardScreen(),
+          const InboxScreen(),
+          const OrdersScreen(),
+          const ProductsScreen(),
+          _buildMoreMenu(context),
+        ],
+      );
+    }
+
+    if (biz.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final error = biz.errorMessage;
+    final hasError = error != null && error.isNotEmpty;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasError ? Icons.cloud_off_outlined : Icons.storefront_outlined,
+                size: 56,
+                color: hasError ? AppTheme.danger : AppTheme.primaryColor,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                hasError ? 'Could not load your store' : 'No store yet',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hasError
+                    ? error
+                    : 'Create your first business store to start managing products and orders.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(hasError ? 'Retry' : 'Reload'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BusinessPickerScreen()),
+                  ).then((_) => _loadData());
+                },
+                child: const Text('Choose or create a store'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

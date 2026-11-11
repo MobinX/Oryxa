@@ -85,7 +85,7 @@ class InboxProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
     }
   }
@@ -145,7 +145,7 @@ class InboxProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSending = false;
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }
@@ -170,7 +170,7 @@ class InboxProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = apiErrorMessage(e);
       notifyListeners();
       return false;
     }

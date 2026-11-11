@@ -1,15 +1,49 @@
 class ApiConfig {
   /// Default backend URL.
-  /// On local dev: http://10.0.2.2:3001 (Android Emulator) or http://localhost:3001
-  /// In production / cloud: https://web.oryxa.us/api/v1
-  static const String defaultBaseUrl = 'https://web.oryxa.us/api/v1';
+  /// Local dev: http://10.0.2.2:3001 (Android Emulator) or http://localhost:3001
+  /// Production: the web dashboard proxies `/api/v1` to the API on the same origin.
+  ///
+  /// `web.oryxa.us` is no longer ours — it is a parked domain, so every request used to
+  /// land on an unrelated HTML page and quietly parse as "no data". Keep this pointing at
+  /// the domain the web dashboard actually runs on.
+  static const String defaultBaseUrl = 'https://onlyorders.tech/api/v1';
+  static const String defaultWebOrigin = 'https://onlyorders.tech';
   static const String devLocalBaseUrl = 'http://10.0.2.2:3001/api/v1';
+
+  /// Public Firebase web config for the mobile sign-in. It lives beside the web app, on
+  /// its origin, and exposes only the browser Firebase config (the same values every
+  /// visitor of the web dashboard already receives).
+  static const String pathMobileFirebaseConfig = '/api/mobile/config';
 
   // Storage key for custom base URL
   static const String storageKeyBaseUrl = 'api_base_url';
   static const String storageKeyToken = 'auth_token';
+  static const String storageKeyRefreshToken = 'auth_refresh_token';
+  static const String storageKeyTokenExpiry = 'auth_token_expiry';
+  static const String storageKeyFirebaseApiKey = 'firebase_web_api_key';
   static const String storageKeySelectedBusiness = 'selected_business_id';
   static const String storageKeyUser = 'user_data';
+
+  /// Origin of the web dashboard for a given API base URL. `…/api/v1` becomes the host
+  /// the dashboard is served from; anything unparseable falls back to production.
+  static String webOrigin([String? baseUrl]) {
+    final uri = Uri.tryParse((baseUrl ?? defaultBaseUrl).trim());
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return defaultWebOrigin;
+    }
+    final port = uri.hasPort ? ':${uri.port}' : '';
+    return '${uri.scheme}://${uri.host}$port';
+  }
+
+  static String mobileFirebaseConfigUrl([String? baseUrl]) =>
+      '${webOrigin(baseUrl)}$pathMobileFirebaseConfig';
+
+  /// Hosts a previous build pointed at that are no longer ours. Requests there return a
+  /// parking page, so a saved value has to be discarded rather than reused.
+  static bool isRetiredHost(String url) {
+    final host = Uri.tryParse(url.trim())?.host.toLowerCase();
+    return host == 'web.oryxa.us' || host == 'api.oryxa.us';
+  }
 
   // API endpoints
   static const String pathUsersMe = '/users/me';
@@ -66,7 +100,8 @@ class ApiConfig {
       p += '&categoryId=${Uri.encodeComponent(categoryId)}';
     }
     if (search != null && search.isNotEmpty) {
-      p += '&search=${Uri.encodeComponent(search)}';
+      // The catalog route names this `q`; `search` is the customers route's spelling.
+      p += '&q=${Uri.encodeComponent(search)}';
     }
     return p;
   }
