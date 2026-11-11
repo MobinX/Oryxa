@@ -64,6 +64,7 @@ ui/*
 # Tool cache (refact agent memory)
 # =========================
 .refact/
+.qoder/
 
 # Paths containing literal fraction slash characters
 oryxa⁄env
@@ -95,3 +96,13 @@ playwright-report/
 
 # Local AI Agent skills
 .agents/skills/
+
+# =========================
+# Flutter / Dart
+# =========================
+flutter/.dart_tool/
+flutter/build/
+flutter/android/.gradle/
+flutter/android/local.properties
+flutter/worker/node_modules/
+flutter/worker/.wrangler/

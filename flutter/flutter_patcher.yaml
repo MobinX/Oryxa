@@ -1,0 +1,14 @@
+# Flutter Patcher Configuration
+# Generated automatically by scripts/setup_template.sh
+
+patch_server:
+  manifest_url: "https://oryxa-flutter-patch-worker.mobin-devx.workers.dev/manifest.json"
+  auto_check_update: true
+  auto_download_patch: true
+  verify_signature: true
+
+build:
+  target_platform: "android"
+  release_apk_path: "apk/app-release.apk"
+  output_patch_dir: "patch"
+  last_patch_dir: "lastpatch"

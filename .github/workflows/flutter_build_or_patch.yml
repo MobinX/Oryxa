@@ -1,0 +1,291 @@
+name: Flutter CI/CD - Build Release APK or Generate OTA Patch
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - 'flutter/apk/**'
+      - 'flutter/patch/**'
+      - 'flutter/lastpatch/**'
+      - 'flutter/README.md'
+      - 'flutter/worker/**'
+  workflow_dispatch:
+    inputs:
+      action_type:
+        description: 'Choose action type to execute manually'
+        type: choice
+        options:
+          - patch
+          - native
+        default: 'patch'
+
+permissions:
+  contents: write
+
+jobs:
+  build_or_patch:
+    name: Build Native APK or OTA Patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Inspect Commit Message for {{patch}} or {{native}} Triggers
+        id: mode_check
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          MANUAL_CHOICE="${{ github.event.inputs.action_type }}"
+
+          echo "Commit message: $COMMIT_MSG"
+          echo "Manual choice: $MANUAL_CHOICE"
+
+          if [[ "$COMMIT_MSG" == *"{{native}}"* ]] || [[ "$COMMIT_MSG" == *"[native]"* ]] || [ "$MANUAL_CHOICE" = "native" ]; then
+            echo "mode=native" >> $GITHUB_OUTPUT
+            echo "TRIGGER: Full native APK rebuild requested."
+          elif [[ "$COMMIT_MSG" == *"{{patch}}"* ]] || [[ "$COMMIT_MSG" == *"[patch]"* ]] || [ "$MANUAL_CHOICE" = "patch" ]; then
+            echo "mode=patch" >> $GITHUB_OUTPUT
+            echo "TRIGGER: OTA patch generation requested via {{patch}}."
+          else
+            echo "mode=skip" >> $GITHUB_OUTPUT
+            echo "TRIGGER: Neither {{patch}} nor {{native}} found. Skipping action."
+          fi
+
+      # -------------------------------------------------------------
+      # SKIP NOTICE: When neither {{patch}} nor {{native}} is present
+      # -------------------------------------------------------------
+      - name: Log Skipped Execution
+        if: steps.mode_check.outputs.mode == 'skip'
+        run: |
+          echo "=========================================================="
+          echo "⏭️ SKIPPED: Commit message does not contain {{patch}} or {{native}}."
+          echo "No compilation or patching performed. CI runner saved."
+          echo "To trigger an OTA patch, push with {{patch}}."
+          echo "To trigger a full native rebuild, push with {{native}}."
+          echo "=========================================================="
+
+      # -------------------------------------------------------------
+      # ENVIRONMENT SETUP (Only when NOT skipped)
+      # -------------------------------------------------------------
+      - name: Setup Java 17
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter SDK
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      # -------------------------------------------------------------
+      # Aggressive Caching: Gradle, Pub, Build Artifacts, Keys
+      # -------------------------------------------------------------
+      - name: Aggressive Gradle & Pub Cache
+        if: steps.mode_check.outputs.mode != 'skip'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.pub-cache
+            ~/.android/build-cache
+            flutter/build
+            flutter/.dart_tool
+          key: aggressive-build-cache-${{ runner.os }}-${{ hashFiles('flutter/**/pubspec.lock', 'flutter/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            aggressive-build-cache-${{ runner.os }}-
+
+      - name: Baseline Release & Patcher Keys Cache
+        if: steps.mode_check.outputs.mode != 'skip'
+        id: baseline_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            flutter/.baseline
+            flutter/keys
+            flutter/android/app/release.keystore
+          key: patcher-baseline-${{ runner.os }}-${{ hashFiles('flutter/android/app/release.keystore') }}
+          restore-keys: |
+            patcher-baseline-${{ runner.os }}-
+
+      - name: Ensure Signing Keystore Exists
+        if: steps.mode_check.outputs.mode != 'skip'
+        working-directory: flutter
+        run: |
+          mkdir -p android/app
+          if [ ! -f "android/app/release.keystore" ]; then
+            echo "Generating persistent release keystore..."
+            bash scripts/gen_keystore.sh
+          fi
+
+      - name: Install Flutter & Dart Dependencies
+        if: steps.mode_check.outputs.mode != 'skip'
+        working-directory: flutter
+        run: |
+          flutter pub get
+
+      # =============================================================
+      # BRANCH 1: FULL NATIVE BUILD (Triggered by {{native}})
+      # =============================================================
+      - name: Full Native Release Build
+        if: steps.mode_check.outputs.mode == 'native'
+        working-directory: flutter
+        run: |
+          echo "=========================================================="
+          echo "🚀 FULL NATIVE BUILD MODE (Triggered by {{native}})"
+          echo "=========================================================="
+
+          # 1. Dynamically read version and build number from pubspec.yaml
+          APP_VERSION_LINE=$(grep "^version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+          APP_VERSION=$(echo "$APP_VERSION_LINE" | cut -d'+' -f1)
+          APP_VERSION_CODE=$(echo "$APP_VERSION_LINE" | cut -d'+' -f2)
+          if [ -z "$APP_VERSION_CODE" ]; then APP_VERSION_CODE="1"; fi
+          echo "Configuring Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
+
+          # 2. Reset baseline and previous patcher keys (Fresh native baseline)
+          echo "Purging old baseline and previous patcher signing keys..."
+          rm -rf .baseline keys/private_key.pem keys/public_key.pem dist/
+          mkdir -p keys .baseline apk lastpatch patch
+
+          # 3. Initialize fresh Flutter Patcher signing keys
+          echo "Initializing fresh Flutter Patcher signing keys for new baseline..."
+          dart run flutter_patcher keys init || true
+
+          # 4. Build release APK
+          echo "Compiling signed production release APK..."
+          flutter build apk --release --android-skip-build-dependency-validation
+
+          # 5. Copy release APK to /apk and archive baseline for diffing
+          cp build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
+          cp build/app/outputs/flutter-apk/app-release.apk .baseline/base-app-release.apk
+
+          # 6. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
+          rm -f lastpatch/patch.zip
+          cat <<EOF > lastpatch/manifest.json
+          {
+            "has_update": false,
+            "version": "$APP_VERSION",
+            "patch_url": "/patch.zip",
+            "md5": "",
+            "target_version_code": $APP_VERSION_CODE,
+            "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "note": "Fresh native baseline release v$APP_VERSION (build $APP_VERSION_CODE). No patches active."
+          }
+          EOF
+
+          echo "✅ Release APK v$APP_VERSION (build $APP_VERSION_CODE) compiled and saved to flutter/apk/app-release.apk"
+
+      # =============================================================
+      # BRANCH 2: OTA PATCH BUILD (Triggered by {{patch}})
+      # =============================================================
+      - name: Generate Production OTA Patch
+        if: steps.mode_check.outputs.mode == 'patch'
+        working-directory: flutter
+        run: |
+          echo "=========================================================="
+          echo "⚡ OTA PATCH MODE (Triggered by {{patch}})"
+          echo "=========================================================="
+
+          # Dynamically read version and build number from pubspec.yaml
+          APP_VERSION_LINE=$(grep "^version:" pubspec.yaml | head -n 1 | awk '{print $2}')
+          APP_VERSION=$(echo "$APP_VERSION_LINE" | cut -d'+' -f1)
+          APP_VERSION_CODE=$(echo "$APP_VERSION_LINE" | cut -d'+' -f2)
+          if [ -z "$APP_VERSION_CODE" ]; then APP_VERSION_CODE="1"; fi
+          echo "Targeting Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
+
+          # Verify baseline exists
+          if [ ! -f ".baseline/base-app-release.apk" ] && [ -f "apk/app-release.apk" ]; then
+            mkdir -p .baseline
+            cp apk/app-release.apk .baseline/base-app-release.apk
+          fi
+
+          # Fast incremental compilation of updated Dart bundle
+          flutter build apk --release --android-skip-build-dependency-validation
+
+          # Compute patch version based on timestamp / commit count
+          PATCH_NUM=$(git rev-list --count HEAD)
+          PATCH_VER="${APP_VERSION}-h${PATCH_NUM}"
+          echo "Generating Patch Version: $PATCH_VER"
+
+          # Run flutter_patcher pack / diff
+          mkdir -p dist
+          dart run flutter_patcher:pack \
+            --apk build/app/outputs/flutter-apk/app-release.apk \
+            --version "$PATCH_VER" \
+            --target-version-code $APP_VERSION_CODE || {
+              echo "Standard pack fallback: generating patch archive..."
+              mkdir -p dist
+              cd build/app/outputs/flutter-apk/
+              unzip -q -o app-release.apk "lib/arm64-v8a/libapp.so" -d /tmp/patch_extracted || true
+              cd -
+              if [ -d "/tmp/patch_extracted" ]; then
+                cd /tmp/patch_extracted && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" . && cd -
+              fi
+            }
+
+          # Verify patch file creation
+          if [ ! -f "dist/patch.zip" ]; then
+            echo "Creating patch bundle from compiled libapp.so..."
+            mkdir -p /tmp/patch_bundle/lib/arm64-v8a
+            unzip -p build/app/outputs/flutter-apk/app-release.apk "lib/arm64-v8a/libapp.so" > /tmp/patch_bundle/lib/arm64-v8a/libapp.so
+            cd /tmp/patch_bundle && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" lib/ && cd -
+          fi
+
+          # Calculate MD5 checksum of the generated patch
+          PATCH_MD5=$(md5sum dist/patch.zip | cut -d' ' -f1)
+          echo "Generated Patch MD5: $PATCH_MD5"
+
+          # Archive to /patch/<version>/
+          ARCHIVE_DIR="patch/${PATCH_VER}"
+          mkdir -p "$ARCHIVE_DIR" lastpatch
+          cp dist/patch.zip "$ARCHIVE_DIR/patch.zip"
+
+          # Update /lastpatch directory (production static host target)
+          cp dist/patch.zip lastpatch/patch.zip
+
+          cat <<EOF > lastpatch/manifest.json
+          {
+            "has_update": true,
+            "version": "${PATCH_VER}",
+            "patch_url": "/patch.zip",
+            "md5": "${PATCH_MD5}",
+            "target_version_code": ${APP_VERSION_CODE},
+            "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "commit": "${{ github.sha }}"
+          }
+          EOF
+
+          cp lastpatch/manifest.json "$ARCHIVE_DIR/manifest.json"
+          echo "✅ Patch $PATCH_VER generated and saved to flutter/lastpatch"
+
+      # -------------------------------------------------------------
+      # Commit artifacts back to GitHub repository (Only if NOT skipped)
+      # -------------------------------------------------------------
+      - name: Commit & Push Release Artifacts to GitHub
+        if: steps.mode_check.outputs.mode != 'skip'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Add generated files inside flutter/ directory
+          git add -f flutter/apk/ flutter/patch/ flutter/lastpatch/ flutter/.baseline/ flutter/keys/ 2>/dev/null || git add -f flutter/apk/ flutter/patch/ flutter/lastpatch/
+
+          # Only commit if changes exist
+          if git diff --staged --quiet; then
+            echo "No artifact changes to commit."
+          else
+            git commit -m "ci(flutter): [skip ci] auto-published updated apk/patch artifacts"
+            git pull --rebase origin ${{ github.ref_name }} || true
+            git push origin HEAD:${{ github.ref_name }}
+          fi

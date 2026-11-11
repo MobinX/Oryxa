@@ -1,0 +1,4 @@
+storePassword=android
+keyPassword=android
+keyAlias=remote_dev_key
+storeFile=release.keystore

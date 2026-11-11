@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "oryxa-flutter-patch-worker",
+  "main": "src/index.js",
+  "compatibility_date": "2024-11-01",
+  "account_id": "be6bd7b07cabf3c741b718a7b2a38d1c",
+  "vars": {
+    "GITHUB_OWNER": "MobinX",
+    "GITHUB_REPO": "Oryxa",
+    "GITHUB_BRANCH": "main",
+    "REPO_PATH": "flutter/lastpatch"
+  }
+}
