@@ -39,10 +39,13 @@ jobs:
 
       - name: Inspect Commit Message for {{patch}} or {{native}} Triggers
         id: mode_check
+        # Pass the message through `env` instead of pasting it into the shell script: a
+        # commit body with quotes, backticks or `$(...)` would otherwise be evaluated by
+        # bash and fail the run (exit 127) before any build starts.
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          MANUAL_CHOICE: ${{ github.event.inputs.action_type }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          MANUAL_CHOICE="${{ github.event.inputs.action_type }}"
-
           echo "Commit message: $COMMIT_MSG"
           echo "Manual choice: $MANUAL_CHOICE"
 
