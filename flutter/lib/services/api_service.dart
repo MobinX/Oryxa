@@ -265,6 +265,70 @@ class ApiService {
     throw ApiException('Invalid upload response');
   }
 
+  /// Opens an HTTP SSE stream to the given path and yields (event, data) pairs.
+  Stream<MapEntry<String, dynamic>> streamSse(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async* {
+    final uri = _buildUri(path);
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    });
+    if (_token != null && _token!.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
+
+    final client = http.Client();
+    try {
+      final response = await client.send(request);
+      if (response.statusCode >= 400) {
+        final errText = await response.stream.bytesToString();
+        String message = 'Request failed (${response.statusCode})';
+        try {
+          final parsed = jsonDecode(errText);
+          if (parsed is Map && parsed['error'] != null) {
+            message = parsed['error'].toString();
+          }
+        } catch (_) {}
+        throw ApiException(message, statusCode: response.statusCode);
+      }
+
+      String currentEvent = '';
+      String buffer = '';
+
+      await for (final chunk in response.stream.transform(utf8.decoder)) {
+        buffer += chunk;
+        final lines = buffer.split('\n');
+        buffer = lines.removeLast();
+
+        for (final line in lines) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty) continue;
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.substring(7).trim();
+          } else if (trimmed.startsWith('data: ')) {
+            final rawData = trimmed.substring(6).trim();
+            dynamic parsedData;
+            try {
+              parsedData = jsonDecode(rawData);
+            } catch (_) {
+              parsedData = rawData;
+            }
+            yield MapEntry(currentEvent, parsedData);
+            currentEvent = '';
+          }
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   dynamic _handleResponse(http.Response res) {
     dynamic json;
     try {

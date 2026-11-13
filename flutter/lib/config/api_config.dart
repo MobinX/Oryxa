@@ -155,6 +155,18 @@ class ApiConfig {
   static String pathPlaygroundChat(String businessId) =>
       '/$businessId/playground/chat';
 
+  static String pathPlaygroundTestRun(String businessId) =>
+      '/$businessId/playground/test-run';
+
+  static String pathPlaygroundCommentTestRun(String businessId) =>
+      '/$businessId/playground/comment-test-run';
+
+  static String pathDefaultAgent(String businessId) =>
+      '/$businessId/agents/default';
+
+  static String pathAgentDetail(String businessId, String agentId) =>
+      '/$businessId/agents/$agentId';
+
   static String pathPostDetail(String businessId, String postId) =>
       '/$businessId/posts/$postId';
 
