@@ -43,6 +43,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="onlyorders" android:host="auth" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="onlyorders" android:host="facebook" />
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"
