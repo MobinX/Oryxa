@@ -151,6 +151,12 @@ class ApiConfig {
 
   static String pathPosts(String businessId) =>
       '/$businessId/posts';
+
+  static String pathPostDetail(String businessId, String postId) =>
+      '/$businessId/posts/$postId';
+
+  static String pathPublishPost(String businessId, String postId) =>
+      '/$businessId/posts/$postId/publish';
   static String pathAds(String businessId, {int days = 30}) =>
       '/$businessId/ads?days=$days';
 }

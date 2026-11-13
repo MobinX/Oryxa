@@ -17,6 +17,7 @@ import 'inbox/inbox_screen.dart';
 import 'notifications/notifications_screen.dart';
 import 'orders/orders_screen.dart';
 import 'payments/payments_screen.dart';
+import 'posts/posts_screen.dart';
 import 'playground/playground_screen.dart';
 import 'products/categories_screen.dart';
 import 'products/products_screen.dart';
@@ -565,6 +566,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           subtitle: 'Facebook Page, Messenger & WhatsApp',
           color: const Color(0xFF1877F2),
           screen: const ChannelsScreen(),
+        ),
+        _menuCard(
+          context,
+          icon: Icons.article_outlined,
+          title: 'Posts',
+          subtitle: 'Create and manage social posts',
+          color: Colors.orange,
+          screen: const PostsScreen(),
         ),
         _menuCard(
           context,
