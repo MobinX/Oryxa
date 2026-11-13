@@ -8,6 +8,8 @@ export function MobileFacebookCallback() {
   const { companyName } = useBrand();
   const [message, setMessage] = useState('Returning to OnlyOrders…');
 
+  const [deepLink, setDeepLink] = useState<string | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -26,7 +28,8 @@ export function MobileFacebookCallback() {
 
     const payload = { v: 1, token, businessId: businessId ?? null };
     const encoded = btoa(JSON.stringify(payload));
-    const deepLink = `onlyorders://facebook#p=${encoded}`;
+    const link = `onlyorders://facebook#p=${encoded}`;
+    setDeepLink(link);
 
     const w = window as unknown as {
       flutter_inappwebview?: { callHandler?: (name: string, args: string) => void };
@@ -35,10 +38,20 @@ export function MobileFacebookCallback() {
     try { w.flutter_inappwebview?.callHandler?.('onlyOrdersFacebook', JSON.stringify(payload)); } catch { /* ignore */ }
     try { w.OnlyOrdersAuth?.postMessage?.(JSON.stringify(payload)); } catch { /* ignore */ }
 
-    window.setTimeout(() => {
-      try { window.location.href = deepLink; } catch { /* ignore */ }
-    }, 400);
+    const timer = window.setTimeout(() => {
+      try { window.location.href = link; } catch { /* ignore */ }
+    }, 600);
+    return () => window.clearTimeout(timer);
   }, []);
+
+  const openApp = () => {
+    if (!deepLink) return;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const href = isAndroid
+      ? `intent://facebook#p=${deepLink.split('#p=')[1] ?? ''}#Intent;scheme=onlyorders;package=com.example.flutter_remote_dev;end`
+      : deepLink;
+    try { window.location.href = href; } catch { /* ignore */ }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[var(--background)] to-[var(--muted)] p-4">
@@ -51,6 +64,15 @@ export function MobileFacebookCallback() {
       <div className="w-full max-w-sm bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-xl p-7 flex flex-col items-center gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" aria-hidden />
         <p className="text-sm text-[var(--muted-foreground)] text-center">{message}</p>
+        {deepLink && (
+          <button
+            type="button"
+            className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all"
+            onClick={openApp}
+          >
+            Open OnlyOrders
+          </button>
+        )}
       </div>
     </div>
   );
