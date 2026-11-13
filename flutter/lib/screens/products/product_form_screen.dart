@@ -1,5 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
+import '../../services/api_service.dart';
 import '../../config/app_theme.dart';
 import '../../models/product.dart';
 import '../../providers/products_provider.dart';
@@ -38,6 +44,42 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   bool _isSaving = false;
 
   bool get _isEditing => widget.product != null;
+
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (picked == null) return;
+    if (!mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      final api = context.read<ApiService>();
+      final uri = Uri.parse('${api.baseUrl}/${widget.businessId}/uploads/image');
+      final req = http.MultipartRequest('POST', uri);
+      req.headers['Authorization'] = 'Bearer ${api.token}';
+      req.files.add(await http.MultipartFile.fromPath('file', picked.path));
+      final streamed = await req.send().timeout(const Duration(seconds: 60));
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        throw Exception('Upload failed (HTTP ${streamed.statusCode}): $body');
+      }
+      final json = jsonDecode(body);
+      final url = json is Map ? (json['url'] ?? json['key'])?.toString() : null;
+      if (url != null && url.isNotEmpty) {
+        _imageUrlController.text = url;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image uploaded.')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   @override
   void initState() {
@@ -378,6 +420,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       prefixIcon: Icon(Icons.link),
                     ),
                     onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _isSaving ? null : _pickAndUploadImage,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Upload image from gallery'),
                   ),
                   if (_imageUrlController.text.isNotEmpty) ...[
                     const SizedBox(height: 12),
