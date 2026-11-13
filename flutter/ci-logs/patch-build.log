@@ -1,0 +1,26 @@
+Upgrading build.gradle
+Upgrading gradle.properties
+Running Gradle task 'assembleRelease'...                        
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Build file '/home/runner/work/Oryxa/Oryxa/flutter/android/app/build.gradle' line: 3
+
+* What went wrong:
+An exception occurred applying plugin request [id: 'kotlin-android']
+> Failed to apply plugin 'kotlin-android'.
+   > ⛔ Android Gradle Plugin Version Incompatible with Kotlin Gradle Plugin
+     Kotlin Gradle Plugin <-> Android Gradle Plugin compatibility issue:
+     The applied Android Gradle Plugin version (8.3.2) is lower than the minimum supported 8.5.2.
+     Solution: Please update the Android Gradle Plugin version to at least 8.5.2.
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 39s
+Running Gradle task 'assembleRelease'...                           40.3s
+Gradle task assembleRelease failed with exit code 1
