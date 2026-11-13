@@ -46,11 +46,7 @@ export function MobileFacebookCallback() {
 
   const openApp = () => {
     if (!deepLink) return;
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const href = isAndroid
-      ? `intent://facebook#p=${deepLink.split('#p=')[1] ?? ''}#Intent;scheme=onlyorders;package=com.example.flutter_remote_dev;end`
-      : deepLink;
-    try { window.location.href = href; } catch { /* ignore */ }
+    try { window.location.href = deepLink; } catch { /* ignore */ }
   };
 
   return (
