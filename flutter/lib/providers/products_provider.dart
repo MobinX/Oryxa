@@ -33,6 +33,7 @@ class ProductsProvider extends ChangeNotifier {
 
   List<CategoryModel> get categories => _categories;
   String? get selectedCategoryId => _selectedCategoryId;
+  String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -76,12 +77,34 @@ class ProductsProvider extends ChangeNotifier {
     try {
       final res = await apiService.get(ApiConfig.pathCategories(businessId));
       if (res is List) {
-        _categories = res.map((c) => CategoryModel.fromJson(c as Map<String, dynamic>)).toList();
+        _categories = res
+            .whereType<Map>()
+            .map((c) => CategoryModel.fromJson(Map<String, dynamic>.from(c)))
+            .toList();
         notifyListeners();
       }
     } catch (e) {
       debugPrint('[ProductsProvider] fetchCategories error: $e');
     }
+  }
+
+  /// One search page for the inbox product picker. Kept off the global catalog list so
+  /// typing in a dialog cannot reorder the Products screen behind it.
+  Future<List<ProductModel>> searchProducts(String businessId, String term) async {
+    try {
+      final res = await apiService.get(
+        ApiConfig.pathProducts(businessId, search: term.trim(), limit: 20),
+      );
+      if (res is Map && res['products'] is List) {
+        return (res['products'] as List)
+            .whereType<Map>()
+            .map((p) => ProductModel.fromJson(Map<String, dynamic>.from(p)))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[ProductsProvider] searchProducts error: $e');
+    }
+    return [];
   }
 
   Future<bool> createProduct(String businessId, Map<String, dynamic> payload) async {

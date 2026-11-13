@@ -7,7 +7,7 @@ class OrdersProvider extends ChangeNotifier {
   final ApiService apiService;
 
   List<OrderModel> _orders = [];
-  String _activeTab = 'all'; // 'all', 'pending', 'acknowledged', 'onDelivery', 'done'
+  String _activeTab = 'all'; // 'all' plus the four canonical states
   String _searchQuery = '';
   bool _isLoading = false;
   String? _errorMessage;
@@ -36,15 +36,25 @@ class OrdersProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // KPI Calculations
+  // KPI cards, exactly the four the web workspace computes from the same list.
   int get totalOrdersCount => _orders.length;
   int get pendingCount => _orders.where((o) => o.state == 'pending').length;
   int get acknowledgedCount => _orders.where((o) => o.state == 'acknowledged').length;
+  int get processingCount => acknowledgedCount;
   int get onDeliveryCount => _orders.where((o) => o.state == 'onDelivery').length;
   int get deliveredCount => _orders.where((o) => o.state == 'done').length;
+  int get deliveredOrDispatchedCount => _orders
+      .where((o) => o.state == 'done' || o.state == 'onDelivery')
+      .length;
   double get totalRevenue => _orders
       .where((o) => o.state != 'cancelled')
       .fold(0.0, (sum, o) => sum + o.totalPrice);
+
+  void clearError() {
+    if (_errorMessage == null) return;
+    _errorMessage = null;
+    notifyListeners();
+  }
 
   void setActiveTab(String tab) {
     _activeTab = tab;
@@ -56,6 +66,13 @@ class OrdersProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  OrderModel? findOrder(String orderId) {
+    for (final order in _orders) {
+      if (order.id == orderId) return order;
+    }
+    return null;
+  }
+
   Future<void> fetchOrders(String businessId) async {
     _isLoading = true;
     _errorMessage = null;
@@ -64,7 +81,10 @@ class OrdersProvider extends ChangeNotifier {
     try {
       final res = await apiService.get(ApiConfig.pathOrders(businessId, limit: 100));
       if (res is List) {
-        _orders = res.map((o) => OrderModel.fromJson(o as Map<String, dynamic>)).toList();
+        _orders = res
+            .whereType<Map>()
+            .map((o) => OrderModel.fromJson(Map<String, dynamic>.from(o)))
+            .toList();
       }
       _isLoading = false;
       notifyListeners();
@@ -76,6 +96,14 @@ class OrdersProvider extends ChangeNotifier {
   }
 
   Future<bool> updateOrderState(String businessId, String orderId, String newState) async {
+    final current = findOrder(orderId);
+    if (current != null && !OrderModel.canTransition(current.state, newState)) {
+      _errorMessage =
+          'Cannot move from ${OrderModel.stateLabel(current.state)} to ${OrderModel.stateLabel(newState)}';
+      notifyListeners();
+      return false;
+    }
+
     try {
       await apiService.patch(
         ApiConfig.pathOrderState(businessId, orderId),
@@ -86,6 +114,7 @@ class OrdersProvider extends ChangeNotifier {
       if (idx != -1) {
         _orders[idx] = _orders[idx].copyWith(state: newState);
       }
+      _errorMessage = null;
       notifyListeners();
       return true;
     } catch (e) {
@@ -129,7 +158,11 @@ class OrdersProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateOrderDetails(String businessId, String orderId, Map<String, dynamic> data) async {
+  Future<bool> updateOrderDetails(
+    String businessId,
+    String orderId,
+    Map<String, dynamic> data,
+  ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -155,10 +188,18 @@ class OrdersProvider extends ChangeNotifier {
     try {
       final res = await apiService.get(ApiConfig.pathOrderDetail(businessId, orderId));
       if (res is Map<String, dynamic>) {
-        return OrderModel.fromJson(res);
+        final order = OrderModel.fromJson(res);
+        final idx = _orders.indexWhere((o) => o.id == orderId);
+        if (idx != -1) {
+          _orders[idx] = order;
+          notifyListeners();
+        }
+        return order;
       }
     } catch (e) {
+      _errorMessage = apiErrorMessage(e);
       debugPrint('[OrdersProvider] fetchOrderDetail error: $e');
+      notifyListeners();
     }
     return null;
   }
@@ -167,6 +208,7 @@ class OrdersProvider extends ChangeNotifier {
     try {
       await apiService.delete(ApiConfig.pathOrderDetail(businessId, orderId));
       _orders.removeWhere((o) => o.id == orderId);
+      _errorMessage = null;
       notifyListeners();
       return true;
     } catch (e) {

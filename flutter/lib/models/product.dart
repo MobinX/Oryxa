@@ -145,6 +145,8 @@ class ProductVariantModel {
   final double price;
   final int stock;
   final String? imageUrl;
+  final List<String> imageUrls;
+  final String? shortId;
   final bool isAvailable;
 
   ProductVariantModel({
@@ -153,10 +155,24 @@ class ProductVariantModel {
     this.price = 0.0,
     this.stock = 0,
     this.imageUrl,
+    this.imageUrls = const [],
+    this.shortId,
     this.isAvailable = true,
   });
 
   factory ProductVariantModel.fromJson(Map<String, dynamic> json) {
+    final photos = <String>[];
+    if (json['imageUrls'] is List) {
+      for (final raw in json['imageUrls'] as List) {
+        final url = raw?.toString();
+        if (url != null && url.isNotEmpty) photos.add(url);
+      }
+    }
+    final cover = json['imageUrl']?.toString();
+    if (cover != null && cover.isNotEmpty && !photos.contains(cover)) {
+      photos.insert(0, cover);
+    }
+
     return ProductVariantModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Default',
@@ -164,23 +180,28 @@ class ProductVariantModel {
           double.tryParse(json['price']?.toString() ?? '') ??
           0,
       stock: (json['stock'] as num?)?.toInt() ?? 0,
-      imageUrl: json['imageUrl']?.toString(),
+      imageUrl: cover ?? (photos.isNotEmpty ? photos.first : null),
+      imageUrls: photos,
+      shortId: json['variantId']?.toString(),
       isAvailable: json['isAvailable'] != false,
     );
   }
 
   String get formattedPrice => '৳${price.toStringAsFixed(0)}';
+  int get photoCount => imageUrls.isNotEmpty ? imageUrls.length : (imageUrl != null ? 1 : 0);
 }
 
 class CategoryModel {
   final String id;
   final String name;
   final String? slug;
+  final int productCount;
 
   CategoryModel({
     required this.id,
     required this.name,
     this.slug,
+    this.productCount = 0,
   });
 
   factory CategoryModel.fromJson(Map<String, dynamic> json) {
@@ -188,6 +209,7 @@ class CategoryModel {
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       slug: json['slug']?.toString(),
+      productCount: (json['productCount'] as num?)?.toInt() ?? 0,
     );
   }
 }

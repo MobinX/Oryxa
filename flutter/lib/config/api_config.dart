@@ -66,12 +66,16 @@ class ApiConfig {
     return p;
   }
 
+  static String pathConversation(String businessId, String conversationId) =>
+      '/$businessId/conversations/$conversationId';
+  static String pathConversationState(String businessId, String conversationId) =>
+      '/$businessId/conversations/$conversationId/state';
   static String pathMessages(String businessId, String conversationId, {int limit = 100}) =>
       '/$businessId/conversations/$conversationId/messages?limit=$limit';
   static String pathSendMessage(String businessId, String conversationId) =>
       '/$businessId/conversations/$conversationId/messages';
   static String pathAutopilot(String businessId, String conversationId) =>
-      '/$businessId/conversations/$conversationId/autopilot';
+      '/$businessId/conversations/$conversationId/auto-pilot';
   static String pathSuggestions(String businessId, String conversationId) =>
       '/$businessId/conversations/$conversationId/suggestions';
   static String pathSendSuggestion(String businessId, String conversationId) =>
