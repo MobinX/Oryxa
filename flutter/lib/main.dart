@@ -14,6 +14,7 @@ import 'screens/main_scaffold.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/diagnostics_service.dart';
+import 'services/facebook_connect_service.dart';
 import 'services/patch_service.dart';
 import 'widgets/app_feedback.dart';
 
@@ -46,7 +47,9 @@ void main() async {
   final apiService = ApiService();
   final authService = AuthService(apiService: apiService);
   final patchService = PatchService();
+  final facebookConnectService = FacebookConnectService(apiService: apiService);
   await authService.init();
+  await facebookConnectService.init();
 
   runApp(
     MultiProvider(
@@ -55,6 +58,7 @@ void main() async {
         ChangeNotifierProvider<DiagnosticsService>.value(value: appDiagnostics),
         ChangeNotifierProvider<PatchService>.value(value: patchService),
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(authService: authService)),
+        ChangeNotifierProvider<FacebookConnectService>.value(value: facebookConnectService),
         ChangeNotifierProvider<BusinessProvider>(create: (_) => BusinessProvider(apiService: apiService)),
         ChangeNotifierProvider<InboxProvider>(create: (_) => InboxProvider(apiService: apiService)),
         ChangeNotifierProvider<OrdersProvider>(create: (_) => OrdersProvider(apiService: apiService)),

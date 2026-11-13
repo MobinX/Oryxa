@@ -1080,6 +1080,8 @@ export async function createOAuthState(
      * callback returns them to the same brand domain instead of the deployment's default.
      */
     returnOrigin?: string;
+    /** Mobile (Flutter) flow: redirect the picker to the mobile callback page. */
+    mobile?: boolean;
   },
   ttlSeconds = 600,
 ): Promise<string> {
@@ -1087,7 +1089,7 @@ export async function createOAuthState(
   if (!secret) throw new Error('INTERNAL_KEY is required to start Facebook OAuth');
   const exp = Date.now() + ttlSeconds * 1000;
   const flags =
-    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}${payload.ads ? 'a' : ''}` || null;
+    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}${payload.ads ? 'a' : ''}${payload.mobile ? 'm' : ''}` || null;
   const origin = payload.returnOrigin
     ? toBase64Url(encoder.encode(payload.returnOrigin))
     : null;
@@ -1120,6 +1122,8 @@ export async function verifyOAuthState(
   platform: MessagingPlatform;
   /** The signed origin the flow started from, when the caller supplied one. */
   returnOrigin?: string;
+  /** Mobile (Flutter) flow. */
+  mobile: boolean;
 } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !state) return null;
@@ -1128,7 +1132,7 @@ export async function verifyOAuthState(
   const [businessId, userId, expStr] = parts;
   // 4 parts: no flags, no origin. 5: flags + signature. 6: flags + origin + signature.
   const flags = parts.length >= 5 ? parts[3]! : '';
-  if (flags !== '' && !/^p?i?a?$/.test(flags)) return null;
+  if (flags !== '' && !/^p?i?a?m?$/.test(flags)) return null;
   const originB64 = parts.length === 6 ? parts[4]! : '';
   const sig = parts[parts.length - 1]!;
   const exp = Number(expStr);
@@ -1154,6 +1158,7 @@ export async function verifyOAuthState(
     ads: flags.includes('a'),
     platform: flags.includes('i') ? 'instagram' : 'facebook',
     ...(returnOrigin ? { returnOrigin } : {}),
+    mobile: flags.includes('m'),
   };
 }
 

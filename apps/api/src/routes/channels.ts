@@ -471,7 +471,8 @@ const fbAuthRoute = createRoute({
 channelsRouter.openapi(fbAuthRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const user = c.get('user');
-  const { portfolio, ads, returnOrigin } = c.req.valid('query');
+  const { portfolio, ads, returnOrigin, mobile } = c.req.valid('query');
+  const mobileChoice = mobile === 'true';
   // Meta echoes `state` back verbatim, so the user's answer survives the round trip inside
   // the same signed token that binds the flow to this business — no second token, and a
   // client cannot relabel someone else's flow as portfolio-aware.
@@ -486,6 +487,7 @@ channelsRouter.openapi(fbAuthRoute, async (c) => {
     portfolio: choice,
     ads: adsChoice,
     returnOrigin: safeReturnOrigin(returnOrigin),
+    mobile: mobileChoice,
   });
   const url = getFacebookOAuthUrl(state, choice, adsChoice);
   return c.json({ url });
@@ -933,15 +935,18 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
   // it again at the redirect site; the fallback keeps old links and admin flows working.
   const webOrigin = safeReturnOrigin(verified.returnOrigin) ?? webUrl;
   const platform = verified.platform;
+  const mobileFlow = verified.mobile === true;
   // The same signed flow serves the admin console: only the picker's home changes. Instagram
   // has its own picker because it shows accounts rather than Pages.
   const adminFlow = platform === 'facebook' && verified.businessId === ADMIN_FACEBOOK_FLOW;
   const pickerUrl =
-    platform === 'instagram'
-      ? `${webOrigin}/b/${verified.businessId}/channels/connect-instagram`
-      : adminFlow
-        ? `${webOrigin}/admin/channels/connect-facebook`
-        : `${webOrigin}/b/${verified.businessId}/channels/connect-facebook`;
+    mobileFlow
+      ? `${webOrigin}/login/mobile-facebook-callback`
+      : platform === 'instagram'
+        ? `${webOrigin}/b/${verified.businessId}/channels/connect-instagram`
+        : adminFlow
+          ? `${webOrigin}/admin/channels/connect-facebook`
+          : `${webOrigin}/b/${verified.businessId}/channels/connect-facebook`;
   // Banked below when the login asked for ad reporting; rides to the picker inside the
   // signed selection token so the connect call can store it beside each channel.
   let adsToken: string | undefined;
@@ -953,15 +958,17 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
       platform,
       ...(adsToken ? { adsToken } : {}),
     });
-    return c.redirect(`${pickerUrl}?token=${encodeURIComponent(pagesToken)}`);
+    const qs = new URLSearchParams({ token: pagesToken });
+    if (mobileFlow) qs.set('businessId', verified.businessId);
+    return c.redirect(`${pickerUrl}?${qs.toString()}`);
   };
 
-  const toError = (error: string, detail?: string) =>
-    c.redirect(
-      `${pickerUrl}?error=${error}${
-        detail ? `&detail=${encodeURIComponent(detail)}` : ''
-      }`,
-    );
+  const toError = (error: string, detail?: string) => {
+    const qs = new URLSearchParams({ error });
+    if (detail) qs.set('detail', detail);
+    if (mobileFlow) qs.set('businessId', verified.businessId);
+    return c.redirect(`${pickerUrl}?${qs.toString()}`);
+  };
 
   try {
     const userToken = await exchangeCodeForToken(code);

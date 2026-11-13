@@ -126,6 +126,8 @@ export const facebookAuthQuerySchema = z.object({
   ads: z.enum(['true', 'false']).optional(),
   /** The web origin the merchant started from, so OAuth returns to the same brand domain. */
   returnOrigin: z.string().max(200).optional(),
+  /** Mobile (Flutter) flow: redirect the picker to the mobile callback page instead of the web picker. */
+  mobile: z.enum(['true', 'false']).optional(),
 });
 
 export const oauthReturnQuerySchema = z.object({

@@ -241,6 +241,21 @@ class BusinessProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteChannel(String channelId) async {
+    if (_currentBusiness == null) return false;
+    final bId = _currentBusiness!.id;
+    try {
+      await apiService.delete(ApiConfig.pathChannelDetail(bId, channelId));
+      _channels.removeWhere((c) => c.id == channelId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = apiErrorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> updateStoreTheme(String theme) async {
     if (_currentBusiness == null) return false;
     final bId = _currentBusiness!.id;

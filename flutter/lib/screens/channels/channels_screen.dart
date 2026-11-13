@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../config/app_theme.dart';
 import '../../models/channel.dart';
 import '../../providers/business_provider.dart';
+import '../../services/facebook_connect_service.dart';
 import '../../widgets/app_card.dart';
-import '../../widgets/status_badge.dart';
 
 class ChannelsScreen extends StatefulWidget {
   const ChannelsScreen({super.key});
@@ -14,61 +15,223 @@ class ChannelsScreen extends StatefulWidget {
 }
 
 class _ChannelsScreenState extends State<ChannelsScreen> {
-  final _pageIdController = TextEditingController();
-  final _pageNameController = TextEditingController();
+  bool _isConnecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final fb = context.read<FacebookConnectService>();
+    fb.addListener(_onFacebookResult);
+    // Handle a result that arrived before this screen was mounted.
+    if (fb.pendingResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handlePending(fb.pendingResult!));
+    }
+  }
 
   @override
   void dispose() {
-    _pageIdController.dispose();
-    _pageNameController.dispose();
+    context.read<FacebookConnectService>().removeListener(_onFacebookResult);
     super.dispose();
   }
 
-  void _showConnectDialog(String platformName) {
-    _pageIdController.clear();
-    _pageNameController.clear();
+  void _onFacebookResult() {
+    final fb = context.read<FacebookConnectService>();
+    final result = fb.pendingResult;
+    if (result != null) {
+      _handlePending(result);
+    }
+  }
 
-    showDialog(
+  Future<void> _handlePending(FacebookConnectResult result) async {
+    final fb = context.read<FacebookConnectService>();
+    fb.clearPendingResult();
+    final businessId = result.businessId ?? context.read<BusinessProvider>().currentBusiness?.id;
+    if (businessId == null) return;
+    await _showPagePicker(businessId, result.token);
+  }
+
+  Future<void> _showPagePicker(String businessId, String token) async {
+    final fb = context.read<FacebookConnectService>();
+    List<FacebookPendingPage> pages;
+    try {
+      pages = await fb.fetchPendingPages(businessId, token);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load pages: $e'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    final selected = <String>{};
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Connect $platformName'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Link your official $platformName so the AI agent can receive messages and reply to customers.',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _pageNameController,
-              decoration: InputDecoration(
-                labelText: '$platformName Name',
-                hintText: 'e.g. Dhaka Store Official',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pageIdController,
-              decoration: const InputDecoration(
-                labelText: 'Platform Channel / Page ID',
-                hintText: 'e.g. 1048291048591',
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Choose Facebook pages'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: pages.isEmpty
+                ? const Text('No Facebook pages found on this account.')
+                : ListView(
+                    shrinkWrap: true,
+                    children: pages.map((page) {
+                      final disabled = page.heldByOtherStore;
+                      return CheckboxListTile(
+                        value: selected.contains(page.id),
+                        onChanged: disabled
+                            ? null
+                            : (v) {
+                                setDialogState(() {
+                                  if (v == true) {
+                                    selected.add(page.id);
+                                  } else {
+                                    selected.remove(page.id);
+                                  }
+                                });
+                              },
+                        title: Text(page.name),
+                        subtitle: Text(
+                          page.heldByOtherStore
+                              ? 'Already connected to another store'
+                              : page.connected
+                                  ? 'Already connected — select to refresh token'
+                                  : 'Page ID: ${page.id}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: page.heldByOtherStore ? AppTheme.danger : null,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () async {
+                      Navigator.pop(ctx);
+                      await _connectSelected(businessId, token, selected.toList());
+                    },
+              child: Text('Connect selected (${selected.length})'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Connected $platformName successfully!')),
-              );
-            },
-            child: const Text('Connect Channel'),
+      ),
+    );
+  }
+
+  Future<void> _connectSelected(String businessId, String token, List<String> pageIds) async {
+    final fb = context.read<FacebookConnectService>();
+    try {
+      final result = await fb.connectPages(businessId, token, pageIds);
+      if (!mounted) return;
+      final connected = (result['connected'] as List?)?.length ?? 0;
+      final failed = (result['failed'] as List?) ?? const [];
+      final biz = context.read<BusinessProvider>();
+      await biz.loadActiveBusinessData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(failed.isEmpty
+              ? 'Connected $connected Facebook page(s).'
+              : 'Connected $connected, ${failed.length} failed.'),
+          backgroundColor: failed.isEmpty ? null : AppTheme.danger,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connect failed: $e'), backgroundColor: AppTheme.danger),
+      );
+    }
+  }
+
+  Future<void> _startConnect() async {
+    final biz = context.read<BusinessProvider>();
+    final businessId = biz.currentBusiness?.id;
+    if (businessId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a store first.')),
+      );
+      return;
+    }
+
+    // Consent + source + ads dialog
+    bool portfolio = false;
+    bool ads = false;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Connect Facebook'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'OnlyOrders will request permission to manage messages, view your Pages list, and receive webhooks.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                const Text('Where are your Pages?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                RadioListTile<bool>(
+                  title: const Text('Pages on my profile', style: TextStyle(fontSize: 13)),
+                  value: false,
+                  groupValue: portfolio,
+                  onChanged: (v) => setDialogState(() => portfolio = v ?? false),
+                ),
+                RadioListTile<bool>(
+                  title: const Text('Pages inside a business portfolio', style: TextStyle(fontSize: 13)),
+                  value: true,
+                  groupValue: portfolio,
+                  onChanged: (v) => setDialogState(() => portfolio = v ?? true),
+                ),
+                CheckboxListTile(
+                  title: const Text('Also connect ad reporting (read-only)', style: TextStyle(fontSize: 13)),
+                  value: ads,
+                  onChanged: (v) => setDialogState(() => ads = v ?? false),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Continue')),
+          ],
+        ),
+      ),
+    );
+    if (proceed != true) return;
+
+    setState(() => _isConnecting = true);
+    try {
+      final fb = context.read<FacebookConnectService>();
+      final result = await fb.startConnect(businessId: businessId, portfolio: portfolio, ads: ads);
+      if (!mounted) return;
+      await _showPagePicker(businessId, result.token);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Facebook connect failed: $e'), backgroundColor: AppTheme.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
+    }
+  }
+
+  Future<void> _deleteChannel(ChannelModel channel) async {
+    final biz = context.read<BusinessProvider>();
+    final ok = await biz.deleteChannel(channel.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Channel deleted.' : (biz.errorMessage ?? 'Delete failed.')),
+        backgroundColor: ok ? null : AppTheme.danger,
       ),
     );
   }
@@ -76,100 +239,59 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
   @override
   Widget build(BuildContext context) {
     final biz = context.watch<BusinessProvider>();
-    final connectedChannels = biz.channels;
-
-    final defaultChannels = [
-      {
-        'platform': 'facebook',
-        'title': 'Facebook Page',
-        'subtitle': 'Messenger chat & comment replies',
-        'icon': Icons.facebook,
-        'color': const Color(0xFF1877F2),
-      },
-      {
-        'platform': 'instagram',
-        'title': 'Instagram Business',
-        'subtitle': 'Direct Messages & post comments',
-        'icon': Icons.camera_alt,
-        'color': const Color(0xFFE1306C),
-      },
-      {
-        'platform': 'whatsapp',
-        'title': 'WhatsApp Cloud API',
-        'subtitle': 'Direct WhatsApp customer chat',
-        'icon': Icons.chat_bubble,
-        'color': const Color(0xFF25D366),
-      },
-    ];
+    final channels = biz.channels;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Channels & Integrations')),
+      appBar: AppBar(title: const Text('Channels')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Connect Social Sales Channels',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Connect social media pages to allow the LangGraph AI sales agent to handle inquiries and generate orders.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Connect Facebook Messenger', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text(
+                  'Link your Facebook Page to enable AI-powered Messenger replies.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _isConnecting ? null : _startConnect,
+                  icon: _isConnecting
+                      ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.facebook),
+                  label: Text(_isConnecting ? 'Connecting…' : 'Connect Facebook'),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
-
-          ...defaultChannels.map((item) {
-            final platform = item['platform'] as String;
-            final isConnected = connectedChannels.any((c) => c.platform == platform);
-            final channel = connectedChannels.cast<ChannelModel?>().firstWhere(
-                  (c) => c?.platform == platform,
-                  orElse: () => null,
-                );
-
-            return AppCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: (item['color'] as Color).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(item['icon'] as IconData, color: item['color'] as Color, size: 26),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          channel?.pageName ?? item['title'] as String,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          const Text('Connected channels', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          if (channels.isEmpty)
+            const Text('No channels connected yet.', style: TextStyle(fontSize: 13, color: Colors.grey))
+          else
+            ...channels.map((c) => AppCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(c.pageName ?? c.platform, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(c.platformChannelId ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item['subtitle'] as String,
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 6),
-                        StatusBadge(status: isConnected ? 'connected' : 'disconnected'),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: AppTheme.danger),
+                        onPressed: () => _deleteChannel(c),
+                      ),
+                    ],
                   ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isConnected ? Colors.grey.shade200 : AppTheme.primaryColor,
-                      foregroundColor: isConnected ? Colors.black87 : Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    ),
-                    onPressed: () => _showConnectDialog(item['title'] as String),
-                    child: Text(isConnected ? 'Configure' : 'Connect', style: const TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-            );
-          }),
+                )),
         ],
       ),
     );
