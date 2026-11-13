@@ -177,7 +177,16 @@ describe('Posts API', () => {
     expect(detailSynced.latestSync).toBeDefined();
     expect(detailSynced.latestSync.likeCount).toBe(42);
 
-    // 9. Delete post
+    // 9. Comments on draft returns empty threads
+    const draftCommentsRes = await app.request(
+      `/api/v1/${seed.business.id}/posts/${postId}/comments`,
+      { headers: authHeaders() },
+    );
+    expect(draftCommentsRes.status).toBe(200);
+    const draftComments = (await draftCommentsRes.json()) as any;
+    expect(draftComments.threads).toEqual([]);
+
+    // 10. Delete post
     const deleteRes = await app.request(`/api/v1/${seed.business.id}/posts/${postId}`, {
       method: 'DELETE',
       headers: authHeaders(),

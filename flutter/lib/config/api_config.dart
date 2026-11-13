@@ -160,6 +160,26 @@ class ApiConfig {
 
   static String pathPublishPost(String businessId, String postId) =>
       '/$businessId/posts/$postId/publish';
+
+  static String pathSyncPost(String businessId, String postId) =>
+      '/$businessId/posts/$postId/sync';
+
+  static String pathGeneratePost(String businessId) =>
+      '/$businessId/posts/generate';
+
+  static String pathTunePost(String businessId, String postId) =>
+      '/$businessId/posts/$postId/tune';
+
+  static String pathPostComments(String businessId, String postId) =>
+      '/$businessId/posts/$postId/comments';
+
+  static String pathReplyComment(
+          String businessId, String postId, String commentId) =>
+      '/$businessId/posts/$postId/comments/$commentId/reply';
+
+  static String pathReactComment(
+          String businessId, String postId, String commentId) =>
+      '/$businessId/posts/$postId/comments/$commentId/react';
   static String pathAds(String businessId, {int days = 30}) =>
       '/$businessId/ads?days=$days';
 }

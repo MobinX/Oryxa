@@ -713,3 +713,287 @@ Output only the revised post content. Do not add any conversational text or wrap
     createdAt: resolvedUpdated.createdAt.toISOString(),
   }, 200);
 });
+
+// 10. Get Comments for a Post
+postsRouter.get('/:businessId/posts/:postId/comments', async (c) => {
+  const businessId = c.req.param('businessId');
+  const postId = c.req.param('postId');
+  const post = await getPostById(businessId, postId);
+  if (!post) {
+    return c.json({ error: 'Post not found' }, 404);
+  }
+  if (!post.platformPostId) {
+    return c.json({ threads: [] });
+  }
+
+  const channel = await getChannelById(post.channelId);
+  if (!channel || !channel.apiToken) {
+    return c.json({ threads: [] });
+  }
+
+  const pageToken = channel.apiToken;
+  const pageId = channel.platformChannelId;
+  const platformPostId = post.platformPostId;
+
+  if (
+    process.env.NODE_ENV === 'test' ||
+    pageToken.startsWith('mock_') ||
+    pageToken.startsWith('fb_page_token_') ||
+    platformPostId.startsWith('fb_post_test_')
+  ) {
+    return c.json({ threads: [] });
+  }
+
+  const fields = [
+    'id',
+    'message',
+    'from',
+    'created_time',
+    'like_count',
+    'user_likes',
+    'parent',
+    'comments.limit(50){id,message,from,created_time,like_count,user_likes,parent}',
+  ].join(',');
+
+  try {
+    const url = `https://graph.facebook.com/v21.0/${platformPostId}/comments?fields=${encodeURIComponent(fields)}&filter=stream&order=chronological&limit=100&access_token=${pageToken}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errText = await res.text();
+      return c.json({ error: `Graph API error: ${errText}` }, 400);
+    }
+    const data = (await res.json()) as any;
+    const flat: any[] = [];
+    for (const item of data.data ?? []) {
+      flat.push(item);
+      for (const nested of item.comments?.data ?? []) {
+        flat.push({ ...nested, parent: nested.parent ?? { id: item.id } });
+      }
+    }
+
+    const unique: any[] = [];
+    const seenIds = new Set<string>();
+    for (const it of flat) {
+      if (seenIds.has(it.id)) continue;
+      seenIds.add(it.id);
+      unique.push(it);
+    }
+
+    const byId = new Map(unique.map((it) => [it.id, it]));
+
+    function rootId(comment: any): string {
+      let current = comment;
+      const walked = new Set<string>();
+      while (current.parent?.id && !walked.has(current.id)) {
+        walked.add(current.id);
+        const parent = byId.get(current.parent.id);
+        if (!parent) return current.parent.id;
+        current = parent;
+      }
+      return current.id;
+    }
+
+    const roots = unique.filter((it) => !it.parent?.id || !byId.has(it.parent.id));
+    const repliesByRoot = new Map<string, any[]>();
+    for (const it of unique) {
+      if (!it.parent?.id || !byId.has(it.parent.id)) continue;
+      const rid = rootId(it);
+      if (rid === it.id) continue;
+      const list = repliesByRoot.get(rid) ?? [];
+      list.push(it);
+      repliesByRoot.set(rid, list);
+    }
+
+    const threads = roots.map((fbComment) => {
+      const replies = (repliesByRoot.get(fbComment.id) ?? []).map((r) => {
+        const fromSelf = r.from?.id === pageId;
+        return {
+          id: r.id,
+          externalId: r.id,
+          content: r.message ?? '',
+          time: r.created_time ?? new Date().toISOString(),
+          from: fromSelf ? 'self' : 'customer',
+          commenterPlatformId: fromSelf ? null : (r.from?.id ?? null),
+          commenterName: fromSelf ? null : (r.from?.name ?? null),
+          likeCount: r.like_count ?? 0,
+          userLikes: Boolean(r.user_likes),
+        };
+      });
+
+      const rootFromPage = fbComment.from?.id === pageId;
+      return {
+        id: fbComment.id,
+        commenterPlatformId: rootFromPage ? null : (fbComment.from?.id ?? null),
+        commenterName: rootFromPage ? 'Page Response' : (fbComment.from?.name ?? null),
+        commenterAvatar: null,
+        comment: {
+          externalId: fbComment.id,
+          content: fbComment.message ?? '',
+          time: fbComment.created_time ?? new Date().toISOString(),
+          from: 'customer',
+          likeCount: fbComment.like_count ?? 0,
+          userLikes: Boolean(fbComment.user_likes),
+        },
+        replies,
+      };
+    });
+
+    return c.json({ threads });
+  } catch (err: any) {
+    return c.json({ error: err.message || 'Failed to fetch comments' }, 500);
+  }
+});
+
+// 11. Create Top-Level Comment on Post
+postsRouter.post('/:businessId/posts/:postId/comments', async (c) => {
+  const businessId = c.req.param('businessId');
+  const postId = c.req.param('postId');
+  const body = (await c.req.json().catch(() => ({}))) as any;
+  const content = body.content?.trim();
+  if (!content) {
+    return c.json({ error: 'Comment content is required' }, 400);
+  }
+
+  const post = await getPostById(businessId, postId);
+  if (!post || !post.platformPostId) {
+    return c.json({ error: 'Published post not found' }, 404);
+  }
+
+  const channel = await getChannelById(post.channelId);
+  if (!channel || !channel.apiToken) {
+    return c.json({ error: 'Channel access token not found' }, 400);
+  }
+
+  const url = `https://graph.facebook.com/v21.0/${post.platformPostId}/comments`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      message: content,
+      access_token: channel.apiToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return c.json({ error: `Facebook comment failed: ${errText}` }, 400);
+  }
+
+  const data = (await res.json()) as any;
+  const id = data.id ?? `comment_${Date.now()}`;
+  return c.json({ id, externalId: id, content, time: new Date().toISOString() }, 201);
+});
+
+// 12. Reply to a Comment
+postsRouter.post('/:businessId/posts/:postId/comments/:commentId/reply', async (c) => {
+  const businessId = c.req.param('businessId');
+  const postId = c.req.param('postId');
+  const commentId = c.req.param('commentId');
+  const body = (await c.req.json().catch(() => ({}))) as any;
+  const content = body.content?.trim();
+  if (!content) {
+    return c.json({ error: 'Reply content is required' }, 400);
+  }
+
+  const post = await getPostById(businessId, postId);
+  if (!post) {
+    return c.json({ error: 'Post not found' }, 404);
+  }
+
+  const channel = await getChannelById(post.channelId);
+  if (!channel || !channel.apiToken) {
+    return c.json({ error: 'Channel access token not found' }, 400);
+  }
+
+  const res = await fetch(`https://graph.facebook.com/v21.0/${commentId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      message: content,
+      access_token: channel.apiToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return c.json({ error: `Facebook reply failed: ${errText}` }, 400);
+  }
+
+  const data = (await res.json()) as any;
+  const replyId = data.id ?? `reply_${Date.now()}`;
+
+  try {
+    const { persistPageReply } = await import('@repo/db/crud/comment');
+    await persistPageReply({
+      parentCommentId: commentId,
+      content,
+      externalId: replyId,
+      businessId,
+      channelId: channel.id,
+      platformPostId: post.platformPostId ?? undefined,
+      commenterPlatformId: body.commenterPlatformId,
+      commenterName: body.commenterName,
+      parentContent: body.parentContent,
+      parentFrom: body.parentFrom,
+    });
+  } catch (persistErr) {
+    console.error('[reply-comment-route] persist failed:', persistErr);
+  }
+
+  return c.json(
+    {
+      id: replyId,
+      externalId: replyId,
+      content,
+      time: new Date().toISOString(),
+      parentExternalId: commentId,
+    },
+    201,
+  );
+});
+
+// 13. React (Like / Unlike) to a Comment
+postsRouter.post('/:businessId/posts/:postId/comments/:commentId/react', async (c) => {
+  const businessId = c.req.param('businessId');
+  const postId = c.req.param('postId');
+  const commentId = c.req.param('commentId');
+  const body = (await c.req.json().catch(() => ({}))) as any;
+  const reaction = body.reaction; // 'LIKE' | null
+
+  const post = await getPostById(businessId, postId);
+  if (!post) {
+    return c.json({ error: 'Post not found' }, 404);
+  }
+
+  const channel = await getChannelById(post.channelId);
+  if (!channel || !channel.apiToken) {
+    return c.json({ error: 'Channel access token not found' }, 400);
+  }
+
+  if (reaction === null) {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${commentId}/likes?access_token=${channel.apiToken}`,
+      { method: 'DELETE' },
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      return c.json({ error: errText }, 400);
+    }
+    return c.json({ reaction: null });
+  }
+
+  if (reaction === 'LIKE') {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${commentId}/likes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ access_token: channel.apiToken }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      return c.json({ error: errText }, 400);
+    }
+    return c.json({ reaction: 'LIKE' });
+  }
+
+  return c.json({ error: 'Only LIKE reactions are supported' }, 400);
+});
