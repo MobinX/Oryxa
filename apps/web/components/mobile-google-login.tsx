@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getFirebaseAuth, getGoogleRedirectResult, signInWithGoogleRedirect } from '@/lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
@@ -157,8 +158,13 @@ export function MobileGoogleLogin() {
       try {
         const result = await getGoogleRedirectResult();
         if (cancelled) return;
-        if (result?.user) {
-          await finish(result.user as any);
+        let user = (result?.user as any) ?? null;
+        if (!user) {
+          const auth = getFirebaseAuth();
+          if (auth?.currentUser) user = auth.currentUser;
+        }
+        if (user) {
+          await finish(user);
           return;
         }
       } catch (error) {
@@ -170,6 +176,30 @@ export function MobileGoogleLogin() {
 
       if (started) {
         if (cancelled) return;
+        const auth = getFirebaseAuth();
+        if (auth) {
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finishIfUser = (u: unknown) => {
+              if (settled || !u) return;
+              settled = true;
+              unsub();
+              window.clearTimeout(timer);
+              void finish(u as any).then(resolve);
+            };
+            const unsub = (auth as any).onAuthStateChanged
+              ? (auth as any).onAuthStateChanged(finishIfUser)
+              : () => {};
+            const timer = window.setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              try { unsub(); } catch { /* ignore */ }
+              resolve();
+            }, 6000);
+          });
+          if (cancelled) return;
+          if (finishedRef.current) return;
+        }
         setStep('ready');
         setMessage('Google sign-in was not completed. Tap below to try again.');
         return;
@@ -194,10 +224,33 @@ export function MobileGoogleLogin() {
   }, [finish]);
 
   const startGoogle = useCallback(async () => {
-    if (startedRef.current) return;
     startedRef.current = true;
     setStep('working');
     setMessage('Taking you to Google…');
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      setStep('error');
+      setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
+      return;
+    }
+    try {
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      clearFlag();
+      await finish(cred.user as any);
+      return;
+    } catch (popupError) {
+      const code = (popupError as { code?: string } | null)?.code ?? '';
+      if (code !== 'auth/popup-blocked' && code !== 'auth/operation-not-supported-in-this-environment' && code !== 'auth/cancelled-popup-request') {
+        // Fall through to redirect only for blockers; otherwise surface the error.
+        if (code !== 'auth/popup-closed-by-user') {
+          clearFlag();
+          setStep('error');
+          setMessage(mapError(popupError));
+          startedRef.current = false;
+          return;
+        }
+      }
+    }
     try {
       writeFlag();
       await signInWithGoogleRedirect();
@@ -205,8 +258,9 @@ export function MobileGoogleLogin() {
       clearFlag();
       setStep('error');
       setMessage(mapError(error));
+      startedRef.current = false;
     }
-  }, []);
+  }, [finish]);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
