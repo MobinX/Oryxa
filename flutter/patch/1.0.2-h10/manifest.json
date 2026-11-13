@@ -1,0 +1,9 @@
+{
+  "has_update": true,
+  "version": "1.0.2-h10",
+  "patch_url": "/patch.zip",
+  "md5": "2c27835c9f526fc2b5943a05fbef3b7a",
+  "target_version_code": 3,
+  "created_at": "2026-11-13T01:36:59Z",
+  "commit": "46cb6a3b5dfd0ac139e63c8083a20bda634f2f74"
+}
