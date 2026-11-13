@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
+import '../config/app_version.dart';
 import '../providers/auth_provider.dart';
 import '../providers/business_provider.dart';
 import '../providers/inbox_provider.dart';
@@ -621,6 +622,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           color: AppTheme.danger,
           screen: const DiagnosticsScreen(),
         ),
+        const SizedBox(height: 8),
+        Center(
+          child: Text(
+            'OnlyOrders $appVersionLabel',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+        ),
+        const SizedBox(height: 12),
       ],
     );
   }

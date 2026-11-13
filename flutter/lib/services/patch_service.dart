@@ -82,6 +82,35 @@ class PatchService extends ChangeNotifier {
 
       _log('Manifest loaded: version=$patchVersion, has_update=$hasUpdate');
 
+      // A patch only loads on the APK version code it was built against. Check
+      // that before downloading 24 MB that the boot loader will discard.
+      final manifestTargetVersionCode = manifest['target_version_code'] is int
+          ? manifest['target_version_code'] as int
+          : int.tryParse(manifest['target_version_code']?.toString() ?? '');
+      if (manifestTargetVersionCode != null) {
+        try {
+          final boot = await FlutterPatcher.lastBootDiagnostic;
+          final appVersionCode = boot?.appVersionCode;
+          if (appVersionCode != null && appVersionCode != manifestTargetVersionCode) {
+            _log(
+              'Patch $patchVersion targets APK version code '
+              '$manifestTargetVersionCode, but this APK is $appVersionCode. '
+              'A native rebuild is required; nothing downloaded.',
+            );
+            appDiagnostics.recordMessage(
+              'Patch check',
+              'Patch $patchVersion targets APK $manifestTargetVersionCode but '
+                  'this APK is $appVersionCode, so it cannot load',
+            );
+            _isChecking = false;
+            notifyListeners();
+            return;
+          }
+        } catch (e) {
+          appDiagnostics.record('Patch boot status', e);
+        }
+      }
+
       if (!force) {
         try {
           final installed = await FlutterPatcher.currentVersion;

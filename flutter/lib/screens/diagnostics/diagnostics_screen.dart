@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
+import '../../config/app_version.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/business_provider.dart';
 import '../../providers/customers_provider.dart';
@@ -17,9 +18,8 @@ import '../../services/patch_service.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/app_feedback.dart';
 
-/// Keep in sync with `pubspec.yaml` (`version: 1.0.2+3`).
-const String _appVersionLabel = '1.0.2+3';
-
+/// Keep in sync with `pubspec.yaml` via `config/app_version.dart`.
+///
 /// Everything needed to explain a silent button: which code is actually
 /// running, who is signed in, whether a store loaded, which API is called, and
 /// what failed last.
@@ -144,7 +144,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final boot = _boot;
     final lines = <String>[
       'OnlyOrders diagnostics',
-      'App version: $_appVersionLabel',
+      'App version: $appVersionLabel',
       'Installed patch: ${_installedPatch ?? 'none'}',
       if (boot != null)
         'Boot status: ${boot.status.name}'
@@ -252,7 +252,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 if (_loadingRuntime)
                   const LinearProgressIndicator()
                 else ...[
-                  _row('App version', _appVersionLabel),
+                  _row('App version', appVersionLabel),
                   _row(
                     'Installed patch',
                     _installedPatch == null
