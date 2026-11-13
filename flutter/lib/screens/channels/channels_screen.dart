@@ -16,21 +16,22 @@ class ChannelsScreen extends StatefulWidget {
 
 class _ChannelsScreenState extends State<ChannelsScreen> {
   bool _isConnecting = false;
+  FacebookConnectService? _facebookService;
 
   @override
   void initState() {
     super.initState();
-    final fb = context.read<FacebookConnectService>();
-    fb.addListener(_onFacebookResult);
+    _facebookService = context.read<FacebookConnectService>();
+    _facebookService?.addListener(_onFacebookResult);
     // Handle a result that arrived before this screen was mounted.
-    if (fb.pendingResult != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _handlePending(fb.pendingResult!));
+    if (_facebookService?.pendingResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handlePending(_facebookService!.pendingResult!));
     }
   }
 
   @override
   void dispose() {
-    context.read<FacebookConnectService>().removeListener(_onFacebookResult);
+    _facebookService?.removeListener(_onFacebookResult);
     super.dispose();
   }
 
