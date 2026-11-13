@@ -88,9 +88,13 @@ jobs:
         if: steps.mode_check.outputs.mode != 'skip'
         uses: subosito/flutter-action@v2
         with:
+          # Pinned: this project's Android config (AGP 8.11.1) is verified
+          # against 3.47.9. Newer stable releases ship a Flutter Gradle plugin
+          # compiled against AGP 9.1.1 and crash before their version check.
+          flutter-version: '3.47.9'
           channel: 'stable'
           cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-key: "flutter-3.47.9-:os:-:arch:-:hash:"
 
       # -------------------------------------------------------------
       # MAXIMUM AGGRESSIVE CACHING (Gradle, Wrappers, Daemon, Pub, Build Outputs, Node Modules, Keys)
