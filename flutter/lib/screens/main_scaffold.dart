@@ -11,6 +11,7 @@ import 'business/business_picker_screen.dart';
 import 'channels/channels_screen.dart';
 import 'customers/customers_screen.dart';
 import 'dashboard/dashboard_screen.dart';
+import 'diagnostics/diagnostics_screen.dart';
 import 'inbox/inbox_screen.dart';
 import 'notifications/notifications_screen.dart';
 import 'orders/orders_screen.dart';
@@ -58,7 +59,19 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   Widget build(BuildContext context) {
     final biz = context.watch<BusinessProvider>();
+    final ordersProv = context.watch<OrdersProvider>();
+    final productsProv = context.watch<ProductsProvider>();
     final currentStore = biz.currentBusiness;
+
+    // Surface background failures from any core provider, not just the store
+    // request: a failed product/order load was previously invisible.
+    final stripError = biz.errorMessage ??
+        (ordersProv.errorMessage != null
+            ? 'Orders: ${ordersProv.errorMessage}'
+            : null) ??
+        (productsProv.errorMessage != null
+            ? 'Products: ${productsProv.errorMessage}'
+            : null);
 
     return Scaffold(
       appBar: AppBar(
@@ -170,7 +183,22 @@ class _MainScaffoldState extends State<MainScaffold> {
         ],
       ),
       drawer: _buildDrawer(context),
-      body: _buildBody(biz),
+      body: Column(
+        children: [
+          if (stripError != null && currentStore != null)
+            _ErrorStrip(
+              message: stripError,
+              onRetry: _loadData,
+              onDetails: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+                );
+              },
+            ),
+          Expanded(child: _buildBody(biz)),
+        ],
+      ),
       bottomNavigationBar: currentStore == null
           ? null
           : NavigationBar(
@@ -272,6 +300,16 @@ class _MainScaffoldState extends State<MainScaffold> {
                   ).then((_) => _loadData());
                 },
                 child: const Text('Choose or create a store'),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+                  );
+                },
+                icon: const Icon(Icons.bug_report_outlined, size: 18),
+                label: const Text('Diagnostics & error log'),
               ),
             ],
           ),
@@ -575,6 +613,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           color: AppTheme.primaryColor,
           screen: const OtaUpdateScreen(),
         ),
+        _menuCard(
+          context,
+          icon: Icons.bug_report_outlined,
+          title: 'Diagnostics & Error Log',
+          subtitle: 'Patch status, API tests & recorded failures',
+          color: AppTheme.danger,
+          screen: const DiagnosticsScreen(),
+        ),
       ],
     );
   }
@@ -603,6 +649,54 @@ class _MainScaffoldState extends State<MainScaffold> {
         subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
         trailing: const Icon(Icons.chevron_right, size: 20),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => screen)),
+      ),
+    );
+  }
+}
+
+/// A persistent, tappable strip: a transient snackbar is exactly what merchants
+/// miss when a request fails in the background.
+class _ErrorStrip extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onDetails;
+
+  const _ErrorStrip({
+    required this.message,
+    required this.onRetry,
+    required this.onDetails,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? const Color(0xFF3A1A1A) : AppTheme.dangerBg,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 18, color: AppTheme.danger),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, height: 1.3),
+              ),
+            ),
+            TextButton(
+              onPressed: onDetails,
+              child: const Text('Details'),
+            ),
+            IconButton(
+              tooltip: 'Retry',
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
+          ],
+        ),
       ),
     );
   }

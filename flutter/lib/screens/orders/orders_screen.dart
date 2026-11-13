@@ -7,7 +7,7 @@ import '../../providers/orders_provider.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/status_badge.dart';
-import 'create_order_screen.dart';
+import '../../widgets/store_guard.dart';
 import 'order_detail_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -19,15 +19,6 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   final _searchController = TextEditingController();
-
-  void _showNoStore(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No store is loaded yet. Pull to refresh, then try again.'),
-        backgroundColor: AppTheme.danger,
-      ),
-    );
-  }
 
   @override
   void dispose() {
@@ -48,18 +39,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
-        onPressed: () {
-          if (currentStore == null) {
-            _showNoStore(context);
-            return;
-          }
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-            ),
-          );
-        },
+        onPressed: () => openCreateOrder(context),
         icon: const Icon(Icons.add_shopping_cart, size: 20),
         label: const Text('New Order'),
       ),
@@ -132,18 +112,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               ? 'Your store has no orders yet. Create one manually or receive orders from chat!'
                               : 'No orders currently in "${OrderModel.stateTitle(ordersProv.activeTab)}" state.',
                           buttonText: 'Create Order',
-                          onButtonPressed: () {
-                            if (currentStore == null) {
-                              _showNoStore(context);
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-                              ),
-                            );
-                          },
+                          onButtonPressed: () => openCreateOrder(context),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

@@ -2,13 +2,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/app_theme.dart';
-import '../../models/product.dart';
 import '../../providers/business_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/store_guard.dart';
 import 'categories_screen.dart';
-import 'product_form_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -19,15 +18,6 @@ class ProductsScreen extends StatefulWidget {
 
 class _ProductsScreenState extends State<ProductsScreen> {
   final _searchController = TextEditingController();
-
-  void _showNoStore(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No store is loaded yet. Pull to refresh, then try again.'),
-        backgroundColor: AppTheme.danger,
-      ),
-    );
-  }
 
   @override
   void dispose() {
@@ -48,18 +38,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
-        onPressed: () {
-          if (currentStore == null) {
-            _showNoStore(context);
-            return;
-          }
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProductFormScreen(businessId: currentStore.id),
-            ),
-          );
-        },
+        onPressed: () => openProductForm(context),
         icon: const Icon(Icons.add, size: 20),
         label: const Text('Add Product'),
       ),
@@ -154,18 +133,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           description:
                               'Add your first product to allow the AI sales agent to quote prices and close orders.',
                           buttonText: 'Add Product',
-                          onButtonPressed: () {
-                            if (currentStore == null) {
-                              _showNoStore(context);
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ProductFormScreen(businessId: currentStore.id),
-                              ),
-                            );
-                          },
+                          onButtonPressed: () => openProductForm(context),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -175,21 +143,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             final p = productList[index];
 
                             return AppCard(
-                              onTap: () {
-                                if (currentStore == null) {
-                                  _showNoStore(context);
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ProductFormScreen(
-                                      businessId: currentStore.id,
-                                      product: p,
-                                    ),
-                                  ),
-                                );
-                              },
+                              onTap: () => openProductForm(context, product: p),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

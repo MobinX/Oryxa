@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/diagnostics_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -44,6 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final success = await auth.login(email, password);
     if (!success && mounted && auth.errorMessage != null) {
+      appDiagnostics.recordMessage('Sign in', auth.errorMessage!);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage!),
@@ -188,6 +190,44 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'API Base URL',
                         hintText: 'https://onlyorders.tech/api/v1',
                         prefixIcon: Icon(Icons.dns_outlined, size: 20),
+                      ),
+                    ),
+                  ],
+
+                  // Errors stay on screen: a snackbar disappears before a
+                  // merchant can read or copy it.
+                  if (auth.errorMessage != null && !auth.isLoading) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.dangerBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppTheme.danger.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 18,
+                            color: AppTheme.danger,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SelectableText(
+                              auth.errorMessage!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: AppTheme.danger,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

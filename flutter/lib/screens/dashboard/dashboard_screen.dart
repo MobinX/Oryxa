@@ -6,18 +6,7 @@ import '../../providers/orders_provider.dart';
 import '../../providers/inbox_provider.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/metric_card.dart';
-import '../orders/create_order_screen.dart';
-import '../products/product_form_screen.dart';
-import '../channels/channels_screen.dart';
-
-void _showStoreMissing(BuildContext context) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('No store is loaded yet. Pull to refresh, then try again.'),
-      backgroundColor: AppTheme.danger,
-    ),
-  );
-}
+import '../../widgets/store_guard.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -268,18 +257,7 @@ class DashboardScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    if (currentStore == null) {
-                      _showStoreMissing(context);
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CreateOrderScreen(businessId: currentStore.id),
-                      ),
-                    );
-                  },
+                  onPressed: () => openCreateOrder(context),
                   icon: const Icon(Icons.add_shopping_cart, size: 18),
                   label: const Text('New Order'),
                 ),
@@ -287,18 +265,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    if (currentStore == null) {
-                      _showStoreMissing(context);
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProductFormScreen(businessId: currentStore.id),
-                      ),
-                    );
-                  },
+                  onPressed: () => openProductForm(context),
                   icon: const Icon(Icons.add_box_outlined, size: 18),
                   label: const Text('Add Product'),
                 ),
