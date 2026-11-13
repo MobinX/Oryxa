@@ -84,9 +84,11 @@ class PatchService extends ChangeNotifier {
 
       // A patch only loads on the APK version code it was built against. Check
       // that before downloading 24 MB that the boot loader will discard.
-      final manifestTargetVersionCode = manifest['target_version_code'] is int
-          ? manifest['target_version_code'] as int
-          : int.tryParse(manifest['target_version_code']?.toString() ?? '');
+      final dynamic rawTargetCode =
+          manifest['target_version_code'] ?? manifest['targetVersionCode'];
+      final manifestTargetVersionCode = rawTargetCode is int
+          ? rawTargetCode
+          : int.tryParse(rawTargetCode?.toString() ?? '');
       if (manifestTargetVersionCode != null) {
         try {
           final boot = await FlutterPatcher.lastBootDiagnostic;
@@ -170,9 +172,11 @@ class PatchService extends ChangeNotifier {
         _log('✓ MD5 Checksum verified successfully');
       }
 
-      final targetVersionCode = manifest['target_version_code'] is int
-          ? manifest['target_version_code'] as int
-          : int.tryParse(manifest['target_version_code']?.toString() ?? '');
+      final dynamic rawTarget =
+          manifest['target_version_code'] ?? manifest['targetVersionCode'];
+      final targetVersionCode = rawTarget is int
+          ? rawTarget
+          : int.tryParse(rawTarget?.toString() ?? '');
 
       _log('Applying patch via FlutterPatcher...');
       try {

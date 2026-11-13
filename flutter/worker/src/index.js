@@ -82,8 +82,14 @@ export default {
       );
     }
 
-    // Target file path inside GitHub repo
-    const targetFilePath = `${repoPath}/${relativePath}`;
+    // Target file path inside GitHub repo:
+    // If requesting APK, map to /flutter/apk/app-release.apk instead of /flutter/lastpatch/
+    let targetFilePath;
+    if (relativePath === 'app-release.apk' || relativePath === 'apk' || relativePath === 'apk/app-release.apk') {
+      targetFilePath = 'flutter/apk/app-release.apk';
+    } else {
+      targetFilePath = `${repoPath}/${relativePath}`;
+    }
 
     try {
       // -------------------------------------------------------------
@@ -230,6 +236,7 @@ function getCorsHeaders() {
 }
 
 function getMimeType(filename, fallback) {
+  if (filename.endsWith('.apk')) return 'application/vnd.android.package-archive';
   if (filename.endsWith('.json')) return 'application/json; charset=utf-8';
   if (filename.endsWith('.zip')) return 'application/zip';
   if (filename.endsWith('.so')) return 'application/octet-stream';

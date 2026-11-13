@@ -200,14 +200,8 @@ jobs:
           if [ -z "$APP_VERSION_CODE" ]; then APP_VERSION_CODE="1"; fi
           echo "Configuring Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
 
-          # 2. Preserve and reuse existing signing keys if available
-          mkdir -p keys .baseline apk lastpatch patch
-          if [ ! -f "keys/private_key.pem" ]; then
-            echo "Initializing fresh Flutter Patcher signing keys..."
-            dart run flutter_patcher keys init || true
-          else
-            echo "✅ Reusing existing Flutter Patcher signing keys."
-          fi
+          # 2. Prepare directories for baseline, apk, and patches
+          mkdir -p keys .baseline apk lastpatch patch dist
 
           # 3. Build release APK using aggressive Gradle caching
           echo "Compiling signed production release APK (with Gradle build cache)..."
@@ -266,17 +260,14 @@ jobs:
           PATCH_VER="${APP_VERSION}-h${GITHUB_RUN_NUMBER}"
           echo "Generating Patch Version: $PATCH_VER"
 
-          # Extract compiled Dart shared libraries for all target architectures (arm64-v8a and armeabi-v7a)
-          mkdir -p dist /tmp/patch_bundle
-          echo "Extracting compiled AOT bytecode from release APK..."
-          unzip -q -o build/app/outputs/flutter-apk/app-release.apk "lib/*/*.so" -d /tmp/patch_bundle || {
-            echo "Fallback extraction for arm64-v8a..."
-            mkdir -p /tmp/patch_bundle/lib/arm64-v8a
-            unzip -p build/app/outputs/flutter-apk/app-release.apk "lib/arm64-v8a/libapp.so" > /tmp/patch_bundle/lib/arm64-v8a/libapp.so
-          }
-
-          # Package patch archive
-          cd /tmp/patch_bundle && zip -r "$GITHUB_WORKSPACE/flutter/dist/patch.zip" lib/ && cd -
+          # Use official flutter_patcher CLI to build patch.zip with internal manifest.json (schemaVersion 2)
+          mkdir -p dist
+          echo "Packaging patch archive with flutter_patcher:pack..."
+          dart run flutter_patcher:pack \
+            --apk build/app/outputs/flutter-apk/app-release.apk \
+            --version "${PATCH_VER}" \
+            --target-version-code ${APP_VERSION_CODE} \
+            --out dist
 
           # Calculate MD5 checksum of the generated patch
           PATCH_MD5=$(md5sum dist/patch.zip | cut -d' ' -f1)
@@ -297,6 +288,8 @@ jobs:
             "patch_url": "/patch.zip",
             "md5": "${PATCH_MD5}",
             "target_version_code": ${APP_VERSION_CODE},
+            "targetVersionCode": ${APP_VERSION_CODE},
+            "schemaVersion": 2,
             "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
             "commit": "${{ github.sha }}"
           }
