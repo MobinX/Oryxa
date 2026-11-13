@@ -7,7 +7,15 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
-  AuthProvider({required this.authService});
+  AuthProvider({required this.authService}) {
+    authService.addListener(notifyListeners);
+  }
+
+  @override
+  void dispose() {
+    authService.removeListener(notifyListeners);
+    super.dispose();
+  }
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -36,6 +44,24 @@ class AuthProvider extends ChangeNotifier {
   Future<void> selectBusiness(String businessId) async {
     await authService.setSelectedBusinessId(businessId);
     notifyListeners();
+  }
+
+  Future<bool> loginWithGoogle() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await authService.loginWithGoogle();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> logout() async {

@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   signInWithEmailAndPassword,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
@@ -90,4 +92,19 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
   await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword));
   await updatePassword(user, newPassword);
+}
+
+/** Google sign-in by redirect — used by the mobile login page so the Chrome Custom Tab
+ *  can hand a session back to the app without a popup. */
+export async function signInWithGoogleRedirect() {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase not configured');
+  const provider = new GoogleAuthProvider();
+  return signInWithRedirect(auth, provider);
+}
+
+export async function getGoogleRedirectResult() {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase not configured');
+  return getRedirectResult(auth);
 }

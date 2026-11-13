@@ -27,6 +27,24 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _handleGoogleLogin() async {
+    final auth = context.read<AuthProvider>();
+    if (_showServerConfig && _serverUrlController.text.isNotEmpty) {
+      await auth.authService.setCustomBaseUrl(_serverUrlController.text.trim());
+    }
+
+    final success = await auth.loginWithGoogle();
+    if (!success && mounted && auth.errorMessage != null) {
+      appDiagnostics.recordMessage('Google sign-in', auth.errorMessage!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.errorMessage!),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
   void _handleLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -104,6 +122,54 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 36),
+
+                  // Google sign-in (embedded Chrome)
+                  ElevatedButton.icon(
+                    onPressed: auth.isLoading ? null : _handleGoogleLogin,
+                    icon: const Icon(Icons.g_mobiledata, size: 24, color: Color(0xFF4285F4)),
+                    label: auth.isLoading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Continue with Google'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      side: const BorderSide(color: Color(0xFFDADCE0)),
+                      elevation: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Opens Chrome to sign in. You will return to OnlyOrders automatically.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Divider
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'or',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
 
                   // Email input
                   Text(

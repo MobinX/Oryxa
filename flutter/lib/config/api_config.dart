@@ -14,6 +14,15 @@ class ApiConfig {
   /// its origin, and exposes only the browser Firebase config (the same values every
   /// visitor of the web dashboard already receives).
   static const String pathMobileFirebaseConfig = '/api/mobile/config';
+  static const String pathMobileGoogleLogin = '/login/mobile-google-login';
+
+  /// Custom scheme the web page uses to hand a Google session back to the app.
+  static const String authCallbackScheme = 'onlyorders';
+  static const String authCallbackHost = 'auth';
+  static const String authCallbackUrl = '$authCallbackScheme://$authCallbackHost';
+
+  static String mobileGoogleLoginUrl([String? baseUrl]) =>
+      '${webOrigin(baseUrl)}$pathMobileGoogleLogin?redirect=${Uri.encodeComponent(authCallbackUrl)}';
 
   // Storage key for custom base URL
   static const String storageKeyBaseUrl = 'api_base_url';

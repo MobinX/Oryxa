@@ -7,20 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
 import '../models/user.dart';
+import '../services/auth_exception.dart';
+import '../services/diagnostics_service.dart';
+import '../services/google_auth_service.dart';
 import 'api_service.dart';
 
-/// A sign-in failure whose [message] is already written for the merchant, so screens can
-/// show it as-is instead of leaking an HTTP or Firebase error code.
-class AuthException implements Exception {
-  final String message;
-
-  AuthException(this.message);
-
-  @override
-  String toString() => message;
-}
-
-class AuthService {
+class AuthService extends ChangeNotifier {
   static const String _identityToolkitBase = 'https://identitytoolkit.googleapis.com/v1';
   static const String _secureTokenUrl = 'https://securetoken.googleapis.com/v1/token';
 
@@ -29,6 +21,7 @@ class AuthService {
   static const String _envApiKey = String.fromEnvironment('FIREBASE_API_KEY');
 
   final ApiService apiService;
+  final GoogleAuthService _googleAuth;
   UserModel? _currentUser;
   String? _token;
   String? _refreshToken;
@@ -37,10 +30,14 @@ class AuthService {
   String? _firebaseApiKey;
   Future<String?>? _refreshInFlight;
 
-  AuthService({required this.apiService}) {
+  AuthService({required this.apiService})
+      : _googleAuth = GoogleAuthService(apiBaseUrl: apiService.baseUrl) {
     // Firebase ID tokens live one hour. When the API answers 401, swap in a fresh token
     // and retry instead of leaving the merchant on a screen that silently stops working.
     apiService.setTokenRefresher(_refreshIdToken);
+    _googleAuth.onUnhandledResult = (result) {
+      unawaited(_applyGoogleResult(result));
+    };
   }
 
   UserModel? get currentUser => _currentUser;
@@ -93,6 +90,8 @@ class AuthService {
         debugPrint('[AuthService] error parsing stored user: $e');
       }
     }
+
+    unawaited(_googleAuth.init());
 
     if (_token == null || _token!.isEmpty) return;
     apiService.setToken(_token);
@@ -152,6 +151,44 @@ class AuthService {
     );
   }
 
+  /// Signs in with Google via the embedded Chrome page. The page returns a Firebase ID
+  /// token (and, when available, a refresh token) through a custom scheme redirect.
+  Future<UserModel> loginWithGoogle() async {
+    appDiagnostics.recordMessage('Google sign-in', 'Starting Google sign-in');
+    try {
+      final result = await _googleAuth.signIn();
+      return await _applyGoogleResult(result);
+    } catch (e) {
+      appDiagnostics.recordMessage('Google sign-in', 'Failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<UserModel> _applyGoogleResult(GoogleSignInResult result) async {
+    _token = result.idToken;
+    _refreshToken = result.refreshToken;
+    _tokenExpiry = DateTime.now().add(Duration(seconds: result.expiresIn));
+    apiService.setToken(_token);
+    await _persistSession();
+
+    if (result.refreshToken == null || result.refreshToken!.isEmpty) {
+      appDiagnostics.recordMessage(
+        'Google sign-in',
+        'Signed in without a refresh token; the session lasts about one hour.',
+      );
+    }
+
+    final user = await _establishSession(
+      token: result.idToken,
+      firebaseUid: result.uid,
+      email: result.email,
+      displayName: result.name,
+      signInMethod: 'google',
+    );
+    notifyListeners();
+    return user;
+  }
+
   /// Creates the merchant record if this Firebase account has never used the dashboard,
   /// then reads the authoritative user row.
   Future<UserModel> _establishSession({
@@ -159,6 +196,7 @@ class AuthService {
     String? firebaseUid,
     String? email,
     String? displayName,
+    String signInMethod = 'password',
   }) async {
     _token = token;
     apiService.setToken(token);
@@ -167,7 +205,7 @@ class AuthService {
     try {
       final res = await apiService.post(
         ApiConfig.pathUsersSync,
-        body: {'signInMethod': 'password'},
+        body: {'signInMethod': signInMethod},
       );
       if (res is Map) synced = Map<String, dynamic>.from(res);
     } catch (e) {
