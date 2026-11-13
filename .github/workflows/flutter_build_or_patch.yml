@@ -9,7 +9,6 @@ on:
       - 'flutter/apk/**'
       - 'flutter/patch/**'
       - 'flutter/lastpatch/**'
-      - 'flutter/ci-logs/**'
       - 'flutter/README.md'
       - 'flutter/worker/**'
   workflow_dispatch:
@@ -259,12 +258,12 @@ jobs:
           fi
 
           # Fast incremental compilation of updated Dart bundle (reuses cached Gradle & C++ objects)
-          set -o pipefail
-          flutter build apk --release --android-skip-build-dependency-validation 2>&1 | tee /tmp/flutter-patch-build.log
+          flutter build apk --release --android-skip-build-dependency-validation
 
-          # Compute patch version based on timestamp / commit count
-          PATCH_NUM=$(git rev-list --count HEAD)
-          PATCH_VER="${APP_VERSION}-h${PATCH_NUM}"
+          # Compute patch version. The checkout is shallow (fetch-depth: 2), so
+          # commit counting always yields 2; the workflow run number is unique
+          # and monotonic, which lets devices detect genuinely newer patches.
+          PATCH_VER="${APP_VERSION}-h${GITHUB_RUN_NUMBER}"
           echo "Generating Patch Version: $PATCH_VER"
 
           # Extract compiled Dart shared libraries for all target architectures (arm64-v8a and armeabi-v7a)
@@ -305,24 +304,6 @@ jobs:
 
           cp lastpatch/manifest.json "$ARCHIVE_DIR/manifest.json"
           echo "✅ Patch $PATCH_VER generated and saved to flutter/lastpatch"
-
-      # -------------------------------------------------------------
-      # Failure log capture: temporarily commits the build log so the
-      # failure can be inspected without an authenticated Actions log.
-      # -------------------------------------------------------------
-      - name: Capture Patch Build Failure Log
-        if: failure()
-        run: |
-          mkdir -p flutter/ci-logs
-          cp /tmp/flutter-patch-build.log flutter/ci-logs/patch-build.log 2>/dev/null || true
-          if [ -s flutter/ci-logs/patch-build.log ]; then
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git add -f flutter/ci-logs/patch-build.log
-            git commit -m "ci(flutter): capture patch build failure log [skip ci]" || true
-            git pull --rebase origin ${{ github.ref_name }} || true
-            git push origin HEAD:${{ github.ref_name }} || true
-          fi
 
       # -------------------------------------------------------------
       # Commit artifacts, keystores & keys back to GitHub repository
