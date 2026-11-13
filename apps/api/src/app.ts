@@ -12,6 +12,7 @@ import { channelsRouter, facebookCallbackRouter } from '@api/routes/channels';
 import { adsRouter } from '@api/routes/ads';
 import { conversationsRouter } from '@api/routes/conversations';
 import { postsRouter } from '@api/routes/posts';
+import { playgroundRouter } from '@api/routes/playground';
 import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { plansRouter } from '@api/routes/plans';
@@ -99,6 +100,7 @@ app.route('/api/v1', channelsRouter);
 app.route('/api/v1', adsRouter);
 app.route('/api/v1', conversationsRouter);
 app.route('/api/v1', postsRouter);
+app.route('/api/v1', playgroundRouter);
 app.route('/api/v1', uploadsRouter);
 app.route('/api/v1', tokenAnalyticsRouter);
 // Push registrations ride the same business auth as billing, but live in their own router.

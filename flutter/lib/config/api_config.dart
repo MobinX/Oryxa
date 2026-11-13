@@ -152,6 +152,9 @@ class ApiConfig {
   static String pathPosts(String businessId) =>
       '/$businessId/posts';
 
+  static String pathPlaygroundChat(String businessId) =>
+      '/$businessId/playground/chat';
+
   static String pathPostDetail(String businessId, String postId) =>
       '/$businessId/posts/$postId';
 

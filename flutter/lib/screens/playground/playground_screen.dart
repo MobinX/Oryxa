@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
+import '../../providers/business_provider.dart';
+import '../../services/api_service.dart';
+import '../../services/diagnostics_service.dart';
 import '../../widgets/app_card.dart';
 
 class PlaygroundScreen extends StatefulWidget {
@@ -43,27 +49,26 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       _isTyping = true;
     });
 
-    // Simulate AI LangGraph + Gemini Agent response
-    await Future.delayed(const Duration(milliseconds: 1400));
-    if (!mounted) return;
-
+    final biz = context.read<BusinessProvider>().currentBusiness;
     String reply;
     String? toolCall;
-
-    final lower = text.toLowerCase();
-    if (lower.contains('price') || lower.contains('cost') || lower.contains('how much')) {
-      toolCall = 'tool: search_catalog(query: "$text")';
-      reply = 'We have items starting from ৳450! Would you like me to check stock for a specific size or color?';
-    } else if (lower.contains('order') || lower.contains('buy')) {
-      toolCall = 'tool: get_order_defaults(customer: "$_customerPersona")';
-      reply = 'I can help you place that order right away! Please confirm your delivery address and contact number.';
-    } else if (lower.contains('delivery') || lower.contains('dhaka')) {
-      toolCall = 'tool: get_delivery_zones()';
-      reply = 'Standard delivery inside Dhaka is ৳60 (24-48 hours), and outside Dhaka is ৳120 via courier.';
+    if (biz == null) {
+      reply = 'Select a store first.';
     } else {
-      reply = 'I understand! Let me check that in our store catalog for you.';
+      try {
+        final api = context.read<ApiService>();
+        final res = await api.post(
+          ApiConfig.pathPlaygroundChat(biz.id),
+          body: {'message': text, 'persona': _customerPersona},
+        );
+        reply = res is Map ? (res['reply']?.toString() ?? 'No reply.') : 'No reply.';
+      } catch (e) {
+        appDiagnostics.recordMessage('Playground', 'Chat failed: $e');
+        reply = 'Sorry, I could not reach the AI agent. $e';
+      }
     }
 
+    if (!mounted) return;
     setState(() {
       _isTyping = false;
       _messages.add({
