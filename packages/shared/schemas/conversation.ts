@@ -97,6 +97,8 @@ export const inboxSuggestionSchema = z.discriminatedUnion('kind', [
     count: z.number().int().optional(),
     customerPhone: z.string().optional(),
     customerAddress: z.string().optional(),
+    shippingCost: z.number().optional(),
+    transactionId: z.string().optional(),
   }),
   z.object({
     id: z.string(),
@@ -160,6 +162,8 @@ export const conversationOrderDefaultsSchema = z.object({
   count: z.number().int(),
   customerPhone: z.string(),
   customerAddress: z.string(),
+  shippingCost: z.number().optional(),
+  transactionId: z.string().optional(),
 });
 
 export const messageSchema = z.object({

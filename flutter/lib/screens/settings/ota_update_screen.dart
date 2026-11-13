@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_patcher/flutter_patcher.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_theme.dart';
 import '../../services/diagnostics_service.dart';
 import '../../services/patch_service.dart';
@@ -365,6 +366,23 @@ class _OtaUpdateScreenState extends State<OtaUpdateScreen> {
             color: needsNative ? AppTheme.danger : Colors.grey.shade600,
           ),
         ),
+        if (needsNative) ...[
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: () => launchUrl(
+              Uri.parse('https://github.com/MobinX/Oryxa/raw/main/flutter/apk/app-release.apk'),
+              mode: LaunchMode.externalApplication,
+            ),
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: const Text('Download Latest APK (Build 15)'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.danger,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
         if (boot.status != PatchBootStatus.patched) ...[
           const SizedBox(height: 6),
           const Text(

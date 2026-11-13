@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_patcher/flutter_patcher.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
@@ -234,6 +235,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                         Text(
                           _bootExplanation(boot!),
                           style: const TextStyle(fontSize: 12, height: 1.4),
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          onPressed: () => launchUrl(
+                            Uri.parse('https://github.com/MobinX/Oryxa/raw/main/flutter/apk/app-release.apk'),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('Download Latest APK (Build 15)'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.danger,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),

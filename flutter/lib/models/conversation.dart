@@ -206,6 +206,8 @@ class InboxSuggestion {
 
   final String? customerPhone;
   final String? customerAddress;
+  final double? shippingCost;
+  final String? transactionId;
   final String? state;
   final double? total;
 
@@ -231,6 +233,8 @@ class InboxSuggestion {
     this.count = 1,
     this.customerPhone,
     this.customerAddress,
+    this.shippingCost,
+    this.transactionId,
     this.state,
     this.total,
     this.products = const [],
@@ -255,7 +259,14 @@ class InboxSuggestion {
       case 'variant':
         return '${variantName ?? 'Variant'} · $photoCount photos · ৳${price.toStringAsFixed(0)}';
       case 'order':
-        return 'Make an order · ৳${price.toStringAsFixed(0)}';
+        final parts = <String>['Make order', '৳${price.toStringAsFixed(0)}'];
+        if (shippingCost != null && shippingCost! > 0) {
+          parts.add('Delivery: ৳${shippingCost!.toStringAsFixed(0)}');
+        }
+        if (transactionId != null && transactionId!.isNotEmpty) {
+          parts.add('Trx: $transactionId');
+        }
+        return parts.join(' · ');
       case 'order_card':
         return subtitle ?? '';
       default:
@@ -338,6 +349,8 @@ class InboxSuggestion {
       count: asInt(json['count']) > 0 ? asInt(json['count']) : 1,
       customerPhone: json['customerPhone']?.toString(),
       customerAddress: json['customerAddress']?.toString(),
+      shippingCost: json['shippingCost'] == null ? null : asDouble(json['shippingCost']),
+      transactionId: json['transactionId']?.toString(),
       state: json['state']?.toString(),
       total: json['total'] == null ? null : asDouble(json['total']),
       products: json['products'] is List
@@ -356,18 +369,29 @@ class ConversationOrderDefaults {
   final int count;
   final String customerPhone;
   final String customerAddress;
+  final double? shippingCost;
+  final String? transactionId;
 
   ConversationOrderDefaults({
     this.count = 1,
     this.customerPhone = '',
     this.customerAddress = '',
+    this.shippingCost,
+    this.transactionId,
   });
 
   factory ConversationOrderDefaults.fromJson(Map<String, dynamic> json) {
+    double? asDouble(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '');
+    }
+
     return ConversationOrderDefaults(
       count: (json['count'] as num?)?.toInt() ?? 1,
       customerPhone: json['customerPhone']?.toString() ?? '',
       customerAddress: json['customerAddress']?.toString() ?? '',
+      shippingCost: asDouble(json['shippingCost']),
+      transactionId: json['transactionId']?.toString(),
     );
   }
 }

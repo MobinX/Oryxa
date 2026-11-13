@@ -91,10 +91,12 @@ class InboxProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchConversations(String businessId) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> fetchConversations(String businessId, {bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     try {
       final res = await apiService.get(
@@ -114,7 +116,9 @@ class InboxProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _errorMessage = apiErrorMessage(e);
+      if (!silent) {
+        _errorMessage = apiErrorMessage(e);
+      }
       notifyListeners();
     }
   }

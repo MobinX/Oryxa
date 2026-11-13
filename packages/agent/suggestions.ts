@@ -70,6 +70,8 @@ export type InboxSuggestion =
       count: number;
       customerPhone: string;
       customerAddress: string;
+      shippingCost?: number;
+      transactionId?: string;
     }
   | {
       id: string;
@@ -129,6 +131,8 @@ export type SuggestionOrderDefaults = {
   count: number;
   customerPhone: string;
   customerAddress: string;
+  shippingCost?: number;
+  transactionId?: string;
 };
 
 /**
@@ -148,7 +152,11 @@ export function createSuggestionTools(
   businessId: string,
   customerPlatformId: string,
   sink: InboxSuggestion[],
-  orderDefaults: SuggestionOrderDefaults = { count: 1, customerPhone: '', customerAddress: '' },
+  orderDefaults: SuggestionOrderDefaults = {
+    count: 1,
+    customerPhone: '',
+    customerAddress: '',
+  },
 ): StructuredTool[] {
   const suggestText = tool(
     async ({ text }) => {
@@ -404,7 +412,15 @@ export function createSuggestionTools(
   );
 
   const suggestOrder = tool(
-    async ({ query, variant, count, customerPhone, customerAddress }) => {
+    async ({
+      query,
+      variant,
+      count,
+      customerPhone,
+      customerAddress,
+      shippingCost,
+      transactionId,
+    }) => {
       const product = (await searchProducts(businessId, query, 5)).find(sellable);
       if (!product) {
         return JSON.stringify({
@@ -445,6 +461,13 @@ export function createSuggestionTools(
           ? parseFloat(String(chosen.price))
           : fromPrice(product)
         : fromPrice(product);
+      const finalShippingCost =
+        typeof shippingCost === 'number' && shippingCost >= 0
+          ? shippingCost
+          : orderDefaults.shippingCost;
+      const finalTransactionId =
+        transactionId?.trim() || orderDefaults.transactionId;
+
       sink.push({
         id: `order:${product.id}:${variantId ?? ''}`,
         kind: 'order',
@@ -456,12 +479,16 @@ export function createSuggestionTools(
         count: count && count > 0 ? count : orderDefaults.count,
         customerPhone: customerPhone?.trim() || orderDefaults.customerPhone,
         customerAddress: customerAddress?.trim() || orderDefaults.customerAddress,
+        shippingCost: finalShippingCost,
+        transactionId: finalTransactionId,
       });
       return JSON.stringify({
         recorded: true,
         kind: 'order',
         productName: product.name,
         variantName,
+        shippingCost: finalShippingCost,
+        transactionId: finalTransactionId,
       });
     },
     {
@@ -474,6 +501,8 @@ export function createSuggestionTools(
         count: z.number().int().positive().optional().describe('Quantity the customer asked for.'),
         customerPhone: z.string().optional().describe('Phone the customer gave in the thread.'),
         customerAddress: z.string().optional().describe('Address the customer gave in the thread.'),
+        shippingCost: z.number().optional().describe('Delivery charge or shipping cost amount the customer sent or agreed to pay in advance.'),
+        transactionId: z.string().optional().describe('bKash/Nagad/Rocket transaction ID (TrxID) sent by customer for delivery charge or advance.'),
       }),
     },
   );

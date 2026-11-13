@@ -100,6 +100,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   bool _refreshing = false;
   bool _savingAutopilot = false;
   bool _toggleSaved = false;
+  bool _suggestionsDismissed = false;
   String? _notice;
   String? _lastSuggestKey;
   String? _sendingSuggestionId;
@@ -145,7 +146,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       if (!mounted || !_appActive || _polling) return;
       _polling = true;
       try {
@@ -163,6 +164,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
     final inbox = context.read<InboxProvider>();
     final count = inbox.activeMessages.length;
     final suggesting = inbox.isGeneratingSuggestions;
+    if (count != _lastMessageCount) {
+      _suggestionsDismissed = false;
+    }
     if (count != _lastMessageCount || suggesting != _lastSuggesting) {
       _lastMessageCount = count;
       _lastSuggesting = suggesting;
@@ -544,6 +548,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
           initialCount: suggestion.count,
           initialPhone: suggestion.customerPhone,
           initialAddress: suggestion.customerAddress,
+          initialShipping: suggestion.shippingCost,
+          initialTransactionId: suggestion.transactionId,
         ),
       );
       if (!mounted || result == null) return;
@@ -784,6 +790,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
                   ),
           ),
           if (suggestionsVisible &&
+              !_suggestionsDismissed &&
               (inbox.isGeneratingSuggestions ||
                   suggestions.isNotEmpty ||
                   inbox.suggestionError != null))
@@ -997,7 +1004,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
                 ),
               ),
               const Spacer(),
-              if (inbox.suggestionError != null)
+              if (inbox.suggestionError != null) ...[
                 TextButton(
                   onPressed: () {
                     _lastSuggestKey = null;
@@ -1020,6 +1027,22 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
                     ),
                   ),
                 ),
+                const SizedBox(width: 6),
+              ],
+              InkWell(
+                onTap: () => setState(() => _suggestionsDismissed = true),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: isDark
+                        ? AppTheme.textDarkSecondary
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1050,7 +1073,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
             )
           else
             SizedBox(
-              height: 142,
+              height: 154,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: suggestions.length,
@@ -1093,7 +1116,41 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
         top: false,
         child: Column(
           children: [
-            if (suggestionsVisible && inbox.isGeneratingSuggestions) ...[
+            if (suggestionsVisible &&
+                _suggestionsDismissed &&
+                (inbox.suggestions.isNotEmpty || inbox.isGeneratingSuggestions)) ...[
+              GestureDetector(
+                onTap: () => setState(() => _suggestionsDismissed = false),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 13, color: AppTheme.primaryColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Show AI suggestions (${inbox.suggestions.length})',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (suggestionsVisible && inbox.isGeneratingSuggestions && !_suggestionsDismissed) ...[
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 6),
@@ -1509,7 +1566,7 @@ class _SuggestionCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         suggestion.displaySubtitle,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 9,
@@ -2165,6 +2222,8 @@ class _OrderComposerSheet extends StatefulWidget {
   final int? initialCount;
   final String? initialPhone;
   final String? initialAddress;
+  final double? initialShipping;
+  final String? initialTransactionId;
 
   const _OrderComposerSheet({
     required this.businessId,
@@ -2176,6 +2235,8 @@ class _OrderComposerSheet extends StatefulWidget {
     this.initialCount,
     this.initialPhone,
     this.initialAddress,
+    this.initialShipping,
+    this.initialTransactionId,
   });
 
   @override
@@ -2214,6 +2275,16 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
     if (widget.initialAddress != null) {
       _addressController.text = widget.initialAddress!;
     }
+    if (widget.initialShipping != null && widget.initialShipping! > 0) {
+      _shippingController.text =
+          widget.initialShipping! == widget.initialShipping!.roundToDouble()
+              ? widget.initialShipping!.toInt().toString()
+              : widget.initialShipping!.toString();
+    }
+    if (widget.initialTransactionId != null &&
+        widget.initialTransactionId!.isNotEmpty) {
+      _txnController.text = widget.initialTransactionId!;
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final inbox = context.read<InboxProvider>();
@@ -2232,6 +2303,19 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
           }
           if (_addressController.text.trim().isEmpty) {
             _addressController.text = defaults.customerAddress;
+          }
+          if (_shippingController.text.trim().isEmpty &&
+              defaults.shippingCost != null &&
+              defaults.shippingCost! > 0) {
+            _shippingController.text =
+                defaults.shippingCost! == defaults.shippingCost!.roundToDouble()
+                    ? defaults.shippingCost!.toInt().toString()
+                    : defaults.shippingCost!.toString();
+          }
+          if (_txnController.text.trim().isEmpty &&
+              defaults.transactionId != null &&
+              defaults.transactionId!.isNotEmpty) {
+            _txnController.text = defaults.transactionId!;
           }
         });
       }
@@ -2333,7 +2417,10 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
 
   bool get _needsTransaction => _chosenMethod?.requiresTransactionId == true;
 
-  bool get _showTransaction => _needsTransaction || _upfrontRequired;
+  bool get _showTransaction =>
+      _needsTransaction ||
+      _upfrontRequired ||
+      _txnController.text.trim().isNotEmpty;
 
   Future<void> _submit() async {
     appDiagnostics.recordMessage('Inbox order', 'Create order tapped');
@@ -2356,7 +2443,7 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
       });
       return;
     }
-    if (_showTransaction && _txnController.text.trim().isEmpty) {
+    if ((_needsTransaction || _upfrontRequired) && _txnController.text.trim().isEmpty) {
       setState(() {
         _error = _upfrontRequired
             ? '${_strategyLabel(_strategy)} orders need the transaction id from the customer\'s upfront payment before the order can be created.'
@@ -2383,7 +2470,7 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
       'customerAddress': _addressController.text.trim(),
       if (shipping != null && shipping >= 0) 'shippingCost': shipping,
       'paymentMethod': _payment,
-      if (_showTransaction) 'transactionId': _txnController.text.trim(),
+      if (_txnController.text.trim().isNotEmpty) 'transactionId': _txnController.text.trim(),
     };
 
     final inbox = context.read<InboxProvider>();
@@ -2824,11 +2911,13 @@ class _OrderComposerSheetState extends State<_OrderComposerSheet> {
                 decoration: InputDecoration(
                   labelText: _upfrontRequired
                       ? 'Transaction ID (upfront payment)'
-                      : 'Transaction ID',
+                      : _needsTransaction
+                          ? 'Transaction ID'
+                          : 'Transaction ID (optional)',
                   hintText: 'TrxID from the customer',
                 ),
                 validator: (value) {
-                  if (!_showTransaction) return null;
+                  if (!_needsTransaction && !_upfrontRequired) return null;
                   return (value ?? '').trim().isEmpty
                       ? 'Enter the transaction ID'
                       : null;

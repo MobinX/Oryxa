@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,9 +23,33 @@ class _InboxScreenState extends State<InboxScreen> {
   final _searchController = TextEditingController();
   final Set<String> _selected = {};
   String? _openConversationId;
+  Timer? _refreshTimer;
+  bool _fetchingInBackground = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPeriodicRefresh();
+  }
+
+  void _startPeriodicRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (!mounted || _openConversationId != null || _fetchingInBackground) return;
+      final store = context.read<BusinessProvider>().currentBusiness;
+      if (store == null) return;
+      _fetchingInBackground = true;
+      try {
+        await context.read<InboxProvider>().fetchConversations(store.id, silent: true);
+      } finally {
+        _fetchingInBackground = false;
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
