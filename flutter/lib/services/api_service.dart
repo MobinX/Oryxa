@@ -188,6 +188,39 @@ class ApiService {
     }
   }
 
+  Future<Map<String, String>> uploadVariantImage({
+    required String businessId,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final uri = _buildUri('/$businessId/uploads/image');
+    debugPrint('[API UPLOAD IMAGE] $uri ($filename, ${bytes.lengthInBytes} bytes)');
+
+    final req = http.MultipartRequest('POST', uri);
+    if (_token != null && _token!.isNotEmpty) {
+      req.headers['Authorization'] = 'Bearer $_token';
+    }
+    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+
+    final streamed = await req.send().timeout(const Duration(seconds: 60));
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw ApiException(
+        'Upload failed (HTTP ${streamed.statusCode}): $body',
+        statusCode: streamed.statusCode,
+        body: body,
+      );
+    }
+
+    final json = jsonDecode(body);
+    if (json is Map) {
+      final key = json['key']?.toString() ?? '';
+      final url = json['url']?.toString() ?? key;
+      return {'key': key, 'url': url};
+    }
+    throw ApiException('Invalid upload response');
+  }
+
   dynamic _handleResponse(http.Response res) {
     dynamic json;
     try {
