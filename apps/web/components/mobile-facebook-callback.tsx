@@ -27,7 +27,10 @@ export function MobileFacebookCallback() {
     }
 
     const payload = { v: 1, token, businessId: businessId ?? null };
-    const encoded = btoa(JSON.stringify(payload));
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    let binary = '';
+    bytes.forEach((b) => { binary += String.fromCharCode(b); });
+    const encoded = btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
     const link = `onlyorders://facebook#p=${encoded}`;
     setDeepLink(link);
 
