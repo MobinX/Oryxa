@@ -2,8 +2,8 @@
   "has_update": true,
   "version": "1.0.2-h2",
   "patch_url": "/patch.zip",
-  "md5": "56b565860c92f2314cb62be05ac3539a",
+  "md5": "654861ec2447374f5e20e402a2780507",
   "target_version_code": 3,
-  "created_at": "2026-11-11T07:47:27Z",
-  "commit": "4c831772e33dfeb9483afae94b037aa94bf0c0b6"
+  "created_at": "2026-11-13T01:29:28Z",
+  "commit": "cdac12f41c3f8366918ad7ab62b8e630c4b49401"
 }
