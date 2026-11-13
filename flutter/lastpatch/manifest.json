@@ -1,9 +1,9 @@
 {
-  "has_update": true,
-  "version": "1.0.12-h30",
+  "has_update": false,
+  "version": "1.0.12",
   "patch_url": "/patch.zip",
-  "md5": "d34ab7b0a50491934d1f0b01c92e71fe",
-  "target_version_code": 14,
-  "created_at": "2026-11-13T19:23:59Z",
-  "commit": "d2ccbd07e2a39406f3eeeb3878c3d6097dd48078"
+  "md5": "",
+  "target_version_code": 15,
+  "created_at": "2026-11-13T19:53:26Z",
+  "note": "Fresh native baseline release v1.0.12 (build 15). No patches active."
 }
