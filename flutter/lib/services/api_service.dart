@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../config/api_config.dart';
 
 class ApiException implements Exception {
@@ -188,19 +189,62 @@ class ApiService {
     }
   }
 
+  MediaType _resolveMediaType(String filename, Uint8List bytes) {
+    if (bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+      return MediaType('image', 'jpeg');
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return MediaType('image', 'png');
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return MediaType('image', 'webp');
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x47 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x38) {
+      return MediaType('image', 'gif');
+    }
+
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return MediaType('image', 'png');
+    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
+    if (lower.endsWith('.gif')) return MediaType('image', 'gif');
+    return MediaType('image', 'jpeg');
+  }
+
   Future<Map<String, String>> uploadVariantImage({
     required String businessId,
     required Uint8List bytes,
     required String filename,
   }) async {
     final uri = _buildUri('/$businessId/uploads/image');
-    debugPrint('[API UPLOAD IMAGE] $uri ($filename, ${bytes.lengthInBytes} bytes)');
+    final mediaType = _resolveMediaType(filename, bytes);
+    debugPrint('[API UPLOAD IMAGE] $uri ($filename, ${bytes.lengthInBytes} bytes, ${mediaType.mimeType})');
 
     final req = http.MultipartRequest('POST', uri);
     if (_token != null && _token!.isNotEmpty) {
       req.headers['Authorization'] = 'Bearer $_token';
     }
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    req.files.add(http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: filename,
+      contentType: mediaType,
+    ));
 
     final streamed = await req.send().timeout(const Duration(seconds: 60));
     final body = await streamed.stream.bytesToString();

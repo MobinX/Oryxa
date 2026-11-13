@@ -1,16 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { withPglite } from '../helpers/with-pglite';
-import { seedTestWorld, authHeaders } from '../helpers/seed';
+import { seedTestWorld, authHeaders, TEST_AUTH_TOKEN } from '../helpers/seed';
 import { app } from '@api/app';
 import {
   setB2SignedUrlOverrideForTests,
   setB2SignedUploadUrlOverrideForTests,
+  setB2UploadOverrideForTests,
 } from '@repo/integrations/b2';
 
 describe('Uploads API', () => {
   withPglite();
+  let uploadedCommands: any[] = [];
 
   beforeEach(() => {
+    uploadedCommands = [];
+    setB2UploadOverrideForTests(async (cmd) => {
+      uploadedCommands.push(cmd);
+      return {};
+    });
     setB2SignedUrlOverrideForTests(async (key) => `https://signed.example.com/${key}?sig=get`);
     setB2SignedUploadUrlOverrideForTests(
       async (key, contentType) =>
@@ -87,5 +94,65 @@ describe('Uploads API', () => {
       body: JSON.stringify({ contentType: 'image/png' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  describe('POST /:businessId/uploads/image', () => {
+    it('sniffs contentType from magic bytes for application/octet-stream', async () => {
+      const { business } = await seedTestWorld();
+      const formData = new FormData();
+      // JPEG magic bytes: 0xFF, 0xD8, 0xFF
+      const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+      const file = new File([jpegBytes], 'photo_from_gallery', { type: 'application/octet-stream' });
+      formData.append('file', file);
+
+      const res = await app.request(`/api/v1/${business.id}/uploads/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+        body: formData,
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as any;
+      expect(body.key).toContain(`businesses/${business.id}/images/`);
+      expect(body.url).toContain('https://signed.example.com/');
+      expect(uploadedCommands.length).toBe(1);
+      expect(uploadedCommands[0].input.ContentType).toBe('image/jpeg');
+    });
+
+    it('sniffs contentType from extension when magic bytes are absent or unknown', async () => {
+      const { business } = await seedTestWorld();
+      const formData = new FormData();
+      const dummyBytes = new Uint8Array([1, 2, 3, 4]);
+      const file = new File([dummyBytes], 'sample.png', { type: 'application/octet-stream' });
+      formData.append('file', file);
+
+      const res = await app.request(`/api/v1/${business.id}/uploads/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+        body: formData,
+      });
+
+      expect(res.status).toBe(201);
+      expect(uploadedCommands.length).toBe(1);
+      expect(uploadedCommands[0].input.ContentType).toBe('image/png');
+    });
+
+    it('rejects file if neither magic bytes nor extension match allowed images', async () => {
+      const { business } = await seedTestWorld();
+      const formData = new FormData();
+      const dummyBytes = new Uint8Array([1, 2, 3, 4]);
+      const file = new File([dummyBytes], 'test.txt', { type: 'application/octet-stream' });
+      formData.append('file', file);
+
+      const res = await app.request(`/api/v1/${business.id}/uploads/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+        body: formData,
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as any;
+      expect(body.error).toContain('Only JPEG, PNG, WebP, and GIF images are allowed');
+    });
   });
 });

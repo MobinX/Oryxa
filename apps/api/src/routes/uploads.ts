@@ -26,10 +26,40 @@ uploadsRouter.post('/:businessId/uploads/image', async (c) => {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    let contentType = file.type || '';
+    if (!contentType || contentType === 'application/octet-stream') {
+      // Sniff magic bytes or fall back to file extension
+      if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        contentType = 'image/jpeg';
+      } else if (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47
+      ) {
+        contentType = 'image/png';
+      } else if (
+        buffer.length >= 12 &&
+        buffer.toString('utf8', 0, 4) === 'RIFF' &&
+        buffer.toString('utf8', 8, 12) === 'WEBP'
+      ) {
+        contentType = 'image/webp';
+      } else if (buffer.length >= 4 && buffer.toString('utf8', 0, 3) === 'GIF') {
+        contentType = 'image/gif';
+      } else {
+        const lowerName = (file.name || '').toLowerCase();
+        if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) contentType = 'image/jpeg';
+        else if (lowerName.endsWith('.png')) contentType = 'image/png';
+        else if (lowerName.endsWith('.webp')) contentType = 'image/webp';
+        else if (lowerName.endsWith('.gif')) contentType = 'image/gif';
+      }
+    }
+
     const result = await uploadImageToB2({
       businessId,
       buffer,
-      contentType: file.type || 'application/octet-stream',
+      contentType: contentType || 'application/octet-stream',
       originalName: file.name || 'image',
     });
 
