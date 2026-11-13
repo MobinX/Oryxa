@@ -1,9 +1,9 @@
 {
   "has_update": false,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "patch_url": "/patch.zip",
   "md5": "",
-  "target_version_code": 9,
-  "created_at": "2026-11-13T11:39:53Z",
-  "note": "Fresh native baseline release v1.0.8 (build 9). No patches active."
+  "target_version_code": 10,
+  "created_at": "2026-11-13T12:34:04Z",
+  "note": "Fresh native baseline release v1.0.9 (build 10). No patches active."
 }
