@@ -1,0 +1,9 @@
+{
+  "has_update": true,
+  "version": "1.0.12-h27",
+  "patch_url": "/patch.zip",
+  "md5": "1317e660b8842870eb7574e076bdfe89",
+  "target_version_code": 13,
+  "created_at": "2026-11-13T18:08:17Z",
+  "commit": "b2e173c95e7a40a8d0a6628cc67edbd31d3ff151"
+}
