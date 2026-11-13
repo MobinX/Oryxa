@@ -95,6 +95,9 @@ class BusinessModel {
     String? storeTheme,
     String? agentProductGuidance,
     String? agentBargainGuidance,
+    List<DeliveryZoneModel>? deliveryZones,
+    List<PaymentMethodModel>? paymentMethods,
+    String? paymentStrategy,
   }) {
     return BusinessModel(
       id: id,
@@ -110,9 +113,9 @@ class BusinessModel {
       storePreset: storePreset,
       agentProductGuidance: agentProductGuidance ?? this.agentProductGuidance,
       agentBargainGuidance: agentBargainGuidance ?? this.agentBargainGuidance,
-      deliveryZones: deliveryZones,
-      paymentMethods: paymentMethods,
-      paymentStrategy: paymentStrategy,
+      deliveryZones: deliveryZones ?? this.deliveryZones,
+      paymentMethods: paymentMethods ?? this.paymentMethods,
+      paymentStrategy: paymentStrategy ?? this.paymentStrategy,
       createdAt: createdAt,
     );
   }

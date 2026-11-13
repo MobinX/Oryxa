@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_theme.dart';
+import '../../models/business.dart';
+import '../../providers/business_provider.dart';
+import '../../services/diagnostics_service.dart';
 import '../../widgets/app_card.dart';
 
 class PaymentsScreen extends StatefulWidget {
@@ -19,6 +23,49 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   bool _enableBkash = true;
   bool _enableNagad = true;
   String _paymentStrategy = 'cod'; // 'cod', 'partial_advance', 'full_advance'
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFromBusiness());
+  }
+
+  void _loadFromBusiness() {
+    final business = context.read<BusinessProvider>().currentBusiness;
+    if (business == null) return;
+    final zones = business.deliveryZones;
+    for (final z in zones) {
+      final label = z.label.toLowerCase();
+      if (label.contains('inside')) {
+        _insideDhakaController.text = z.price.toStringAsFixed(0);
+      } else if (label.contains('outside')) {
+        _outsideDhakaController.text = z.price.toStringAsFixed(0);
+      }
+    }
+    final methods = business.paymentMethods.map((m) => m.name.toLowerCase()).toList();
+    _enableCod = methods.any((n) => n.contains('cash'));
+    _enableBkash = methods.any((n) => n.contains('bkash'));
+    _enableNagad = methods.any((n) => n.contains('nagad'));
+    for (final m in business.paymentMethods) {
+      final name = m.name.toLowerCase();
+      if (name.contains('bkash') && m.info != null) {
+        _bkashNumberController.text = m.info!;
+      }
+      if (name.contains('nagad') && m.info != null) {
+        _nagadNumberController.text = m.info!;
+      }
+    }
+    final strategy = business.paymentStrategy;
+    if (strategy == 'delivery_prepaid') {
+      _paymentStrategy = 'partial_advance';
+    } else if (strategy == 'full_prepaid') {
+      _paymentStrategy = 'full_advance';
+    } else {
+      _paymentStrategy = 'cod';
+    }
+    setState(() {});
+  }
 
   @override
   void dispose() {
@@ -29,14 +76,68 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     super.dispose();
   }
 
-  void _saveSettings() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Payment and delivery settings saved!')),
-    );
+  Future<void> _saveSettings() async {
+    final business = context.read<BusinessProvider>().currentBusiness;
+    if (business == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No store selected.')),
+      );
+      return;
+    }
+
+    final inside = double.tryParse(_insideDhakaController.text.trim()) ?? 0;
+    final outside = double.tryParse(_outsideDhakaController.text.trim()) ?? 0;
+
+    final methods = <PaymentMethodModel>[];
+    if (_enableCod) {
+      methods.add(PaymentMethodModel(name: 'Cash on Delivery'));
+    }
+    if (_enableBkash) {
+      methods.add(PaymentMethodModel(name: 'bKash', info: _bkashNumberController.text.trim()));
+    }
+    if (_enableNagad) {
+      methods.add(PaymentMethodModel(name: 'Nagad', info: _nagadNumberController.text.trim()));
+    }
+
+    String strategy = 'cod';
+    if (_paymentStrategy == 'partial_advance') strategy = 'delivery_prepaid';
+    if (_paymentStrategy == 'full_advance') strategy = 'full_prepaid';
+
+    setState(() => _isSaving = true);
+    final ok = await context.read<BusinessProvider>().updatePaymentDeliverySettings(
+          deliveryZones: [
+            DeliveryZoneModel(label: 'Inside Dhaka', price: inside),
+            DeliveryZoneModel(label: 'Outside Dhaka', price: outside),
+          ],
+          paymentMethods: methods,
+          paymentStrategy: strategy,
+        );
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (ok) {
+      appDiagnostics.recordMessage('Payments', 'Payment and delivery settings saved.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment and delivery settings saved!')),
+      );
+    } else {
+      final err = context.read<BusinessProvider>().errorMessage ?? 'Save failed.';
+      appDiagnostics.recordMessage('Payments', 'Save failed: $err');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err), backgroundColor: AppTheme.danger),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final business = context.watch<BusinessProvider>().currentBusiness;
+    if (business == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payments & Delivery')),
+        body: const Center(child: Text('Select a store first.')),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Payments & Delivery')),
       bottomNavigationBar: Container(
@@ -47,8 +148,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         ),
         child: SafeArea(
           child: ElevatedButton(
-            onPressed: _saveSettings,
-            child: const Text('Save Payment & Delivery Rules'),
+            onPressed: _isSaving ? null : _saveSettings,
+            child: _isSaving
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Save Payment & Delivery Rules'),
           ),
         ),
       ),

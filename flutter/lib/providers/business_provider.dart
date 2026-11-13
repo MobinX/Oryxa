@@ -207,6 +207,40 @@ class BusinessProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updatePaymentDeliverySettings({
+    required List<DeliveryZoneModel> deliveryZones,
+    required List<PaymentMethodModel> paymentMethods,
+    required String paymentStrategy,
+  }) async {
+    if (_currentBusiness == null) return false;
+    final bId = _currentBusiness!.id;
+    try {
+      await apiService.put(
+        ApiConfig.pathBusiness(bId),
+        body: {
+          'deliveryZones': deliveryZones.map((z) => {'label': z.label, 'price': z.price}).toList(),
+          'paymentMethods': paymentMethods.map((m) => {
+                'name': m.name,
+                if (m.info != null) 'info': m.info,
+                'requiresTransactionId': m.requiresTransactionId,
+              }).toList(),
+          'paymentStrategy': paymentStrategy,
+        },
+      );
+      _currentBusiness = _currentBusiness!.copyWith(
+        deliveryZones: deliveryZones,
+        paymentMethods: paymentMethods,
+        paymentStrategy: paymentStrategy,
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = apiErrorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> updateStoreTheme(String theme) async {
     if (_currentBusiness == null) return false;
     final bId = _currentBusiness!.id;
