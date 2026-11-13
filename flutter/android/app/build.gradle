@@ -44,7 +44,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.flutter_remote_dev"
-        minSdk 21
+        minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

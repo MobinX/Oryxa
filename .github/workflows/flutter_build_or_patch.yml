@@ -118,10 +118,10 @@ jobs:
             ~/.gradle/daemon
             ~/.android/build-cache
             flutter/android/.gradle
-          key: gradle-cache-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle') }}-${{ github.run_id }}
+          key: gradle-cache-v2-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle', 'flutter/android/settings.gradle') }}-${{ github.run_id }}
           restore-keys: |
-            gradle-cache-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle') }}-
-            gradle-cache-${{ runner.os }}-
+            gradle-cache-v2-${{ runner.os }}-${{ hashFiles('flutter/android/gradle/wrapper/gradle-wrapper.properties', 'flutter/android/build.gradle', 'flutter/android/app/build.gradle', 'flutter/android/settings.gradle') }}-
+            gradle-cache-v2-${{ runner.os }}-
 
       - name: Flutter Engine, Pub & Build Tree Cache
         if: steps.mode_check.outputs.mode != 'skip'
@@ -131,10 +131,10 @@ jobs:
             ~/.pub-cache
             flutter/.dart_tool
             flutter/build
-          key: flutter-build-cache-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-${{ github.run_id }}
+          key: flutter-build-cache-v2-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-${{ github.run_id }}
           restore-keys: |
-            flutter-build-cache-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-
-            flutter-build-cache-${{ runner.os }}-
+            flutter-build-cache-v2-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-
+            flutter-build-cache-v2-${{ runner.os }}-
 
       - name: Worker Node Modules Cache
         if: steps.mode_check.outputs.mode != 'skip'
