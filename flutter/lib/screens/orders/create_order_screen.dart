@@ -7,7 +7,9 @@ import '../../models/product.dart';
 import '../../providers/business_provider.dart';
 import '../../providers/orders_provider.dart';
 import '../../providers/products_provider.dart';
+import '../../services/diagnostics_service.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_feedback.dart';
 
 /// Mirrors `apps/web/lib/payment-strategy.ts`: a product's own rule wins over the store
 /// default, and an unknown value is treated as cash on delivery rather than as an error.
@@ -50,6 +52,7 @@ class CreateOrderScreen extends StatefulWidget {
 
 class _CreateOrderScreenState extends State<CreateOrderScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -89,6 +92,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     _quantityController.dispose();
     _shippingCostController.dispose();
     _txIdController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -186,13 +190,31 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
-    );
+    appDiagnostics.recordMessage('New order', message);
+    showAppSnack(message, isError: true);
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    appDiagnostics.recordMessage('New order', 'Place Order button tapped');
+
+    if (!_formKey.currentState!.validate()) {
+      appDiagnostics.recordMessage(
+        'New order',
+        'Place Order blocked: required fields are missing or invalid',
+        details: 'Customer "${_nameController.text.trim()}", '
+            'quantity "${_quantityController.text.trim()}", '
+            'product "${_selectedProduct?.name ?? 'none'}"',
+      );
+      showAppSnack('Check the highlighted fields before placing the order.', isError: true);
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+      return;
+    }
 
     if (_selectedProduct == null) {
       _showError('Please select a product from your catalog to place an order.');
@@ -247,17 +269,23 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       if (txId.isNotEmpty) 'transactionId': txId,
     };
 
-    final ok = await orders.createOrder(widget.businessId, payload);
+    bool ok;
+    try {
+      ok = await orders.createOrder(widget.businessId, payload);
+    } catch (e, stack) {
+      appDiagnostics.record('New order submit', e, stack);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      showAppSnack('Order failed: $e', isError: true);
+      return;
+    }
+
     if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order created successfully!'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+      appDiagnostics.recordMessage('New order', 'Order created');
+      showAppSnack('Order created successfully!');
       Navigator.pop(context);
     } else {
       _showError(orders.errorMessage ?? 'Failed to create order');
@@ -307,6 +335,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
             // Customer Card

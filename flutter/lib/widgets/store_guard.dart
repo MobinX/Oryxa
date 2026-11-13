@@ -39,10 +39,17 @@ Future<void> _openForStore(
   final biz = context.read<BusinessProvider>();
   final store = biz.currentBusiness;
 
+  appDiagnostics.recordMessage(
+    action,
+    'Button tapped (store: ${store?.name ?? 'none'})',
+  );
+
   if (store == null) {
     await _showStoreMissing(context, action: action);
     return;
   }
+
+  appDiagnostics.recordMessage(action, 'Opening form for store "${store.name}"');
 
   try {
     await Navigator.of(context).push(

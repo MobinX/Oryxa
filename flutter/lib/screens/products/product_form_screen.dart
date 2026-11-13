@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../config/app_theme.dart';
 import '../../models/product.dart';
 import '../../providers/products_provider.dart';
+import '../../services/diagnostics_service.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_feedback.dart';
 
 class ProductFormScreen extends StatefulWidget {
   final String businessId;
@@ -21,6 +23,7 @@ class ProductFormScreen extends StatefulWidget {
 
 class _ProductFormScreenState extends State<ProductFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
 
   late TextEditingController _nameController;
   late TextEditingController _descController;
@@ -87,11 +90,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _stockController.dispose();
     _skuController.dispose();
     _imageUrlController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final scope = _isEditing ? 'Edit product' : 'Add product';
+    appDiagnostics.recordMessage(scope, 'Save button tapped');
+
+    if (!_formKey.currentState!.validate()) {
+      appDiagnostics.recordMessage(
+        scope,
+        'Save blocked: required fields are missing or invalid',
+        details: 'Title "${_nameController.text.trim()}", '
+            'sale price "${_priceController.text.trim()}", '
+            'regular price "${_regularPriceController.text.trim()}", '
+            'stock "${_stockController.text.trim()}"',
+      );
+      showAppSnack(
+        'Check the highlighted fields before saving.',
+        isError: true,
+      );
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+      return;
+    }
 
     setState(() => _isSaving = true);
     final prods = context.read<ProductsProvider>();
@@ -139,30 +167,31 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     };
 
     bool ok;
-    if (_isEditing) {
-      ok = await prods.updateProduct(widget.businessId, widget.product!.id, payload);
-    } else {
-      ok = await prods.createProduct(widget.businessId, payload);
+    try {
+      if (_isEditing) {
+        ok = await prods.updateProduct(widget.businessId, widget.product!.id, payload);
+      } else {
+        ok = await prods.createProduct(widget.businessId, payload);
+      }
+    } catch (e, stack) {
+      appDiagnostics.record('$scope submit', e, stack);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      showAppSnack('Save failed: $e', isError: true);
+      return;
     }
 
     if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isEditing ? 'Product updated successfully' : 'Product created successfully'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+      appDiagnostics.recordMessage(scope, _isEditing ? 'Product updated' : 'Product created');
+      showAppSnack(_isEditing ? 'Product updated successfully' : 'Product created successfully');
       Navigator.pop(context);
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(prods.errorMessage ?? 'Failed to save product. Please check fields.'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
+      final message = prods.errorMessage ?? 'Failed to save product. Please check fields.';
+      appDiagnostics.recordMessage(scope, 'Save failed: $message');
+      showAppSnack(message, isError: true);
     }
   }
 
@@ -239,6 +268,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
             AppCard(
