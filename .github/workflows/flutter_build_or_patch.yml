@@ -104,12 +104,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
+            ~/.flutter_patcher
             flutter/.baseline
             flutter/.flutter_patcher
             flutter/keys
             flutter/android/app/release.keystore
-          key: signing-baseline-${{ runner.os }}-v1
+          key: signing-baseline-v3-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            signing-baseline-v3-${{ runner.os }}-
             signing-baseline-${{ runner.os }}-
 
       - name: Aggressive Gradle & Android Build Cache
@@ -173,12 +175,35 @@ jobs:
         run: |
           flutter pub get
 
+      - name: Sync Patcher Baseline & Keys Environment
+        if: steps.mode_check.outputs.mode != 'skip'
+        working-directory: flutter
+        run: |
+          mkdir -p "$HOME/.flutter_patcher/baselines" "$HOME/.flutter_patcher/keys"
+          mkdir -p .flutter_patcher/baselines keys .baseline
+
+          # If project repository has archived baselines, restore them to ~/.flutter_patcher
+          if [ -d ".flutter_patcher/baselines" ] && [ "$(ls -A .flutter_patcher/baselines 2>/dev/null)" ]; then
+            echo "Restoring project baselines to ~/.flutter_patcher/baselines"
+            cp -rn .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+          fi
+          if [ -d "keys" ] && [ "$(ls -A keys 2>/dev/null)" ]; then
+            echo "Restoring project keys to ~/.flutter_patcher/keys"
+            cp -rn keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
+          fi
+
+          # If ~/.flutter_patcher has baselines from cache, sync to project
+          if [ -d "$HOME/.flutter_patcher/baselines" ] && [ "$(ls -A $HOME/.flutter_patcher/baselines 2>/dev/null)" ]; then
+            echo "Syncing cached baselines to project"
+            cp -rn "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
+          fi
+
       - name: Warm Worker Dependencies
         if: steps.mode_check.outputs.mode != 'skip'
-        working-directory: flutter/worker
+        working-directory: flutter
         run: |
-          if [ ! -d "node_modules" ]; then
-            npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+          if [ ! -d "worker/node_modules" ]; then
+            cd worker && (npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit)
           else
             echo "✅ Worker node_modules restored from cache."
           fi
@@ -202,12 +227,12 @@ jobs:
           echo "Configuring Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
 
           # 2. Prepare directories for baseline, apk, and patches
-          mkdir -p keys .baseline apk lastpatch patch dist
+          mkdir -p keys .baseline apk lastpatch patch dist .flutter_patcher/baselines "$HOME/.flutter_patcher/baselines"
 
-          # 3. Build release APK using flutter_patcher dedicated command (or fallback to flutter build apk)
-          echo "Compiling signed production release APK with flutter_patcher build..."
+          # 3. Build release APK using flutter_patcher dedicated build command
+          echo "Compiling signed production release APK with flutter_patcher build android..."
           rm -rf dist/release
-          dart run flutter_patcher build android --strategy so --out dist/release --version-code "$APP_VERSION_CODE" || flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
+          dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE" || flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
 
           # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
           APK_PRODUCED=$(find dist/release build/app/outputs -name "app-release.apk" 2>/dev/null | head -n 1)
@@ -221,7 +246,12 @@ jobs:
             exit 1
           fi
 
-          # 5. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
+          # 5. Sync generated baselines & keys from ~/.flutter_patcher to project so git stages & tracks them
+          mkdir -p .flutter_patcher/baselines keys
+          cp -rn "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
+          cp -rn "$HOME/.flutter_patcher/keys/"* keys/ 2>/dev/null || true
+
+          # 6. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
           rm -f lastpatch/patch.zip
           cat <<EOF > lastpatch/manifest.json
           {
@@ -253,13 +283,20 @@ jobs:
           APP_VERSION=$(echo "$APP_VERSION_LINE" | cut -d'+' -f1)
           APP_VERSION_CODE=$(echo "$APP_VERSION_LINE" | cut -d'+' -f2)
           if [ -z "$APP_VERSION_CODE" ]; then APP_VERSION_CODE="1"; fi
-          echo "Targeting Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE)"
+          PATCH_VER="${APP_VERSION}-h${GITHUB_RUN_NUMBER}"
+          echo "Targeting Base Release Version: $APP_VERSION (Build $APP_VERSION_CODE), Patch: $PATCH_VER"
 
           # Verify baseline exists
           if [ ! -f ".baseline/base-app-release.apk" ] && [ -f "apk/app-release.apk" ]; then
             mkdir -p .baseline
             cp apk/app-release.apk .baseline/base-app-release.apk
           fi
+
+          # Ensure ~/.flutter_patcher/baselines has the project baselines
+          mkdir -p "$HOME/.flutter_patcher/baselines" .flutter_patcher/baselines
+          cp -rn .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+          mkdir -p "$HOME/.flutter_patcher/keys" keys
+          cp -rn keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
 
           # Use official flutter_patcher CLI to build patch
           mkdir -p dist
@@ -333,6 +370,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Sync ~/.flutter_patcher back into project before git staging
+          mkdir -p flutter/.flutter_patcher/baselines flutter/keys
+          cp -rn "$HOME/.flutter_patcher/baselines/"* flutter/.flutter_patcher/baselines/ 2>/dev/null || true
+          cp -rn "$HOME/.flutter_patcher/keys/"* flutter/keys/ 2>/dev/null || true
 
           # Stage all flutter release artifacts, baseline, and keys safely
           for target in flutter/apk flutter/patch flutter/lastpatch flutter/.baseline flutter/.flutter_patcher flutter/keys flutter/android/app/release.keystore; do
