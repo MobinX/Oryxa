@@ -58,7 +58,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   bool _isChatRunning = false;
   bool _isCommentRunning = false;
   final List<PlaygroundLogEvent> _logs = [];
-  final List<PlaygroundTraceMessage> _trace = [];
+  List<PlaygroundTraceMessage> _trace = [];
   final List<CommentThreadItem> _commentThread = [];
   final List<Map<String, String>> _pendingPhotos = []; // [{'key': ..., 'url': ...}]
   bool _uploadingPhoto = false;
@@ -599,7 +599,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
     final api = context.read<ApiService>();
     try {
-      await api.delete(ApiConfig.pathConversationDetail(biz.id, convId));
+      await api.delete(ApiConfig.pathConversation(biz.id, convId));
       setState(() {
         _conversations.removeWhere((c) => c.id == convId);
         if (_selectedConvId == convId) {
@@ -702,7 +702,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   ),
                   const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Test Conversations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ElevatedButton.icon(
@@ -811,7 +811,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   ),
                   const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Row(
                         children: [
@@ -913,7 +913,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.between,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1050,7 +1050,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.between,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   item.role.toUpperCase(),
@@ -1142,7 +1142,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                     ),
                     const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.between,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Agent Prompt & Guidance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         ElevatedButton(
