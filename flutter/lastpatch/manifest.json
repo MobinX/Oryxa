@@ -1,11 +1,11 @@
 {
   "has_update": true,
-  "version": "1.0.12-h33",
+  "version": "1.0.12-h34",
   "patch_url": "/patch.zip",
-  "md5": "890001ad97f4d630d93008ac7e3deeb0",
+  "md5": "836b3577dc6c3ecd69e51a0748cc3cc8",
   "target_version_code": 15,
   "targetVersionCode": 15,
   "schemaVersion": 2,
-  "created_at": "2026-11-14T01:30:48Z",
-  "commit": "3032dfaf027991bb16521fbe542edd09d4b99f41"
+  "created_at": "2026-11-14T02:51:29Z",
+  "commit": "83d7a4e5476295a7294d987f88b0852b5078ce3e"
 }
