@@ -153,9 +153,11 @@ class AuthService extends ChangeNotifier {
 
   /// Signs in with Google via the embedded Chrome page. The page returns a Firebase ID
   /// token (and, when available, a refresh token) through a custom scheme redirect.
+  /// Always logs out from any existing session first to allow fresh account selection.
   Future<UserModel> loginWithGoogle() async {
-    appDiagnostics.recordMessage('Google sign-in', 'Starting Google sign-in');
+    appDiagnostics.recordMessage('Google sign-in', 'Logging out existing session before Google sign-in');
     try {
+      await logout();
       final result = await _googleAuth.signIn();
       return await _applyGoogleResult(result);
     } catch (e) {

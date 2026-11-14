@@ -144,8 +144,16 @@ class ApiConfig {
 
   static String pathBilling(String businessId) =>
       '/$businessId/billing';
-  static String pathNotifications(String businessId) =>
-      '/$businessId/notifications';
+  static String pathNotifications(String businessId, {bool? unread}) =>
+      unread == true ? '/$businessId/notifications?unread=true' : '/$businessId/notifications';
+  static String pathNotificationsRead(String businessId) =>
+      '/$businessId/notifications/read';
+  static String pathPushTest(String businessId) =>
+      '/$businessId/push/test';
+  static String pathMessengerNotifications(String businessId) =>
+      '/$businessId/messenger-notifications';
+  static String pathMessengerNotificationUser(String businessId, String userId) =>
+      '/$businessId/messenger-notifications/users/$userId';
   static String pathTokenAnalytics(String businessId) =>
       '/$businessId/token-analytics';
 

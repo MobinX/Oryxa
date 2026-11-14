@@ -155,27 +155,27 @@ export function MobileGoogleLogin() {
 
     let cancelled = false;
     (async () => {
-      try {
-        const result = await getGoogleRedirectResult();
-        if (cancelled) return;
-        let user = (result?.user as any) ?? null;
-        if (!user) {
-          const auth = getFirebaseAuth();
-          if (auth?.currentUser) user = auth.currentUser;
-        }
-        if (user) {
-          await finish(user);
+      // If we are returning from Google redirect:
+      if (started) {
+        try {
+          const result = await getGoogleRedirectResult();
+          if (cancelled) return;
+          let user = (result?.user as any) ?? null;
+          if (!user) {
+            const auth = getFirebaseAuth();
+            if (auth?.currentUser) user = auth.currentUser;
+          }
+          if (user) {
+            await finish(user);
+            return;
+          }
+        } catch (error) {
+          if (cancelled) return;
+          setStep('error');
+          setMessage(mapError(error));
           return;
         }
-      } catch (error) {
-        if (cancelled) return;
-        setStep('error');
-        setMessage(mapError(error));
-        return;
-      }
 
-      if (started) {
-        if (cancelled) return;
         const auth = getFirebaseAuth();
         if (auth) {
           await new Promise<void>((resolve) => {
@@ -201,12 +201,23 @@ export function MobileGoogleLogin() {
           if (finishedRef.current) return;
         }
         setStep('ready');
-        setMessage('Google sign-in was not completed. Tap below to try again.');
+        setMessage('Google sign-in was not completed. Tap below to select your Google account.');
         return;
       }
 
+      // Initial visit from mobile app: always sign out of any existing Firebase account first!
       if (startedRef.current) return;
       startedRef.current = true;
+      setMessage('Signing out of existing session & opening Google Sign-In…');
+
+      try {
+        if (auth.currentUser) {
+          await auth.signOut();
+        }
+      } catch {
+        /* ignore */
+      }
+
       try {
         writeFlag();
         await signInWithGoogleRedirect();
@@ -226,7 +237,7 @@ export function MobileGoogleLogin() {
   const startGoogle = useCallback(async () => {
     startedRef.current = true;
     setStep('working');
-    setMessage('Taking you to Google…');
+    setMessage('Signing out previous session & opening Google Sign-In…');
     const auth = getFirebaseAuth();
     if (!auth) {
       setStep('error');
@@ -234,7 +245,16 @@ export function MobileGoogleLogin() {
       return;
     }
     try {
-      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      if (auth.currentUser) {
+        await auth.signOut();
+      }
+    } catch {
+      /* ignore */
+    }
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      const cred = await signInWithPopup(auth, provider);
       clearFlag();
       await finish(cred.user as any);
       return;
@@ -279,7 +299,7 @@ export function MobileGoogleLogin() {
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">{companyName}</h1>
         <p className="mt-2 text-[var(--muted-foreground)] text-sm max-w-xs">
-          Sign in with Google to use the mobile app
+          Sign in with Google to use the mobile app. Any previous session is automatically logged out.
         </p>
       </div>
 
@@ -287,7 +307,10 @@ export function MobileGoogleLogin() {
         {step === 'working' && (
           <div className="flex flex-col items-center gap-3 py-4">
             <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" aria-hidden />
-            <p className="text-sm text-[var(--muted-foreground)] text-center">{message}</p>
+            <p className="text-sm text-[var(--muted-foreground)] text-center font-medium">{message}</p>
+            <p className="text-xs text-[var(--muted-foreground)] text-center">
+              Logging out any active session and opening Google account picker…
+            </p>
           </div>
         )}
 
@@ -296,10 +319,10 @@ export function MobileGoogleLogin() {
             <p className="text-sm text-[var(--muted-foreground)] text-center">{message}</p>
             <button
               type="button"
-              className="w-full h-12 rounded-[14px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] font-semibold hover:bg-[var(--muted)] transition-colors"
+              className="w-full h-12 rounded-[14px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] font-semibold hover:bg-[var(--muted)] transition-colors shadow-sm"
               onClick={startGoogle}
             >
-              Continue with Google
+              Choose Google Account
             </button>
           </>
         )}

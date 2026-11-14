@@ -14,7 +14,6 @@ import '../../models/playground.dart';
 import '../../providers/business_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/diagnostics_service.dart';
-import '../../widgets/app_card.dart';
 import '../../widgets/app_feedback.dart';
 
 class PlaygroundScreen extends StatefulWidget {
@@ -353,10 +352,15 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     final photos = List<Map<String, String>>.from(_pendingPhotos);
     final biz = context.read<BusinessProvider>().currentBusiness;
     final channel = _activeChannel;
-    final convId = _selectedConvId;
 
-    if ((userMessage.isEmpty && photos.isEmpty) || biz == null || channel == null || convId == null || _isChatRunning) {
+    if ((userMessage.isEmpty && photos.isEmpty) || biz == null || channel == null || _isChatRunning) {
       return;
+    }
+
+    String? convId = _selectedConvId;
+    if (convId == null && _conversations.isNotEmpty) {
+      convId = _conversations.first.id;
+      _selectedConvId = convId;
     }
 
     _messageController.clear();
@@ -370,7 +374,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       _messages.add(
         MessageModel(
           id: 'temp-${DateTime.now().millisecondsSinceEpoch}',
-          conversationId: convId,
+          conversationId: convId ?? 'temp',
           from: 'customer',
           content: userMessage,
           images: photos.map((p) => p['url']!).toList(),
@@ -382,9 +386,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
     final activeConv = _conversations.firstWhere(
       (c) => c.id == convId,
-      orElse: () => ConversationModel(id: convId, lastMessageState: 'done'),
+      orElse: () => ConversationModel(id: convId ?? '', lastMessageState: 'done'),
     );
-    final testUserId = activeConv.customerPlatformId ?? 'test-user-$convId';
+    final testUserId = activeConv.customerPlatformId ?? (convId != null ? 'test-user-$convId' : 'test-user-${DateTime.now().millisecondsSinceEpoch}');
     final api = context.read<ApiService>();
 
     try {
@@ -398,9 +402,21 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         },
       );
 
+      String? createdConvId;
+
       await for (final entry in stream) {
         final event = entry.key;
         final data = entry.value;
+
+        if (event == 'conversation_ready' && data is Map && data['conversationId'] != null) {
+          createdConvId = data['conversationId'].toString();
+          if (mounted) {
+            setState(() {
+              _selectedConvId = createdConvId;
+              convId = createdConvId;
+            });
+          }
+        }
 
         if (event == 'trace') {
           _addLog(event, {'count': data is Map && data['messages'] is List ? (data['messages'] as List).length : 0});
@@ -420,7 +436,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               _messages.add(
                 MessageModel(
                   id: 'reply-${DateTime.now().millisecondsSinceEpoch}',
-                  conversationId: convId,
+                  conversationId: convId ?? 'temp',
                   from: 'self',
                   content: text,
                   time: DateTime.now(),
@@ -434,7 +450,10 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         }
       }
 
-      await _loadMessages(convId);
+      await _loadConversations();
+      if (_selectedConvId != null) {
+        await _loadMessages(_selectedConvId!);
+      }
     } catch (e) {
       debugPrint('[Playground] SSE stream failed, trying fallback chat endpoint: $e');
       try {
@@ -453,7 +472,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               _messages.add(
                 MessageModel(
                   id: 'reply-${DateTime.now().millisecondsSinceEpoch}',
-                  conversationId: convId,
+                  conversationId: convId ?? 'temp',
                   from: 'self',
                   content: replyText,
                   time: DateTime.now(),
@@ -462,7 +481,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
             });
             _scrollChatToBottom();
           }
-          await _loadMessages(convId);
+          if (convId != null) {
+            await _loadMessages(convId!);
+          }
           return;
         }
       } catch (fallbackErr) {
@@ -1462,37 +1483,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   // MESSENGER CHAT VIEW
   // -------------------------------------------------------------
   Widget _buildChatView(bool isDark, ConversationModel activeConv) {
-    if (_selectedConvId == null && _conversations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              const Text('No test conversations yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 6),
-              const Text(
-                'Seed a new chat to test how the AI sales agent answers questions and takes orders.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _isChatRunning ? null : _handleCreateChat,
-                icon: const Icon(Icons.add),
-                label: const Text('Start New Test Chat'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Column(
       children: [
-        // Messages list
+        // Messages list or placeholder prompt
         Expanded(
           child: _loadingMessages && _messages.isEmpty
               ? const Center(child: CircularProgressIndicator())
@@ -1502,11 +1495,71 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text('Failed to load chat: $_chatLoadError', style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
-                          TextButton(onPressed: () => _loadMessages(_selectedConvId!), child: const Text('Retry')),
+                          const SizedBox(height: 8),
+                          TextButton(onPressed: () => _selectedConvId != null ? _loadMessages(_selectedConvId!) : null, child: const Text('Retry')),
                         ],
                       ),
                     )
-                  : ListView.builder(
+                  : _messages.isEmpty
+                      ? Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryColor.withOpacity(0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.smart_toy_outlined, size: 44, color: AppTheme.primaryColor),
+                                ),
+                                const SizedBox(height: 14),
+                                const Text(
+                                  'AI Sales Agent Chat Playground',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Test your AI sales assistant in real-time. Ask about products, send images, check order status, or test cart flows.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                                ),
+                                const SizedBox(height: 18),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    ActionChip(
+                                      avatar: const Icon(Icons.shopping_bag_outlined, size: 16, color: AppTheme.primaryColor),
+                                      label: const Text('What products do you have?'),
+                                      onPressed: () {
+                                        _messageController.text = 'What products do you have available?';
+                                        _handleSendMessage();
+                                      },
+                                    ),
+                                    ActionChip(
+                                      avatar: const Icon(Icons.local_shipping_outlined, size: 16, color: AppTheme.primaryColor),
+                                      label: const Text('Delivery charge & time?'),
+                                      onPressed: () {
+                                        _messageController.text = 'What is the delivery charge and time?';
+                                        _handleSendMessage();
+                                      },
+                                    ),
+                                    ActionChip(
+                                      avatar: const Icon(Icons.add_circle_outline, size: 16, color: AppTheme.primaryColor),
+                                      label: const Text('New Session'),
+                                      onPressed: _isChatRunning ? null : _handleCreateChat,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
                       controller: _chatScrollController,
                       padding: const EdgeInsets.all(14),
                       itemCount: _messages.length + (_isChatRunning ? 1 : 0),
@@ -1675,35 +1728,91 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                     ),
                   ),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    IconButton(
-                      icon: _uploadingPhoto
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.attach_file, color: AppTheme.primaryColor),
-                      tooltip: 'Attach photo',
-                      onPressed: (_isChatRunning || _uploadingPhoto) ? null : _attachPhoto,
+                    // Prominent Image / Photo Upload Button
+                    Tooltip(
+                      message: 'Upload photo/product image',
+                      child: Material(
+                        color: isDark ? AppTheme.cardDark : Colors.grey.shade100,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: isDark ? AppTheme.borderDark : Colors.grey.shade300),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: (_isChatRunning || _uploadingPhoto) ? null : _attachPhoto,
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            alignment: Alignment.center,
+                            child: _uploadingPhoto
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+                                  )
+                                : const Icon(Icons.add_photo_alternate_rounded, color: AppTheme.primaryColor, size: 24),
+                          ),
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 8),
+                    // Message Text Field
                     Expanded(
                       child: TextField(
                         controller: _messageController,
                         textInputAction: TextInputAction.send,
+                        maxLines: null,
+                        minLines: 1,
                         onSubmitted: (_) => _handleSendMessage(),
                         decoration: InputDecoration(
                           hintText: 'Ask the sales agent a question...',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
                           isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           filled: true,
                           fillColor: isDark ? AppTheme.cardDark : Colors.grey.shade100,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(color: isDark ? AppTheme.borderDark : Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(color: isDark ? AppTheme.borderDark : Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: _isChatRunning
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.send_rounded, color: AppTheme.primaryColor),
-                      onPressed: (_isChatRunning || _uploadingPhoto) ? null : _handleSendMessage,
+                    const SizedBox(width: 8),
+                    // Prominent Send Message Button
+                    Tooltip(
+                      message: 'Send message to AI',
+                      child: Material(
+                        color: _isChatRunning ? Colors.grey : AppTheme.primaryColor,
+                        borderRadius: BorderRadius.circular(12),
+                        elevation: 2,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: (_isChatRunning || _uploadingPhoto) ? null : _handleSendMessage,
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            alignment: Alignment.center,
+                            child: _isChatRunning
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

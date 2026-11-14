@@ -95,11 +95,12 @@ export async function changePassword(currentPassword: string, newPassword: strin
 }
 
 /** Google sign-in by redirect — used by the mobile login page so the Chrome Custom Tab
- *  can hand a session back to the app without a popup. */
+ *  can hand a session back to the app without a popup. Always forces account selection. */
 export async function signInWithGoogleRedirect() {
   const auth = getFirebaseAuth();
   if (!auth) throw new Error('Firebase not configured');
   const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
   return signInWithRedirect(auth, provider);
 }
 

@@ -274,4 +274,134 @@ class BusinessProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  // -------------------------------------------------------------
+  // NOTIFICATIONS & MESSENGER PORTAL
+  // -------------------------------------------------------------
+
+  Future<void> fetchNotifications({bool unreadOnly = false}) async {
+    if (_currentBusiness == null) return;
+    final bId = _currentBusiness!.id;
+
+    try {
+      final notifRes = await apiService.get(ApiConfig.pathNotifications(bId, unread: unreadOnly));
+      if (notifRes is Map && notifRes['notifications'] is List) {
+        _notifications = (notifRes['notifications'] as List)
+            .map((n) => NotificationItemModel.fromJson(n as Map<String, dynamic>))
+            .toList();
+        _unreadNotificationsCount = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[BusinessProvider] fetch notifications error: $e');
+    }
+  }
+
+  Future<bool> markAllNotificationsRead() async {
+    if (_currentBusiness == null) return false;
+    final bId = _currentBusiness!.id;
+
+    try {
+      await apiService.post(
+        ApiConfig.pathNotificationsRead(bId),
+        body: {'all': true},
+      );
+      final now = DateTime.now();
+      _notifications = _notifications.map((n) => n.copyWith(readAt: n.readAt ?? now)).toList();
+      _unreadNotificationsCount = 0;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[BusinessProvider] markAllNotificationsRead error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> markNotificationRead(String id) async {
+    if (_currentBusiness == null) return false;
+    final bId = _currentBusiness!.id;
+
+    try {
+      await apiService.post(
+        ApiConfig.pathNotificationsRead(bId),
+        body: {
+          'ids': [id]
+        },
+      );
+      final now = DateTime.now();
+      _notifications = _notifications.map((n) => n.id == id ? n.copyWith(readAt: now) : n).toList();
+      if (_unreadNotificationsCount > 0) {
+        _unreadNotificationsCount--;
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[BusinessProvider] markNotificationRead error: $e');
+      return false;
+    }
+  }
+
+  Future<PushTestResult> sendTestPush() async {
+    if (_currentBusiness == null) {
+      return PushTestResult(tokens: 0, sent: 0, failed: 0, removed: 0, error: 'No active business selected');
+    }
+    final bId = _currentBusiness!.id;
+
+    try {
+      final res = await apiService.post(ApiConfig.pathPushTest(bId));
+      if (res is Map<String, dynamic>) {
+        return PushTestResult.fromJson(res);
+      }
+      return PushTestResult(tokens: 0, sent: 0, failed: 0, removed: 0, error: 'Unexpected response format');
+    } catch (e) {
+      return PushTestResult(tokens: 0, sent: 0, failed: 0, removed: 0, error: apiErrorMessage(e));
+    }
+  }
+
+  Future<MessengerOverview> fetchMessengerOverview() async {
+    if (_currentBusiness == null) {
+      return MessengerOverview(users: []);
+    }
+    final bId = _currentBusiness!.id;
+
+    try {
+      final res = await apiService.get(ApiConfig.pathMessengerNotifications(bId));
+      if (res is Map<String, dynamic>) {
+        return MessengerOverview.fromJson(res);
+      }
+      return MessengerOverview(users: []);
+    } catch (e) {
+      debugPrint('[BusinessProvider] fetchMessengerOverview error: $e');
+      return MessengerOverview(users: []);
+    }
+  }
+
+  Future<String?> createMessengerCode() async {
+    if (_currentBusiness == null) return null;
+    final bId = _currentBusiness!.id;
+
+    try {
+      final res = await apiService.post(ApiConfig.pathMessengerNotifications(bId));
+      if (res is Map && res['code'] != null) {
+        return res['code'].toString();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[BusinessProvider] createMessengerCode error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> removeMessengerFollower(String userId) async {
+    if (_currentBusiness == null) return false;
+    final bId = _currentBusiness!.id;
+
+    try {
+      await apiService.delete(ApiConfig.pathMessengerNotificationUser(bId, userId));
+      return true;
+    } catch (e) {
+      debugPrint('[BusinessProvider] removeMessengerFollower error: $e');
+      return false;
+    }
+  }
 }
