@@ -210,14 +210,15 @@ jobs:
           dart run flutter_patcher build android --strategy so --out dist/release --version-code "$APP_VERSION_CODE" || flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
 
           # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
-          if [ -f "dist/release/app-release.apk" ]; then
-            cp dist/release/app-release.apk apk/app-release.apk
-            cp dist/release/app-release.apk lastpatch/app-release.apk
-            cp dist/release/app-release.apk .baseline/base-app-release.apk
-          elif [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
-            cp build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
-            cp build/app/outputs/flutter-apk/app-release.apk lastpatch/app-release.apk
-            cp build/app/outputs/flutter-apk/app-release.apk .baseline/base-app-release.apk
+          APK_PRODUCED=$(find dist/release build/app/outputs -name "app-release.apk" 2>/dev/null | head -n 1)
+          if [ -n "$APK_PRODUCED" ]; then
+            echo "Copying compiled release APK from $APK_PRODUCED..."
+            cp "$APK_PRODUCED" apk/app-release.apk
+            cp "$APK_PRODUCED" lastpatch/app-release.apk
+            cp "$APK_PRODUCED" .baseline/base-app-release.apk
+          else
+            echo "❌ ERROR: No release APK found!"
+            exit 1
           fi
 
           # 5. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
@@ -333,15 +334,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage all flutter release artifacts, baseline, and keys
-          git add -f \
-            flutter/apk/ \
-            flutter/patch/ \
-            flutter/lastpatch/ \
-            flutter/.baseline/ \
-            flutter/.flutter_patcher/ \
-            flutter/keys/ \
-            flutter/android/app/release.keystore 2>/dev/null || true
+          # Stage all flutter release artifacts, baseline, and keys safely
+          for target in flutter/apk flutter/patch flutter/lastpatch flutter/.baseline flutter/.flutter_patcher flutter/keys flutter/android/app/release.keystore; do
+            if [ -e "$target" ]; then
+              git add -f "$target"
+            fi
+          done
 
           # Only commit if changes exist
           if git diff --staged --quiet; then

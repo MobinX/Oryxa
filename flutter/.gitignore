@@ -36,6 +36,8 @@ worker/.wrangler/
 !/keys/**
 !/.baseline/
 !/.baseline/**
+!/.flutter_patcher/
+!/.flutter_patcher/**
 !android/app/release.keystore
 
 # Local secrets

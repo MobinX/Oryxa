@@ -5,9 +5,6 @@
 # build writes it into the app.
 url: https://oryxa-flutter-patch-worker.mobin-devx.workers.dev
 
-# Where host baselines are kept. Every patch of a host needs its baseline.
-baseline_store: .flutter_patcher/baselines
-
 # The project's patch key, written by `flutter_patcher init`.
 trust:
   patch: X/rVmfiuGH3Bry5vVYu0emdvO3vK/KClvWDBRx5bC+s=
