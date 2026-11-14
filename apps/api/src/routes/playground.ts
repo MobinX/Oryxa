@@ -2,12 +2,11 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { ChatOpenAI } from '@langchain/openai';
 import { runAgentCore } from '@api/lib/agent-runner-core';
 import { runCommentTest } from '@api/lib/comment-test-runner';
 import type { SseEmitter } from '@repo/agent';
-import { getChannelById } from '@repo/db/crud/channel';
+import { getChannelById, listChannels, createChannel, updateChannel } from '@repo/db/crud/channel';
+import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
 import { processInboundMessage } from '@repo/db/crud/conversation';
 import { assertB2KeyForBusiness } from '@repo/integrations';
 import { testRunInputSchema, commentTestRunInputSchema } from '@repo/shared';
@@ -15,20 +14,36 @@ import { testRunInputSchema, commentTestRunInputSchema } from '@repo/shared';
 export const playgroundRouter = new OpenAPIHono();
 playgroundRouter.use('/:businessId/*', authMiddleware, businessAccessMiddleware);
 
-function getLlm() {
-  const provider = process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini';
-  if (provider === 'openai') {
-    return new ChatOpenAI({
-      model: process.env.OPENAI_MODEL || 'gpt-6-luna',
-      apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
-      configuration: { baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1' },
-    });
+/**
+ * Resolves or seeds the merchant's sandbox channel (mock-channel-${businessId})
+ * and ensures an active agent is attached.
+ */
+async function resolveOrCreateSandboxChannel(businessId: string, channelId?: string) {
+  let channel = channelId ? await getChannelById(channelId) : null;
+  if (!channel || channel.businessId !== businessId) {
+    const pageId = `mock-channel-${businessId}`;
+    const channels = await listChannels(businessId);
+    channel = channels.find((ch) => ch.platformChannelId === pageId) || null;
+
+    if (!channel) {
+      const defaultAgent = await ensureDefaultAgent(businessId);
+      channel = await createChannel(businessId, {
+        platform: 'facebook',
+        apiToken: 'mock-test-token',
+        platformChannelId: pageId,
+        agentId: defaultAgent.id,
+        extraInfo: JSON.stringify({ pageName: 'Sandbox Testing Page' }),
+      });
+    }
   }
-  return new ChatGoogleGenerativeAI({
-    model: 'gemini-flash-lite-latest',
-    apiKey: process.env.GEMINI_API_KEY || 'fake-key',
-    temperature: 0.7,
-  });
+
+  if (channel && !channel.agentId) {
+    const defaultAgent = await ensureDefaultAgent(businessId);
+    const updated = await updateChannel(businessId, channel.id, { agentId: defaultAgent.id });
+    if (updated) channel = updated;
+  }
+
+  return channel;
 }
 
 const chatRoute = createRoute({
@@ -38,23 +53,114 @@ const chatRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ businessId: z.string().uuid() }),
-    body: { content: { 'application/json': { schema: z.object({ message: z.string().min(1), persona: z.string().optional() }) } } },
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            message: z.string().min(1),
+            persona: z.string().optional(),
+            channelId: z.string().uuid().optional(),
+            imageKeys: z.array(z.string()).optional(),
+          }),
+        },
+      },
+    },
   },
   responses: {
-    200: { content: { 'application/json': { schema: z.object({ reply: z.string() }) } }, description: 'Reply' },
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            reply: z.string(),
+            toolCalls: z.array(z.object({ name: z.string(), args: z.any().optional(), result: z.any().optional() })).optional(),
+            conversationId: z.string().optional(),
+            channelId: z.string().optional(),
+          }),
+        },
+      },
+      description: 'Reply with tool execution details',
+    },
+    500: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Server error',
+    },
   },
 });
 
+/**
+ * POST /:businessId/playground/chat
+ * Full merchant agent endpoint with tool execution (categories, catalog search, order creation).
+ */
 playgroundRouter.openapi(chatRoute, async (c) => {
   const { businessId } = c.req.param();
-  const { message, persona } = c.req.valid('json');
-  const llm = getLlm();
-  const res = await llm.invoke([
-    { role: 'system', content: `You are an OnlyOrders AI sales agent for business ${businessId}. Customer persona: ${persona ?? 'Oliver Queen'}. Reply helpfully and concisely.` },
-    { role: 'user', content: message },
-  ]);
-  const reply = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-  return c.json({ reply }, 200);
+  const { message, persona, channelId: requestedChannelId, imageKeys } = c.req.valid('json');
+  const photos = imageKeys ?? [];
+
+  for (const key of photos) assertB2KeyForBusiness(key, businessId);
+
+  const channel = await resolveOrCreateSandboxChannel(businessId, requestedChannelId);
+  if (!channel) {
+    return c.json({ error: 'Could not provision sandbox channel for this store.' }, 500);
+  }
+
+  const testUserId = persona
+    ? `test-user-${persona.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+    : `test-user-${channel.id}`;
+
+  const { conversationId } = await processInboundMessage(
+    { id: channel.id, businessId },
+    testUserId,
+    message,
+    undefined,
+    photos,
+  );
+
+  const toolCalls: Array<{ name: string; args: any; result?: any }> = [];
+  let replyText = '';
+
+  const emitSse: SseEmitter = (event, data) => {
+    if (event === 'tool_call' && data) {
+      toolCalls.push({ name: (data as any).name, args: (data as any).args });
+    } else if (event === 'tool_result' && data) {
+      const last = toolCalls[toolCalls.length - 1];
+      if (last && last.name === (data as any).name) {
+        last.result = (data as any).result;
+      }
+    } else if ((event === 'message_sent' || event === 'reply') && data && (data as any).text) {
+      replyText = (data as any).text;
+    }
+  };
+
+  const sendMessageOverride = async (_pageToken: string, _psid: string, text: string) => {
+    replyText = text;
+  };
+
+  try {
+    const run = await runAgentCore(conversationId, { emitSse, sendMessageOverride });
+
+    if (!replyText && run?.messages?.length) {
+      const aiMsgs = run.messages.filter((m: any) => m.role === 'ai' || m._getType?.() === 'ai');
+      const lastAi = aiMsgs[aiMsgs.length - 1];
+      if (lastAi) {
+        replyText = typeof lastAi.content === 'string' ? lastAi.content : JSON.stringify(lastAi.content);
+      }
+    }
+
+    return c.json({
+      reply: replyText || 'I have processed your request.',
+      toolCalls,
+      conversationId,
+      channelId: channel.id,
+    }, 200);
+  } catch (err) {
+    console.error('[playground-chat] agent execution error:', err);
+    return c.json({
+      reply: `Error running agent: ${err instanceof Error ? err.message : String(err)}`,
+      toolCalls,
+      conversationId,
+      channelId: channel.id,
+    }, 200);
+  }
 });
 
 /**
@@ -95,7 +201,7 @@ playgroundRouter.post('/:businessId/playground/test-run', async (c) => {
     };
 
     try {
-      const channel = await getChannelById(channelId);
+      let channel = await getChannelById(channelId);
       if (!channel) {
         await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: `Channel ${channelId} not found` }) });
         return;
@@ -105,8 +211,9 @@ playgroundRouter.post('/:businessId/playground/test-run', async (c) => {
         return;
       }
       if (!channel.agentId) {
-        await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: 'Channel has no agent assigned — connect an agent first' }) });
-        return;
+        const defaultAgent = await ensureDefaultAgent(businessId);
+        const updated = await updateChannel(businessId, channel.id, { agentId: defaultAgent.id });
+        if (updated) channel = updated;
       }
 
       for (const key of photos) assertB2KeyForBusiness(key, businessId);
@@ -185,7 +292,7 @@ playgroundRouter.post('/:businessId/playground/comment-test-run', async (c) => {
       stream.writeSSE({ event, data: JSON.stringify(data) });
 
     try {
-      const channel = await getChannelById(channelId);
+      let channel = await getChannelById(channelId);
       if (!channel) {
         await write('error', { message: `Channel ${channelId} not found` });
         return;
@@ -193,6 +300,11 @@ playgroundRouter.post('/:businessId/playground/comment-test-run', async (c) => {
       if (channel.businessId !== businessId) {
         await write('error', { message: 'Channel does not belong to this business' });
         return;
+      }
+      if (!channel.agentId) {
+        const defaultAgent = await ensureDefaultAgent(businessId);
+        const updated = await updateChannel(businessId, channel.id, { agentId: defaultAgent.id });
+        if (updated) channel = updated;
       }
 
       await runCommentTest(

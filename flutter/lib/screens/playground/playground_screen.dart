@@ -301,6 +301,23 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   .toList();
             });
           }
+        } else if ((event == 'message_sent' || event == 'reply') && data is Map && data['text'] != null) {
+          _addLog(event, data);
+          final text = data['text'].toString().trim();
+          if (text.isNotEmpty && mounted && createdConvId != null) {
+            setState(() {
+              _messages.add(
+                MessageModel(
+                  id: 'reply-${DateTime.now().millisecondsSinceEpoch}',
+                  conversationId: createdConvId!,
+                  from: 'self',
+                  content: text,
+                  time: DateTime.now(),
+                ),
+              );
+            });
+            _scrollChatToBottom();
+          }
         } else {
           _addLog(event, data);
         }
@@ -394,6 +411,23 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   .toList();
             });
           }
+        } else if ((event == 'message_sent' || event == 'reply') && data is Map && data['text'] != null) {
+          _addLog(event, data);
+          final text = data['text'].toString().trim();
+          if (text.isNotEmpty && mounted) {
+            setState(() {
+              _messages.add(
+                MessageModel(
+                  id: 'reply-${DateTime.now().millisecondsSinceEpoch}',
+                  conversationId: convId,
+                  from: 'self',
+                  content: text,
+                  time: DateTime.now(),
+                ),
+              );
+            });
+            _scrollChatToBottom();
+          }
         } else {
           _addLog(event, data);
         }
@@ -401,6 +435,38 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
       await _loadMessages(convId);
     } catch (e) {
+      debugPrint('[Playground] SSE stream failed, trying fallback chat endpoint: $e');
+      try {
+        final res = await api.post(
+          ApiConfig.pathPlaygroundChat(biz.id),
+          body: {
+            'message': userMessage,
+            'persona': activeConv.customerName ?? 'Oliver Queen',
+            'channelId': channel.id,
+          },
+        );
+        if (res is Map && res['reply'] != null) {
+          final replyText = res['reply'].toString().trim();
+          if (replyText.isNotEmpty && mounted) {
+            setState(() {
+              _messages.add(
+                MessageModel(
+                  id: 'reply-${DateTime.now().millisecondsSinceEpoch}',
+                  conversationId: convId,
+                  from: 'self',
+                  content: replyText,
+                  time: DateTime.now(),
+                ),
+              );
+            });
+            _scrollChatToBottom();
+          }
+          await _loadMessages(convId);
+          return;
+        }
+      } catch (fallbackErr) {
+        debugPrint('[Playground] Fallback chat also failed: $fallbackErr');
+      }
       appDiagnostics.recordMessage('Playground', 'Failed during agent test run: $e');
       _addLog('error', {'message': e.toString()});
       if (mounted) {

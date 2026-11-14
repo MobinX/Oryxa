@@ -77,4 +77,22 @@ describe('Playground API', () => {
     expect(text).toContain('event: comment_replied');
     expect(text).toContain('event: done');
   });
+
+  it('executes playground chat using full merchant agent with tool calling', async () => {
+    const { business } = await seedTestWorld();
+    const res = await app.request(`/api/v1/${business.id}/playground/chat`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'What categories do you have in stock?',
+        persona: 'Oliver Queen',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.reply).toBeDefined();
+    expect(typeof data.reply).toBe('string');
+    expect(data.conversationId).toBeDefined();
+  });
 });
