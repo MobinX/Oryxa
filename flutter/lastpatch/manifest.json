@@ -1,11 +1,9 @@
 {
-  "has_update": true,
-  "version": "1.0.12-h34",
+  "has_update": false,
+  "version": "1.0.13",
   "patch_url": "/patch.zip",
-  "md5": "836b3577dc6c3ecd69e51a0748cc3cc8",
-  "target_version_code": 15,
-  "targetVersionCode": 15,
-  "schemaVersion": 2,
-  "created_at": "2026-11-14T02:51:29Z",
-  "commit": "83d7a4e5476295a7294d987f88b0852b5078ce3e"
+  "md5": "",
+  "target_version_code": 16,
+  "created_at": "2026-11-14T04:53:51Z",
+  "note": "Fresh native baseline release v1.0.13 (build 16). No patches active."
 }
