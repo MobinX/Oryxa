@@ -201,6 +201,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         final msgs = res
             .whereType<Map>()
             .map((m) => MessageModel.fromJson(Map<String, dynamic>.from(m), conversationId: convId))
+            .where((m) => m.content.trim().toUpperCase() != 'SILENT')
             .toList();
 
         if (mounted && _selectedConvId == convId) {
@@ -304,7 +305,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         } else if ((event == 'message_sent' || event == 'reply') && data is Map && data['text'] != null) {
           _addLog(event, data);
           final text = data['text'].toString().trim();
-          if (text.isNotEmpty && mounted && createdConvId != null) {
+          if (text.isNotEmpty && text.toUpperCase() != 'SILENT' && mounted && createdConvId != null) {
             setState(() {
               _messages.add(
                 MessageModel(
@@ -414,7 +415,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         } else if ((event == 'message_sent' || event == 'reply') && data is Map && data['text'] != null) {
           _addLog(event, data);
           final text = data['text'].toString().trim();
-          if (text.isNotEmpty && mounted) {
+          if (text.isNotEmpty && text.toUpperCase() != 'SILENT' && mounted) {
             setState(() {
               _messages.add(
                 MessageModel(
@@ -447,7 +448,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         );
         if (res is Map && res['reply'] != null) {
           final replyText = res['reply'].toString().trim();
-          if (replyText.isNotEmpty && mounted) {
+          if (replyText.isNotEmpty && replyText.toUpperCase() != 'SILENT' && mounted) {
             setState(() {
               _messages.add(
                 MessageModel(

@@ -127,12 +127,18 @@ playgroundRouter.openapi(chatRoute, async (c) => {
         last.result = (data as any).result;
       }
     } else if ((event === 'message_sent' || event === 'reply') && data && (data as any).text) {
-      replyText = (data as any).text;
+      const text = String((data as any).text).trim();
+      if (text.toUpperCase() !== 'SILENT') {
+        replyText = text;
+      }
     }
   };
 
   const sendMessageOverride = async (_pageToken: string, _psid: string, text: string) => {
-    replyText = text;
+    const trimmed = text.trim();
+    if (trimmed.toUpperCase() !== 'SILENT') {
+      replyText = trimmed;
+    }
   };
 
   try {
@@ -142,7 +148,19 @@ playgroundRouter.openapi(chatRoute, async (c) => {
       const aiMsgs = run.messages.filter((m: any) => m.role === 'ai' || m._getType?.() === 'ai');
       const lastAi = aiMsgs[aiMsgs.length - 1];
       if (lastAi) {
-        replyText = typeof lastAi.content === 'string' ? lastAi.content : JSON.stringify(lastAi.content);
+        const candidate = (typeof lastAi.content === 'string' ? lastAi.content : JSON.stringify(lastAi.content)).trim();
+        if (candidate.toUpperCase() !== 'SILENT') {
+          replyText = candidate;
+        }
+      }
+    }
+
+    if (!replyText) {
+      const { listMessages } = await import('@repo/db/crud/conversation');
+      const msgs = await listMessages(conversationId, 5);
+      const selfMsgs = msgs.filter((m) => m.from === 'self' && m.content.trim().toUpperCase() !== 'SILENT');
+      if (selfMsgs.length > 0) {
+        replyText = selfMsgs[selfMsgs.length - 1].content;
       }
     }
 
@@ -195,6 +213,9 @@ playgroundRouter.post('/:businessId/playground/test-run', async (c) => {
       if (data && typeof data === 'object' && 'metrics' in data && (data as any).metrics) {
         finalMetrics = (data as any).metrics;
       }
+      if ((event === 'reply' || event === 'message_sent') && (data as any)?.text?.toString().trim().toUpperCase() === 'SILENT') {
+        return;
+      }
       stream.writeSSE({ event, data: JSON.stringify(data) }).catch((err) =>
         console.error('[playground-test-run][sse] write error:', err),
       );
@@ -232,7 +253,9 @@ playgroundRouter.post('/:businessId/playground/test-run', async (c) => {
       });
 
       const sendMessageOverride = async (_pageToken: string, _psid: string, text: string) => {
-        emitSse('message_sent', { text });
+        if (text.trim().toUpperCase() !== 'SILENT') {
+          emitSse('message_sent', { text });
+        }
       };
 
       const run = await runAgentCore(conversationId, { emitSse, sendMessageOverride });
