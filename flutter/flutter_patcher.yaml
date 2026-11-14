@@ -1,14 +1,14 @@
-# Flutter Patcher Configuration
-# Generated automatically by scripts/setup_template.sh
+# flutter_patcher project settings. Commands read them when no flag is given.
+# Every setting is optional, and nothing here is secret.
 
-patch_server:
-  manifest_url: "https://oryxa-flutter-patch-worker.mobin-devx.workers.dev/manifest.json"
-  auto_check_update: true
-  auto_download_patch: true
-  verify_signature: true
+# The address FlutterPatcher.checkUpdate() uses when the app passes none;
+# build writes it into the app.
+url: https://oryxa-flutter-patch-worker.mobin-devx.workers.dev
 
-build:
-  target_platform: "android"
-  release_apk_path: "apk/app-release.apk"
-  output_patch_dir: "patch"
-  last_patch_dir: "lastpatch"
+# Where host baselines are kept. Every patch of a host needs its baseline.
+baseline_store: .flutter_patcher/baselines
+
+# The project's patch key, written by `flutter_patcher init`.
+trust:
+  patch: X/rVmfiuGH3Bry5vVYu0emdvO3vK/KClvWDBRx5bC+s=
+  enabled: false

@@ -329,15 +329,10 @@ class _OtaUpdateScreenState extends State<OtaUpdateScreen> {
       PatchBootStatus.droppedCircuitBreaker =>
         'The patch crashed during startup and was rolled back automatically. '
             'Install the current native APK before applying more patches.',
-      PatchBootStatus.droppedMd5Mismatch =>
-        'The downloaded patch failed verification and was dropped. '
-            'Re-apply the update from this screen.',
-      PatchBootStatus.droppedSignatureInvalid =>
-        'The patch signature was rejected. Re-apply the update, or install a '
-            'newly built APK if the signing key changed.',
-      PatchBootStatus.droppedMetaCorrupted =>
-        'Patch files on the device are damaged. Re-apply the update, or clear '
-            'app data and install the current APK.',
+      PatchBootStatus.bytecodeBootFailed =>
+        'Bytecode patch startup failed during early boot.',
+      PatchBootStatus.soBootFailed =>
+        'Native SO patch startup failed during early boot.',
       PatchBootStatus.hookInstallFailed =>
         'The patcher could not hook the Flutter loader in this APK. A native '
             'rebuild is required.',

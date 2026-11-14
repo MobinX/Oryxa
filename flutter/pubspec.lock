@@ -242,10 +242,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_patcher
-      sha256: "2dba7dce8cedea6d7cb70d016c9bb63ce1216e3cf8329fa64f43b791d28237c3"
+      sha256: "8358ae867ebdbf10cc48c1fd0a780fcdc231fec26dcb78cbc6f71e1ce73358ca"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.4"
+    version: "1.1.1"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:

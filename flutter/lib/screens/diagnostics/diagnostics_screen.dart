@@ -622,13 +622,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       case PatchBootStatus.droppedCircuitBreaker:
         return 'The patch crashed during startup and was rolled back. Install a '
             'rebuilt APK, or apply the next patch after the crash is fixed.';
-      case PatchBootStatus.droppedMd5Mismatch:
-        return 'The installed patch file failed its MD5 check and was dropped. '
-            'Apply the patch again.';
-      case PatchBootStatus.droppedSignatureInvalid:
-        return 'The patch signature was rejected. Apply a correctly signed patch.';
-      case PatchBootStatus.droppedMetaCorrupted:
-        return 'The installed patch files are damaged. Apply the patch again.';
+      case PatchBootStatus.bytecodeBootFailed:
+        return 'Bytecode patch startup failed during early boot.';
+      case PatchBootStatus.soBootFailed:
+        return 'Native SO patch startup failed during early boot.';
       case PatchBootStatus.hookInstallFailed:
         return 'The patcher could not hook Flutter\'s loader in this APK. A '
             'native rebuild is required.';

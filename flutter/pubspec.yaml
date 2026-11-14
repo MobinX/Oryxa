@@ -1,7 +1,7 @@
 name: onlyorders
 description: "OnlyOrders Merchant App - AI Auto-Reply E-commerce & Omnichannel Sales"
 publish_to: "none"
-version: 1.0.12+15
+version: 1.0.13+16
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_patcher: ^0.1.4
+  flutter_patcher: ^1.1.1
   http: ^1.2.0
   crypto: ^3.0.3
   path_provider: ^2.1.2

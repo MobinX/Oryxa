@@ -105,6 +105,7 @@ jobs:
         with:
           path: |
             flutter/.baseline
+            flutter/.flutter_patcher
             flutter/keys
             flutter/android/app/release.keystore
           key: signing-baseline-${{ runner.os }}-v1
@@ -203,13 +204,21 @@ jobs:
           # 2. Prepare directories for baseline, apk, and patches
           mkdir -p keys .baseline apk lastpatch patch dist
 
-          # 3. Build release APK using aggressive Gradle caching
-          echo "Compiling signed production release APK (with Gradle build cache)..."
-          flutter build apk --release --android-skip-build-dependency-validation
+          # 3. Build release APK using flutter_patcher dedicated command (or fallback to flutter build apk)
+          echo "Compiling signed production release APK with flutter_patcher build..."
+          rm -rf dist/release
+          dart run flutter_patcher build android --strategy so --out dist/release --version-code "$APP_VERSION_CODE" || flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
 
-          # 4. Copy release APK to /apk and archive baseline for diffing
-          cp build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
-          cp build/app/outputs/flutter-apk/app-release.apk .baseline/base-app-release.apk
+          # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
+          if [ -f "dist/release/app-release.apk" ]; then
+            cp dist/release/app-release.apk apk/app-release.apk
+            cp dist/release/app-release.apk lastpatch/app-release.apk
+            cp dist/release/app-release.apk .baseline/base-app-release.apk
+          elif [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            cp build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
+            cp build/app/outputs/flutter-apk/app-release.apk lastpatch/app-release.apk
+            cp build/app/outputs/flutter-apk/app-release.apk .baseline/base-app-release.apk
+          fi
 
           # 5. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
           rm -f lastpatch/patch.zip
@@ -251,41 +260,42 @@ jobs:
             cp apk/app-release.apk .baseline/base-app-release.apk
           fi
 
-          # Fast incremental compilation of updated Dart bundle (reuses cached Gradle & C++ objects)
-          flutter build apk --release --android-skip-build-dependency-validation
-
-          # Compute patch version. The checkout is shallow (fetch-depth: 2), so
-          # commit counting always yields 2; the workflow run number is unique
-          # and monotonic, which lets devices detect genuinely newer patches.
-          PATCH_VER="${APP_VERSION}-h${GITHUB_RUN_NUMBER}"
-          echo "Generating Patch Version: $PATCH_VER"
-
-          # Use official flutter_patcher CLI to build patch.zip with internal manifest.json (schemaVersion 2)
+          # Use official flutter_patcher CLI to build patch
           mkdir -p dist
-          echo "Packaging patch archive with flutter_patcher:pack..."
-          dart run flutter_patcher:pack \
-            --apk build/app/outputs/flutter-apk/app-release.apk \
-            --version "${PATCH_VER}" \
-            --target-version-code ${APP_VERSION_CODE} \
-            --out dist
+          rm -rf dist/patch
+          echo "Packaging patch archive with flutter_patcher patch android..."
+          dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch || true
 
-          # Calculate MD5 checksum of the generated patch
-          PATCH_MD5=$(md5sum dist/patch.zip | cut -d' ' -f1)
-          echo "Generated Patch MD5: $PATCH_MD5"
+          # Locate generated patch file (.fptc or .zip)
+          PATCH_FILE=$(find dist/patch -name "*.fptc" -o -name "patch.zip" 2>/dev/null | head -n 1)
 
-          # Archive to /patch/<version>/
-          ARCHIVE_DIR="patch/${PATCH_VER}"
-          mkdir -p "$ARCHIVE_DIR" lastpatch
-          cp dist/patch.zip "$ARCHIVE_DIR/patch.zip"
+          # Fallback if baseline was not found or patch android did not produce a file
+          if [ -z "$PATCH_FILE" ]; then
+            echo "Falling back: compiling incremental bundle with flutter build apk..."
+            flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
+            dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch || true
+            PATCH_FILE=$(find dist/patch -name "*.fptc" -o -name "patch.zip" 2>/dev/null | head -n 1)
+          fi
 
-          # Update /lastpatch directory (production static host target)
-          cp dist/patch.zip lastpatch/patch.zip
+          if [ -n "$PATCH_FILE" ]; then
+            PATCH_NAME=$(basename "$PATCH_FILE")
+            echo "Generated patch artifact: $PATCH_NAME"
+            PATCH_MD5=$(md5sum "$PATCH_FILE" | cut -d' ' -f1)
+            echo "Generated Patch MD5: $PATCH_MD5"
 
-          cat <<EOF > lastpatch/manifest.json
+            # Archive to /patch/<version>/
+            ARCHIVE_DIR="patch/${PATCH_VER}"
+            mkdir -p "$ARCHIVE_DIR" lastpatch
+            cp "$PATCH_FILE" "$ARCHIVE_DIR/patch.zip"
+            cp "$PATCH_FILE" "$ARCHIVE_DIR/$PATCH_NAME"
+            cp "$PATCH_FILE" lastpatch/patch.zip
+            cp "$PATCH_FILE" "lastpatch/$PATCH_NAME"
+
+            cat <<EOF > lastpatch/manifest.json
           {
             "has_update": true,
             "version": "${PATCH_VER}",
-            "patch_url": "/patch.zip",
+            "patch_url": "/$PATCH_NAME",
             "md5": "${PATCH_MD5}",
             "target_version_code": ${APP_VERSION_CODE},
             "targetVersionCode": ${APP_VERSION_CODE},
@@ -295,8 +305,24 @@ jobs:
           }
           EOF
 
-          cp lastpatch/manifest.json "$ARCHIVE_DIR/manifest.json"
-          echo "✅ Patch $PATCH_VER generated and saved to flutter/lastpatch"
+            cp lastpatch/manifest.json "$ARCHIVE_DIR/manifest.json"
+            echo "✅ Patch $PATCH_VER generated ($PATCH_NAME) and saved to flutter/lastpatch"
+          else
+            echo "❌ ERROR: Failed to produce patch file!"
+            exit 1
+          fi
+
+      # -------------------------------------------------------------
+      # Upload Release APK as GitHub Artifact (Direct download from GitHub Actions Web UI)
+      # -------------------------------------------------------------
+      - name: Upload Release APK as GitHub Artifact
+        if: steps.mode_check.outputs.mode == 'native'
+        uses: actions/upload-artifact@v4
+        with:
+          name: onlyorders-release-apk
+          path: flutter/apk/app-release.apk
+          if-no-files-found: warn
+          retention-days: 30
 
       # -------------------------------------------------------------
       # Commit artifacts, keystores & keys back to GitHub repository
@@ -313,6 +339,7 @@ jobs:
             flutter/patch/ \
             flutter/lastpatch/ \
             flutter/.baseline/ \
+            flutter/.flutter_patcher/ \
             flutter/keys/ \
             flutter/android/app/release.keystore 2>/dev/null || true
 

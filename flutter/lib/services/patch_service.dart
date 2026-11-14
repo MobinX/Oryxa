@@ -172,25 +172,25 @@ class PatchService extends ChangeNotifier {
         _log('✓ MD5 Checksum verified successfully');
       }
 
-      final dynamic rawTarget =
-          manifest['target_version_code'] ?? manifest['targetVersionCode'];
-      final targetVersionCode = rawTarget is int
-          ? rawTarget
-          : int.tryParse(rawTarget?.toString() ?? '');
+
 
       _log('Applying patch via FlutterPatcher...');
       try {
-        await FlutterPatcher.applyPatchBytes(
-          bytes,
-          version: patchVersion,
-          targetVersionCode: targetVersionCode,
-        );
-        _restartRequired = true;
-        _log('🎉 Patch v$patchVersion applied! Restart app to load updated code.');
-        appDiagnostics.recordMessage(
-          'Patch apply',
-          'Patch $patchVersion installed; restart required to load it',
-        );
+        final res = await FlutterPatcher.applyPatchBytes(bytes);
+        if (res.ok) {
+          _restartRequired = true;
+          _log('🎉 Patch v$patchVersion applied! Restart app to load updated code.');
+          appDiagnostics.recordMessage(
+            'Patch apply',
+            'Patch $patchVersion installed; restart required to load it',
+          );
+        } else {
+          _log('FlutterPatcher install rejected: ${res.error?.name} - ${res.message}');
+          appDiagnostics.recordMessage(
+            'Patch apply error',
+            'Error: ${res.error?.name} - ${res.message}',
+          );
+        }
       } catch (err) {
         _log('FlutterPatcher install notice: $err');
         appDiagnostics.record('Patch install', err);
