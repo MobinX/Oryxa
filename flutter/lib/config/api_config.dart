@@ -64,6 +64,8 @@ class ApiConfig {
   static String pathBusinessStats(String businessId) => '/businesses/$businessId/stats';
   static String pathBusinessAnalytics(String businessId, {int days = 30}) =>
       '/businesses/$businessId/analytics?days=$days';
+  static String pathTokenAnalytics(String businessId, {int hours = 24}) =>
+      '/$businessId/analytics/tokens?hours=$hours';
   static String pathBusinessSearch(String businessId, String query) =>
       '/businesses/$businessId/search?q=${Uri.encodeComponent(query)}';
 
@@ -154,8 +156,6 @@ class ApiConfig {
       '/$businessId/messenger-notifications';
   static String pathMessengerNotificationUser(String businessId, String userId) =>
       '/$businessId/messenger-notifications/users/$userId';
-  static String pathTokenAnalytics(String businessId) =>
-      '/$businessId/token-analytics';
 
   static String pathPosts(String businessId) =>
       '/$businessId/posts';
