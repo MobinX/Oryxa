@@ -92,7 +92,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Analytics',
+          'Sales & AI Analytics',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
