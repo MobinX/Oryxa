@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 
 /// Corner positions where the variant short ID can be stamped.
 enum StampCorner {
@@ -35,9 +34,9 @@ class ImageStampingService {
     required String? label,
     StampCorner corner = StampCorner.topRight,
   }) async {
-    // If no label or row has no short ID, return compressed image as is
+    // If no label or row has no short ID, return image as is
     if (label == null || label.trim().isEmpty) {
-      return _compressImage(imageBytes);
+      return imageBytes;
     }
 
     final cleanLabel = label.trim().startsWith('#') ? label.trim() : '#${label.trim()}';
@@ -156,33 +155,6 @@ class ImageStampingService {
       throw Exception('Failed to render stamped image');
     }
 
-    final pngBytes = byteData.buffer.asUint8List();
-    return _compressImage(pngBytes);
-  }
-
-  /// Compresses the image using package:image with descending quality until within 4MB.
-  static Uint8List _compressImage(Uint8List bytes) {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return bytes;
-
-    // Resize if any side exceeds 2048
-    img.Image prepared = decoded;
-    if (decoded.width > maxEdge || decoded.height > maxEdge) {
-      if (decoded.width >= decoded.height) {
-        prepared = img.copyResize(decoded, width: maxEdge.toInt());
-      } else {
-        prepared = img.copyResize(decoded, height: maxEdge.toInt());
-      }
-    }
-
-    for (final q in qualities) {
-      final jpg = img.encodeJpg(prepared, quality: q);
-      if (jpg.length <= maxStoredBytes) {
-        return Uint8List.fromList(jpg);
-      }
-    }
-
-    // Fallback to lowest quality if still over 4MB
-    return Uint8List.fromList(img.encodeJpg(prepared, quality: 50));
+    return byteData.buffer.asUint8List();
   }
 }
