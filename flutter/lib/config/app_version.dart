@@ -4,5 +4,5 @@
 /// plugin, so the visible build marker lives here and is shown in the More menu
 /// and on the Diagnostics screen. It lets a merchant confirm which build is
 /// actually installed.
-const String appVersionLabel = '1.0.14+18';
-const int appVersionCode = 18;
+const String appVersionLabel = '1.0.14+19';
+const int appVersionCode = 19;

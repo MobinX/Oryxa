@@ -110,13 +110,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.flutter_patcher
+            ~/.flutter_patcher/baselines
+            ~/.flutter_patcher/release
+            ~/.flutter_patcher/compile
+            ~/.flutter_patcher/keys
             flutter/.baseline
             flutter/.flutter_patcher
             flutter/keys
             flutter/android/app/release.keystore
-          key: signing-baseline-v3-${{ runner.os }}-${{ github.run_id }}
+          key: signing-baseline-v4-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            signing-baseline-v4-${{ runner.os }}-
             signing-baseline-v3-${{ runner.os }}-
             signing-baseline-${{ runner.os }}-
 
@@ -179,17 +183,17 @@ jobs:
           # If project repository has archived baselines, restore them to ~/.flutter_patcher
           if [ -d ".flutter_patcher/baselines" ] && [ "$(ls -A .flutter_patcher/baselines 2>/dev/null)" ]; then
             echo "Restoring project baselines to ~/.flutter_patcher/baselines"
-            cp -rn .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+            cp -rf .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
           fi
           if [ -d "keys" ] && [ "$(ls -A keys 2>/dev/null)" ]; then
             echo "Restoring project keys to ~/.flutter_patcher/keys"
-            cp -rn keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
+            cp -rf keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
           fi
 
           # If ~/.flutter_patcher has baselines from cache, sync to project
           if [ -d "$HOME/.flutter_patcher/baselines" ] && [ "$(ls -A $HOME/.flutter_patcher/baselines 2>/dev/null)" ]; then
             echo "Syncing cached baselines to project"
-            cp -rn "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
+            cp -rf "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
           fi
 
           # Ensure zero symlinks exist in the Flutter source tree so flutter_patcher workspace copy succeeds
@@ -224,7 +228,8 @@ jobs:
           # 3. Build release APK using flutter_patcher dedicated build command
           echo "Compiling signed production release APK with flutter_patcher build android..."
           rm -rf dist/release
-          if ! dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE" 2>&1 | tee /tmp/patcher_build.log; then
+          set -o pipefail
+          if ! dart run flutter_patcher build android --out dist/release 2>&1 | tee /tmp/patcher_build.log; then
             echo "### ❌ flutter_patcher build android Failed" >> "$GITHUB_STEP_SUMMARY"
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
             cat /tmp/patcher_build.log >> "$GITHUB_STEP_SUMMARY"
@@ -233,21 +238,23 @@ jobs:
           fi
 
           # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
-          APK_PRODUCED=$(find dist/release build/app/outputs -name "*.apk" 2>/dev/null | head -n 1)
+          APK_PRODUCED=$(find dist/release -name "*.apk" 2>/dev/null | head -n 1)
           if [ -n "$APK_PRODUCED" ]; then
             echo "Copying compiled release APK from $APK_PRODUCED..."
             cp "$APK_PRODUCED" apk/app-release.apk
             cp "$APK_PRODUCED" lastpatch/app-release.apk
             cp "$APK_PRODUCED" .baseline/base-app-release.apk
           else
-            echo "❌ ERROR: No release APK found!"
+            echo "❌ ERROR: No release APK found in dist/release!"
             exit 1
           fi
 
-          # 5. Sync generated baselines & keys from ~/.flutter_patcher to project so git stages & tracks them
-          mkdir -p .flutter_patcher/baselines keys
-          cp -rn "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
-          cp -rn "$HOME/.flutter_patcher/keys/"* keys/ 2>/dev/null || true
+          # 5. Sync generated baselines & keys between ~/.flutter_patcher and project so git stages & tracks them
+          mkdir -p .flutter_patcher/baselines keys "$HOME/.flutter_patcher/baselines" "$HOME/.flutter_patcher/keys"
+          cp -rf .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/keys/"* keys/ 2>/dev/null || true
+          cp -rf keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
 
           # 6. Clean up lastpatch directory and reset manifest (No patches for fresh native release)
           rm -f lastpatch/patch.zip
@@ -292,9 +299,11 @@ jobs:
 
           # Ensure ~/.flutter_patcher/baselines has the project baselines
           mkdir -p "$HOME/.flutter_patcher/baselines" .flutter_patcher/baselines
-          cp -rn .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+          cp -rf .flutter_patcher/baselines/* "$HOME/.flutter_patcher/baselines/" 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
           mkdir -p "$HOME/.flutter_patcher/keys" keys
-          cp -rn keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
+          cp -rf keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/keys/"* keys/ 2>/dev/null || true
 
           # Clean any symlinks and non-flutter node_modules before patcher workspace copy
           rm -rf worker/node_modules
@@ -304,7 +313,8 @@ jobs:
           mkdir -p dist
           rm -rf dist/patch
           echo "Packaging patch archive with flutter_patcher patch android..."
-          if ! dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch 2>&1 | tee /tmp/patcher_patch.log; then
+          set -o pipefail
+          if ! dart run flutter_patcher patch android --out dist/patch 2>&1 | tee /tmp/patcher_patch.log; then
             echo "### ❌ flutter_patcher patch android Failed" >> "$GITHUB_STEP_SUMMARY"
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
             cat /tmp/patcher_patch.log >> "$GITHUB_STEP_SUMMARY"
@@ -373,8 +383,8 @@ jobs:
 
           # Sync ~/.flutter_patcher back into project before git staging
           mkdir -p flutter/.flutter_patcher/baselines flutter/keys
-          cp -rn "$HOME/.flutter_patcher/baselines/"* flutter/.flutter_patcher/baselines/ 2>/dev/null || true
-          cp -rn "$HOME/.flutter_patcher/keys/"* flutter/keys/ 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/baselines/"* flutter/.flutter_patcher/baselines/ 2>/dev/null || true
+          cp -rf "$HOME/.flutter_patcher/keys/"* flutter/keys/ 2>/dev/null || true
 
           # Stage all flutter release artifacts, baseline, and keys safely
           for target in flutter/apk flutter/patch flutter/lastpatch flutter/.baseline flutter/.flutter_patcher flutter/keys flutter/android/app/release.keystore; do
