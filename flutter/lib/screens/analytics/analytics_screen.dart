@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
 import '../../models/analytics_data.dart';
+import '../../models/order.dart';
 import '../../providers/business_provider.dart';
 import '../../services/api_service.dart';
 import '../../widgets/app_card.dart';
@@ -314,7 +315,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               width: cardWidth,
               child: _buildMetricCard(
                 label: 'Revenue',
-                value: '৳${d.revenue.current.toStringAsFixed(0)}',
+                value: OrderModel.formatMoney(d.revenue.current),
                 delta: d.revenue.delta,
                 icon: Icons.monetization_on_outlined,
                 iconColor: const Color(0xFF8B5CF6),
@@ -667,7 +668,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               ),
                             ),
                             TextSpan(
-                              text: 'Revenue: ৳${day.revenue.toStringAsFixed(0)}',
+                              text: 'Revenue: ${OrderModel.formatMoney(day.revenue)}',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 10,
@@ -857,7 +858,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           ),
                         ),
                         Text(
-                          '৳${item.revenue.toStringAsFixed(0)}',
+                          OrderModel.formatMoney(item.revenue),
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -1116,7 +1117,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     width: itemWidth,
                     child: _buildLifetimeItem(
                       'Revenue',
-                      '৳${totals.revenue.toStringAsFixed(0)}',
+                      OrderModel.formatMoney(totals.revenue),
                       isDark,
                     ),
                   ),
