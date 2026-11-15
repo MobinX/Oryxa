@@ -3,7 +3,7 @@
   "version": "1.0.14",
   "patch_url": "/patch.zip",
   "md5": "",
-  "target_version_code": 18,
-  "created_at": "2026-11-15T05:13:22Z",
-  "note": "Fresh native baseline release v1.0.14 (build 18). No patches active."
+  "target_version_code": 19,
+  "created_at": "2026-11-15T06:27:53Z",
+  "note": "Fresh native baseline release v1.0.14 (build 19). No patches active."
 }
