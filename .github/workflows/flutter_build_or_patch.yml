@@ -148,18 +148,6 @@ jobs:
             flutter-build-cache-v2-${{ runner.os }}-${{ hashFiles('flutter/pubspec.lock') }}-
             flutter-build-cache-v2-${{ runner.os }}-
 
-      - name: Worker Node Modules Cache
-        if: steps.mode_check.outputs.mode != 'skip'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            flutter/worker/node_modules
-          key: worker-deps-${{ runner.os }}-${{ hashFiles('flutter/worker/package-lock.json') }}-${{ github.run_id }}
-          restore-keys: |
-            worker-deps-${{ runner.os }}-${{ hashFiles('flutter/worker/package-lock.json') }}-
-            worker-deps-${{ runner.os }}-
-
       # -------------------------------------------------------------
       # Ensure Keystores & Reusable Keys are Ready
       # -------------------------------------------------------------
@@ -204,15 +192,9 @@ jobs:
             cp -rn "$HOME/.flutter_patcher/baselines/"* .flutter_patcher/baselines/ 2>/dev/null || true
           fi
 
-      - name: Warm Worker Dependencies
-        if: steps.mode_check.outputs.mode != 'skip'
-        working-directory: flutter
-        run: |
-          if [ ! -d "worker/node_modules" ]; then
-            cd worker && (npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit)
-          else
-            echo "✅ Worker node_modules restored from cache."
-          fi
+          # Ensure zero symlinks exist in the Flutter source tree so flutter_patcher workspace copy succeeds
+          rm -rf worker/node_modules
+          find . -type l -delete 2>/dev/null || true
 
       # =============================================================
       # BRANCH 1: FULL NATIVE BUILD (Triggered by {{native}})
@@ -235,10 +217,20 @@ jobs:
           # 2. Prepare directories for baseline, apk, and patches
           mkdir -p keys .baseline apk lastpatch patch dist .flutter_patcher/baselines "$HOME/.flutter_patcher/baselines"
 
+          # Clean any symlinks and non-flutter node_modules before patcher workspace copy
+          rm -rf worker/node_modules
+          find . -type l -delete 2>/dev/null || true
+
           # 3. Build release APK using flutter_patcher dedicated build command
           echo "Compiling signed production release APK with flutter_patcher build android..."
           rm -rf dist/release
-          dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE"
+          if ! dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE" 2>&1 | tee /tmp/patcher_build.log; then
+            echo "### ❌ flutter_patcher build android Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/patcher_build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
 
           # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
           APK_PRODUCED=$(find dist/release build/app/outputs -name "*.apk" 2>/dev/null | head -n 1)
@@ -304,22 +296,24 @@ jobs:
           mkdir -p "$HOME/.flutter_patcher/keys" keys
           cp -rn keys/* "$HOME/.flutter_patcher/keys/" 2>/dev/null || true
 
+          # Clean any symlinks and non-flutter node_modules before patcher workspace copy
+          rm -rf worker/node_modules
+          find . -type l -delete 2>/dev/null || true
+
           # Use official flutter_patcher CLI to build patch
           mkdir -p dist
           rm -rf dist/patch
           echo "Packaging patch archive with flutter_patcher patch android..."
-          dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch || true
+          if ! dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch 2>&1 | tee /tmp/patcher_patch.log; then
+            echo "### ❌ flutter_patcher patch android Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/patcher_patch.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
 
           # Locate generated patch file (.fptc or .zip)
           PATCH_FILE=$(find dist/patch -name "*.fptc" -o -name "patch.zip" 2>/dev/null | head -n 1)
-
-          # Fallback if baseline was not found or patch android did not produce a file
-          if [ -z "$PATCH_FILE" ]; then
-            echo "Falling back: compiling incremental bundle with flutter build apk..."
-            flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
-            dart run flutter_patcher patch android --version-code "$APP_VERSION_CODE" --out dist/patch || true
-            PATCH_FILE=$(find dist/patch -name "*.fptc" -o -name "patch.zip" 2>/dev/null | head -n 1)
-          fi
 
           if [ -n "$PATCH_FILE" ]; then
             PATCH_NAME=$(basename "$PATCH_FILE")
