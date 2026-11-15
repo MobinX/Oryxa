@@ -1,6 +1,5 @@
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img;
 import 'package:onlyorders/models/product.dart';
 import 'package:onlyorders/services/image_stamping_service.dart';
 import 'package:onlyorders/utils/product_utils.dart';
@@ -101,10 +100,17 @@ void main() {
 
   group('Image Stamping Service Tests', () {
     test('stampVariantId stamps text onto an image frame', () async {
-      // Create a 200x200 test RGB image
-      final testImg = img.Image(width: 200, height: 200);
-      img.fill(testImg, color: img.ColorRgb8(200, 200, 200));
-      final rawBytes = Uint8List.fromList(img.encodeJpg(testImg));
+      // Create a 200x200 test RGB image using native dart:ui canvas
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawRect(
+        const ui.Rect.fromLTWH(0, 0, 200, 200),
+        ui.Paint()..color = const ui.Color(0xFFC8C8C8),
+      );
+      final picture = recorder.endRecording();
+      final testImage = await picture.toImage(200, 200);
+      final byteData = await testImage.toByteData(format: ui.ImageByteFormat.png);
+      final rawBytes = byteData!.buffer.asUint8List();
 
       final stampedBytes = await ImageStampingService.stampVariantId(
         imageBytes: rawBytes,
@@ -115,10 +121,10 @@ void main() {
       expect(stampedBytes, isNotNull);
       expect(stampedBytes.isNotEmpty, isTrue);
 
-      final decodedStamped = img.decodeImage(stampedBytes);
-      expect(decodedStamped, isNotNull);
-      expect(decodedStamped!.width, 200);
-      expect(decodedStamped.height, 200);
+      final codec = await ui.instantiateImageCodec(stampedBytes);
+      final frame = await codec.getNextFrame();
+      expect(frame.image.width, 200);
+      expect(frame.image.height, 200);
     });
   });
 }

@@ -226,10 +226,10 @@ jobs:
           find . -type l -delete 2>/dev/null || true
 
           # 3. Build release APK using flutter_patcher dedicated build command
-          echo "Compiling signed production release APK with flutter_patcher build android..."
+          echo "Compiling signed production release APK with flutter_patcher build android (SO strategy)..."
           rm -rf dist/release
           set -o pipefail
-          if ! dart run flutter_patcher build android --out dist/release -- --android-skip-build-dependency-validation 2>&1 | tee /tmp/patcher_build.log; then
+          if ! dart run flutter_patcher build android --strategy so --out dist/release -- --android-skip-build-dependency-validation 2>&1 | tee /tmp/patcher_build.log; then
             echo "### ❌ flutter_patcher build android Failed" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             cat /tmp/patcher_build.log >> "$GITHUB_STEP_SUMMARY"
@@ -257,7 +257,7 @@ jobs:
             cd ..
             mkdir -p flutter/build_logs
             cp /tmp/err_dump/* flutter/build_logs/ 2>/dev/null || true
-            git add flutter/build_logs
+            git add -f flutter/build_logs
             git commit -m "ci(flutter): [skip ci] log build failure details" || true
             git push origin HEAD:${{ github.ref_name }} || true
             cd flutter
