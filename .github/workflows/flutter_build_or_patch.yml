@@ -95,6 +95,12 @@ jobs:
           cache: true
           cache-key: "flutter-3.47.9-:os:-:arch:-:hash:"
 
+      - name: Configure Android SDK for Flutter
+        if: steps.mode_check.outputs.mode != 'skip'
+        run: |
+          echo "Setting Android SDK path: $ANDROID_HOME"
+          flutter config --android-sdk "$ANDROID_HOME"
+
       # -------------------------------------------------------------
       # MAXIMUM AGGRESSIVE CACHING (Gradle, Wrappers, Daemon, Pub, Build Outputs, Node Modules, Keys)
       # -------------------------------------------------------------
@@ -232,10 +238,10 @@ jobs:
           # 3. Build release APK using flutter_patcher dedicated build command
           echo "Compiling signed production release APK with flutter_patcher build android..."
           rm -rf dist/release
-          dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE" || flutter build apk --release --build-name="$APP_VERSION" --build-number="$APP_VERSION_CODE" --android-skip-build-dependency-validation
+          dart run flutter_patcher build android --out dist/release --version-code "$APP_VERSION_CODE"
 
           # 4. Copy release APK to /apk, /lastpatch and archive baseline for diffing
-          APK_PRODUCED=$(find dist/release build/app/outputs -name "app-release.apk" 2>/dev/null | head -n 1)
+          APK_PRODUCED=$(find dist/release build/app/outputs -name "*.apk" 2>/dev/null | head -n 1)
           if [ -n "$APK_PRODUCED" ]; then
             echo "Copying compiled release APK from $APK_PRODUCED..."
             cp "$APK_PRODUCED" apk/app-release.apk
