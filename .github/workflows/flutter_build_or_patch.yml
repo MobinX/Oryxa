@@ -248,6 +248,20 @@ jobs:
               done < <(grep -E -i "error:|failed|exception|failure|cause" "$APK_LOG" | tail -n 25)
             fi
 
+            # Also commit build logs to repository for immediate local inspection
+            mkdir -p /tmp/err_dump
+            cp /tmp/patcher_build.log /tmp/err_dump/patcher_build.log 2>/dev/null || true
+            find "$HOME/.flutter_patcher/builds" -name "*.log" -exec cp {} /tmp/err_dump/ \; 2>/dev/null || true
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            cd ..
+            mkdir -p flutter/build_logs
+            cp /tmp/err_dump/* flutter/build_logs/ 2>/dev/null || true
+            git add flutter/build_logs
+            git commit -m "ci(flutter): [skip ci] log build failure details" || true
+            git push origin HEAD:${{ github.ref_name }} || true
+            cd flutter
+
             while IFS= read -r line; do
               echo "::error title=flutter_patcher::$line"
             done < <(tail -n 40 /tmp/patcher_build.log)
