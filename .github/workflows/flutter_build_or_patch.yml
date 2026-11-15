@@ -234,6 +234,20 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             cat /tmp/patcher_build.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+            # Find and print exact Gradle failure log lines to annotations and summary
+            APK_LOG=$(find "$HOME/.flutter_patcher/builds" -name "*-apk.log" 2>/dev/null | sort -V | tail -n 1)
+            if [ -n "$APK_LOG" ] && [ -f "$APK_LOG" ]; then
+              echo "Found APK build log: $APK_LOG"
+              echo "### ❌ Gradle Build Log Failure Tail" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -n 60 "$APK_LOG" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              while IFS= read -r line; do
+                echo "::error title=gradle::$line"
+              done < <(grep -E -i "error:|failed|exception|failure|cause" "$APK_LOG" | tail -n 25)
+            fi
+
             while IFS= read -r line; do
               echo "::error title=flutter_patcher::$line"
             done < <(tail -n 40 /tmp/patcher_build.log)
@@ -419,5 +433,7 @@ jobs:
           path: |
             /tmp/patcher_build.log
             /tmp/patcher_patch.log
+            ~/.flutter_patcher/builds/**
+            flutter/build/**/*.log
           if-no-files-found: ignore
           retention-days: 7
