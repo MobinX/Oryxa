@@ -83,10 +83,13 @@ export default {
     }
 
     // Target file path inside GitHub repo:
-    // If requesting APK, map to /flutter/apk/app-release.apk instead of /flutter/lastpatch/
+    // If requesting APK, map to /flutter/apk/ instead of /flutter/lastpatch/
     let targetFilePath;
-    if (relativePath === 'app-release.apk' || relativePath === 'apk' || relativePath === 'apk/app-release.apk') {
+    if (relativePath === 'apk' || relativePath === 'apk/' || relativePath === 'app-release.apk' || relativePath === 'apk/app-release.apk') {
       targetFilePath = 'flutter/apk/app-release.apk';
+    } else if (relativePath.startsWith('apk/') || relativePath.endsWith('.apk')) {
+      const filename = relativePath.startsWith('apk/') ? relativePath.substring(4) : relativePath;
+      targetFilePath = `flutter/apk/${filename}`;
     } else {
       targetFilePath = `${repoPath}/${relativePath}`;
     }

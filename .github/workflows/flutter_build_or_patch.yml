@@ -273,6 +273,8 @@ jobs:
           if [ -n "$APK_PRODUCED" ]; then
             echo "Copying compiled release APK from $APK_PRODUCED..."
             cp "$APK_PRODUCED" apk/app-release.apk
+            cp "$APK_PRODUCED" "apk/onlyorders-v${APP_VERSION}-b${APP_VERSION_CODE}.apk"
+            cp "$APK_PRODUCED" "apk/onlyorders-b${APP_VERSION_CODE}.apk"
             cp "$APK_PRODUCED" lastpatch/app-release.apk
             cp "$APK_PRODUCED" .baseline/base-app-release.apk
           else
