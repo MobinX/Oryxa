@@ -2,6 +2,7 @@ import { cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import type { NotificationPush } from '@repo/db/crud/notification';
 import { deletePushTokens, listPushTokens } from '@repo/db/crud/push';
+import { emit } from './log';
 
 let adminApp: App | null | undefined;
 
@@ -93,6 +94,12 @@ export async function sendPushToBusiness(notice: NotificationPush): Promise<Push
     console.log(
       `[push] ${notice.businessId}: ${result.successCount} sent, ${result.failureCount} failed, ${gone.length} forgotten`,
     );
+    emit(result.failureCount > 0 ? 'error' : 'bg', {
+      task: 'push',
+      ok: result.failureCount === 0,
+      name: 'fcm_multicast',
+      message: `Push ${notice.businessId}: ${result.successCount} sent, ${result.failureCount} failed, ${gone.length} forgotten`,
+    });
     return {
       tokens: tokens.length,
       sent: result.successCount,
@@ -102,6 +109,11 @@ export async function sendPushToBusiness(notice: NotificationPush): Promise<Push
     };
   } catch (err) {
     console.error('[push] FCM send failed:', err);
+    emit('error', {
+      name: 'fcm_send_failed',
+      message: err instanceof Error ? err.message : 'FCM send failed',
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return {
       tokens: tokens.length,
       sent: 0,
