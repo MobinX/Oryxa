@@ -66,7 +66,7 @@ void main() async {
   await appDiagnostics.loadPersisted();
 
   final apiService = ApiService();
-  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+25');
+  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+27');
   final authService = AuthService(apiService: apiService);
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
