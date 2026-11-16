@@ -16,33 +16,49 @@ import 'diagnostics_service.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    final data = message.data;
     final notification = message.notification;
-    final title = notification?.title ?? data['title'] ?? 'OnlyOrders Alert';
-    final body = notification?.body ?? data['body'] ?? '';
+    // If the message contains a notification payload, Android system FCM receiver
+    // displays it automatically in the status bar when in background/terminated.
+    // Do NOT create a duplicate notification in that case.
+    if (notification != null) {
+      debugPrint('[NotificationService] System already displayed background push: ${notification.title}');
+      return;
+    }
+
+    final data = message.data;
+    final title = data['title']?.toString() ?? 'OnlyOrders Alert';
+    final body = data['body']?.toString() ?? '';
 
     if (title.isNotEmpty || body.isNotEmpty) {
       final localNotifications = FlutterLocalNotificationsPlugin();
+      const androidInit = AndroidInitializationSettings('ic_notification');
+      await localNotifications.initialize(
+        settings: const InitializationSettings(android: androidInit),
+      );
+
       const androidDetails = AndroidNotificationDetails(
         'high_importance_channel',
         'Order & Customer Alerts',
         channelDescription: 'Notifications for new customer orders, urgent help requests, and sales updates.',
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: 'ic_notification',
+        color: AppTheme.primaryColor,
         playSound: true,
         enableVibration: true,
       );
+
+      final notificationId = (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
       await localNotifications.show(
-        id: message.hashCode,
+        id: notificationId,
         title: title,
         body: body,
         notificationDetails: const NotificationDetails(android: androidDetails),
         payload: data['link']?.toString(),
       );
     }
-  } catch (e) {
-    debugPrint('[NotificationService] Background message error: $e');
+  } catch (e, st) {
+    debugPrint('[NotificationService] Background message error: $e\n$st');
   }
 }
 
@@ -74,7 +90,7 @@ class NotificationService {
     } catch (_) {}
 
     // Initialize local notifications plugin
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('ic_notification');
     const initSettings = InitializationSettings(android: androidInit);
     await _localNotifications.initialize(
       settings: initSettings,
@@ -190,35 +206,41 @@ class NotificationService {
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
-    final data = message.data;
-    final notification = message.notification;
-    final title = notification?.title ?? data['title'] ?? 'OnlyOrders Alert';
-    final body = notification?.body ?? data['body'] ?? '';
+    try {
+      final data = message.data;
+      final notification = message.notification;
+      final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
+      final body = notification?.body ?? data['body']?.toString() ?? '';
 
-    if (title.isEmpty && body.isEmpty) return;
+      if (title.isEmpty && body.isEmpty) return;
 
-    final androidDetails = AndroidNotificationDetails(
-      'high_importance_channel',
-      'Order & Customer Alerts',
-      channelDescription: 'Notifications for new customer orders, urgent help requests, and sales updates.',
-      importance: Importance.max,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      playSound: true,
-      enableVibration: true,
-      styleInformation: BigTextStyleInformation(
-        body,
-        contentTitle: title,
-      ),
-    );
+      final androidDetails = AndroidNotificationDetails(
+        'high_importance_channel',
+        'Order & Customer Alerts',
+        channelDescription: 'Notifications for new customer orders, urgent help requests, and sales updates.',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: 'ic_notification',
+        color: AppTheme.primaryColor,
+        playSound: true,
+        enableVibration: true,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+        ),
+      );
 
-    await _localNotifications.show(
-      id: message.hashCode,
-      title: title,
-      body: body,
-      notificationDetails: NotificationDetails(android: androidDetails),
-      payload: data['link']?.toString(),
-    );
+      final notificationId = (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
+      await _localNotifications.show(
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(android: androidDetails),
+        payload: data['link']?.toString(),
+      );
+    } catch (e, st) {
+      debugPrint('[NotificationService] Show foreground notification error: $e\n$st');
+    }
   }
 
   /// Shows the pre-permission explanation dialog if not prompted yet, then requests OS permission.

@@ -64,6 +64,8 @@ export async function sendPushToBusiness(notice: NotificationPush): Promise<Push
         notification: {
           title: notice.title,
           body: notice.body,
+          icon: 'ic_notification',
+          color: '#10B981',
           channelId: 'high_importance_channel',
           priority: 'high',
           defaultSound: true,
