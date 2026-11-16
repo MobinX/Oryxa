@@ -46,7 +46,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.flutter_remote_dev"
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 24  // firebase_messaging v17+ requires API 24+
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

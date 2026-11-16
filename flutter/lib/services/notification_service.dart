@@ -15,68 +15,71 @@ import 'axiom_service.dart';
 import 'diagnostics_service.dart';
 import '../widgets/app_feedback.dart';
 
+/// Background FCM handler — runs in a SEPARATE Dart isolate spawned by Android.
+/// RULES for this isolate:
+///   1. Must be a top-level function annotated @pragma('vm:entry-point').
+///   2. No access to main isolate singletons (axiomService, appDiagnostics, etc.)
+///      — each is re-instantiated fresh in the new isolate.
+///   3. WidgetsFlutterBinding.ensureInitialized() MUST be called first.
+///   4. When message.notification != null, Android FCM service displays the
+///      system-tray notification automatically — do NOT create a duplicate.
+///   5. Keep this function as lean as possible. Any unhandled exception here
+///      terminates the background isolate and swallows the notification silently.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    final notification = message.notification;
-    final data = message.data;
-    final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
-    final body = notification?.body ?? data['body']?.toString() ?? '';
+  // Step 1: initialise bindings (required for all plugin calls in background isolate)
+  WidgetsFlutterBinding.ensureInitialized();
 
-    axiomService.logNotificationEvent(
-      'background_received',
-      title: title,
-      body: body,
-      data: data,
+  final notification = message.notification;
+  final data = message.data;
+
+  // Step 2: If a notification payload exists, Android FCM already shows it in
+  // the status bar automatically — log and return to avoid a duplicate.
+  if (notification != null) {
+    debugPrint(
+      '[FCM-BG] System displayed background push: ${notification.title}',
+    );
+    return;
+  }
+
+  // Step 3: Data-only message — manually show a local notification.
+  final title = data['title']?.toString() ?? 'OnlyOrders Alert';
+  final body = data['body']?.toString() ?? '';
+  if (title.isEmpty && body.isEmpty) return;
+
+  try {
+    final localNotifications = FlutterLocalNotificationsPlugin();
+    const androidInit = AndroidInitializationSettings('ic_notification');
+    await localNotifications.initialize(
+      settings: const InitializationSettings(android: androidInit),
     );
 
-    // If the message contains a notification payload, Android system FCM receiver
-    // displays it automatically in the status bar when in background/terminated.
-    // Do NOT create a duplicate notification in that case.
-    if (notification != null) {
-      debugPrint('[NotificationService] System already displayed background push: ${notification.title}');
-      return;
-    }
+    const androidDetails = AndroidNotificationDetails(
+      'high_importance_channel',
+      'Order & Customer Alerts',
+      channelDescription:
+          'Notifications for new customer orders, urgent help requests, and sales updates.',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: 'ic_notification',
+      color: Color(0xFF5B3DF5), // AppTheme.primaryColor — inline to avoid import chain
+      playSound: true,
+      enableVibration: true,
+    );
 
-    if (title.isNotEmpty || body.isNotEmpty) {
-      final localNotifications = FlutterLocalNotificationsPlugin();
-      const androidInit = AndroidInitializationSettings('ic_notification');
-      await localNotifications.initialize(
-        settings: const InitializationSettings(android: androidInit),
-      );
+    final notificationId =
+        (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
+    await localNotifications.show(
+      id: notificationId,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(android: androidDetails),
+      payload: data['link']?.toString(),
+    );
 
-      const androidDetails = AndroidNotificationDetails(
-        'high_importance_channel',
-        'Order & Customer Alerts',
-        channelDescription: 'Notifications for new customer orders, urgent help requests, and sales updates.',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: 'ic_notification',
-        color: AppTheme.primaryColor,
-        playSound: true,
-        enableVibration: true,
-      );
-
-      final notificationId = (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
-      await localNotifications.show(
-        id: notificationId,
-        title: title,
-        body: body,
-        notificationDetails: const NotificationDetails(android: androidDetails),
-        payload: data['link']?.toString(),
-      );
-    }
+    debugPrint('[FCM-BG] Data-only notification displayed: $title');
   } catch (e, st) {
-    debugPrint('[NotificationService] Background message error: $e\n$st');
-    try {
-      axiomService.error(
-        'Background notification error: $e',
-        error: e,
-        stack: st,
-        tag: 'FCM_BG_ERROR',
-      );
-    } catch (_) {}
+    debugPrint('[FCM-BG] Failed to show data-only notification: $e\n$st');
   }
 }
 
@@ -141,6 +144,19 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     } catch (e) {
       debugPrint('[NotificationService] onBackgroundMessage registration error: $e');
+    }
+
+    try {
+      // On Android, FCM foreground messages are suppressed by the native SDK when
+      // notification payload is present — override so our local notifications plugin
+      // always handles display (required to show heads-up banners in foreground).
+      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: false,
+        sound: true,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] setForegroundNotificationPresentationOptions error: $e');
     }
 
     try {
@@ -285,25 +301,32 @@ class NotificationService {
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
-    try {
-      final data = message.data;
-      final notification = message.notification;
-      final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
-      final body = notification?.body ?? data['body']?.toString() ?? '';
+    // Log immediately — before any risky operations — so Axiom always sees the event
+    // even if the notification display itself throws later.
+    final data = message.data;
+    final notification = message.notification;
+    final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
+    final body = notification?.body ?? data['body']?.toString() ?? '';
 
+    try {
       axiomService.logNotificationEvent(
         'foreground_received',
         title: title,
         body: body,
         data: data,
       );
+    } catch (_) {}
 
-      if (title.isEmpty && body.isEmpty) return;
+    if (title.isEmpty && body.isEmpty) return;
 
+    // Show local heads-up notification via flutter_local_notifications.
+    // This runs on the main isolate so the plugin channel is fully available.
+    try {
       final androidDetails = AndroidNotificationDetails(
         'high_importance_channel',
         'Order & Customer Alerts',
-        channelDescription: 'Notifications for new customer orders, urgent help requests, and sales updates.',
+        channelDescription:
+            'Notifications for new customer orders, urgent help requests, and sales updates.',
         importance: Importance.max,
         priority: Priority.high,
         icon: 'ic_notification',
@@ -316,7 +339,8 @@ class NotificationService {
         ),
       );
 
-      final notificationId = (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
+      final notificationId =
+          (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
       await _localNotifications.show(
         id: notificationId,
         title: title,
@@ -325,7 +349,7 @@ class NotificationService {
         payload: data['link']?.toString(),
       );
 
-      // In-app immediate feedback
+      // In-app snack feedback (safe — appMessengerKey guards null state)
       showAppSnack('🔔 $title${body.isNotEmpty ? ': $body' : ''}');
 
       axiomService.info(
@@ -335,12 +359,14 @@ class NotificationService {
       );
     } catch (e, st) {
       debugPrint('[NotificationService] Show foreground notification error: $e\n$st');
-      axiomService.error(
-        'Show foreground notification error: $e',
-        error: e,
-        stack: st,
-        tag: 'NOTIFICATION_FG_ERROR',
-      );
+      try {
+        axiomService.error(
+          'Show foreground notification error: $e',
+          error: e,
+          stack: st,
+          tag: 'NOTIFICATION_FG_ERROR',
+        );
+      } catch (_) {}
     }
   }
 
