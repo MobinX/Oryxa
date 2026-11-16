@@ -16,7 +16,7 @@ export const storePresetSchema = z.enum(['gallery', 'pine', 'terracotta', 'petro
  */
 export const storeStructureSchema = z.enum(['classic', 'editorial', 'market', 'terminal', 'atelier']);
 
-export const storeThemeSchema = z.object({
+export const storeThemeObjectSchema = z.object({
   accentColor: z.string().max(32).optional(),
   font: z.enum(['sans', 'serif', 'mono']).optional(),
   tagline: z.string().max(280).optional(),
@@ -26,6 +26,24 @@ export const storeThemeSchema = z.object({
   preset: storePresetSchema.optional(),
   structure: storeStructureSchema.optional(),
 }).partial();
+
+export const storeThemeSchema = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        // fall through
+      }
+    }
+    if (['gallery', 'pine', 'terracotta', 'petrol'].includes(trimmed)) {
+      return { preset: trimmed };
+    }
+    return { structure: trimmed };
+  }
+  return val;
+}, storeThemeObjectSchema);
 
 export const publicStoreVariantSchema = z.object({
   id: uuidSchema,

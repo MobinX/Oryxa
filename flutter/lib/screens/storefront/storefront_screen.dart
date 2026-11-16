@@ -121,7 +121,10 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
           const SizedBox(height: 14),
 
           ..._themes.map((t) {
-            final isSelected = _selectedTheme == t['id'];
+            final activeTheme = (b?.storeTheme != null && b!.storeTheme!.isNotEmpty)
+                ? b.storeTheme!
+                : _selectedTheme;
+            final isSelected = activeTheme == t['id'];
 
             return AppCard(
               border: isSelected ? const BorderSide(color: AppTheme.primaryColor, width: 2) : null,

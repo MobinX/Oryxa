@@ -263,7 +263,9 @@ class BusinessProvider extends ChangeNotifier {
     try {
       await apiService.put(
         ApiConfig.pathBusiness(bId),
-        body: {'storeTheme': theme},
+        body: {
+          'storeTheme': {'structure': theme},
+        },
       );
       _currentBusiness = _currentBusiness!.copyWith(storeTheme: theme);
       notifyListeners();

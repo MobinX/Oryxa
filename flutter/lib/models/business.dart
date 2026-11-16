@@ -37,6 +37,21 @@ class BusinessModel {
     this.createdAt,
   });
 
+  static String? _parseStoreTheme(dynamic val) {
+    if (val == null) return null;
+    if (val is Map) {
+      return (val['structure'] ?? val['preset'] ?? val['id'])?.toString();
+    }
+    final s = val.toString().trim();
+    if (s.startsWith('{') && s.endsWith('}')) {
+      final match = RegExp(r'''['"]?(?:structure|preset)['"]?\s*:\s*['"]?([a-zA-Z0-9_-]+)['"]?''').firstMatch(s);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return s.isNotEmpty ? s : null;
+  }
+
   factory BusinessModel.fromJson(Map<String, dynamic> json) {
     return BusinessModel(
       id: json['id']?.toString() ?? '',
@@ -48,7 +63,7 @@ class BusinessModel {
       website: json['website']?.toString(),
       address: json['address']?.toString(),
       agentState: json['agentState'] != false,
-      storeTheme: (json['storeTheme'] ?? json['storePreset'])?.toString(),
+      storeTheme: _parseStoreTheme(json['storeTheme'] ?? json['storePreset']),
       storePreset: json['storePreset']?.toString(),
       agentProductGuidance: json['agentProductGuidance']?.toString(),
       agentBargainGuidance: json['agentBargainGuidance']?.toString(),
@@ -81,7 +96,7 @@ class BusinessModel {
         'website': website,
         'address': address,
         'agentState': agentState,
-        'storeTheme': storeTheme,
+        'storeTheme': storeTheme != null ? {'structure': storeTheme} : null,
         'storePreset': storePreset,
       };
 
