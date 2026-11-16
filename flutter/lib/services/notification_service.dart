@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -110,31 +111,35 @@ class NotificationService {
       if (saved != null) _subscribedBusinessIds.addAll(saved);
     } catch (_) {}
 
-    // Initialize local notifications plugin
-    const androidInit = AndroidInitializationSettings('ic_notification');
-    const initSettings = InitializationSettings(android: androidInit);
-    await _localNotifications.initialize(
-      settings: initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        final payload = response.payload;
-        if (payload != null && payload.isNotEmpty) {
-          onNotificationClicked?.call(payload);
-        }
-      },
-    );
+    // Initialize local notifications plugin safely
+    try {
+      const androidInit = AndroidInitializationSettings('ic_notification');
+      const initSettings = InitializationSettings(android: androidInit);
+      await _localNotifications.initialize(
+        settings: initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          final payload = response.payload;
+          if (payload != null && payload.isNotEmpty) {
+            onNotificationClicked?.call(payload);
+          }
+        },
+      );
 
-    // Create high importance Android notification channel
-    const channel = AndroidNotificationChannel(
-      'high_importance_channel',
-      'Order & Customer Alerts',
-      description: 'Notifications for new customer orders, urgent help requests, and sales updates.',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-    );
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+      // Create high importance Android notification channel
+      const channel = AndroidNotificationChannel(
+        'high_importance_channel',
+        'Order & Customer Alerts',
+        description: 'Notifications for new customer orders, urgent help requests, and sales updates.',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    } catch (e) {
+      debugPrint('[NotificationService] Local notifications init skipped: $e');
+    }
 
     // Initialize Firebase Core dynamically from web config if not already initialized
     await _ensureFirebaseInitialized(apiService);
@@ -301,8 +306,6 @@ class NotificationService {
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
-    // Log immediately — before any risky operations — so Axiom always sees the event
-    // even if the notification display itself throws later.
     final data = message.data;
     final notification = message.notification;
     final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
@@ -319,55 +322,38 @@ class NotificationService {
 
     if (title.isEmpty && body.isEmpty) return;
 
-    // Show local heads-up notification via flutter_local_notifications.
-    // This runs on the main isolate so the plugin channel is fully available.
+    // Haptic & audio alert
     try {
-      final androidDetails = AndroidNotificationDetails(
-        'high_importance_channel',
-        'Order & Customer Alerts',
-        channelDescription:
-            'Notifications for new customer orders, urgent help requests, and sales updates.',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: 'ic_notification',
-        color: AppTheme.primaryColor,
-        playSound: true,
-        enableVibration: true,
-        styleInformation: BigTextStyleInformation(
-          body,
-          contentTitle: title,
-        ),
+      HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+
+    // In-app snack feedback with link navigation
+    try {
+      final link = data['link']?.toString();
+      showAppSnack(
+        '🔔 $title${body.isNotEmpty ? ': $body' : ''}',
+        action: (link != null && link.isNotEmpty)
+            ? SnackBarAction(
+                label: 'VIEW',
+                textColor: Colors.white,
+                onPressed: () {
+                  onNotificationClicked?.call(link);
+                },
+              )
+            : null,
       );
+    } catch (e) {
+      debugPrint('[NotificationService] showAppSnack error: $e');
+    }
 
-      final notificationId =
-          (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
-      await _localNotifications.show(
-        id: notificationId,
-        title: title,
-        body: body,
-        notificationDetails: NotificationDetails(android: androidDetails),
-        payload: data['link']?.toString(),
-      );
-
-      // In-app snack feedback (safe — appMessengerKey guards null state)
-      showAppSnack('🔔 $title${body.isNotEmpty ? ': $body' : ''}');
-
+    try {
       axiomService.info(
         'Foreground notification displayed: $title',
         tag: 'NOTIFICATION_FG',
-        metadata: {'id': notificationId, 'title': title},
+        metadata: {'title': title},
       );
-    } catch (e, st) {
-      debugPrint('[NotificationService] Show foreground notification error: $e\n$st');
-      try {
-        axiomService.error(
-          'Show foreground notification error: $e',
-          error: e,
-          stack: st,
-          tag: 'NOTIFICATION_FG_ERROR',
-        );
-      } catch (_) {}
-    }
+    } catch (_) {}
   }
 
   /// Shows the pre-permission explanation dialog if not prompted yet, then requests OS permission.

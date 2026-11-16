@@ -692,18 +692,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ],
       ),
-      child: InkWell(
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          if (isUnread) {
-            biz.markNotificationRead(notice.id);
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            if (isUnread) {
+              biz.markNotificationRead(notice.id);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Header line: icon, title, tags
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -852,6 +855,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
