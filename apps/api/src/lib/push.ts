@@ -55,6 +55,10 @@ export async function sendPushToBusiness(notice: NotificationPush): Promise<Push
   try {
     const result = await getMessaging(app).sendEachForMulticast({
       tokens,
+      notification: {
+        title: notice.title,
+        body: notice.body,
+      },
       data: {
         title: notice.title,
         body: notice.body,

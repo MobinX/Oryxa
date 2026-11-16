@@ -13,6 +13,7 @@ import '../config/app_theme.dart';
 import 'api_service.dart';
 import 'axiom_service.dart';
 import 'diagnostics_service.dart';
+import '../widgets/app_feedback.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -135,9 +136,14 @@ class NotificationService {
     // Initialize Firebase Core dynamically from web config if not already initialized
     await _ensureFirebaseInitialized(apiService);
 
-    if (_firebaseInitialized) {
+    // Register Firebase Messaging listeners unconditionally
+    try {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    } catch (e) {
+      debugPrint('[NotificationService] onBackgroundMessage registration error: $e');
+    }
 
+    try {
       // Listen for foreground messages
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         _showForegroundNotification(message);
@@ -168,6 +174,15 @@ class NotificationService {
           syncSubscriptions(apiService, _subscribedBusinessIds.toList());
         }
       });
+
+      axiomService.info('FCM message listeners registered successfully', tag: 'FCM_LISTENERS');
+    } catch (e, st) {
+      axiomService.error(
+        'FCM listener registration error: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_LISTENERS_ERROR',
+      );
     }
   }
 
@@ -178,6 +193,22 @@ class NotificationService {
       return;
     }
 
+    // 1. Try initializing with native options (reads google-services.json on Android automatically)
+    try {
+      await Firebase.initializeApp();
+      _firebaseInitialized = true;
+      axiomService.info('Firebase initialized natively via google-services', tag: 'FCM');
+      return;
+    } catch (e) {
+      if (e.toString().contains('duplicate-app') || Firebase.apps.isNotEmpty) {
+        _firebaseInitialized = true;
+        axiomService.info('Firebase already initialized natively', tag: 'FCM');
+        return;
+      }
+      debugPrint('[NotificationService] Native initializeApp skipped: $e');
+    }
+
+    // 2. Fallback: fetch remote config
     try {
       final configUrl = ApiConfig.mobileFirebaseConfigUrl(apiService.baseUrl);
       final res = await http.get(Uri.parse(configUrl)).timeout(const Duration(seconds: 10));
@@ -190,15 +221,19 @@ class NotificationService {
         final storageBucket = config['storageBucket']?.toString();
 
         if (apiKey.isNotEmpty && appId.isNotEmpty && projectId.isNotEmpty) {
-          await Firebase.initializeApp(
-            options: FirebaseOptions(
-              apiKey: apiKey,
-              appId: appId,
-              messagingSenderId: messagingSenderId,
-              projectId: projectId,
-              storageBucket: storageBucket,
-            ),
-          );
+          try {
+            await Firebase.initializeApp(
+              options: FirebaseOptions(
+                apiKey: apiKey,
+                appId: appId,
+                messagingSenderId: messagingSenderId,
+                projectId: projectId,
+                storageBucket: storageBucket,
+              ),
+            );
+          } catch (e) {
+            if (!e.toString().contains('duplicate-app')) rethrow;
+          }
           _firebaseInitialized = true;
           axiomService.info(
             'Firebase initialized successfully with project $projectId ($appId)',
@@ -208,14 +243,18 @@ class NotificationService {
         }
       }
     } catch (e, st) {
-      axiomService.error(
-        'Firebase init error: $e',
-        error: e,
-        stack: st,
-        tag: 'FCM_INIT_ERROR',
-      );
-      appDiagnostics.record('FCM init error', e);
-      debugPrint('[NotificationService] Firebase init error: $e');
+      if (e.toString().contains('duplicate-app') || Firebase.apps.isNotEmpty) {
+        _firebaseInitialized = true;
+      } else {
+        axiomService.error(
+          'Firebase init error: $e',
+          error: e,
+          stack: st,
+          tag: 'FCM_INIT_ERROR',
+        );
+        appDiagnostics.record('FCM init error', e);
+        debugPrint('[NotificationService] Firebase init error: $e');
+      }
     }
   }
 
@@ -285,6 +324,9 @@ class NotificationService {
         notificationDetails: NotificationDetails(android: androidDetails),
         payload: data['link']?.toString(),
       );
+
+      // In-app immediate feedback
+      showAppSnack('🔔 $title${body.isNotEmpty ? ': $body' : ''}');
 
       axiomService.info(
         'Foreground notification displayed: $title',

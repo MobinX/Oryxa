@@ -66,7 +66,7 @@ void main() async {
   await appDiagnostics.loadPersisted();
 
   final apiService = ApiService();
-  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+24');
+  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+25');
   final authService = AuthService(apiService: apiService);
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
@@ -115,6 +115,7 @@ class OnlyOrdersApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
+      onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => const AuthGate()),
       home: const AuthGate(),
     );
   }
