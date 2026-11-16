@@ -1,0 +1,34 @@
+{
+  "schema": 5,
+  "kind": "release",
+  "strategy": "so",
+  "flavor": "default",
+  "version_code": "20",
+  "abi": "arm64-v8a",
+  "application_id": "com.example.flutter_remote_dev",
+  "build_id": "df6557e4-48fd-42ff-bab7-7363cc055c6e",
+  "identity": {
+    "fingerprint": "b5a9316b5dccfc6588952ae4144b8e451b103fd1dec70b68e5aa8737f112a564",
+    "flutter_version": "3.47.9",
+    "engine_commit": "89c39edfdfae2949f6806e4a315c0c08522238b7",
+    "host_policy_sha256": "1b7200b99d7b0af55d7bee01fa52b3fb1e339248d8ffe60c0941c775dcf2f2a5"
+  },
+  "files": {
+    "libapp.so": {
+      "sha256": "656a0ac266460188fa4119658a254dc0d36277a219a64d666601ac1a38020c3a",
+      "size": 10027912
+    },
+    "package_config.json": {
+      "sha256": "2b16835b1530f3ae636e0324fdb84a74e6714be7b0502ee5511bb9d96511f575",
+      "size": 17341
+    },
+    "release_receipt.json": {
+      "sha256": "8e7040801d7e9b1e8584d9fa1b6a07b9e13cced8c2e791ad78d9b2c3fb26f059",
+      "size": 72913
+    },
+    "host_policy.json": {
+      "sha256": "1b7200b99d7b0af55d7bee01fa52b3fb1e339248d8ffe60c0941c775dcf2f2a5",
+      "size": 175
+    }
+  }
+}

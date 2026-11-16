@@ -1,0 +1,1222 @@
+{
+  "schema": 1,
+  "flavor": "default",
+  "version_code": "20",
+  "abi": "arm64-v8a",
+  "application_id": "com.example.flutter_remote_dev",
+  "public_key": "-",
+  "libapp_sha256": "656a0ac266460188fa4119658a254dc0d36277a219a64d666601ac1a38020c3a",
+  "resources": {
+    "schema": 1,
+    "files": {
+      "AssetManifest.bin": {
+        "sha256": "dd8bef691abb5effa7d42768bfd4d448e5b95b9ebbe80bb9446abd6865448019",
+        "length": 618
+      },
+      "FontManifest.json": {
+        "sha256": "6034d95770a75200406d41b71810a17bf64aa23b76806266305c1ce86eb45060",
+        "length": 226
+      },
+      "NOTICES.Z": {
+        "sha256": "5e559873a783a0488bdee85d6aff06930db5f91145d72af6ad9495327dfc6ff2",
+        "length": 1388425
+      },
+      "NativeAssetsManifest.json": {
+        "sha256": "9548a31e4a048135c1d94f919328bfb62ae2c7bb3cab96557c7941daa97776cb",
+        "length": 45
+      },
+      "assets/icon-192.png": {
+        "sha256": "0dc97b567a6c4b321b71f3e344020514e8138ae9840cbf7a030439b81829168b",
+        "length": 14805
+      },
+      "assets/icon-96.png": {
+        "sha256": "e46702af8241b44600fb3d3f3fce24297c2e0b6d81a1638cc73be54d01919ce8",
+        "length": 6834
+      },
+      "assets/logo.png": {
+        "sha256": "01ac69f4644757dab313e53f8753c4d4cdbcbc12846bfbe6593ea0f3ca332d3d",
+        "length": 42535
+      },
+      "assets/onlyorders-logo-dark.png": {
+        "sha256": "3a4819880d38c7581152c86b862d7e1014f5dbf20ceeb269c5d0b264909d2979",
+        "length": 84044
+      },
+      "assets/onlyorders-logo.png": {
+        "sha256": "751c35cead39b64ed88525ab0593fd1c1014815e214ef9635401d2a6a7c49442",
+        "length": 88028
+      },
+      "assets/version.json": {
+        "sha256": "213169b1d90945ba3d3024afb512bb35f00734e805f3f39ff35dde3e26ed8294",
+        "length": 120
+      },
+      "fonts/MaterialIcons-Regular.otf": {
+        "sha256": "defb7cb56b9ede9ddf66a77d2c25b7c1acd84a3d7c733ecb1d995194c755c696",
+        "length": 29864
+      },
+      "packages/pro_image_editor/assets/fonts/ProImageEditorIcons.ttf": {
+        "sha256": "850693a7a9cd6fc05ac35547aea7728358f7dd5c5536fd862cdbd1feffd7bd01",
+        "length": 916
+      },
+      "packages/pro_image_editor/lib/shared/shaders/pixelate.frag": {
+        "sha256": "4ebe2c295b9872b2bff66748ba06d5d177498d0792467981a392c7c53fe79e2d",
+        "length": 5400
+      },
+      "shaders/ink_sparkle.frag": {
+        "sha256": "1fe8436a743884cb65078fe8c7b38e18f5365f2a2961270916f426fd13c604af",
+        "length": 21856
+      },
+      "shaders/stretch_effect.frag": {
+        "sha256": "bc7599dbbbaab310efe41520574138d21fb18a88c8fe4495ed79315309336f6f",
+        "length": 17616
+      }
+    },
+    "manifest": {
+      "assets/icon-192.png": [
+        {
+          "asset": "assets/icon-192.png"
+        }
+      ],
+      "assets/icon-96.png": [
+        {
+          "asset": "assets/icon-96.png"
+        }
+      ],
+      "assets/logo.png": [
+        {
+          "asset": "assets/logo.png"
+        }
+      ],
+      "assets/onlyorders-logo-dark.png": [
+        {
+          "asset": "assets/onlyorders-logo-dark.png"
+        }
+      ],
+      "assets/onlyorders-logo.png": [
+        {
+          "asset": "assets/onlyorders-logo.png"
+        }
+      ],
+      "assets/version.json": [
+        {
+          "asset": "assets/version.json"
+        }
+      ],
+      "packages/pro_image_editor/assets/fonts/ProImageEditorIcons.ttf": [
+        {
+          "asset": "packages/pro_image_editor/assets/fonts/ProImageEditorIcons.ttf"
+        }
+      ],
+      "packages/pro_image_editor/lib/shared/shaders/pixelate.frag": [
+        {
+          "asset": "packages/pro_image_editor/lib/shared/shaders/pixelate.frag"
+        }
+      ]
+    }
+  },
+  "package_inputs": {
+    "app_links": {
+      "pubspec_sha256": "5c688858a30a5989c2fea95941ee729dabf1657eb415b4b827edde022ef9c2fa",
+      "version": "7.2.2",
+      "native": true,
+      "native_files": {
+        "android/build.gradle.kts": "c9ac2cba4f0d43da9a7e305aeb92bb16d356e5cd30351eba6d813aabc7342efb",
+        "android/settings.gradle.kts": "a38f3c62eb0ae943e9755778d4c46e444bc587b5854d276cd1caa46c78d25ab6",
+        "android/src/main/AndroidManifest.xml": "c57ac3fe14ce89ea1a4ad5095da76bad7f117bcd37bce156d768b63e44939213",
+        "android/src/main/java/com/llfbandit/app_links/AppLinksHelper.java": "152e47ee8110cccc47647bdde087d14e2154d731334bc28266955f866f27170f",
+        "android/src/main/java/com/llfbandit/app_links/AppLinksPlugin.java": "be0a36550b2da09392dbea24c50528a9c51c86b10c50bdadf41b9987a0becb66",
+        "ios/app_links.podspec": "b93c19242f32712c0556bfe55e488ce2a4b21d234ff120823173b7c858b3e22e",
+        "ios/app_links/Package.swift": "9f60931f4dfa1d8dce0bcf0346178c7daba398ef67fc80eb6a6edfa7f8d5e680",
+        "ios/app_links/Sources/app_links/AppLinksIosPlugin.swift": "f2b704cd0cc8879b5bd42bd9a9959ac6946c14439c309e5e12336323f73ae735",
+        "ios/app_links/Sources/app_links/PrivacyInfo.xcprivacy": "df01bf8f311b7b350d01d55afe5059ead9ba2b0069c5421e69d9b405f7cabea2",
+        "macos/app_links.podspec": "0fc0415e28b7285e1c3c75c9188dd2b8553545df0f5c663c555d9880d7c32ae6",
+        "macos/app_links/Package.swift": "4e41584797b2d981442f5321bc17a74d203cbc1e4d0a4d4dd270d307298bd394",
+        "macos/app_links/Sources/app_links/AppLinksMacosPlugin.swift": "21613cd843e044a527ddc217f292be14f3ad791234b44dfd3018742da7a3e140",
+        "macos/app_links/Sources/app_links/PrivacyInfo.xcprivacy": "df01bf8f311b7b350d01d55afe5059ead9ba2b0069c5421e69d9b405f7cabea2",
+        "windows/CMakeLists.txt": "eea889323927c47b1ce5bd734a1dc19e7b77a809a10b6f9d519b5c65cbe39602",
+        "windows/app_links_plugin.cpp": "48e0feef5cdaa7067f8cd4af47fee67ab55e1395d923243cccc74822ae7eeaff",
+        "windows/app_links_plugin.h": "ca91fa5bcc4754e7d4a1379eada37e3fd06ccb6f9e069b0584b2c237bd84f223",
+        "windows/app_links_plugin_c_api.cpp": "b262bc3fd69846f38e648cd973510cc66cab6002ecbb50044c329d31a3c62c47",
+        "windows/include/app_links/app_links_plugin_c_api.h": "e3e67f04a147d90c5b77aec7ab8bd16e38df1f2355b216a5988d4ce1b9a1c8c3"
+      }
+    },
+    "app_links_linux": {
+      "pubspec_sha256": "1c96af720dc131ed3e8d72fa6d3f5b5781709b5854a1465a67224024c7237d8e",
+      "version": "1.0.5",
+      "native": true,
+      "native_files": {
+        "linux/CMakeLists.txt": "c9e284d2e7814bfeced9e6f393c6adfeec967b8244fc15089a57b3efbdf87821",
+        "linux/app_links_plugin_linux.cc": "0755b69bc6d8311ee52675fd2eb2943af6f5906c5cd538a98608de826bb0379f",
+        "linux/include/app_links_linux/app_links_plugin_linux.h": "8c557d1d25eccfbc923c6715ac7a9c822ef3c2d4a5787132ce920b3b98740e1e"
+      }
+    },
+    "app_links_platform_interface": {
+      "pubspec_sha256": "090dce68f074116ab30c54b5e1e21437fe81a7073671a10a4223dbc7e1f337fe",
+      "version": "2.0.4",
+      "native": false,
+      "native_files": {}
+    },
+    "app_links_web": {
+      "pubspec_sha256": "ed49660e206e145521cc29705c2018b83f93059931e4cbace042ca21c089e46f",
+      "version": "1.0.5",
+      "native": true,
+      "native_files": {}
+    },
+    "archive": {
+      "pubspec_sha256": "158166c4cb1f166e2c11e45e85cdc7de8284dc6abac4a88f8bc5bac0d1d550ec",
+      "version": "4.7.1",
+      "native": false,
+      "native_files": {}
+    },
+    "args": {
+      "pubspec_sha256": "b9f281c06f6c6211b1fe70d4389c2413d974b60754e53d985c7692797445d67b",
+      "version": "2.7.0",
+      "native": false,
+      "native_files": {}
+    },
+    "async": {
+      "pubspec_sha256": "e40095aa4863af7443d9ee920c9040f6872b09b496efcc2015f278b0f2c4d8ca",
+      "version": "2.13.1",
+      "native": false,
+      "native_files": {}
+    },
+    "boolean_selector": {
+      "pubspec_sha256": "5e61ef35d1ae2f99381c60d1b8244512de0ecfb41dcefe8cb8dda86594e8684f",
+      "version": "2.1.2",
+      "native": false,
+      "native_files": {}
+    },
+    "cached_network_image": {
+      "pubspec_sha256": "19a2bc4a1a62cc8dd3f7aa41da0a556532a8f7988f9403637b1b6702e1b1868c",
+      "version": "3.4.1",
+      "native": false,
+      "native_files": {}
+    },
+    "cached_network_image_platform_interface": {
+      "pubspec_sha256": "70b771b7aa6bbb4f5a989f233520cf765669b14123a1316d67e02b17dca6a1f6",
+      "version": "4.1.1",
+      "native": false,
+      "native_files": {}
+    },
+    "cached_network_image_web": {
+      "pubspec_sha256": "b677a8917e66ebaa47cf0846b8456f00ece7b8b42eb255c14b6d5f4110dcdd28",
+      "version": "1.3.1",
+      "native": false,
+      "native_files": {}
+    },
+    "characters": {
+      "pubspec_sha256": "7cd9ffb21171f23663ab49252538a6ee6cb3bb564c92d8cee1184111b97067fc",
+      "version": "1.4.1",
+      "native": false,
+      "native_files": {}
+    },
+    "clock": {
+      "pubspec_sha256": "3e0c2d4683afc46bd783bf27073ce6bf95ac53aa78fd26e9135758fab58f248d",
+      "version": "1.1.3",
+      "native": false,
+      "native_files": {}
+    },
+    "code_assets": {
+      "pubspec_sha256": "46710076764b00cb3b29a1a8f7a93c5154e9a3bbc03442b91b3ac3cebe1ae971",
+      "version": "2.2.0",
+      "native": false,
+      "native_files": {}
+    },
+    "collection": {
+      "pubspec_sha256": "4e11aa2845578f3e39badb5e8ed9413eb03bfebe0b87079db03a46680eea0f52",
+      "version": "1.19.1",
+      "native": false,
+      "native_files": {}
+    },
+    "cross_file": {
+      "pubspec_sha256": "e4108d3489f9667b0f2eef63d6a4cf57d487ed703e53f3471ea6a5161d5d745e",
+      "version": "0.3.5+5",
+      "native": false,
+      "native_files": {}
+    },
+    "crypto": {
+      "pubspec_sha256": "e9990225090bde6770086af34da388c2b0b7476eadc1e3c86fb84f830d4d470a",
+      "version": "3.0.8",
+      "native": false,
+      "native_files": {}
+    },
+    "equatable": {
+      "pubspec_sha256": "04598c49b0c83c7f9d93285504d245e803eba8a4a774369788aaf10f7a34897f",
+      "version": "2.1.0",
+      "native": false,
+      "native_files": {}
+    },
+    "fake_async": {
+      "pubspec_sha256": "9ad59f5addeba7d78dd91ec4980ff2dd6e7744dc92dbb1a0ac5ab3d205831019",
+      "version": "1.3.3",
+      "native": false,
+      "native_files": {}
+    },
+    "ffi": {
+      "pubspec_sha256": "041ca905e6d72dfca4c00562860e7d23c1db0eafcacb3c761c260fca6f30faf5",
+      "version": "2.2.0",
+      "native": false,
+      "native_files": {}
+    },
+    "file": {
+      "pubspec_sha256": "72b110453e152f8109f1d3d659b661db0833b5d84b8cdda792ea2ee86ca94459",
+      "version": "7.0.1",
+      "native": false,
+      "native_files": {}
+    },
+    "file_selector_linux": {
+      "pubspec_sha256": "752030ccc3e0a1b2ab94e87924b2c38046ca763975b468c4a73699d52cad0252",
+      "version": "0.9.4+1",
+      "native": true,
+      "native_files": {
+        "linux/CMakeLists.txt": "2117e1a092ba2823b3143fdd38733af6a1e006dfa7105a4bfae9d990ac483420",
+        "linux/file_selector_plugin.cc": "6c85e3968576e093e950fa6f0e11d788fe6972c9d93dbd93cd5514f807d31fd9",
+        "linux/file_selector_plugin_private.h": "cbd8ddfabebfafea453b16a160ece53e28ca784df4c20c92c981b5e10e7718c1",
+        "linux/include/file_selector_linux/file_selector_plugin.h": "552fc69fd1708a09565054fd2ecc08b8a4901763c4ce4b04449c7a3a7de85fc7",
+        "linux/messages.g.cc": "c385d7edeb5f451a1ec38633f4116b676996287ba93a0d10fab537d367738a95",
+        "linux/messages.g.h": "1dac0c5cc5659efb909612a9d58e8e9ec0ee527b4c35da351d13e54b5b457fab",
+        "linux/test/file_selector_plugin_test.cc": "90c9ef8d357fa0be1f25e3084bf90ab34d867379f067375ee458334bd1481dfe",
+        "linux/test/test_main.cc": "23cf38ba1e93fff575e34d06795a310de38a9472849873aaeec8cb050af7b8f3"
+      }
+    },
+    "file_selector_macos": {
+      "pubspec_sha256": "7576b4fc8d9be2fca71a3a001a68d4baadb017ed3e7a3948b67b46c4bade1ed3",
+      "version": "0.9.5+2",
+      "native": true,
+      "native_files": {
+        "macos/file_selector_macos.podspec": "f6d92fa3a1c1657598006993d0bafa9ab7bbe637370dafb7add18d5edcfdb642",
+        "macos/file_selector_macos/Package.swift": "d2ccaed81d453b0141273124606f683b314e3b8041d941b34308bd80a7cee337",
+        "macos/file_selector_macos/Sources/file_selector_macos/FileSelectorPlugin.swift": "2ce6820e865f645c7823c82091d1df2a3a2f36662add35fd75d509b9a5bcc24d",
+        "macos/file_selector_macos/Sources/file_selector_macos/Resources/PrivacyInfo.xcprivacy": "204d035a88eab2281b3d914f46c796766ae78e3cb82537711928dca9e28dbbb8",
+        "macos/file_selector_macos/Sources/file_selector_macos/messages.g.swift": "142c87055b2101a68858336962a34d3a16a3e5c6561ee82e3d61176c40f9111f"
+      }
+    },
+    "file_selector_platform_interface": {
+      "pubspec_sha256": "dcac9809d716434eb0785c3571dec8a664f21996c6d80899b9973526673c3078",
+      "version": "2.7.0",
+      "native": false,
+      "native_files": {}
+    },
+    "file_selector_windows": {
+      "pubspec_sha256": "b5eefe76394631a62559d1d9a2881fd97663fef0f1d0463998f11563f4b8cea0",
+      "version": "0.9.3+6",
+      "native": true,
+      "native_files": {
+        "windows/CMakeLists.txt": "a233e689aea9f7962ee635e02b68d7db3b0903fb5fb854898ecec400d7931a82",
+        "windows/file_dialog_controller.cpp": "b35502bb981c2e19b201c2c0bd7202dc25d0b255ac5fef66fec4b80da63e4d4e",
+        "windows/file_dialog_controller.h": "2dbd646f1da2d1d3f6f643f806cbc02a046f260602eda5c93156fdbb45e7ae22",
+        "windows/file_selector_plugin.cpp": "17e0345a6c0a508986d7d2100ecd04880339b40459c46bb1c14370cbce4b2d3e",
+        "windows/file_selector_plugin.h": "fab7c648fec2f95fab974dd5f38971dd7eefbaed0a5ba7fc58ef33b90d4e2fb7",
+        "windows/file_selector_windows.cpp": "eee98d463b07eaaed9caba99476b91e1cf1ccbfadf1d59e3db07e4a9fa9c5332",
+        "windows/include/file_selector_windows/file_selector_windows.h": "f7dbfc39e822507ced773d7df89311f8a8c4a52fc03c60481f9cadd00d9df06e",
+        "windows/messages.g.cpp": "dd7dd73e56569773a567af364e1be8e740d1b3d3c52a35d6e80018602e931022",
+        "windows/messages.g.h": "dd3af5c0b7c923207388a116f14b167b3e135b0fe61ce657a62392b1847373d4",
+        "windows/string_utils.cpp": "56f5f0f9196d423fb17ec3d01ec83baa9a3065a91757039c9df38579ef92fcf9",
+        "windows/string_utils.h": "8dc8d38b948d9dc8f4b4014a2fb64eebdad673404f7f1b85ba5f9438e9796087",
+        "windows/test/file_selector_plugin_test.cpp": "f31019700caa27abceec52b9f6af446cea77d38a27f9b22cefa6dec17c884eb5",
+        "windows/test/test_file_dialog_controller.cpp": "5b2356135f1cc18fcd680a0da7bf7e89e1f0e80ad58e27f96163eba6932adceb",
+        "windows/test/test_file_dialog_controller.h": "84101719dba167c83fe1133b676af7b4a1533dea9dc6447c03676e05b8c6fcfa",
+        "windows/test/test_main.cpp": "adf09de1011f25d4edc0206a5ff442dd6b2bfcf6417c946591ced1c19d6bddce",
+        "windows/test/test_utils.cpp": "0f37c8247389dfaefb3c317a7c1b0bc0fef4b072a016eb1f09c784159571844f",
+        "windows/test/test_utils.h": "bf993e744458796f2f87f6aeed16e45140e8c71651c50242531e07a18285f1a3"
+      }
+    },
+    "fixnum": {
+      "pubspec_sha256": "2254de24891d1fec71a1b8bd2db3dcf3428ed2a3d1268588bb629215afe6cc2a",
+      "version": "1.1.1",
+      "native": false,
+      "native_files": {}
+    },
+    "fl_chart": {
+      "pubspec_sha256": "aba98267fb24b3ce5ade73b93ad311267342dd19403cf5e725323ecd76552166",
+      "version": "0.68.0",
+      "native": false,
+      "native_files": {}
+    },
+    "flutter": {
+      "pubspec_sha256": "fa999e217c391e09f85247838f2cd39ed942f73df1ed8433e4b2165dec4b6b31",
+      "version": "null",
+      "native": false,
+      "native_files": {}
+    },
+    "flutter_cache_manager": {
+      "pubspec_sha256": "6d4c358232689f77b7d3d0a33db49d03c888d7aa7dea1cc5129d44325f1ec4e8",
+      "version": "3.5.0",
+      "native": false,
+      "native_files": {}
+    },
+    "flutter_lints": {
+      "pubspec_sha256": "740727b8e640d2017ffa6a4a0a1b1bd36de99674ff242ad3b7b8f40bddb0f878",
+      "version": "3.0.2",
+      "native": false,
+      "native_files": {}
+    },
+    "flutter_patcher": {
+      "pubspec_sha256": "d442700b6280918fcc1dd0de55bf145ab6265abe262c6b7c222e0c1e077a0217",
+      "version": "1.1.1",
+      "native": true,
+      "native_files": {
+        "android/BOOTSTRAP_FFI.md": "73c18e5b30da3e3d064283e756058178b5a78e4b2e002b03c3075221afcb8a1b",
+        "android/ED25519.md": "f48cc962838caf08068c679abb32e4b68fcbf0aa3a29e12a39fe53a71a4f1171",
+        "android/build.gradle": "8bcbee4a7948f1821228c688ba634a7b623af02f0e8b724b50fc64309bc508ab",
+        "android/consumer-rules.pro": "9f089384e601668fd3e9d2556f0cfa7ec205fe58a0d86ae6e4e19a9a6f3439e9",
+        "android/settings.gradle": "1ee39e572b81a7df0f000df8f8d816129bd35a349c82f37541892122cd6247de",
+        "android/src/main/AndroidManifest.xml": "c2a648955ee686382eeca79434ada84931aa9283f338dd33bd2be505614670ef",
+        "android/src/main/cpp/CMakeLists.txt": "d0d12bcac05a4e9896a60a2f74f929f3046dbe0ccf37e8c6374d5043058d4c92",
+        "android/src/main/cpp/bridge.cpp": "000a875dccd7e52389c7a94d37c1f5b05ce832e6dc248eb3b9233717427ad961",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/ApplyResult.kt": "613dfb83ba3f19711f778cd5b616fbcb432897c634acf3badce39746bc7ca2d4",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/BootAttempt.kt": "cdae2364e31afdc2988ac7516c4704f18219371cc12bf756e99364e9dba67ebd",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/BootChannelProfiler.kt": "73cdde944e1389a014c3d54248809684e0b2fab0b9578a5c345d86f8c7ed014f",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/BootDiagnosticStore.kt": "543d516c097a961b6471bee31e7a7798df50bee555202a7f0eba7b1ae556fc90",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/BootstrapBridge.kt": "da9405338605410315b3a3b02820a46b6b02f48c6bde0368d31cb2e56735a1f0",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/CandidateFormat.kt": "9f5dc2139369a88cd8e64f24b6acc0e932c8419819ccaa2caaf9878ee645a33f",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/CandidateStore.kt": "2ee2fa8127ac4bbf29e71fb526588a06bf93abcd227de510ba4e15d4acddf384",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/CrashGuard.kt": "adb298e9daf2782cdafca213335c2292cddf9be0c7ed8ef7736a8e3c2b1bcc6d",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/Ed25519Verifier.kt": "4d6da79e914d42794de3d57d7a00b889dbc914890f9464a2f7b844f2587befc4",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/FlutterPatcherApplication.kt": "ca12027753a8c14cf4bc1f4e4a96b5a383f9c80cced36d4a565d7a804821cf63",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/FlutterPatcherAutoInitProvider.kt": "c0ae7b2bdd8c4e40299cc7e4aefaad6eec721a434fbb1848cfde23e237214b03",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/FlutterPatcherPlugin.kt": "2cb2f27d163540e17889fe92a27c7a873f071e08509c56e58a3fb6b622dc7e91",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/HostTrustConfig.kt": "fa63adb2ae929c08175b6e021ce6d3c52590a96139a2d569c658d4ab6b81df07",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/LoaderHook.kt": "ebb97e823c5a1909013a5bac5a9025f3a53676024b278012ed3df05932c08178",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/PatchArchive.kt": "0470b68bd06183949abdc01ebbe75532a5891886fbb3fe206ef3ff1bcb8a970d",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/PatchEnvelope.kt": "9ac9d943f4ed280aa8db524c6c1f4ac76fafde9f993af93ff45200937ec6a050",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/PatchHost.kt": "2f21b1029ebe57418aa29edb0d141a0ed6cf1c5aee82e57f66e8f95aafaad47c",
+        "android/src/main/kotlin/com/flutter_patcher/flutter_patcher/PatcherConfig.kt": "1513f7c8a2cb0deda4870eb4284886ea89be00dc97021e9540e822711ffa36eb",
+        "ios/flutter_patcher.podspec": "156ed2f21e75b8b07a85d2cf83f3c75f18ef251afd675d506050d29d7344b63f",
+        "ios/flutter_patcher/Package.swift": "3ab987693973e2d5ea5fac3747596e499af8c08b5a32ae84a85f114e1165bec2",
+        "ios/flutter_patcher/Sources/flutter_patcher/Bytecode.swift": "0953507bbb0a89f5beaff0f10e1e4b131b5442446edc462f8b24f7b0f6fd492e",
+        "ios/flutter_patcher/Sources/flutter_patcher/FlutterPatcherPlugin.swift": "e78c5151dbe950d19fa2517bdf77f8f643fc447e70fe8cc7b7a5e610b1467e07",
+        "ios/flutter_patcher/Sources/flutter_patcher/PatchArchive.swift": "04c51968365889e44c47a4b9de69c52e58c3ba0431871347eee5ca02f097215a",
+        "ios/flutter_patcher/Sources/flutter_patcher/Protocol.swift": "e7bff2bfbb9325d3edf069d1bbbba4ef243da174f885bfe80b17ae991dca703d",
+        "ios/flutter_patcher/Sources/flutter_patcher/Stores.swift": "9efddac98635d518b0125f9ae7c58291891847a3e4a207fdfe108c1430b50df4",
+        "ios/flutter_patcher/Sources/flutter_patcher/Support.swift": "cc6318e9a3aba9a7afd3416bf11fd927f8b9c43215b1a0c131e0293992af0a61"
+      }
+    },
+    "flutter_plugin_android_lifecycle": {
+      "pubspec_sha256": "4d34a76bb4fbf9a82098c4988b0c6625b9ab64580ee6c078e2c3c3ed49bc7d87",
+      "version": "2.0.35",
+      "native": true,
+      "native_files": {
+        "android/build.gradle.kts": "dd6b424f03f08a6d91799199e89b67a95011b7122edcdc90a920acbf06be9b0f",
+        "android/proguard.txt": "5fef87419bb60c26f78f43ecf3c0de256573bc3eb9ef2928862225a5d1057e16",
+        "android/settings.gradle.kts": "5e1f38acf596f1b1040f969b0bc2f51ea2ff9994ee6c2de4dd4d7f23df2a842f",
+        "android/src/main/AndroidManifest.xml": "9fc3806a78cd2abc3c5f8403c26c91c46856a202395be51c7913f06fff379324",
+        "android/src/main/java/io/flutter/embedding/engine/plugins/lifecycle/FlutterLifecycleAdapter.java": "9311b072b2f31f557974c6a7ffef16e86875359e640e04b8becee266632b2a6b",
+        "android/src/main/java/io/flutter/plugins/flutter_plugin_android_lifecycle/FlutterAndroidLifecyclePlugin.java": "b2ca8efdc1d3d22e97a047150d43229793b40b75c6584301d744c8f2160ca750",
+        "android/src/test/java/io/flutter/embedding/engine/plugins/lifecycle/FlutterLifecycleAdapterTest.java": "a2276f00b2ff3c8bfd0f1eedbe9db07472d879621f71a6d410b3d899a00f85ba"
+      }
+    },
+    "flutter_test": {
+      "pubspec_sha256": "4a8ff1e7c26422d47da60ba272be44a9d4faed94619eefea0ba86ad392a8b24a",
+      "version": "null",
+      "native": false,
+      "native_files": {}
+    },
+    "flutter_web_plugins": {
+      "pubspec_sha256": "98f0763a2bba52c595f7e19831a2bd5a361d4610826330bf55ff961754044219",
+      "version": "null",
+      "native": false,
+      "native_files": {}
+    },
+    "google_fonts": {
+      "pubspec_sha256": "2782de5e2e819c12fcbf2ab7af18ffbb5cb1afb4799a89216352bb11288a1dfb",
+      "version": "6.3.3",
+      "native": false,
+      "native_files": {}
+    },
+    "hooks": {
+      "pubspec_sha256": "7ba5521b348007f2ef44a7795a0e77d062a2bf73a0ed1f3987c8c1d8d580007a",
+      "version": "2.2.0",
+      "native": false,
+      "native_files": {}
+    },
+    "http": {
+      "pubspec_sha256": "ea4d427c296606676f49bca9163822fae7c0ef2593cf0c4fe6f3f11708f570b5",
+      "version": "1.6.0",
+      "native": false,
+      "native_files": {}
+    },
+    "http_parser": {
+      "pubspec_sha256": "72c95470123820e0ceeccc0056fe59158c47834e640317afc3eb7601e0d99ce0",
+      "version": "4.1.2",
+      "native": false,
+      "native_files": {}
+    },
+    "image_picker": {
+      "pubspec_sha256": "aecf6179a5923fd265a27c3a67b835ef3eb22d4680e79780948c50738b9c3afc",
+      "version": "1.2.4",
+      "native": true,
+      "native_files": {}
+    },
+    "image_picker_android": {
+      "pubspec_sha256": "2a848316b853b9b76a167f86b8ef96683b093cc4d072ead366af4baad2b844f5",
+      "version": "0.8.13+25",
+      "native": true,
+      "native_files": {
+        "android/build.gradle.kts": "7a09e83dcddc5b23d0948173ba6b0ac2aaa3a9011994462c55af8e1d3caac111",
+        "android/gradle.properties": "622a3c6053f7d1429ef926700e2859ddcf2da8e58581de4621b5b601074508ba",
+        "android/settings.gradle.kts": "66438c10cc93f35ab471d6bb88c4c3889f12b2cb8eef8c8a7f2e4c5a8b638aee",
+        "android/src/main/AndroidManifest.xml": "61349e6a391f437624fbbda8c3a1d97d206295d3f3a54edf364393af14b677c6",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ExifDataCopier.java": "070a37b3b97f7345d1150b896d5efb24c6966eb2b14e4f70bf0f9c6f36107978",
+        "android/src/main/java/io/flutter/plugins/imagepicker/FileUtils.java": "4ab08463ff5987f91801dc73b267c331b1b2e328168c20a3bfeda08ab8bfd9dc",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImagePickerCache.java": "404e2c1bd21a65bd1d55d2ca4c7952074d50ca608e4f9cf9d296888af2ad2326",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImagePickerDelegate.java": "2848f76f45edac248ec2d7ef2676c339f1f8811122f526bfe293d7c80f5d81cc",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImagePickerFileProvider.java": "09ee51148dd1fbda018bbaff226e2fdd91575e2c74910c2b971825a89acac8b3",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImagePickerPlugin.java": "09426d0ccc857fcca44611bf4b055952fd5873a7db43299302d9870ce2bb3f63",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImagePickerUtils.java": "a9eaffdc91ba5fa9b0434196faf65497dd73dc2353b6af92c952931389f5dfab",
+        "android/src/main/java/io/flutter/plugins/imagepicker/ImageResizer.java": "f030c3d0481ce24771fa889877f167fb6e746b0b710d4b250d7228ed66f849d8",
+        "android/src/main/kotlin/io/flutter/plugins/imagepicker/Messages.kt": "a650c90a790a8cc1b7892763bd648ffc1f5b895569104e25e1e51251b66b6e72",
+        "android/src/main/kotlin/io/flutter/plugins/imagepicker/ResultUtils.kt": "01328ed31588e53ea49a1d6c1f00f9d286083f2dd40262db7929924add2fdacd",
+        "android/src/main/res/xml/flutter_image_picker_file_paths.xml": "2306c13b644f2b0c95b78de7e91f738569451ffa811e361c9bee86042959b2c0",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ExifDataCopierTest.java": "30094d2646736701ec198eb54364f737f2dcfa6830ebc2f6a8dfeb3ef949016c",
+        "android/src/test/java/io/flutter/plugins/imagepicker/FileUtilTest.java": "18ab779052c11bdb577c672b0f1976c24215abbe1b26c5551b25d034fd6a8ec7",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ImagePickerCacheTest.java": "7917c5888fc307a64ca21c80a9dcc33e3d9593d08b8b3aace4d719048f9f7c73",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ImagePickerDelegateTest.java": "cf2d26863fac3c2bb94b8f567dab17391dbad40846d773147f983dc05d0e14dc",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ImagePickerPluginTest.java": "f0ed2f61134256816ea495c3d34cb606a63660c973bb35714b549a11d0b3d5d3",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ImagePickerUtilsTest.java": "dd728688800caa49d38d15bee4332622259a2ed9001761a124b993354574e59f",
+        "android/src/test/java/io/flutter/plugins/imagepicker/ImageResizerTest.java": "ed306e56cc58ce327ec314512c2db601c3ffaf29e70997cbdfed817207c9f57e",
+        "android/src/test/kotlin/io/flutter/plugins/imagepicker/TestResultUtils.kt": "93d95fd463c809ef857cf8b31118289358efb63900ae9f89caa9c0bfe67f6cc3",
+        "android/src/test/resources/flutter_image.svg": "55effcbd51457e9f2bfc25194e7be6fec83368634b339131e578bd95643362de",
+        "android/src/test/resources/jpgImageTall.jpg": "f14f59b8162c5511a5a15005adb5a08137a61da6dcf79d7a2290c653a4f367e5",
+        "android/src/test/resources/jpgImageWide.jpg": "242206e6ecb0fc340dd86f4d32e50e4d2ae21dbaf7389e099133a916f1d0c4b8",
+        "android/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker": "ad854cde62cc375ac4d837bcd1769fb17feb26bd4096ce837ca9164903514e93",
+        "android/src/test/resources/pngImage.png": "40054377e1e084f44f4410ce8f44c210aba945dfc55ed0ef23bdf9469e32f8d3"
+      }
+    },
+    "image_picker_for_web": {
+      "pubspec_sha256": "5e0ec1e8b6abe396d714ccce94ad8b55368cb9694ed1be0891e3d345ef4f7588",
+      "version": "3.1.1",
+      "native": true,
+      "native_files": {}
+    },
+    "image_picker_ios": {
+      "pubspec_sha256": "fd3e471286f422dfdbdaad35c7b141e67e485104748f16ebcbfd194701c41345",
+      "version": "0.8.13+15",
+      "native": true,
+      "native_files": {
+        "ios/image_picker_ios.podspec": "538a0fee797cfa65eba0885da9587b7cd6eb4d07c550c0b0ee2a8585c6984b2a",
+        "ios/image_picker_ios/Package.swift": "6a5161b6c6aca4faa0c1191d3b1536651e3dd782c15a9af976deb0cf269658a2",
+        "ios/image_picker_ios/Sources/image_picker_ios/CameraAvailability.swift": "6ffbaaa98aec18daad6206df83f055d2836d71c9c2c896a412b3b382afafe953",
+        "ios/image_picker_ios/Sources/image_picker_ios/CameraPermissionChecker.swift": "45c6873973957ee0c8601767cac50d1edd659e26ec592995aa972e158a8f4795",
+        "ios/image_picker_ios/Sources/image_picker_ios/ImageDataRequesting.swift": "55da8b3baf7561dcb56f80e334361ca619ba27962fe36cfb1577e58f8a5ccec7",
+        "ios/image_picker_ios/Sources/image_picker_ios/ImagePickerImageUtil.swift": "dfab665a12b20679d001a7196a247f66944e1d76e9a6f7988d9760db1233bafe",
+        "ios/image_picker_ios/Sources/image_picker_ios/ImagePickerMetaDataUtil.swift": "c0ab14d31d9b708c1444dc4c63fe90be3ac3d9111d921c8ca4be74ca3339a9fb",
+        "ios/image_picker_ios/Sources/image_picker_ios/ImagePickerPhotoAssetUtil.swift": "ac09286b3ce28bba2dd61adae19fd17e94f0db54dd54f30f02e99eb7fa81a510",
+        "ios/image_picker_ios/Sources/image_picker_ios/ImagePickerPlugin.swift": "74baa4437c7851883d7c7df59147171c6da73e2fcc424f5a04952cd8e8ea89f0",
+        "ios/image_picker_ios/Sources/image_picker_ios/PHPickerCreating.swift": "dde58df2f6e45d49ffbd708832896d86b9856785530c375493c1619d58ad166b",
+        "ios/image_picker_ios/Sources/image_picker_ios/PHPickerSaveImageToPathOperation.swift": "f7625db4d8fa1f016e893ef51415724cf399e222949d0db467d7ec2b231c3729",
+        "ios/image_picker_ios/Sources/image_picker_ios/PhotoLibraryPermissionChecker.swift": "cb1c14d18c6d4fbc1c4b35b9df86a9db60b1a32c06b7598e742f26417c4ff8b3",
+        "ios/image_picker_ios/Sources/image_picker_ios/Resources/PrivacyInfo.xcprivacy": "6d2da0d8d930227d428c1d9363b0ad6e3a12e2c9b68c5ce297158a7412fc8c31",
+        "ios/image_picker_ios/Sources/image_picker_ios/ViewProvider.swift": "aea71557cee83fa174c34fb3be8e8949ddc517231051916283cbc97a21ac812c",
+        "ios/image_picker_ios/Sources/image_picker_ios/messages.g.swift": "4fbddc8b821a81916182d78c69d9f855c819f9f90fa5dde97607f74f22f5499e"
+      }
+    },
+    "image_picker_linux": {
+      "pubspec_sha256": "ed5bce935c14593b0e1e12deca77db8747ee3ed513981d8c89f94b00904989c5",
+      "version": "0.2.2",
+      "native": true,
+      "native_files": {}
+    },
+    "image_picker_macos": {
+      "pubspec_sha256": "f07ffc49dd00452208807dc05e748774344f89605196f04a2fb26415a5191518",
+      "version": "0.2.2+1",
+      "native": true,
+      "native_files": {}
+    },
+    "image_picker_platform_interface": {
+      "pubspec_sha256": "1c223f1ad1188b459eb73b41bb56d0426af5847ba9a34a1dbd0e6ea5ff713e82",
+      "version": "2.11.2",
+      "native": false,
+      "native_files": {}
+    },
+    "image_picker_windows": {
+      "pubspec_sha256": "95cdd4c74f90c0e42ea0b79afe3e157d031a8ccf75f5e3decca09787b08197ed",
+      "version": "0.2.2",
+      "native": true,
+      "native_files": {}
+    },
+    "intl": {
+      "pubspec_sha256": "27c15dcee651e46df2d8a6e20c21adb61f983f7015b4c9fe9a2dfd0cad5fcc23",
+      "version": "0.19.0",
+      "native": false,
+      "native_files": {}
+    },
+    "jni": {
+      "pubspec_sha256": "4b40a8804e0239684315ffb7a0ce477c5a06f02b82329069eba7f64ff4fd6835",
+      "version": "1.1.2",
+      "native": true,
+      "native_files": {
+        "android/README.md": "62946b65810d77e4741c99511e6e4bdbb32843448e905fd66802596a0b80cec9",
+        "android/build.gradle": "7a70fa8cb48b09cb272b7163e3268eaf82f0dd3dad4b6ca484fe6a9a9b135dc5",
+        "android/consumer-rules.pro": "52429cc021c8cfa8230c937f982af900908112a0cf4e56474107d0f86c39d6e3",
+        "android/settings.gradle": "d91b05de12e9bb05305cc346abc1125ca09c0817da14f3951a2ba6e941ea1356",
+        "android/src/main/AndroidManifest.xml": "f18b3e31c35986ff748a772116ca2017a84bf5f3880ad7401989a34ce88140ef",
+        "android/src/main/java/com/github/dart_lang/jni/JniPlugin.java": "df0aa9b2aa4371b8c8ca7e23a16bb3d9b55680dac3adcd5228de0dc3f94803f9",
+        "linux/CMakeLists.txt": "16955aa17ec5514d8cd3b13711e763927a3ff9e8c9b4cdd9e1311487bd8664c1",
+        "windows/CMakeLists.txt": "3cae0b3c8091c70f409d4ba24481ce168243b67ddc191da36637f3f1bbe376c5"
+      }
+    },
+    "jni_flutter": {
+      "pubspec_sha256": "799482b0c08cb933411d3f870644b17620e22d6b41c6a59c851d4fb0282fed8b",
+      "version": "1.0.4+1",
+      "native": true,
+      "native_files": {
+        "android/build.gradle": "efe6792295979b44a5112d66ea4797095f5ce54799564201b54d9b6aa8f37ce0",
+        "android/consumer-rules.pro": "0a89832f114857ac326c0f0994cc84e4841a4103ae9cadd8e30589ea094253dc",
+        "android/settings.gradle": "394f5957375b4cec4a82294b3f69afa1fc1b34da3853d87fc08c712759aa673c",
+        "android/src/main/AndroidManifest.xml": "73019387ce4ec37ed9c136edbc601128efd0d29b82d45f7a9d14dbf51a5a9aa0",
+        "android/src/main/java/com/github/dart_lang/jni_flutter/JniFlutterPlugin.java": "38c96ec871857e8a01a2a181e9ef259da4c1657a7706e786dde6e0b79df00f0a"
+      }
+    },
+    "jni_util": {
+      "pubspec_sha256": "bc687fea50f9049c6c32e8695b9d5b3655b1e2e07ac7b3c046a1f7470163ba63",
+      "version": "1.0.0",
+      "native": false,
+      "native_files": {}
+    },
+    "leak_tracker": {
+      "pubspec_sha256": "94d7b508a146b66e276d950237ca57b1b2ae29d59e8b90636751f9e0ab6e874e",
+      "version": "11.0.2",
+      "native": false,
+      "native_files": {}
+    },
+    "leak_tracker_flutter_testing": {
+      "pubspec_sha256": "f8865981491384f057687b6a989c4e11a7e897e124c66a1dce5890e215b589cd",
+      "version": "3.0.10",
+      "native": false,
+      "native_files": {}
+    },
+    "leak_tracker_testing": {
+      "pubspec_sha256": "4a1e11a96154e2bca0a5d16dd32b3ffd0c9b7990812ea2836e8b384a13bd23fd",
+      "version": "3.0.2",
+      "native": false,
+      "native_files": {}
+    },
+    "lints": {
+      "pubspec_sha256": "1a27124735793456940ad3724a793174c4ef236556db7e98f696c6880596e3ff",
+      "version": "3.0.0",
+      "native": false,
+      "native_files": {}
+    },
+    "logging": {
+      "pubspec_sha256": "6874846cf8531dbc28e1ed14005adbbc797c40a90d879043390c61cdb5911245",
+      "version": "1.3.0",
+      "native": false,
+      "native_files": {}
+    },
+    "matcher": {
+      "pubspec_sha256": "7614acee1be859c12e898b108af02b60135bf7338dc5ffffbe196140f2bc1e49",
+      "version": "0.12.20",
+      "native": false,
+      "native_files": {}
+    },
+    "material_color_utilities": {
+      "pubspec_sha256": "793249a237885c8b8ba009d77f11089f077df5c6c24489919ec24e9138a69f19",
+      "version": "0.13.0",
+      "native": false,
+      "native_files": {}
+    },
+    "meta": {
+      "pubspec_sha256": "4dc4c3a3c1c8305f48df70722f8bd705e81b8b5ec910be9cae7e1206ecdf0656",
+      "version": "1.19.0",
+      "native": false,
+      "native_files": {}
+    },
+    "mime": {
+      "pubspec_sha256": "cdc0d3feb89450dee80ee55d53340b4ad5fc570ff76b22b679bbf10af592e12f",
+      "version": "2.1.0",
+      "native": false,
+      "native_files": {}
+    },
+    "nested": {
+      "pubspec_sha256": "8e0b42faabfb3cb30757694757c6a9cd9ff3c60ebe80b97472fc45cadc8c89fa",
+      "version": "1.0.0",
+      "native": false,
+      "native_files": {}
+    },
+    "objective_c": {
+      "pubspec_sha256": "21043dd304036beaa3661e3bd418c8933b26f0b44ff388bf3d8e3546e6bbd13a",
+      "version": "9.6.4",
+      "native": false,
+      "native_files": {
+        "hook/build.dart": "8aa3018cbc51f28d8368819f86d3846ac5ddb972b738caa846ea7c47ba68b67a"
+      }
+    },
+    "octo_image": {
+      "pubspec_sha256": "26ac0621068287a1ba6bcc7a2f01f3ae350ed0177d9ad6f9aeaddbb1402eec77",
+      "version": "2.1.5",
+      "native": false,
+      "native_files": {}
+    },
+    "package_config": {
+      "pubspec_sha256": "38cf8fb3182a73e2a6a8e97795e69ce9acdd2f05becd884d20f132cd20db69fd",
+      "version": "3.0.0",
+      "native": false,
+      "native_files": {}
+    },
+    "path": {
+      "pubspec_sha256": "ce033da2f7b263dbaba49c940a94c36185460861e542c1bce39ae7e3d3cfe7e8",
+      "version": "1.9.1",
+      "native": false,
+      "native_files": {}
+    },
+    "path_provider": {
+      "pubspec_sha256": "7268fbfd67b32ddb3c17d2fb1904521d4db25f66eaa0b34e51c87467e5615385",
+      "version": "2.1.6",
+      "native": true,
+      "native_files": {}
+    },
+    "path_provider_android": {
+      "pubspec_sha256": "71f04c65decb9a68448630d56d35f10a9a962bc91fad8c3508a048a22d8d08bf",
+      "version": "2.3.1",
+      "native": true,
+      "native_files": {}
+    },
+    "path_provider_foundation": {
+      "pubspec_sha256": "f07f1e84ba7c7d9014ee78e8e2d90dff7f02bb13e7a07719484ece6e89940452",
+      "version": "2.6.0",
+      "native": true,
+      "native_files": {}
+    },
+    "path_provider_linux": {
+      "pubspec_sha256": "e517df5c479b8702a10ced4749285df6daeab8673e4ef50ab91a8aa8acdcfcde",
+      "version": "2.2.2",
+      "native": true,
+      "native_files": {}
+    },
+    "path_provider_platform_interface": {
+      "pubspec_sha256": "87d1b21be6caee001a113a02b7f53b0a54f6b9ecee7188dbb86b57de91ba3665",
+      "version": "2.1.3",
+      "native": false,
+      "native_files": {}
+    },
+    "path_provider_windows": {
+      "pubspec_sha256": "deda7ddf059bf288028743a14d5d2044e46c2430f22cd7117767699b992021ae",
+      "version": "2.3.0",
+      "native": true,
+      "native_files": {}
+    },
+    "platform": {
+      "pubspec_sha256": "1a28a05cd5333a6d38926f565dc6d33ba87c6e72ddebf3d4d0756b96200b5e0e",
+      "version": "3.2.0",
+      "native": false,
+      "native_files": {}
+    },
+    "plugin_platform_interface": {
+      "pubspec_sha256": "ff12d6cfd6abff9a646279a3968b827fff87da7d9bb43fcf1103b638e8fd7df4",
+      "version": "2.1.8",
+      "native": false,
+      "native_files": {}
+    },
+    "posix": {
+      "pubspec_sha256": "166ac0751cc255a45a8ed0014ceabe316a12aeda0e5c8a97543815537ea484e0",
+      "version": "6.5.4",
+      "native": false,
+      "native_files": {}
+    },
+    "pro_image_editor": {
+      "pubspec_sha256": "b4c15f6070cfa0ac153caec0bddb2731932cb0f32486d7a0c457f863e98bccc5",
+      "version": "13.5.0",
+      "native": true,
+      "native_files": {
+        "android/build.gradle": "ab4f070cdfba2c5b645b3e568469f116166f482d06ed80c8ebbc55f770f7261a",
+        "android/settings.gradle": "be1d88f278da18c0f7debd5e6588a59b496e429479a24a8978006c4f18548a51",
+        "android/src/main/AndroidManifest.xml": "e44fac27b354fa97388cf7d067f5dbd24e2e698ac676bd6d40107f026cac18d4",
+        "android/src/main/kotlin/ch/waio/pro_image_editor/ProImageEditorPlugin.kt": "02e39d7cbe379e83809d82fb41e07170509749db3809f31ff37ff3d3e885f876",
+        "android/src/test/kotlin/ch/waio/pro_image_editor/ProImageEditorPluginTest.kt": "7bb77359e23e484020c761d50dcb952c5bf45a20abbad57260d29e9aacc599bd",
+        "darwin/pro_image_editor.podspec": "c097a55512eebb4812e90235a36ee53a7151be7afb55a1b98b46df7785b45877",
+        "darwin/pro_image_editor/Package.swift": "5e0ae59137477a3c7e23a2ca404ae9014560421fa5ec3ee6cd1df2414d5e2606",
+        "darwin/pro_image_editor/Sources/pro_image_editor/ProImageEditorPlugin.swift": "6bd8c7c1375fe02f59bce2e32787de146f1fb2ab4fb864140bf4e2089e4df84b"
+      }
+    },
+    "provider": {
+      "pubspec_sha256": "e33cd44a1ab8cd7570eba9df9df1285ef94f0e8e02a9c74381842831f87e6ab5",
+      "version": "6.1.5+1",
+      "native": false,
+      "native_files": {}
+    },
+    "pub_semver": {
+      "pubspec_sha256": "0b8cbd89800bb4efc7dd1b300251808249aa5ba274cc9e94be860f0584e84de8",
+      "version": "2.2.1",
+      "native": false,
+      "native_files": {}
+    },
+    "record_use": {
+      "pubspec_sha256": "f3a040fd53ded13737cd93a816907f35b3c276cccec1a6cdc3535f6d5151505b",
+      "version": "1.1.1",
+      "native": false,
+      "native_files": {}
+    },
+    "rxdart": {
+      "pubspec_sha256": "2c483ca0e5bf780707e56f625f220a00c5c09df5956e67acb839515d391e6dae",
+      "version": "0.28.0",
+      "native": false,
+      "native_files": {}
+    },
+    "shared_preferences": {
+      "pubspec_sha256": "f5fb37968a96df57c05a8282bcc65ef146952a34c8e4a2c93160fc414b73a888",
+      "version": "2.5.6",
+      "native": true,
+      "native_files": {}
+    },
+    "shared_preferences_android": {
+      "pubspec_sha256": "53cf849ad8a09becb088868843dd793e31c46a6ed03899702a882c45c3876f98",
+      "version": "2.5.5",
+      "native": true,
+      "native_files": {
+        "android/build.gradle.kts": "ac77fcc08a0cf86a9b123f806e215b1968c66c54e8aef742bcdead4577af2a19",
+        "android/gradle.properties": "d9dee78fe96651a3552d9084b0e9fa91b8a8889af91f9a39cb7a7becc1cfd547",
+        "android/lint-baseline.xml": "e3a0dbf5d6b8c6e43849e248c70344f1ac7359126bef10e7a247e0b4b3c09e48",
+        "android/settings.gradle.kts": "e32bb28ef85cb9620d9397d0e152ae062fdc9f9149b2e06396525996e919339d",
+        "android/src/main/AndroidManifest.xml": "40c4f0d01fe04626ece76e3470ad233060bec2de9adc4c53071a51e2e39acd5b",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/LegacySharedPreferencesPlugin.kt": "3e1b7dbd82f1ffe0f1a4154ce80684d89a80ee4f2534336a513b5a8665cd24bb",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/Messages.g.kt": "39147098abf63e060d248b58e36fb00e4e525124fe1151ee4ab571ee3ccef69e",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/MessagesAsync.g.kt": "01d10b79abd67246e087c474266dae74d96c4e307601b52f9cc882a4b21edb15",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/SharedPreferencesListEncoder.kt": "e34b855fd859813daf55d3a320d7833468e4e24f2348597d83d475b1abc4bb38",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/SharedPreferencesPlugin.kt": "5605289fb092889b961d08324f425ceb9a5d625027955aed084de9a105795430",
+        "android/src/main/kotlin/io/flutter/plugins/sharedpreferences/StringListObjectInputStream.kt": "d5a1fd02b593c74a5e5c257686a5cff6d407f76e76ac806959905a5c1a3d5312",
+        "android/src/test/kotlin/io/flutter/plugins/sharedpreferences/LegacySharedPreferencesTest.kt": "3475085bc2eeb8124f2ff614fabc3d2bca8f433d023a22168d849ed3fdaa60c8",
+        "android/src/test/kotlin/io/flutter/plugins/sharedpreferences/SharedPreferencesTest.kt": "3a9101bf70d5458fd6687f80d3e458e4055d20fdef46f74ee198f1b801f5e0d2"
+      }
+    },
+    "shared_preferences_foundation": {
+      "pubspec_sha256": "bc2eabe970aeb1aed5efb2ee9308ff3bb93bccff15c7e709c8d7f6e5fb5a43aa",
+      "version": "2.6.2",
+      "native": true,
+      "native_files": {
+        "darwin/Tests/RunnerTests.swift": "8407e697e89f1c71fbce5c33cc735ed01e915d625e0d459d39d3e5c851109291",
+        "darwin/shared_preferences_foundation.podspec": "9ac7465a3a57d6cc2bf0ff8829df55185869f437cda6243e356c9c2bcc921a29",
+        "darwin/shared_preferences_foundation/Package.swift": "e0aae125c494d061044a058c54e0e52e3f1cfcb63fa7c430eaa65792b9413269",
+        "darwin/shared_preferences_foundation/Sources/shared_preferences_foundation/Resources/PrivacyInfo.xcprivacy": "056428b938bd57018a60019d15c3c1ee2fa727f23687598bbbd934848b180b1a",
+        "darwin/shared_preferences_foundation/Sources/shared_preferences_foundation/SharedPreferencesPlugin.swift": "433ac0e59b19a781c35ba7353161aff12845a802066cbbf9e366baa8f062ae70",
+        "darwin/shared_preferences_foundation/Sources/shared_preferences_foundation/messages.g.swift": "1905ddf8da66d16f218681466ff57d1260f4d027c9647622f43630973f219d0a"
+      }
+    },
+    "shared_preferences_linux": {
+      "pubspec_sha256": "c01799b24e66ac256a71726c4f5b89e7ab38927c9eb626a778933d664a39d0cf",
+      "version": "2.4.1",
+      "native": true,
+      "native_files": {}
+    },
+    "shared_preferences_platform_interface": {
+      "pubspec_sha256": "f0a6c124a549870b409d8c587fc66f01a473f76ca23c1981dda913b3c90b7dcd",
+      "version": "2.4.2",
+      "native": false,
+      "native_files": {}
+    },
+    "shared_preferences_web": {
+      "pubspec_sha256": "b45432c88cb3c2b7332308a754341e325eb58faf18868feb9e5f12b52e4eb4b7",
+      "version": "2.4.3",
+      "native": true,
+      "native_files": {}
+    },
+    "shared_preferences_windows": {
+      "pubspec_sha256": "4bbdb8da408a6b9ea235adb13bb676e8318c7d3a3c47aaccfe8c00d43b207555",
+      "version": "2.4.1",
+      "native": true,
+      "native_files": {}
+    },
+    "sky_engine": {
+      "pubspec_sha256": "ee7f7f271658e967a9d26452225a8c5c76b74c2327056dcb6412bfb1921ebe6d",
+      "version": "null",
+      "native": false,
+      "native_files": {}
+    },
+    "source_span": {
+      "pubspec_sha256": "39e816338178cf945355074c4c2e991e97fd0d0a823d9d05c531b6de5bf85aad",
+      "version": "1.10.2",
+      "native": false,
+      "native_files": {}
+    },
+    "sqflite": {
+      "pubspec_sha256": "627529c99af35c0703d0938f782a271dad637cf39c343270d0ae67241a5d1ec5",
+      "version": "2.4.6",
+      "native": true,
+      "native_files": {}
+    },
+    "sqflite_android": {
+      "pubspec_sha256": "0455c1dd4e5126aa60a6eb6aa12f98b0344fab1ff420c680312010200b77ef4a",
+      "version": "2.4.6",
+      "native": true,
+      "native_files": {
+        "android/build.gradle": "221614566e9463dbfd529144cbab45a8d77f22bb591ee8f9ee7a8b00ba2334db",
+        "android/gradle.properties": "0458daa85e49a2b953af56eb874bc554173e639d3ff435b1f18d3518612e4635",
+        "android/settings.gradle": "659b3bdf550c06b3b68e8f11a1481aca0ffea66ff59eee25c463c4d97c1285c2",
+        "android/src/main/AndroidManifest.xml": "5cd294a1b20c3f5f5cb8fd12ef19b535879a64a89a76560970041db03855b057",
+        "android/src/main/java/com/tekartik/sqflite/Constant.java": "6c2239a123474a6baba574f468a0337fda76634f7f5da1373b558420aad6dc60",
+        "android/src/main/java/com/tekartik/sqflite/Database.java": "b89bf89e17cb8d2db16a948940714056d6e49c5559d943f72c0b124e214d7790",
+        "android/src/main/java/com/tekartik/sqflite/DatabaseTask.java": "f9b18b9d32eb368932bb8020100c2341cca062c168361c2b23cddcad1f771b5d",
+        "android/src/main/java/com/tekartik/sqflite/DatabaseWorker.java": "f5cf9ee72f2a3d9363f28c62a36219093623507572cc6aa841af8f1473bbe092",
+        "android/src/main/java/com/tekartik/sqflite/DatabaseWorkerPool.java": "abf1851c06ae63fb2793501522fd9aefb5f858540fc9b1c59dc7302709ef4cd8",
+        "android/src/main/java/com/tekartik/sqflite/LogLevel.java": "ba3f2be70d31df641d08a6689d0019421cdd82fd3df0a2500fae0fc46fae0719",
+        "android/src/main/java/com/tekartik/sqflite/SqfliteCursor.java": "23573af9c0dba2efb29bca8e02c7a56ee6c3c8395a52bf3da4449eaa720fc529",
+        "android/src/main/java/com/tekartik/sqflite/SqflitePlugin.java": "8aabeb0229fb36db1f05a0f7b669f952534e8c1de62a4b29fcaa2528e2f0c3f7",
+        "android/src/main/java/com/tekartik/sqflite/SqlCommand.java": "3c3c1b70bee96de91b041273a7764ab8fd78f1f4d0d3b1c62bb1623b785a044a",
+        "android/src/main/java/com/tekartik/sqflite/Utils.java": "110d6ffcd73d8c9348fea1480c3dae97e513c3294cf0722e52f05a686eaad493",
+        "android/src/main/java/com/tekartik/sqflite/dev/Debug.java": "92a1f7f75650c3e397e9d41e0885f4497f6e5dd9d3e46c1f035e9436103a8554",
+        "android/src/main/java/com/tekartik/sqflite/operation/BaseOperation.java": "a5b97b0aaced72c0efbdeeb18536df126d0088e73bb4465e8c55fddb0acac67c",
+        "android/src/main/java/com/tekartik/sqflite/operation/BaseReadOperation.java": "ad555022737146dbf705b28cba1c7fe41291aa4a6a5e8d5c66607f025b02a5ff",
+        "android/src/main/java/com/tekartik/sqflite/operation/BatchOperation.java": "3e913ebe7c16fa3d59913b758e4e7142a0f6cc012a3e92ce16386a89d692e556",
+        "android/src/main/java/com/tekartik/sqflite/operation/MethodCallOperation.java": "6a7110c57b8239032e0c5ae7d5d283919986405b6d1979becc974c08e4249d84",
+        "android/src/main/java/com/tekartik/sqflite/operation/Operation.java": "56aca10760790d5085632999063035bb6928e5f818085cda7a3cca17d7704ddc",
+        "android/src/main/java/com/tekartik/sqflite/operation/OperationResult.java": "98f564a2c623b415ea33bcf85ec55b6aed99c9698f8524809bf803a1415d7001",
+        "android/src/main/java/com/tekartik/sqflite/operation/OperationRunnable.java": "b69be7e5e785cf6f0ad950709171302bc1fb0df20803bb63cb92915f08ad6d28",
+        "android/src/main/java/com/tekartik/sqflite/operation/QueuedOperation.java": "9978fd55f22d0ed7b47e996942929a1317af2154756f686c6d944c17f33b2ef7",
+        "android/src/main/java/com/tekartik/sqflite/operation/SqlErrorInfo.java": "13fb7efc84d95945eadaad9f3b830ae6aaf302e162b178eac01ccb84b37e906e",
+        "android/src/test/java/com/tekartik/sqflite/ConstantTest.java": "1ea1ad538ded01779cfce5b096c9242162bb5cf0d72087a441bf5ed241aabe4d",
+        "android/src/test/java/com/tekartik/sqflite/DatabaseWorkerPoolTest.java": "86e81208f0c7c5b0eb2d29085061f19c7eb150c251411210db51a1602a1e41a7",
+        "android/src/test/java/com/tekartik/sqflite/LogLevelTest.java": "a45776a40efa86d5aea9aa146c0fc33ef96f86681be6ccafd04987f53d8c4c42",
+        "android/src/test/java/com/tekartik/sqflite/SqlCommandTest.java": "cc27f8256f7ed5cb3b4e6b285c05cfefe00f5337afb833ee9f17fff88886b79f",
+        "android/src/test/java/com/tekartik/sqflite/UtilsTest.java": "0b95f3aca84bd71a24f179f3f695288b62d240d7a694fa8b0c12ca27df7f5073"
+      }
+    },
+    "sqflite_common": {
+      "pubspec_sha256": "6d27c517b676443f46c651b89a7aab5821d86620b00b2d36eab3ae1e31920d0d",
+      "version": "2.5.17",
+      "native": false,
+      "native_files": {}
+    },
+    "sqflite_darwin": {
+      "pubspec_sha256": "15037e651285b5319d874c2fbbd7d2e1bf187f2e2a0f0937d9f04f5a9041fbeb",
+      "version": "2.4.6",
+      "native": true,
+      "native_files": {
+        "darwin/FMDB_LICENSE.txt": "cc6cfe156c98f1ca8d42f5a2371266694624a86b35fdfb614a8d60ee23c7a104",
+        "darwin/README.md": "af76667f2105d566e1e94bb7ab3ce531043a9ff986210fdb08f68cb05ef6fc38",
+        "darwin/sqflite_darwin.podspec": "129d0f63c692cef848a74563b2bc8a8fdc676a65ba93802c7130462e33092605",
+        "darwin/sqflite_darwin/Package.swift": "4fb85181c3b455145523c5edd8470090615ee1ec29c434cc9552a2d39578e5df",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/Resources/PrivacyInfo.xcprivacy": "47226a29608df206ad0a110e6afeb5a77ff575ac1df9c76bfdb2d6dfb3fafed1",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteCursor.h": "59616b42b7ca8c5cd98d4ba0cad61bdec428fb7cc828e3cb08ea29c897a4e074",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteCursor.m": "e00695318f295d92ca93022666c30ff437aed17c6bd40593d9e360c3c385dd76",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDB.h": "e28e80a8612f98699f69fddc15741d1c5dec01660a5931918d0620b4c0bb8b40",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabase.h": "faa82d9df60375c98f2b5a014842e94b81827576cb4075255ae43c912d2dfc45",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabase.m": "fbd481a0cdfdcb13b4917d7646fd0d6cb20f122b845056506bba0be79a622808",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabaseAdditions.h": "ec24a1b9f11e0cf13e637af33364d1e4177a37d4400a124442d35abc8d1f16c1",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabaseAdditions.m": "d688812ad97b5af219739ea34b0087d1f412258b3a9d8584e9576f684440a2d3",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabaseQueue.h": "42864a06ef1ea82710c13263d0b85607256e0f148d395753ba6f65f6d27a01b6",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinDatabaseQueue.m": "51a23a1a4f942376fc1725e28694e8b622288951c704291e8988746a853fc047",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinImport.h": "5845e9f2126557da9199d5ca716e6b571ef6a31aa7ed85fbd2f3420b4ad1eac8",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinResultSet.h": "009da7f255e3a9aba8aa9bf440a73835cf706aabd3d30908bd4fdbc0c8b00dcb",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDarwinResultSet.m": "278e458c133e9205bb3a670c8853a5cd5d69e16afe364b935743c6a833ed805c",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDatabase.h": "c22f65fd240983f2a5a86b95e020d26566217c88c596741d159022adfe9d29fe",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteDatabase.m": "8022251310f876cdc09ebf211244b668673bdbce992ad978f2376cfb90fb40e7",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteImport.h": "21bed4ed27c5e7ca5ec82663e3b203d3a8b1f2f9a16557260929f8c82655b1c2",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteOperation.h": "dd153cae63d137b26a6a963650d86adbee7f8ce2be83dbf73c342e515a1ca10d",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqfliteOperation.m": "27b31b48278dcc5f7d0e765ba2ff7e45558cec0789bff6a0881ab2db9e973e4d",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqflitePlugin.h": "d858843a4c07af382bd5e3e35be724411743a39bf4ebac44239ea5f2727a18dc",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/SqflitePlugin.m": "1722d9cc7bbcf4fa55d9d0dc20afce72f9f14bfacd1ffb64f2317e4ff4f7bf25",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/include/sqflite_darwin/SqfliteImportPublic.h": "d5a9939fa6a3948842d0abdf6b420fca5e227e0149d1870fa1909fc6a9f41cb0",
+        "darwin/sqflite_darwin/Sources/sqflite_darwin/include/sqflite_darwin/SqflitePluginPublic.h": "677887b6a770d468362a2cc260930ff87658ade33ff3e91c13a63b7a90af8697"
+      }
+    },
+    "sqflite_platform_interface": {
+      "pubspec_sha256": "52b96f8449948e61de090775f266d6d8bc7e0707678bb0f1d97fb4123961cbd6",
+      "version": "2.4.4",
+      "native": false,
+      "native_files": {}
+    },
+    "stack_trace": {
+      "pubspec_sha256": "6d762052636e64cf0697434f798c10037a9de8668fc3a6e82cce66ff0f5b184f",
+      "version": "1.12.2",
+      "native": false,
+      "native_files": {}
+    },
+    "stream_channel": {
+      "pubspec_sha256": "e35fdc9f3249e44a306037ddb3c1c292aba5fce94b80911427cdf094f19586c2",
+      "version": "2.1.4",
+      "native": false,
+      "native_files": {}
+    },
+    "string_scanner": {
+      "pubspec_sha256": "5a124b2b118bb4616a42603c2071af36ef0bf851c90611cd1315eedf85e1b76b",
+      "version": "1.4.1",
+      "native": false,
+      "native_files": {}
+    },
+    "synchronized": {
+      "pubspec_sha256": "f4c777ef2700453c98b442b0b98b99c796cd758daf25648a70c893e86d93acb4",
+      "version": "3.6.1+1",
+      "native": false,
+      "native_files": {}
+    },
+    "term_glyph": {
+      "pubspec_sha256": "afceb850d2dac1cf733a8b48602a53d91d938adb95827f00dbe2fe7bb7c15867",
+      "version": "1.2.2",
+      "native": false,
+      "native_files": {}
+    },
+    "test_api": {
+      "pubspec_sha256": "5b147c41389d160ec237ecba28d30e80a3aa0110cb4b1d9294b8e58e05e03383",
+      "version": "0.7.12",
+      "native": false,
+      "native_files": {}
+    },
+    "typed_data": {
+      "pubspec_sha256": "0b6050c7c1f5c00a4f1c2be99de8aa46e55693f340b1c3e12d5a371f54abb6cb",
+      "version": "1.4.0",
+      "native": false,
+      "native_files": {}
+    },
+    "url_launcher": {
+      "pubspec_sha256": "5eeeb242472e587f15e9e9c81af13ea67ac18e0087b5fba633f5653fdab98bb1",
+      "version": "6.3.3",
+      "native": true,
+      "native_files": {}
+    },
+    "url_launcher_android": {
+      "pubspec_sha256": "3d1677d24673d71304e1d79bd0751e89225e962442982b000ccac0d31982f6f9",
+      "version": "6.3.33",
+      "native": true,
+      "native_files": {
+        "android/build.gradle.kts": "b7c15441541ac8a7d80d63780fb9128a518ac3067f70816e853a2c88ea8e8e45",
+        "android/settings.gradle.kts": "48899388be4a4df328b6cfc308b756829bb09f9d286bbb5ec3957b8f85654a32",
+        "android/src/main/AndroidManifest.xml": "9480478876ea1108d083b7dfbe88b78b9c1b6d25e553dca52d76da2d5a39ad0c",
+        "android/src/main/java/io/flutter/plugins/urllauncher/UrlLauncher.java": "9baf4731426f2bf1d326566a843825019224723b1b31ec6c7cf8be3b528a3e9b",
+        "android/src/main/java/io/flutter/plugins/urllauncher/UrlLauncherPlugin.java": "c5ffe98d3308842150865d55b5a6b81a952df246c1635dcec285266b0b918405",
+        "android/src/main/java/io/flutter/plugins/urllauncher/WebViewActivity.java": "cb9fc09efcc8582da54756b5c5725430784e0f96c8d6396b64a6e52282181a10",
+        "android/src/main/kotlin/io/flutter/plugins/urllauncher/Messages.kt": "560a861abe91cbac4704765c7a0df80374e348260ba9a366c266acd03adef8ec",
+        "android/src/test/java/io/flutter/plugins/urllauncher/UrlLauncherTest.java": "ce496e9c25f17ad47568626ad07579700ddf9b324867a1597046a70f95b01e5d",
+        "android/src/test/java/io/flutter/plugins/urllauncher/WebViewActivityTest.java": "7058ee7f3bf8517136740797e2cc101e191eaea64f90fc26515181e4bfe902c5"
+      }
+    },
+    "url_launcher_ios": {
+      "pubspec_sha256": "a3cd32df8b86b983b25a750924f52ec42bc16b82a0df3c032ad8cf062aa7fff8",
+      "version": "6.4.2",
+      "native": true,
+      "native_files": {
+        "ios/url_launcher_ios.podspec": "0307afd17d3408d04e375872d6563bb76457ffb1f38027aa3271647332329e93",
+        "ios/url_launcher_ios/Package.swift": "a084c5f43a622fa55111da7a765002d43c312f601fcd232a0b03a673927f4660",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/Launcher.swift": "b5b499f3d10754a85be0befaeca35e13e417fddf5cc24c8e5584b0bfaf7c778b",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/Resources/PrivacyInfo.xcprivacy": "6d2da0d8d930227d428c1d9363b0ad6e3a12e2c9b68c5ce297158a7412fc8c31",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/URLLaunchSession.swift": "3ce1e0c670ae99fb4e280dd21a077c15e9523c4f80851d179c79dd27598f3f67",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/URLLauncherPlugin.swift": "2cf5db0164f0d39c9406a0c34246a86e121bcac90cb605e81ca6ce63ae8c8b4e",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/ViewPresenter.swift": "b9e5e4d28f554da8b47f351bb5b66aca6a255e9001be17f58ca0a30260febb7e",
+        "ios/url_launcher_ios/Sources/url_launcher_ios/messages.g.swift": "87b919e25695e3278e4ab1c08da599def7599569d0c2fd811dc328df070b2b44"
+      }
+    },
+    "url_launcher_linux": {
+      "pubspec_sha256": "5f21f6be8d594bc1534cae19b63145799351c3ade593031094206487c6bec609",
+      "version": "3.2.3",
+      "native": true,
+      "native_files": {
+        "linux/CMakeLists.txt": "e629a47e833c505b7e8884d8d5f008d8b463a50ce3c675c7ebd22957cbe570b3",
+        "linux/include/url_launcher_linux/url_launcher_plugin.h": "46d876ccaf7517ff0a4b0ee144943c0986d739de62afa03525bce884817d6602",
+        "linux/messages.g.cc": "dcc34cd90d9c0fba2d066d343a3a4cd585bfda03c8132a101c5a22ce54201c4a",
+        "linux/messages.g.h": "7947b28bba84665f170ed6e0c2a1aee349913a3aeff7b317c7d4a42acee9fd49",
+        "linux/test/url_launcher_linux_test.cc": "8aa9598afb867e861bf8af61fc888d259740be3d7414a84ad589e1830fe66828",
+        "linux/url_launcher_plugin.cc": "b119a6e095fef26f2fc9edadadfea55f85d5f8310cb3d258c0d3b0fe6a7e2f5f",
+        "linux/url_launcher_plugin_private.h": "e89c8f24148c02c96522a51b76a167331c194457f8f38d0146a4a2d66f458336"
+      }
+    },
+    "url_launcher_macos": {
+      "pubspec_sha256": "70846327fe9df77aa800a1f06fd0b85640dd5aae59c34a99209c7c031f0b633e",
+      "version": "3.2.6",
+      "native": true,
+      "native_files": {
+        "macos/url_launcher_macos.podspec": "4515bb8d31c88d546797e23d2c6a08392000a617da09dc9745dbd1aa7b08b454",
+        "macos/url_launcher_macos/Package.swift": "2094ecd1aa9ee88e3169b5f8f8f92769f8f5d81b8282c4bdb5bc120a9fcd56e8",
+        "macos/url_launcher_macos/Sources/url_launcher_macos/Resources/PrivacyInfo.xcprivacy": "204d035a88eab2281b3d914f46c796766ae78e3cb82537711928dca9e28dbbb8",
+        "macos/url_launcher_macos/Sources/url_launcher_macos/UrlLauncherPlugin.swift": "6558f3ade867e6e0baadb7215b275dd7daa1412bdd6228f779b91dde98c825ff",
+        "macos/url_launcher_macos/Sources/url_launcher_macos/messages.g.swift": "8e26bbac628e8a3a09dc12325b94f66b432d39243fabe2682cfcc9249d6e9980"
+      }
+    },
+    "url_launcher_platform_interface": {
+      "pubspec_sha256": "fa72d7e1024bc4c64020841bdb07c8551cc1048f11bdb4c2bfcf1ca7b7aa3701",
+      "version": "2.3.2",
+      "native": false,
+      "native_files": {}
+    },
+    "url_launcher_web": {
+      "pubspec_sha256": "4be9d7363082482bc4fc266d44842c1fecde1e81d6c1557f7a42886ecf62d313",
+      "version": "2.4.3",
+      "native": true,
+      "native_files": {}
+    },
+    "url_launcher_windows": {
+      "pubspec_sha256": "40112a53c5d865f150a79a30064a3b62f2ceb82b6c053e428c53f487c00a45c4",
+      "version": "3.1.6",
+      "native": true,
+      "native_files": {
+        "windows/CMakeLists.txt": "fd3030d7565f31ab7a0d3a8d7ae2a7da660a2a17d29298b2798ca2e694ae5a9c",
+        "windows/include/url_launcher_windows/url_launcher_windows.h": "657442ec7efa6c771d55e386e529c76cfb776bfc64bcc2012f246a0974b13ef2",
+        "windows/messages.g.cpp": "030900e032af12d11603bcb3807c4642c9ba646b29d61d102566b615c9550596",
+        "windows/messages.g.h": "5b560a6c5cc9ac5e9ce78220b636c0d67cfc9018cfe65737992b06709d666cc7",
+        "windows/system_apis.cpp": "904670e17a4b7aa28bce7853611f7b3a1731390ed852c3123542a6e9e45943ed",
+        "windows/system_apis.h": "e408e65e953d385c6a8bef34e17a227f28b388f90676caddc9eff5728a0ae36d",
+        "windows/test/url_launcher_windows_test.cpp": "4b65dfd7051693038a9b03ddfff84c69b32cc08144aaed8dc64271419ceaccda",
+        "windows/url_launcher_plugin.cpp": "a79a60430e2479fcf94e21c2030a8c4b4d78815750e3b9cb6f0d898a96eb1d4e",
+        "windows/url_launcher_plugin.h": "5951a1f7c1cf51033089091dc9c30c7e4bd2adfbcfef4dcc493af83fe1032860",
+        "windows/url_launcher_windows.cpp": "689e7727036cc677d527ad27589687e817c53bccd56da959c81f6103bcfadca9"
+      }
+    },
+    "uuid": {
+      "pubspec_sha256": "b8b7a422554138d912a91f3d629a84b6d063eaea88d7c672fe1d6905f45dd527",
+      "version": "4.6.0",
+      "native": false,
+      "native_files": {}
+    },
+    "vector_math": {
+      "pubspec_sha256": "8bf6610ca8d86861cfbdd26699f4cf1fe99bd01dbc89ddf07d15c4e300e68a36",
+      "version": "2.4.4",
+      "native": false,
+      "native_files": {}
+    },
+    "vm_service": {
+      "pubspec_sha256": "73947a9315142fa6a21149abec8fe8054127da38efaea202675963221dd14c21",
+      "version": "15.4.0",
+      "native": false,
+      "native_files": {}
+    },
+    "web": {
+      "pubspec_sha256": "e8944e3de4495f5a69b89f965e7c44b87408c0a27346838d145365024668eeca",
+      "version": "1.1.2",
+      "native": false,
+      "native_files": {}
+    },
+    "xdg_directories": {
+      "pubspec_sha256": "e11cf54013b18e43715339f28d2eba258db70c6ca35f9b2bbb92f6de7be8280c",
+      "version": "1.1.0",
+      "native": false,
+      "native_files": {}
+    },
+    "yaml": {
+      "pubspec_sha256": "7c74a842caf1795dcdb8299ed7ee3715e58a8885a7a7eb80f39edc9febdd3723",
+      "version": "3.1.4",
+      "native": false,
+      "native_files": {}
+    },
+    "onlyorders": {
+      "pubspec_sha256": "d4d17e06bbc368fb9e80bdeee1057a0ef37569f782bf0a4c7ea9b13623b953df",
+      "version": "1.0.15+20",
+      "native": false,
+      "native_files": {
+        "android/app/build.gradle": "0d11171fbaf66aea43d8ba0f702f2d2c368bfd815159513ca727f3bf15bb893d",
+        "android/app/release.keystore": "6309eb2ebde8815f7fa9cc777bc3bb611dd5213d8cb5134da683320b428140e9",
+        "android/app/src/main/AndroidManifest.xml": "5c3d19441885035683de7fc58ea899dbeacb04262ffa8b73f412ab09291c3d6f",
+        "android/app/src/main/kotlin/com/example/flutter_remote_dev/MainActivity.kt": "f74c576273b5a6aa1ff9b4317b41d7f4bc954c0ba23c264a87b14ca43e7d20d9",
+        "android/app/src/main/res/drawable/ic_launcher_background.xml": "07f896d549f06ca6037f8f4a4e683041cdb5e25e6abbfc80a41b5f1f0e3b1e0a",
+        "android/app/src/main/res/drawable/ic_launcher_foreground.xml": "bcf5354bf85ba84e9f977cdb42d4b7f5728c240c5a375616044cae5f56dae6cb",
+        "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml": "1c832bf194d8eecd439a92bcced0df144c9f566b934b3d7865e983d8ee8dbdeb",
+        "android/app/src/main/res/mipmap-hdpi/ic_launcher.png": "7ff8fca6c58c278e59682e447427983ca83842b221ca8661ac1b08f5b10829cf",
+        "android/app/src/main/res/mipmap-mdpi/ic_launcher.png": "3669f7a7f3715c6f44d50692e7ce8e1ddcdd028b75379b7f54192169aed6555d",
+        "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": "17b884abafab1b833c0b57fd3ea72c5f18189d7a4288f8cf3ecab6c956710c08",
+        "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": "7fdc839cc3a58707472651dd40df47d5e0b7e6a1d209057fd6d0da9fcd377380",
+        "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "7decccc58c73413b377147419a58d8adb0eeeea7c0835fbd28d2d6443eae3d8a",
+        "android/app/src/main/res/values/styles.xml": "5becd512b5694cd118b9c01d99d69f2094e7e42c17b937d2c9931e861073775b",
+        "android/build.gradle": "37bb5e2370be94561043add48ffcc5a939b438f226fc0666a6a1e6a826794d1a",
+        "android/gradle.properties": "b6002c25190bfb2a6a44b4d3c5913bd5a122cd6436de6f538ffe81e12ea476a4",
+        "android/gradle/wrapper/gradle-wrapper.properties": "c2f7bd44d9f66b09fc74e842373a034a8c7b15884273dbb04451ed9b31a6ce5f",
+        "android/key.properties.example": "ef8e9a5f1b4e4d573aae1126ce87ba44a676120b03f6e3f55ae730b6c71d0171",
+        "android/settings.gradle": "affa31a76a667c90d0f49d683754f4787b0d3c88481a7a17630577fad8e9653a"
+      },
+      "dart_files": {
+        "config/api_config.dart": "c5946ae4d92de14aabc3a41038d5a7b39745e66c6aa2bdc722859432e6cc69fe",
+        "config/app_theme.dart": "de022be28b67ceb12d4a45d9951433e0d32f8a245b1f611687d06e4fda045c34",
+        "config/app_version.dart": "fef174b2bb94e35b135508e201952b008dbc0d7de57d301b5d29f27c4eef3c4b",
+        "main.dart": "eb0f67e4039732a5f046da402e87911da67e89841859b365856861e7a8608d14",
+        "models/analytics_data.dart": "0c62995a5c97ed90db16597ad6d172f1ad38d4f22909faab33ca58aa69fe9467",
+        "models/business.dart": "b25346dc7373c46281d86d31379f9ccd574f81e754acc54e1d32c973d28fb4f5",
+        "models/channel.dart": "42c93e6cf3f59a66ce3b4a32bc0cf9be3adc2e511d201d164d3d903afe13c019",
+        "models/conversation.dart": "fbe10d9e3e802fab68552d4ca6f859de6b04178bd2e6f0eb363844cc708e77bc",
+        "models/customer.dart": "a6f1ebe7e57c4dde0223b0a08fa9d2884909e28b0e53a02ee5a87fbdf32f1408",
+        "models/notification_item.dart": "5b969135d7a6645fafd5dc6c51ebea7bf1ad6e07cbd3554bfc54cce508848ea7",
+        "models/order.dart": "ea76c2933160c365223217af048341c489e58811005feac4f11b72f07aea8065",
+        "models/playground.dart": "ce6ddf6f302cbe6fd50350909733669c42e763d595da6ff53841496e3f334155",
+        "models/post.dart": "8f6fafc685aa6760ee9a77ead66aa35ab906869f1fcf9a2e6244624025e55f2f",
+        "models/product.dart": "a712e2180c1930fe981b8873fcd4638f7ec1e3527b0e24d94c6dae904c8a58b3",
+        "models/user.dart": "4219f60acfa6005eac0a2705aa95f602f3806823551bd27f0704c2fe10f6ee95",
+        "providers/auth_provider.dart": "bbc1afc2b6bf9aa6f3627758a3aa1a1030025327f0f7d7b2cc6f9d7fcc75102a",
+        "providers/business_provider.dart": "cace7398cc86d565fbda4f5a77e3a76525da3c82a932d68f704abaeb59b2b046",
+        "providers/customers_provider.dart": "48abebbcf543429536c0cf24777a475081597e6691ba3eea63804bbd992583fd",
+        "providers/inbox_provider.dart": "13a4b48f0666268bab322e5fc470087423bdaff3164a82fcefb3d31b986461aa",
+        "providers/orders_provider.dart": "fb70f07958398eaf8e76b039e43019079078ecac3ac7df27943eb9de48886287",
+        "providers/products_provider.dart": "186fed120134d3f16650fa70bb65fc213af27abf4ae25a67b14fc15e327fe34c",
+        "screens/analytics/analytics_screen.dart": "d09f0225d07f1a5f8cf4ed80db1acb5b0b54fbd58a4567ead7fbb6369ed03c66",
+        "screens/auth/login_screen.dart": "c042fe72d28eee29aaea9835c39fcd1e1cb3e13cbe37eb23283f51b1e7121fcd",
+        "screens/business/business_picker_screen.dart": "128c3565b6aa94edb36522c344ce56123a7f09dc8732cc837f311492d2d0848d",
+        "screens/channels/channels_screen.dart": "74bb5b2cbf2db7da38d041de47d1cad1efcc82fc2e404ad9280ba4a7de9f40f1",
+        "screens/customers/customer_detail_screen.dart": "948644a32a47186ee767cba23cd4983cb571b47f4e8127843f08258245ce9e21",
+        "screens/customers/customers_screen.dart": "fb565e247a15a2a8c20e14950360c124459d5519ae5ee11eca4ac4659e12bee0",
+        "screens/dashboard/dashboard_screen.dart": "8889978c5cc4011b305de36c3237fda8ed00c1d0ecc8e73fb90016e92be7295e",
+        "screens/diagnostics/diagnostics_screen.dart": "f5dc1ebbb76f57dab0fccee65bfa229b255e8d2aa6824ca0c30237262f25697f",
+        "screens/inbox/chat_thread_screen.dart": "72d2b68c7d56c71050a4e1700fa912a85e1078ab7a1ef22afb58f603c672cc2f",
+        "screens/inbox/inbox_screen.dart": "2069142cca391d806ceeebf9a9765795dfe9016130d870edca7b3c2e3ec72a1c",
+        "screens/main_scaffold.dart": "87e1ed4c9605cedcfce894bb7e6508c726214199cc0510348214dd557b34bf17",
+        "screens/notifications/notifications_screen.dart": "304f7e1fb2ce2b4aa891c94461e87691e7ddae99c323bb67352db8b39f6eaedb",
+        "screens/orders/create_order_screen.dart": "8b65ca7bcceb1b638ba463a24b110106b6e0733796d9641c8d670839db5eda61",
+        "screens/orders/order_detail_screen.dart": "e0e7702e218f2924530e75c375d0f1fffcf28f7b6fc77922aceb531c0d2e7307",
+        "screens/orders/orders_screen.dart": "fa04e8766f6103d40387195f2350e8d4a284454acd9e4ac305907e217b11c200",
+        "screens/payments/payments_screen.dart": "e40d6ab0db7cb9099434b2a9afe46438c6508437aaeb6c72a86fc6e0d06cfeec",
+        "screens/playground/playground_screen.dart": "6cae374fe6dedbe204af072e74b47a109dd9dcf01b48286fcc1513dccb968233",
+        "screens/posts/post_editor_screen.dart": "3a48e0f3d7eb9d6a234fb29f26a2cca1b8247b483929739c22d0cc432425dc20",
+        "screens/posts/posts_screen.dart": "f50a87750aa13ca27704fc375367e3ce88f0f39c1aa31fd16ccd4325f6d90ab5",
+        "screens/products/categories_screen.dart": "1ca6b6feb773dd6ce2c82092ddf7c684ad6dd94ab21e354b98386d84af25975f",
+        "screens/products/product_form_screen.dart": "e13c88198e52fb98c13fbebad2b2a936a0fb32e2a49ccb3d80606dfcaad43aef",
+        "screens/products/products_screen.dart": "acd109741c23c4ed306353b77a1346ba96a0af7a4efd07c663d6d7bd2b7a12c0",
+        "screens/settings/ota_update_screen.dart": "38263ff06e56095d204f533df6e4943f7f307dc32b6cc69476c6b8443a872135",
+        "screens/settings/settings_screen.dart": "3ac08b305833ba8b8c71d2f0d299c847355ce327e341a1fd8dee2ce0a0a29300",
+        "screens/storefront/storefront_screen.dart": "9d9d05e28a94542e8e2f2d38ff8fcad67804b145172a52b65170d2a3978016cc",
+        "services/api_service.dart": "6796d6a8a84e7a57386d9793310cfd6329cbd6f60d811c331e2339278f7400ac",
+        "services/auth_exception.dart": "849d168608a1f2c439c9e31104f71d3ce44680cef30a4cab620acbe2eef837d2",
+        "services/auth_service.dart": "ca0d8abad99b81a39b6d04c410b4c9eeba50b909ca4c110bd216c39f2f4dcf40",
+        "services/diagnostics_service.dart": "d442415b0b14f9e18806a9a62ed9367d2a7a6d523322931118b738a78a314415",
+        "services/facebook_connect_service.dart": "b55312fbdcd1366948850476ece8ff32e107cbfde5bae01573afb2900eee7bdb",
+        "services/google_auth_service.dart": "e0db472372180890aae996f74d13d2f741df30cd1b2b9a3a8c8eeb66498cf4e4",
+        "services/image_stamping_service.dart": "89e7fbf39ac62c02a30434fdfca4fe7ef1d3e2cdb023f03efa7699193be1b0ab",
+        "services/patch_service.dart": "3a0d1403ea86633fdcdc5ca1d31a43269ffd7d4942aa832d2fa80432dc8df50b",
+        "utils/product_utils.dart": "54aaa656dbedb97487995b14dde97de9b1283e84e0c7683b0090e1ee51ad8fdb",
+        "widgets/app_card.dart": "0a9fda024dbabcc37c245ad8a43f46e87bead4795d1f02a6cf2c543224eb42f0",
+        "widgets/app_feedback.dart": "b03a6f1bfcbf82342bfad935cbc185c4baf8c38c566369d648e339430fedd199",
+        "widgets/empty_state.dart": "db44c1f47a9097b58a04ddc37d3e8685928ac1166dbe05f2b19b005bac6adf39",
+        "widgets/error_banner.dart": "20d32d4c62a698debc069309ff2507778792c9f911d40b101bdb87e9fed4b921",
+        "widgets/metric_card.dart": "c959fa259ed639710f43388739cbe3ecf7ec1ec9ce224128f58a06bba99bfe03",
+        "widgets/post_image_editor_dialog.dart": "94e8de072b5ab63a2aee4d9d1e318951f2f46ebcd12f4aa1160da01607c15dca",
+        "widgets/status_badge.dart": "9037177bf580574bf05685189f6c11ec8072f92d76946a39fbcef79190390228",
+        "widgets/store_guard.dart": "229a7e6e85512bead90b65b374e07796187978a61e580dcfaac8b57f79323ed0",
+        "widgets/variant_photo_dialog.dart": "1813403ebd91bb85e585cf377ad0557756d9d6c58cd3fd46a290cb6f3a99f689"
+      }
+    },
+    "dynamic_modules": {
+      "pubspec_sha256": "d550cc666e40db32d280d5df18b3574de945c50471cc5ae90153371a0b16a579",
+      "version": "1.0.0",
+      "native": false,
+      "native_files": {}
+    }
+  },
+  "artifacts": {
+    "engine": {
+      "tag": "engine-3.47.9-df6557e4",
+      "manifest_sha256": "870fcaea7c31ae1ee36aa358ab16a28a96be9a0666c94d9342686fdfb5c44e66"
+    },
+    "engine-ios": {
+      "tag": "engine-ios-3.47.9-771cfe76",
+      "manifest_sha256": "a53afd155a5a5ddec467aae8cfbf8eda33bbe34a119fecc250d3a750fd014b02"
+    },
+    "tools": {
+      "tag": "tools-3.47.9-d7e70fbf",
+      "manifest_sha256": "d985fca8a737ca30164dfc989427d46759407476a53fbc3ae812172749d09064"
+    }
+  },
+  "engine_capabilities": [
+    "asset_overlay",
+    "isolate_entry"
+  ],
+  "build_inputs": {
+    "schema": 1,
+    "target": "lib/main.dart",
+    "dart_defines": {},
+    "builtin_defines": {
+      "FLUTTER_BUILD_NAME": "1.0.15",
+      "FLUTTER_BUILD_NUMBER": "20",
+      "FLUTTER_VERSION": "3.47.9",
+      "FLUTTER_CHANNEL": "[user-branch]",
+      "FLUTTER_GIT_URL": "https://github.com/flutter/flutter.git",
+      "FLUTTER_FRAMEWORK_REVISION": "c197ca5199",
+      "FLUTTER_ENGINE_REVISION": "89c39edfdf",
+      "FLUTTER_DART_VERSION": "3.13.7"
+    },
+    "flutter_args": [
+      "--android-skip-build-dependency-validation"
+    ]
+  },
+  "build_id": "df6557e4-48fd-42ff-bab7-7363cc055c6e"
+}
