@@ -1,11 +1,9 @@
 {
-  "has_update": true,
-  "version": "1.0.15-h53",
-  "patch_url": "/20-arm64-v8a.fptc",
-  "md5": "b43d9e9b411db7436bc294df305d2373",
-  "target_version_code": 20,
-  "targetVersionCode": 20,
-  "schemaVersion": 2,
-  "created_at": "2026-11-16T03:52:45Z",
-  "commit": "601862652b400179b78bc0b9e67d0781a3a47736"
+  "has_update": false,
+  "version": "1.0.16",
+  "patch_url": "/patch.zip",
+  "md5": "",
+  "target_version_code": 21,
+  "created_at": "2026-11-16T04:54:43Z",
+  "note": "Fresh native baseline release v1.0.16 (build 21). No patches active."
 }
