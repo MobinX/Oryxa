@@ -1,0 +1,3 @@
+WARNING: BASELINE_STORE_LOCAL: this host's baseline is kept only in file:///home/runner/work/Oryxa/Oryxa/flutter/.flutter_patcher/baselines/; every patch of the host needs it, so set baseline_store in flutter_patcher.yaml to a durable store.
+WARNING: UNSIGNED: this host accepts patch files that are not signed, so whoever can hand the app a file can run code in it. To sign, set trust.enabled to true in flutter_patcher.yaml (run `flutter_patcher init` first if it names no key) and build again.
+{"command":"build","status":"failed","code":"BUILD_STEP_FAILED","message":"apk failed (exit 1): BUILD FAILED in 3m 40s | Gradle task assembleRelease failed with exit code 1; evidence: /home/runner/.flutter_patcher/builds/run.pending-3024-1794836436242705"}
