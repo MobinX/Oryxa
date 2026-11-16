@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'api_service.dart';
+import 'axiom_service.dart';
 import 'diagnostics_service.dart';
 
 @pragma('vm:entry-point')
@@ -17,6 +18,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     final notification = message.notification;
+    final data = message.data;
+    final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
+    final body = notification?.body ?? data['body']?.toString() ?? '';
+
+    axiomService.logNotificationEvent(
+      'background_received',
+      title: title,
+      body: body,
+      data: data,
+    );
+
     // If the message contains a notification payload, Android system FCM receiver
     // displays it automatically in the status bar when in background/terminated.
     // Do NOT create a duplicate notification in that case.
@@ -24,10 +36,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       debugPrint('[NotificationService] System already displayed background push: ${notification.title}');
       return;
     }
-
-    final data = message.data;
-    final title = data['title']?.toString() ?? 'OnlyOrders Alert';
-    final body = data['body']?.toString() ?? '';
 
     if (title.isNotEmpty || body.isNotEmpty) {
       final localNotifications = FlutterLocalNotificationsPlugin();
@@ -59,6 +67,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     }
   } catch (e, st) {
     debugPrint('[NotificationService] Background message error: $e\n$st');
+    try {
+      axiomService.error(
+        'Background notification error: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_BG_ERROR',
+      );
+    } catch (_) {}
   }
 }
 
@@ -212,6 +228,13 @@ class NotificationService {
       final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
       final body = notification?.body ?? data['body']?.toString() ?? '';
 
+      axiomService.logNotificationEvent(
+        'foreground_received',
+        title: title,
+        body: body,
+        data: data,
+      );
+
       if (title.isEmpty && body.isEmpty) return;
 
       final androidDetails = AndroidNotificationDetails(
@@ -238,8 +261,20 @@ class NotificationService {
         notificationDetails: NotificationDetails(android: androidDetails),
         payload: data['link']?.toString(),
       );
+
+      axiomService.info(
+        'Foreground notification displayed: $title',
+        tag: 'NOTIFICATION_FG',
+        metadata: {'id': notificationId, 'title': title},
+      );
     } catch (e, st) {
       debugPrint('[NotificationService] Show foreground notification error: $e\n$st');
+      axiomService.error(
+        'Show foreground notification error: $e',
+        error: e,
+        stack: st,
+        tag: 'NOTIFICATION_FG_ERROR',
+      );
     }
   }
 

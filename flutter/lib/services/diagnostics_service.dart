@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'axiom_service.dart';
+
 /// One failure kept so the Diagnostics screen can show it after the snackbar is
 /// gone (or after a button appeared to do nothing) — and after a restart.
 @immutable
@@ -117,6 +119,12 @@ class DiagnosticsService extends ChangeNotifier {
       _entries.removeRange(_maxEntries, _entries.length);
     }
     debugPrint('[Diagnostics][$scope] $message');
+    axiomService.log(
+      'error',
+      '[$scope] $message',
+      tag: scope,
+      metadata: details != null ? {'details': details} : null,
+    );
     notifyListeners();
     _persist();
   }

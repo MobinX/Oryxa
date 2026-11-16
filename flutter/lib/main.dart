@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_patcher/flutter_patcher.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/main_scaffold.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/axiom_service.dart';
 import 'services/diagnostics_service.dart';
 import 'services/facebook_connect_service.dart';
 import 'services/notification_service.dart';
@@ -23,10 +25,28 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // A build failure in a pushed screen must leave a trace the merchant can read;
-  // the Diagnostics screen shows this log and can copy it.
+  // the Diagnostics screen shows this log and streams directly to Axiom.
   FlutterError.onError = (details) {
     appDiagnostics.record('Flutter error', details.exception, details.stack);
+    axiomService.error(
+      'Flutter framework error: ${details.exceptionAsString()}',
+      error: details.exception,
+      stack: details.stack,
+      tag: 'FLUTTER_ERROR',
+    );
     FlutterError.presentError(details);
+  };
+
+  // Catch unhandled async and platform errors before they terminate the process
+  PlatformDispatcher.instance.onError = (error, stack) {
+    appDiagnostics.record('Platform error', error, stack);
+    axiomService.error(
+      'Uncaught platform error: $error',
+      error: error,
+      stack: stack,
+      tag: 'PLATFORM_ERROR',
+    );
+    return true; // Prevents the uncaught exception from aborting the app process
   };
 
   // Release builds otherwise replace a crashed screen with an anonymous grey
@@ -46,6 +66,7 @@ void main() async {
   await appDiagnostics.loadPersisted();
 
   final apiService = ApiService();
+  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+23');
   final authService = AuthService(apiService: apiService);
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);

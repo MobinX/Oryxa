@@ -2,9 +2,48 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 import { sendPushToBusiness } from '@api/lib/push';
+import { emit } from '@api/lib/log';
 import { registerPushToken, unregisterPushToken, unregisterTokenFromAll } from '@repo/db/crud/push';
 
 export const pushRouter = new OpenAPIHono();
+
+const mobileLogsRoute = createRoute({
+  method: 'post',
+  path: '/mobile/logs',
+  tags: ['Mobile'],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            events: z.array(z.record(z.unknown())),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.object({ ok: z.boolean(), count: z.number() }) } },
+      description: 'Mobile log events accepted and routed to log sink',
+    },
+  },
+});
+
+pushRouter.openapi(mobileLogsRoute, async (c) => {
+  const { events } = c.req.valid('json');
+  for (const ev of events) {
+    const isError = ev.level === 'error' || ev.level === 'critical' || !!ev.error;
+    emit(isError ? 'error' : 'bg', {
+      task: 'mobile',
+      ok: !isError,
+      name: String(ev.tag ?? ev.evt ?? 'mobile'),
+      message: String(ev.message ?? 'mobile log'),
+      stack: ev.stack ? String(ev.stack) : undefined,
+    });
+  }
+  return c.json({ ok: true, count: events.length }, 200);
+});
 
 const globalUnsubscribeRoute = createRoute({
   method: 'post',
