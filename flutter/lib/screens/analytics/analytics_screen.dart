@@ -92,9 +92,36 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Sales & AI Analytics',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Sales & AI Analytics',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.success,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Live Metrics',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : AppTheme.textLightSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
           IconButton(
