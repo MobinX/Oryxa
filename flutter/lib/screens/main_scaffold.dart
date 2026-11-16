@@ -24,6 +24,8 @@ import 'products/products_screen.dart';
 import 'settings/ota_update_screen.dart';
 import 'settings/settings_screen.dart';
 import 'storefront/storefront_screen.dart';
+import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -38,6 +40,18 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   void initState() {
     super.initState();
+    NotificationService.instance.onNotificationClicked = (link) {
+      if (!mounted) return;
+      if (link.contains('/orders')) {
+        setState(() => _currentIndex = 1);
+      } else if (link.contains('/inbox')) {
+        setState(() => _currentIndex = 2);
+      } else if (link.contains('/notifications')) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+        );
+      }
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -49,6 +63,14 @@ class _MainScaffoldState extends State<MainScaffold> {
     final biz = context.read<BusinessProvider>();
     biz.fetchBusinesses(preferredBusinessId: auth.selectedBusinessId).then((_) {
       if (!mounted) return;
+      final bIds = biz.businesses.map((b) => b.id).toList();
+      final api = context.read<ApiService>();
+      NotificationService.instance.showPermissionDialogIfNeeded(
+        context,
+        apiService: api,
+        businessIds: bIds,
+      );
+
       if (biz.currentBusiness != null) {
         final bId = biz.currentBusiness!.id;
         context.read<InboxProvider>().fetchConversations(bId);

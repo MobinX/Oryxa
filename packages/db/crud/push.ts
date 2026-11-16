@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@db/client';
 import { pushTokens } from '@db/schema';
 
@@ -19,4 +19,14 @@ export async function listPushTokens(businessId: string): Promise<string[]> {
 export async function deletePushTokens(tokens: string[]): Promise<void> {
   if (tokens.length === 0) return;
   await db.delete(pushTokens).where(inArray(pushTokens.token, tokens));
+}
+
+/** Removes one browser or app registration for a specific business. */
+export async function unregisterPushToken(businessId: string, token: string): Promise<void> {
+  await db.delete(pushTokens).where(and(eq(pushTokens.businessId, businessId), eq(pushTokens.token, token)));
+}
+
+/** Removes a device token from all businesses (e.g. when merchant logs out). */
+export async function unregisterTokenFromAll(token: string): Promise<void> {
+  await db.delete(pushTokens).where(eq(pushTokens.token, token));
 }

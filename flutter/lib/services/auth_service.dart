@@ -11,6 +11,7 @@ import '../services/auth_exception.dart';
 import '../services/diagnostics_service.dart';
 import '../services/google_auth_service.dart';
 import 'api_service.dart';
+import 'notification_service.dart';
 
 class AuthService extends ChangeNotifier {
   static const String _identityToolkitBase = 'https://identitytoolkit.googleapis.com/v1';
@@ -399,6 +400,12 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    try {
+      await NotificationService.instance.onUserLoggedOut(apiService);
+    } catch (e) {
+      debugPrint('[AuthService] logout notification unsubscribe error: $e');
+    }
+
     _token = null;
     _refreshToken = null;
     _tokenExpiry = null;

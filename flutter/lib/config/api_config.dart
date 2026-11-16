@@ -69,6 +69,10 @@ class ApiConfig {
   static String pathBusinessSearch(String businessId, String query) =>
       '/businesses/$businessId/search?q=${Uri.encodeComponent(query)}';
 
+  static String pathBusinessPushSubscribe(String businessId) => '/$businessId/push/subscribe';
+  static String pathBusinessPushUnsubscribe(String businessId) => '/$businessId/push/unsubscribe';
+  static const String pathGlobalPushUnsubscribe = '/push/unsubscribe';
+
   static String pathConversations(String businessId, {String? channelId, int limit = 50}) {
     var p = '/$businessId/conversations?limit=$limit';
     if (channelId != null && channelId.isNotEmpty) {

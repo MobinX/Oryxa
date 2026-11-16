@@ -15,6 +15,7 @@ import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/diagnostics_service.dart';
 import 'services/facebook_connect_service.dart';
+import 'services/notification_service.dart';
 import 'services/patch_service.dart';
 import 'widgets/app_feedback.dart';
 
@@ -50,6 +51,7 @@ void main() async {
   final facebookConnectService = FacebookConnectService(apiService: apiService);
   await authService.init();
   await facebookConnectService.init();
+  await NotificationService.instance.init(apiService);
 
   runApp(
     MultiProvider(

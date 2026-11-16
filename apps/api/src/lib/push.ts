@@ -59,6 +59,17 @@ export async function sendPushToBusiness(notice: NotificationPush): Promise<Push
         body: notice.body,
         ...(notice.link ? { link: notice.link } : {}),
       },
+      android: {
+        priority: 'high',
+        notification: {
+          title: notice.title,
+          body: notice.body,
+          channelId: 'high_importance_channel',
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        },
+      },
       webpush: { headers: { Urgency: 'high' } },
     });
 

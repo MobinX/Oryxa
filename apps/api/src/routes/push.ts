@@ -2,9 +2,40 @@ import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 import { sendPushToBusiness } from '@api/lib/push';
-import { registerPushToken } from '@repo/db/crud/push';
+import { registerPushToken, unregisterPushToken, unregisterTokenFromAll } from '@repo/db/crud/push';
 
 export const pushRouter = new OpenAPIHono();
+
+const globalUnsubscribeRoute = createRoute({
+  method: 'post',
+  path: '/push/unsubscribe',
+  tags: ['Notifications'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            token: z.string().min(20).max(500),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.object({ unsubscribed: z.boolean() }) } },
+      description: 'Device token removed from all businesses',
+    },
+  },
+});
+
+pushRouter.use('/push/unsubscribe', authMiddleware);
+pushRouter.openapi(globalUnsubscribeRoute, async (c) => {
+  const { token } = c.req.valid('json');
+  await unregisterTokenFromAll(token.trim());
+  return c.json({ unsubscribed: true }, 200);
+});
 
 pushRouter.use('/:businessId/*', authMiddleware, businessAccessMiddleware);
 
@@ -20,7 +51,7 @@ const subscribeRoute = createRoute({
         'application/json': {
           schema: z.object({
             /** The FCM registration token this browser obtained from the Web SDK. */
-            token: z.string().min(40).max(500),
+            token: z.string().min(20).max(500),
           }),
         },
       },
@@ -39,6 +70,38 @@ pushRouter.openapi(subscribeRoute, async (c) => {
   const { token } = c.req.valid('json');
   await registerPushToken(businessId, token.trim());
   return c.json({ subscribed: true }, 200);
+});
+
+const unsubscribeRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/push/unsubscribe',
+  tags: ['Notifications'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            token: z.string().min(20).max(500),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: z.object({ unsubscribed: z.boolean() }) } },
+      description: 'This device/browser no longer receives the business’s push notices',
+    },
+  },
+});
+
+pushRouter.openapi(unsubscribeRoute, async (c) => {
+  const businessId = c.req.param('businessId');
+  const { token } = c.req.valid('json');
+  await unregisterPushToken(businessId, token.trim());
+  return c.json({ unsubscribed: true }, 200);
 });
 
 const testPushRoute = createRoute({
