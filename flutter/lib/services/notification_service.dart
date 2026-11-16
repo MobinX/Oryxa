@@ -183,7 +183,7 @@ class NotificationService {
       if (res.statusCode == 200) {
         final Map<String, dynamic> config = jsonDecode(res.body);
         final apiKey = config['apiKey']?.toString() ?? '';
-        final appId = config['appId']?.toString() ?? '';
+        final appId = (Platform.isAndroid ? (config['androidAppId'] ?? config['appId']) : config['appId'])?.toString() ?? '';
         final messagingSenderId = config['messagingSenderId']?.toString() ?? '';
         final projectId = config['projectId']?.toString() ?? '';
         final storageBucket = config['storageBucket']?.toString();
@@ -199,10 +199,20 @@ class NotificationService {
             ),
           );
           _firebaseInitialized = true;
+          axiomService.info(
+            'Firebase initialized successfully with project $projectId ($appId)',
+            tag: 'FCM',
+          );
           appDiagnostics.record('FCM', 'Firebase initialized successfully with project $projectId');
         }
       }
-    } catch (e) {
+    } catch (e, st) {
+      axiomService.error(
+        'Firebase init error: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_INIT_ERROR',
+      );
       appDiagnostics.record('FCM init error', e);
       debugPrint('[NotificationService] Firebase init error: $e');
     }
@@ -214,8 +224,21 @@ class NotificationService {
     if (!_firebaseInitialized) return null;
     try {
       _fcmToken = await FirebaseMessaging.instance.getToken();
+      if (_fcmToken != null && _fcmToken!.isNotEmpty) {
+        axiomService.info(
+          'FCM device token obtained successfully',
+          tag: 'FCM_TOKEN',
+          metadata: {'token_prefix': _fcmToken!.substring(0, 15)},
+        );
+      }
       return _fcmToken;
-    } catch (e) {
+    } catch (e, st) {
+      axiomService.error(
+        'FCM getToken error: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_TOKEN_ERROR',
+      );
       debugPrint('[NotificationService] getToken error: $e');
       return null;
     }
@@ -284,12 +307,16 @@ class NotificationService {
     required ApiService apiService,
     required List<String> businessIds,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyShown = prefs.getBool(_prefDialogShown) ?? false;
-
     await _ensureFirebaseInitialized(apiService);
     if (!_firebaseInitialized) return;
 
+    // Always ensure device token is synced with the backend for user's businesses
+    unawaited(syncSubscriptions(apiService, businessIds));
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShown = prefs.getBool(_prefDialogShown) ?? false;
+
+    // Check if OS notifications are enabled
     NotificationSettings currentSettings;
     try {
       currentSettings = await FirebaseMessaging.instance.getNotificationSettings();
@@ -298,8 +325,6 @@ class NotificationService {
     }
 
     if (currentSettings.authorizationStatus == AuthorizationStatus.authorized) {
-      // Already authorized: sync subscriptions silently
-      await syncSubscriptions(apiService, businessIds);
       return;
     }
 
@@ -395,6 +420,14 @@ class NotificationService {
     if (!_firebaseInitialized) return false;
 
     try {
+      // 1. Android 13+ POST_NOTIFICATIONS via local notifications plugin
+      try {
+        final androidPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.requestNotificationsPermission();
+      } catch (_) {}
+
+      // 2. Firebase messaging permission
       final settings = await FirebaseMessaging.instance.requestPermission(
         alert: true,
         announcement: false,
@@ -405,15 +438,21 @@ class NotificationService {
         sound: true,
       );
 
-      final isAuthorized = settings.authorizationStatus == AuthorizationStatus.authorized ||
-          settings.authorizationStatus == AuthorizationStatus.provisional;
+      axiomService.info(
+        'Notification permission requested: status=${settings.authorizationStatus}',
+        tag: 'FCM_PERMISSION',
+      );
 
-      if (isAuthorized) {
-        await syncSubscriptions(apiService, businessIds);
-        return true;
-      }
-      return false;
-    } catch (e) {
+      await syncSubscriptions(apiService, businessIds);
+      return settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    } catch (e, st) {
+      axiomService.error(
+        'requestPermission error: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_PERMISSION_ERROR',
+      );
       debugPrint('[NotificationService] requestPermission error: $e');
       return false;
     }
@@ -423,7 +462,10 @@ class NotificationService {
   Future<void> syncSubscriptions(ApiService apiService, List<String> businessIds) async {
     if (businessIds.isEmpty) return;
     final token = await getDeviceToken(apiService);
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      axiomService.warn('Cannot sync subscriptions: device token is null/empty', tag: 'FCM_SYNC');
+      return;
+    }
 
     for (final bId in businessIds) {
       if (bId.isEmpty) continue;
@@ -433,10 +475,21 @@ class NotificationService {
           body: {'token': token},
         );
         _subscribedBusinessIds.add(bId);
+        axiomService.info(
+          'Successfully registered FCM device token for business $bId',
+          tag: 'FCM_SUBSCRIBE',
+          metadata: {'businessId': bId},
+        );
         try {
           await FirebaseMessaging.instance.subscribeToTopic('business_$bId');
         } catch (_) {}
-      } catch (e) {
+      } catch (e, st) {
+        axiomService.error(
+          'Failed to subscribe $bId to push: $e',
+          error: e,
+          stack: st,
+          tag: 'FCM_SUBSCRIBE_ERROR',
+        );
         debugPrint('[NotificationService] Failed to subscribe $bId: $e');
       }
     }

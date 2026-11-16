@@ -35,7 +35,7 @@ class MainApplication : Application() {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
                     .setApiKey("AIzaSyB0jHaD6MIrfKkpGE8ZWLg7xxcXoiuA7Ck")
-                    .setApplicationId("1:208924881683:android:com.example.flutter_remote_dev")
+                    .setApplicationId("1:208924881683:android:b3dbcaab831f4576e7a0e6")
                     .setProjectId("oryza-33d8f")
                     .setGcmSenderId("208924881683")
                     .setStorageBucket("oryza-33d8f.firebasestorage.app")

@@ -15,6 +15,7 @@ export async function GET() {
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
+    androidAppId: process.env.FIREBASE_ANDROID_APP_ID ?? '1:208924881683:android:b3dbcaab831f4576e7a0e6',
     axiom: {
       enabled: process.env.AXIOM_ENABLED === '1',
       dataset: process.env.AXIOM_DATASET ?? 'app',
