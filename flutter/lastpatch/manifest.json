@@ -1,11 +1,11 @@
 {
   "has_update": true,
-  "version": "1.0.15-h52",
+  "version": "1.0.15-h53",
   "patch_url": "/20-arm64-v8a.fptc",
-  "md5": "51f93ab9e0262a041732e9336ba5b8b8",
+  "md5": "b43d9e9b411db7436bc294df305d2373",
   "target_version_code": 20,
   "targetVersionCode": 20,
   "schemaVersion": 2,
-  "created_at": "2026-11-16T03:31:46Z",
-  "commit": "d6009bde80d26aedec515f178d92eb3b947c2855"
+  "created_at": "2026-11-16T03:52:45Z",
+  "commit": "601862652b400179b78bc0b9e67d0781a3a47736"
 }
