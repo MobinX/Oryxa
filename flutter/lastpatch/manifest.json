@@ -1,9 +1,11 @@
 {
-  "has_update": false,
-  "version": "1.0.18",
-  "patch_url": "/patch.zip",
-  "md5": "",
+  "has_update": true,
+  "version": "1.0.18-h67",
+  "patch_url": "/28-arm64-v8a.fptc",
+  "md5": "117fc59141d0adfc78290aae547a0a13",
   "target_version_code": 28,
-  "created_at": "2026-11-17T02:17:12Z",
-  "note": "Fresh native baseline release v1.0.18 (build 28). No patches active."
+  "targetVersionCode": 28,
+  "schemaVersion": 2,
+  "created_at": "2026-11-17T03:41:48Z",
+  "commit": "cc3ccaeb90e2159d17e553025ccf1949e74b06f6"
 }
