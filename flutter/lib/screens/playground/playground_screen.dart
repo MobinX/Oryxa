@@ -17,13 +17,16 @@ import '../../services/diagnostics_service.dart';
 import '../../widgets/app_feedback.dart';
 
 class PlaygroundScreen extends StatefulWidget {
-  const PlaygroundScreen({super.key});
+  final BusinessModel? business;
+  const PlaygroundScreen({super.key, this.business});
 
   @override
   State<PlaygroundScreen> createState() => _PlaygroundScreenState();
 }
 
 class _PlaygroundScreenState extends State<PlaygroundScreen> {
+  BusinessModel? get _effectiveBusiness =>
+      widget.business ?? context.read<BusinessProvider>().currentBusiness;
   static const List<String> _mockNames = [
     'Oliver Queen',
     'Bruce Wayne',
@@ -82,7 +85,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   String _sandboxPageId(String businessId) => 'mock-channel-$businessId';
 
   Future<void> _loadSandbox() async {
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     if (biz == null) {
       setState(() => _loadingSandbox = false);
       return;
@@ -152,7 +155,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   Future<void> _loadConversations() async {
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     final channel = _activeChannel;
     if (biz == null || channel == null) return;
 
@@ -185,7 +188,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   Future<void> _loadMessages(String convId) async {
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     if (biz == null) return;
 
     setState(() {
@@ -261,7 +264,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   Future<void> _handleCreateChat() async {
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     final channel = _activeChannel;
     if (biz == null || channel == null || _isChatRunning) return;
 
@@ -350,7 +353,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   Future<void> _handleSendMessage() async {
     final userMessage = _messageController.text.trim();
     final photos = List<Map<String, String>>.from(_pendingPhotos);
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     final channel = _activeChannel;
 
     if ((userMessage.isEmpty && photos.isEmpty) || biz == null || channel == null || _isChatRunning) {
@@ -503,7 +506,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
   Future<void> _handleRunComment() async {
     final comment = _commentTextController.text.trim();
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     final channel = _activeChannel;
 
     if (comment.isEmpty || biz == null || channel == null || _isCommentRunning) return;
@@ -682,7 +685,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     if (biz == null) return;
 
     final api = context.read<ApiService>();
@@ -705,7 +708,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   Future<void> _attachPhoto() async {
-    final biz = context.read<BusinessProvider>().currentBusiness;
+    final biz = _effectiveBusiness;
     if (biz == null || _pendingPhotos.length >= 4) return;
 
     final picker = ImagePicker();
@@ -1238,7 +1241,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                               ? null
                               : () async {
                                   setSheetState(() => saving = true);
-                                  final biz = context.read<BusinessProvider>().currentBusiness;
+                                  final biz = _effectiveBusiness;
                                   if (biz != null) {
                                     try {
                                       final api = context.read<ApiService>();

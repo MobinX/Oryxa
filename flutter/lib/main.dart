@@ -63,20 +63,17 @@ void main() async {
     debugPrint('[FlutterPatcher] Safe fallback to baseline: $e');
   }
 
-  // Restore the previous session's failures so a crash-loop or a dead button
-  // still has evidence after a restart.
-  await appDiagnostics.loadPersisted();
-
   final apiService = ApiService();
-  await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+27');
   final authService = AuthService(apiService: apiService);
   final adminProvider = AdminProvider(apiService: apiService, authService: authService);
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
-  await authService.init();
-  await adminProvider.init();
-  await facebookConnectService.init();
-  await NotificationService.instance.init(apiService);
+
+  // Fast parallel load of persisted auth sessions from local disk
+  await Future.wait([
+    authService.init(),
+    adminProvider.init(),
+  ]);
 
   runApp(
     MultiProvider(
@@ -97,14 +94,24 @@ void main() async {
     ),
   );
 
-  // Install published hotfixes without requiring the merchant to open the OTA
-  // screen. Failures are recorded for the Diagnostics screen.
-  patchService.autoCheckOnBoot().then((_) {
-    if (patchService.restartRequired) {
-      showAppSnack(
-        'Update installed. Close the app completely and reopen it to use it.',
-      );
-    }
+  // Defer non-critical services and telemetry to run asynchronously after the first frame
+  // Drastically accelerates app startup and renders screens immediately.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      appDiagnostics.loadPersisted();
+      axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+28');
+      facebookConnectService.init();
+      NotificationService.instance.init(apiService);
+
+      // Install published hotfixes without requiring the merchant to open the OTA screen
+      patchService.autoCheckOnBoot().then((_) {
+        if (patchService.restartRequired) {
+          showAppSnack(
+            'Update installed. Close the app completely and reopen it to use it.',
+          );
+        }
+      });
+    });
   });
 }
 

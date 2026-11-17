@@ -243,8 +243,50 @@ class ApiConfig {
   static String pathAdminMailRestore(String id) => '/api2/admin/mail/emails/$id/restore';
   static String pathAdminMailDelete(String id) => '/api2/admin/mail/emails/$id/delete';
   static const String pathAdminTokenAnalytics = '/admin/token-analytics';
+  static String pathAdminTokenUsage({String? month}) =>
+      '/api2/admin/token-analytics/businesses${month != null ? '?month=$month' : ''}';
+  static const String pathAdminModelBilling = '/admin/model-billing';
   static const String pathAdminPlans = '/admin/plans';
+  static const String pathAdminBusinessPlans = '/api2/admin/plans/businesses';
   static const String pathAdminChannels = '/admin/channels';
+  static const String pathAdminOfficialChannels = '/api2/admin/official/channels';
+  static String pathAdminOfficialChannelVerify(String id) => '/api2/admin/official/channels/$id/verify';
+  static String pathAdminOfficialChannelDisconnect(String id) => '/api2/admin/official/channels/$id/disconnect';
+  static const String pathAdminOfficialWhatsAppConnect = '/api2/admin/official/channels/whatsapp/connect';
+  static const String pathAdminOfficialSettings = '/api2/admin/official/settings';
+  static String pathAdminOfficialConversations({String? platform, String? status}) {
+    var p = '/api2/admin/official/conversations';
+    final params = <String>[];
+    if (platform != null && platform.isNotEmpty) params.add('platform=${Uri.encodeComponent(platform)}');
+    if (status != null && status.isNotEmpty && status != 'all') params.add('status=${Uri.encodeComponent(status)}');
+    if (params.isNotEmpty) p += '?${params.join('&')}';
+    return p;
+  }
+  static String pathAdminOfficialConversation(String id) => '/api2/admin/official/conversations/$id';
+  static String pathAdminOfficialConversationReply(String id) => '/api2/admin/official/conversations/$id/reply';
+  static String pathAdminOfficialConversationTakeover(String id) => '/api2/admin/official/conversations/$id/takeover';
+  static const String pathAdminOfficialInbox = '/api2/admin/official/inbox';
+  static String pathAdminOfficialTickets({String? status, String? type}) {
+    var p = '/api2/admin/official/tickets';
+    final params = <String>[];
+    if (status != null && status.isNotEmpty) params.add('status=${Uri.encodeComponent(status)}');
+    if (type != null && type.isNotEmpty) params.add('type=${Uri.encodeComponent(type)}');
+    if (params.isNotEmpty) p += '?${params.join('&')}';
+    return p;
+  }
+  static String pathAdminOfficialTicket(String id) => '/api2/admin/official/tickets/$id';
+  static String pathAdminOfficialProspects({String? status}) {
+    var p = '/api2/admin/official/prospects';
+    if (status != null && status.isNotEmpty && status != 'all') {
+      p += '?status=${Uri.encodeComponent(status)}';
+    }
+    return p;
+  }
+  static String pathAdminOfficialProspect(String id) => '/api2/admin/official/prospects/$id';
+  static const String pathAdminOfficialProspectWeights = '/api2/admin/official/prospect-weights';
+  static const String pathAdminDefaultAgent = '/api2/admin/default-agent';
+  static const String pathAdminDefaultAgentOverrides = '/api2/admin/default-agent/overrides';
+  static const String pathAdminDefaultAgentFollow = '/api2/admin/default-agent/overrides/follow';
   static const String pathAdminLogs = '/admin/logs';
   static const String pathAdminSettings = '/admin/settings';
 }

@@ -7,10 +7,16 @@ import '../auth/login_screen.dart';
 import '../main_scaffold.dart';
 import 'channels/admin_channels_screen.dart';
 import 'dashboard/admin_dashboard_screen.dart';
-import 'generic/admin_generic_panel_screen.dart';
+import 'default_agent/admin_default_agent_screen.dart';
 import 'logs/admin_logs_screen.dart';
 import 'mail/admin_mailbox_screen.dart';
+import 'model_billing/admin_model_billing_screen.dart';
+import 'official/admin_official_channels_screen.dart';
+import 'official/admin_official_inbox_screen.dart';
+import 'official/admin_official_prospects_screen.dart';
+import 'official/admin_official_tickets_screen.dart';
 import 'plans/admin_plans_screen.dart';
+import 'playground/admin_playground_screen.dart';
 import 'settings/admin_settings_screen.dart';
 import 'tokens/admin_tokens_screen.dart';
 
@@ -70,11 +76,7 @@ class _AdminScaffoldState extends State<AdminScaffold> {
           label: 'Model billing',
           icon: Icons.receipt_long_outlined,
           capability: 'model_billing',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Model Billing',
-            description: 'AI model cost accounting, token usage meters, and billing invoices.',
-            icon: Icons.receipt_long_outlined,
-          ),
+          builder: () => const AdminModelBillingScreen(),
         ),
       ],
     ),
@@ -112,22 +114,14 @@ class _AdminScaffoldState extends State<AdminScaffold> {
           label: 'Default agent',
           icon: Icons.description_outlined,
           capability: 'default_agent',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Default Agent Guidance',
-            description: 'Global system prompts, fallback sales scripts, and guidance overrides.',
-            icon: Icons.description_outlined,
-          ),
+          builder: () => const AdminDefaultAgentScreen(),
         ),
         _NavItem(
           key: 'playground',
           label: 'Playground',
           icon: Icons.smart_toy_outlined,
           capability: 'playground',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Operator Playground',
-            description: 'Simulate and test customer-facing sales conversations in sandbox mode.',
-            icon: Icons.smart_toy_outlined,
-          ),
+          builder: () => const AdminPlaygroundScreen(),
         ),
       ],
     ),
@@ -139,44 +133,28 @@ class _AdminScaffoldState extends State<AdminScaffold> {
           label: 'Official channels',
           icon: Icons.public_outlined,
           capability: 'official_channels',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Official Platform Channels',
-            description: 'OnlyOrders official brand pages and central public communications.',
-            icon: Icons.public_outlined,
-          ),
+          builder: () => const AdminOfficialChannelsScreen(),
         ),
         _NavItem(
           key: 'official_inbox',
           label: 'Official inbox',
           icon: Icons.inbox_outlined,
           capability: 'official_inbox',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Official Inbox',
-            description: 'Support requests and conversations directed to official company channels.',
-            icon: Icons.inbox_outlined,
-          ),
+          builder: () => const AdminOfficialInboxScreen(),
         ),
         _NavItem(
           key: 'tickets',
           label: 'Tickets',
           icon: Icons.support_agent_outlined,
           capability: 'tickets',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Support Tickets',
-            description: 'Merchant escalation tickets and technical helpdesk cases.',
-            icon: Icons.support_agent_outlined,
-          ),
+          builder: () => const AdminOfficialTicketsScreen(),
         ),
         _NavItem(
           key: 'prospects',
           label: 'Prospects',
           icon: Icons.people_outline,
           capability: 'prospects',
-          builder: () => const AdminGenericPanelScreen(
-            title: 'Merchant Prospects',
-            description: 'Onboarding leads, inbound merchant inquiries, and CRM pipeline.',
-            icon: Icons.people_outline,
-          ),
+          builder: () => const AdminOfficialProspectsScreen(),
         ),
       ],
     ),
