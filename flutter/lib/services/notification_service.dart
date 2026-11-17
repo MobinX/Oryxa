@@ -63,6 +63,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       importance: Importance.max,
       priority: Priority.high,
       icon: 'ic_notification',
+      largeIcon: DrawableResourceAndroidBitmap('ic_launcher'),
       color: Color(0xFF5B3DF5), // AppTheme.primaryColor — inline to avoid import chain
       playSound: true,
       enableVibration: true,

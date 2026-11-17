@@ -1,7 +1,7 @@
 name: onlyorders
 description: "OnlyOrders Merchant App - AI Auto-Reply E-commerce & Omnichannel Sales"
 publish_to: "none"
-version: 1.0.18+27
+version: 1.0.18+28
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -42,3 +42,4 @@ flutter:
     - assets/onlyorders-logo.png
     - assets/onlyorders-logo-dark.png
     - assets/logo.png
+    - assets/onlyorders-mark.png
