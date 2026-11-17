@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
+import '../../models/business.dart';
 import '../../models/channel.dart';
 import '../../models/conversation.dart';
 import '../../models/playground.dart';
