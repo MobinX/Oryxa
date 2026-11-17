@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../config/app_theme.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../utils/admin_format.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -128,7 +129,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       _buildMetricCard(
                         title: 'LLM Tokens',
                         value: _numberFormat.format(stats.window.llmTokens),
-                        subtitle: 'Est. \$${stats.window.estimatedCostUsd.toStringAsFixed(2)}',
+                        subtitle: 'Est. ${AdminFormat.tokenMoney(stats.window.estimatedCostUsd)}',
                         icon: Icons.memory_outlined,
                         color: Colors.amber,
                         isDark: isDark,

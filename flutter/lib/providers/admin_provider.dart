@@ -542,13 +542,19 @@ class AdminProvider extends ChangeNotifier {
   Future<bool> updateModelBilling({
     required double promptPerMillion,
     required double completionPerMillion,
+    double? cachedPromptPerMillion,
+    String? provider,
+    String? model,
   }) async {
     try {
       await apiService.put(
         ApiConfig.pathAdminModelBilling,
         body: {
-          'promptPerMillion': promptPerMillion,
-          'completionPerMillion': completionPerMillion,
+          'provider': (provider != null && provider.isNotEmpty) ? provider : 'google',
+          'model': (model != null && model.isNotEmpty) ? model : 'gemini-2.5-flash-lite',
+          'inputUsdPerMillion': promptPerMillion,
+          'outputUsdPerMillion': completionPerMillion,
+          'cachedInputUsdPerMillion': cachedPromptPerMillion ?? (promptPerMillion * 0.25),
         },
       );
       return true;
@@ -567,6 +573,16 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching token usage: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> fetchBusinessTokenUsageDetail(String businessId, {String? month}) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminBusinessTokenUsage(businessId, month: month));
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching business token usage detail: $e');
     }
     return null;
   }

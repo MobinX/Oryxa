@@ -67,6 +67,8 @@ class _AdminModelBillingScreenState extends State<AdminModelBillingScreen> {
       await admin.updateModelBilling(
         promptPerMillion: promptRate,
         completionPerMillion: completionRate,
+        provider: _provider,
+        model: _model,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

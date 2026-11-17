@@ -245,6 +245,8 @@ class ApiConfig {
   static const String pathAdminTokenAnalytics = '/admin/token-analytics';
   static String pathAdminTokenUsage({String? month}) =>
       '/api2/admin/token-analytics/businesses${month != null ? '?month=$month' : ''}';
+  static String pathAdminBusinessTokenUsage(String businessId, {String? month}) =>
+      '/api2/admin/token-analytics/businesses/$businessId${month != null ? '?month=$month' : ''}';
   static const String pathAdminModelBilling = '/admin/model-billing';
   static const String pathAdminPlans = '/admin/plans';
   static const String pathAdminBusinessPlans = '/api2/admin/plans/businesses';
