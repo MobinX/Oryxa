@@ -42,10 +42,15 @@ class _MainScaffoldState extends State<MainScaffold> {
     super.initState();
     NotificationService.instance.onNotificationClicked = (link) {
       if (!mounted) return;
-      if (link.contains('/orders')) {
-        setState(() => _currentIndex = 1);
-      } else if (link.contains('/inbox')) {
+      if (link.contains('/orders') || link.contains('order')) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
         setState(() => _currentIndex = 2);
+      } else if (link.contains('/inbox') ||
+          link.contains('human') ||
+          link.contains('help') ||
+          link.contains('conversation')) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        setState(() => _currentIndex = 1);
       } else if (link.contains('/notifications')) {
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const NotificationsScreen()),

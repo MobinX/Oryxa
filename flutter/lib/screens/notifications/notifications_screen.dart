@@ -701,6 +701,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             if (isUnread) {
               biz.markNotificationRead(notice.id);
             }
+            _handleNotificationAction(notice);
           },
           child: Padding(
             padding: const EdgeInsets.all(14),
