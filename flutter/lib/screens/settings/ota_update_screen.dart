@@ -80,9 +80,25 @@ class _OtaUpdateScreenState extends State<OtaUpdateScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.memory_outlined,
-                        size: 18, color: AppTheme.primaryColor),
-                    const SizedBox(width: 8),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF141234),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Image.asset(
+                        'assets/onlyorders-mark.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.memory_outlined,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
                     const Expanded(
                       child: Text(
                         'Patch status on this device',

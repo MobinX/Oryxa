@@ -243,7 +243,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                             mode: LaunchMode.externalApplication,
                           ),
                           icon: const Icon(Icons.download_rounded, size: 16),
-                          label: const Text('Download Latest APK (Build 15)'),
+                          label: const Text('Download Latest APK'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.danger,
                             foregroundColor: Colors.white,

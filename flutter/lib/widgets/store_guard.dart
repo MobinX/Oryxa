@@ -118,7 +118,23 @@ Future<void> _showStoreMissing(
     context: context,
     builder: (ctx) {
       return AlertDialog(
-        icon: const Icon(Icons.store_mall_directory_outlined),
+        icon: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF141234),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.all(8),
+          child: Image.asset(
+            'assets/onlyorders-mark.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.store_mall_directory_outlined,
+              color: Colors.white,
+            ),
+          ),
+        ),
         title: Text('Can\'t open $action'),
         content: SingleChildScrollView(
           child: Column(

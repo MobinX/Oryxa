@@ -139,14 +139,27 @@ class _BusinessPickerScreenState extends State<BusinessPickerScreen> {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppTheme.primaryColor
-                                  : AppTheme.primaryColor.withValues(alpha: 0.1),
+                              color: const Color(0xFF141234),
                               borderRadius: BorderRadius.circular(12),
+                              border: isSelected
+                                  ? Border.all(color: AppTheme.primaryColor, width: 2)
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor.withValues(alpha: isSelected ? 0.3 : 0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            child: Icon(
-                              Icons.storefront_outlined,
-                              color: isSelected ? Colors.white : AppTheme.primaryColor,
+                            padding: const EdgeInsets.all(8),
+                            child: Image.asset(
+                              'assets/onlyorders-mark.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.storefront_outlined,
+                                color: isSelected ? Colors.white : AppTheme.primaryColor,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),

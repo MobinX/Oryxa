@@ -43,6 +43,32 @@ class DashboardScreen extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF141234),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: Image.asset(
+                            'assets/onlyorders-mark.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.dashboard,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                         Text(
                           'Store Dashboard',
                           style: TextStyle(
@@ -323,9 +349,32 @@ class DashboardScreen extends StatelessWidget {
             AppCard(
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               child: Center(
-                child: Text(
-                  'No orders received yet. Incoming orders will show up here.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF141234),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: Image.asset(
+                        'assets/onlyorders-mark.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.shopping_bag_outlined,
+                          size: 24,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'No orders received yet. Incoming orders will show up here.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                    ),
+                  ],
                 ),
               ),
             )

@@ -122,13 +122,25 @@ class _MainScaffoldState extends State<MainScaffold> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                    color: const Color(0xFF141234),
                     borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.store_mall_directory_outlined,
-                    size: 18,
-                    color: AppTheme.primaryColor,
+                  padding: const EdgeInsets.all(4),
+                  child: Image.asset(
+                    'assets/onlyorders-mark.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.store_mall_directory_outlined,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -295,10 +307,32 @@ class _MainScaffoldState extends State<MainScaffold> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                hasError ? Icons.cloud_off_outlined : Icons.storefront_outlined,
-                size: 56,
-                color: hasError ? AppTheme.danger : AppTheme.primaryColor,
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141234),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(12),
+                child: hasError
+                    ? const Icon(Icons.cloud_off_outlined, size: 36, color: AppTheme.danger)
+                    : Image.asset(
+                        'assets/onlyorders-mark.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.storefront_outlined,
+                          size: 36,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -358,18 +392,57 @@ class _MainScaffoldState extends State<MainScaffold> {
           children: [
             // OnlyOrders Brand Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Image.asset(
-                  isDark ? 'assets/onlyorders-logo-dark.png' : 'assets/onlyorders-logo.png',
-                  height: 28,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Image.asset(
-                    'assets/logo.png',
-                    height: 28,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141234),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(6),
+                    child: Image.asset(
+                      'assets/onlyorders-mark.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/logo.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'OnlyOrders',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.6,
+                          color: isDark ? AppTheme.textDarkPrimary : AppTheme.textLightPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Merchant Portal',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
             const Divider(height: 1),

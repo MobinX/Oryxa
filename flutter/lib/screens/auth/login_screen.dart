@@ -93,22 +93,48 @@ class _LoginScreenState extends State<LoginScreen> {
                   Center(
                     child: Hero(
                       tag: 'app_logo',
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        constraints: const BoxConstraints(maxHeight: 56, maxWidth: 280),
-                        child: Image.asset(
-                          isDark ? 'assets/onlyorders-logo-dark.png' : 'assets/onlyorders-logo.png',
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Image.asset(
-                            'assets/logo.png',
-                            height: 52,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.shopping_bag_outlined,
-                              size: 44,
-                              color: AppTheme.primaryColor,
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF141234),
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(12),
+                            child: Image.asset(
+                              'assets/onlyorders-mark.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Image.asset(
+                                'assets/logo.png',
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.shopping_bag_outlined,
+                                  size: 44,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 14),
+                          Text(
+                            'OnlyOrders',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.8,
+                              color: isDark ? AppTheme.textDarkPrimary : AppTheme.textLightPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

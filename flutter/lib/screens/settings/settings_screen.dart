@@ -185,12 +185,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    color: const Color(0xFF141234),
                     borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.system_update_alt, color: AppTheme.primaryColor),
+                  padding: const EdgeInsets.all(8),
+                  child: Image.asset(
+                    'assets/onlyorders-mark.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.system_update_alt, color: Colors.white),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
