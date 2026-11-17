@@ -4,6 +4,7 @@ import '../../config/api_config.dart';
 import '../../config/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/diagnostics_service.dart';
+import '../admin/admin_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -336,6 +337,23 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
                         : const Text('Sign In to Store'),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // Admin Sign-in Button
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.shield_outlined, size: 18),
+                    label: const Text('Sign In as Admin / Console'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
                 ],
               ),

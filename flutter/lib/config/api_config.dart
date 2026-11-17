@@ -32,6 +32,10 @@ class ApiConfig {
   static const String storageKeyFirebaseApiKey = 'firebase_web_api_key';
   static const String storageKeySelectedBusiness = 'selected_business_id';
   static const String storageKeyUser = 'user_data';
+  static const String storageKeyUserSessionType = 'user_session_type'; // 'merchant' | 'admin'
+  static const String storageKeyAdminToken = 'admin_token';
+  static const String storageKeyAdminUser = 'admin_user';
+  static const String storageKeyAdminFirebaseToken = 'admin_firebase_token';
 
   /// Origin of the web dashboard for a given API base URL. `…/api/v1` becomes the host
   /// the dashboard is served from; anything unparseable falls back to production.
@@ -206,4 +210,41 @@ class ApiConfig {
       '/$businessId/posts/$postId/comments/$commentId/react';
   static String pathAds(String businessId, {int days = 30}) =>
       '/$businessId/ads?days=$days';
+
+  // Admin Console Endpoints
+  static const String pathAdminLogin = '/api/admin/login';
+  static const String pathApi2AdminLogin = '/api2/admin/login';
+  static const String pathAdminMe = '/api2/admin/me';
+  static const String pathAdminLogout = '/api2/admin/logout';
+  static String pathAdminStats({int days = 30}) => '/admin/stats?days=$days';
+  static const String pathAdminMailbox = '/api2/admin/mail/mailbox';
+  static const String pathAdminMailStorage = '/api2/admin/mail/storage';
+  static String pathAdminEmails({String folder = 'inbox', String? q, int limit = 40, int offset = 0}) {
+    var p = '/api2/admin/mail/emails?limit=$limit&offset=$offset';
+    if (folder == 'sent') {
+      p += '&direction=outbound&trashed=false';
+    } else if (folder == 'trash') {
+      p += '&trashed=true';
+    } else if (folder == 'all') {
+      p += '&trashed=false';
+    } else {
+      p += '&direction=inbound&trashed=false';
+    }
+    if (q != null && q.isNotEmpty) {
+      p += '&q=${Uri.encodeComponent(q)}';
+    }
+    return p;
+  }
+  static String pathAdminEmailDetail(String id) => '/api2/admin/mail/emails/$id';
+  static const String pathAdminMailSend = '/api2/admin/mail/send';
+  static String pathAdminMailReply(String id) => '/api2/admin/mail/emails/$id/reply';
+  static String pathAdminMailForward(String id) => '/api2/admin/mail/emails/$id/forward';
+  static String pathAdminMailTrash(String id) => '/api2/admin/mail/emails/$id/trash';
+  static String pathAdminMailRestore(String id) => '/api2/admin/mail/emails/$id/restore';
+  static String pathAdminMailDelete(String id) => '/api2/admin/mail/emails/$id/delete';
+  static const String pathAdminTokenAnalytics = '/admin/token-analytics';
+  static const String pathAdminPlans = '/admin/plans';
+  static const String pathAdminChannels = '/admin/channels';
+  static const String pathAdminLogs = '/admin/logs';
+  static const String pathAdminSettings = '/admin/settings';
 }

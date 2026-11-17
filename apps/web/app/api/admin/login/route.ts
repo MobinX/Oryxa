@@ -41,6 +41,7 @@ export async function POST(request: Request) {
 
   const response = NextResponse.json({
     ok: true,
+    token: data.token,
     user: data.user,
     firebase: firebaseBootstrap(),
   });

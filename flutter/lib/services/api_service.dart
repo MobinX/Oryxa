@@ -63,7 +63,15 @@ class ApiService {
   }
 
   Uri _buildUri(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return Uri.parse(path);
+    }
     final cleanPath = path.startsWith('/') ? path : '/$path';
+    if (cleanPath.startsWith('/api2/') ||
+        cleanPath.startsWith('/admin/') ||
+        cleanPath.startsWith('/api/')) {
+      return Uri.parse('${ApiConfig.webOrigin(_baseUrl)}$cleanPath');
+    }
     return Uri.parse('$_baseUrl$cleanPath');
   }
 

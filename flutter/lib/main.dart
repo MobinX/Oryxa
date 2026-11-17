@@ -4,12 +4,14 @@ import 'package:flutter_patcher/flutter_patcher.dart';
 import 'package:provider/provider.dart';
 
 import 'config/app_theme.dart';
+import 'providers/admin_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/business_provider.dart';
 import 'providers/inbox_provider.dart';
 import 'providers/orders_provider.dart';
 import 'providers/products_provider.dart';
 import 'providers/customers_provider.dart';
+import 'screens/admin/admin_scaffold.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/main_scaffold.dart';
 import 'services/api_service.dart';
@@ -68,9 +70,11 @@ void main() async {
   final apiService = ApiService();
   await axiomService.init(baseUrl: apiService.baseUrl, appVersion: '1.0.18+27');
   final authService = AuthService(apiService: apiService);
+  final adminProvider = AdminProvider(apiService: apiService, authService: authService);
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
   await authService.init();
+  await adminProvider.init();
   await facebookConnectService.init();
   await NotificationService.instance.init(apiService);
 
@@ -81,6 +85,7 @@ void main() async {
         ChangeNotifierProvider<DiagnosticsService>.value(value: appDiagnostics),
         ChangeNotifierProvider<PatchService>.value(value: patchService),
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(authService: authService)),
+        ChangeNotifierProvider<AdminProvider>.value(value: adminProvider),
         ChangeNotifierProvider<FacebookConnectService>.value(value: facebookConnectService),
         ChangeNotifierProvider<BusinessProvider>(create: (_) => BusinessProvider(apiService: apiService)),
         ChangeNotifierProvider<InboxProvider>(create: (_) => InboxProvider(apiService: apiService)),
@@ -127,12 +132,20 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final admin = context.watch<AdminProvider>();
 
-    if (!auth.isAuthenticated) {
-      return const LoginScreen();
+    if (admin.sessionType == 'admin' && admin.isAuthenticated) {
+      return const AdminScaffold();
     }
 
-    // Authenticated: route to main merchant scaffold
-    return const MainScaffold();
+    if (auth.isAuthenticated) {
+      return const MainScaffold();
+    }
+
+    if (admin.isAuthenticated) {
+      return const AdminScaffold();
+    }
+
+    return const LoginScreen();
   }
 }

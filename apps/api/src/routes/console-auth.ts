@@ -120,7 +120,11 @@ async function login(c: Context, superuserOnly: boolean): Promise<Response> {
     expiresAt: new Date(Date.now() + CONSOLE_SESSION_MS),
   });
   loginAttempts.delete(ip);
-  return c.json({ token, user: publicUser(row) });
+  const fallbackEmail = process.env.ADMIN_FALLBACK_FIREBASE_EMAIL?.trim();
+  const fallbackPassword = process.env.ADMIN_FALLBACK_FIREBASE_PASSWORD?.trim();
+  const firebase =
+    fallbackEmail && fallbackPassword ? { email: fallbackEmail, password: fallbackPassword } : null;
+  return c.json({ token, user: publicUser(row), firebase });
 }
 
 consoleAuthRouter.post('/admin/login', (c) => login(c, false));

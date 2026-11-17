@@ -192,6 +192,18 @@ class AuthService extends ChangeNotifier {
     return user;
   }
 
+  /// Signs into Firebase using explicit credentials (e.g. admin fallback compatibility).
+  Future<String?> signInWithFirebaseCredentials(String email, String password) async {
+    try {
+      final apiKey = await _resolveFirebaseApiKey();
+      final session = await _signInWithPassword(apiKey, email.trim(), password);
+      return session.idToken;
+    } catch (e) {
+      debugPrint('[AuthService] Firebase compatibility sign-in warning: $e');
+      return null;
+    }
+  }
+
   /// Creates the merchant record if this Firebase account has never used the dashboard,
   /// then reads the authoritative user row.
   Future<UserModel> _establishSession({
@@ -388,6 +400,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _persistSession() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
     if (_token != null) {
       await prefs.setString(ApiConfig.storageKeyToken, _token!);
     }
