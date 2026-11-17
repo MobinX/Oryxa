@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "apk_sha256": "2a10632bed044c8be03109c039c8ef5664f97fc43f4dbf54d0cbc6ca5caf9fb6",
+  "release": "release-default-28-arm64-v8a.tar.gz",
+  "release_manifest_sha256": "af9db21507a9ec5e13080d3765a95bce695e27c584aba784eee0b7d52ed46913",
+  "build_host": {
+    "os": "linux",
+    "arch": "x64"
+  },
+  "crlf_dart_sources": []
+}
