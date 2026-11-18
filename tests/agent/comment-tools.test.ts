@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AIMessage } from '@langchain/core/messages';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ChatResult } from '@langchain/core/outputs';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { createCommentAgentTools } from '@agent/tools/comment';
@@ -203,5 +206,58 @@ describe('comment agent tools: reply_comment', () => {
 
     expect(sendCommenterMessageMock).not.toHaveBeenCalled();
     expect(String(result)).toMatch(/cannot be messaged privately/i);
+  }, 30_000);
+
+  it('reports the product helper’s tokens to the comment run', async () => {
+    const seed = await seedTestWorld();
+    const thread = await getOrCreateCommentThread(
+      seed.business.id,
+      seed.channel.id,
+      'POST_USAGE',
+      'COMMENTER_USAGE',
+      'Commenter Usage',
+    );
+
+    class UsageModel extends BaseChatModel {
+      constructor() {
+        super({});
+      }
+      _llmType() {
+        return 'usage-model';
+      }
+      bindTools() {
+        return this;
+      }
+      async _generate(): Promise<ChatResult> {
+        const message = new AIMessage({
+          content: 'It is cotton.',
+          usage_metadata: {
+            input_tokens: 60,
+            output_tokens: 8,
+            total_tokens: 68,
+            input_token_details: { cache_read: 10 },
+          },
+        });
+        return { generations: [{ text: 'It is cotton.', message }], llmOutput: {} };
+      }
+    }
+
+    const usages: Array<{ inputTokens: number; outputTokens: number; cacheHitTokens: number }> = [];
+    const tools = createCommentAgentTools({
+      businessId: seed.business.id,
+      commentThreadId: thread.id,
+      pageToken: 'page-token-test',
+      parentCommentExternalId: 'PARENT_COMMENT_ID',
+      customerName: 'Commenter Usage',
+      productInfoLlm: new UsageModel(),
+      onTokenUsage: (usage) => usages.push(usage),
+    });
+
+    await tools.find((tool) => tool.name === 'getProductInfoWithQuery')!.invoke({
+      productId: seed.productDetail.id,
+      userQuery: 'Is it cotton?',
+    });
+
+    expect(usages).toEqual([{ inputTokens: 60, outputTokens: 8, cacheHitTokens: 10 }]);
   }, 30_000);
 });

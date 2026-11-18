@@ -6,6 +6,7 @@ import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
 import { createStoreAgentModel, defaultAgentProvider, agentModelName } from '@agent/model';
+import { createAgentUsageCollector, type AgentUsageCollector } from '@agent/usage';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
@@ -125,6 +126,11 @@ export interface AgentConfig {
   llm?: BaseChatModel;
   /** Inject a fake model for the product-answer helper (tests only; production uses the store model). */
   productInfoLlm?: BaseChatModel;
+  /**
+   * Share one collector with tools built outside the Agent (the comment runner builds its
+   * own tool set). When omitted the Agent creates one and passes it to the tools it builds.
+   */
+  usageCollector?: AgentUsageCollector;
   /** Select the LLM provider to use (defaults to 'openai' if OPENAI_API_KEY is set, otherwise 'gemini'). */
   llmProvider?: 'gemini' | 'openai';
   /** Override the default Messenger tool set (e.g. the comment tool set). */
@@ -348,6 +354,10 @@ export class Agent {
         : null;
     const answerAgeSeconds = this.config.lastSelfReply?.secondsAgo ?? null;
 
+    // One collector for this turn: the tools the Agent builds report their helper calls into it,
+    // and the counters below fold them into the metrics the runner records.
+    const usageCollector = this.config.usageCollector ?? createAgentUsageCollector();
+
     const tools: StructuredTool[] =
       this.config.tools ??
       createAgentTools(
@@ -359,6 +369,7 @@ export class Agent {
           customerName: this.config.customerName,
           businessName: this.config.business.name,
           productInfoLlm: this.config.productInfoLlm,
+          onTokenUsage: (usage) => usageCollector.add(usage),
           platform: this.config.platform,
           suppressSuggestions: this.config.suppressSuggestions,
           emitSse,
@@ -521,6 +532,12 @@ export class Agent {
         cacheHitTokens += details.cache_read || details.cached_tokens || 0;
       }
     }
+
+    // Helper calls (a product answer written by a second model) are part of this turn's spend.
+    // Without this the usage row undercounts every turn that asked a product question.
+    inputTokens += usageCollector.inputTokens;
+    outputTokens += usageCollector.outputTokens;
+    cacheHitTokens += usageCollector.cacheHitTokens;
 
     const totalTokens = inputTokens + outputTokens;
     const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);

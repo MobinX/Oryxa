@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { FakeStreamingChatModel } from '@langchain/core/utils/testing';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ChatResult } from '@langchain/core/outputs';
 import { withPglite } from '../helpers/with-pglite';
 import { seedTestWorld } from '../helpers/seed';
 import { createAgentTools } from '@repo/agent/tools';
@@ -12,6 +14,8 @@ import {
   PRODUCT_INFO_UNAVAILABLE,
 } from '@repo/agent/tools/product-info';
 import { setAgentLogSink } from '@repo/agent/log';
+import { Agent } from '@repo/agent';
+import { createAgentUsageCollector } from '@repo/agent/usage';
 import {
   COMMENT_AGENT_GUIDANCE,
   MESSENGER_AGENT_GUIDANCE,
@@ -22,6 +26,55 @@ const ANSWER = 'Yes, the Test T-Shirt is cotton.\n• Red M is available.';
 /** A model that answers with fixed text — the helper agent is tool-less, so one reply is enough. */
 function fakeAnswer(text = ANSWER) {
   return new FakeStreamingChatModel({ responses: [new AIMessage(text)] });
+}
+
+/** The same answer, with the usage numbers a provider reports — the part the run must bill. */
+function answerWithUsage(inputTokens = 100, outputTokens = 20, cacheHitTokens = 40) {
+  return scripted([
+    {
+      content: ANSWER,
+      usage_metadata: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+        input_token_details: { cache_read: cacheHitTokens },
+      },
+    },
+  ]);
+}
+
+/**
+ * A model that returns one scripted message per call, usage included. `FakeStreamingChatModel`
+ * drops both tool calls and usage metadata in `_generate`, which is the whole point here.
+ */
+function scripted(messages: Array<ConstructorParameters<typeof AIMessage>[0]>) {
+  class ScriptedModel extends BaseChatModel {
+    private index = 0;
+
+    constructor() {
+      super({});
+    }
+
+    _llmType(): string {
+      return 'scripted-product-info';
+    }
+
+    bindTools(): this {
+      return this;
+    }
+
+    async _generate(): Promise<ChatResult> {
+      const fields = messages[Math.min(this.index, messages.length - 1)];
+      this.index += 1;
+      const message = new AIMessage(fields);
+      return {
+        generations: [{ text: typeof message.content === 'string' ? message.content : '', message }],
+        llmOutput: {},
+      };
+    }
+  }
+
+  return new ScriptedModel();
 }
 
 describe('getProductInfoWithQuery', () => {
@@ -82,6 +135,63 @@ describe('getProductInfoWithQuery', () => {
     } finally {
       setAgentLogSink(undefined);
     }
+  });
+
+  it('reports the helper call’s tokens to the run that will be billed', async () => {
+    const seed = await seedTestWorld();
+    const collector = createAgentUsageCollector();
+    const tool = createProductInfoTool({
+      businessId: seed.business.id,
+      llm: answerWithUsage(),
+      onTokenUsage: (usage) => collector.add(usage),
+    });
+
+    await tool.invoke({
+      productId: seed.productDetail.id,
+      userQuery: 'Is it cotton?',
+    });
+
+    expect(collector).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheHitTokens: 40,
+      calls: 1,
+    });
+  });
+
+  it('folds helper tokens into the Messenger run metrics', async () => {
+    const seed = await seedTestWorld();
+    const main = scripted([
+      {
+        content: '',
+        tool_calls: [
+          {
+            name: 'getProductInfoWithQuery',
+            args: { productId: seed.productDetail.id, userQuery: 'Is it cotton?' },
+            id: 'call_product_info',
+            type: 'tool_call',
+          },
+        ],
+      },
+      { content: 'Yes, it is made of cotton.' },
+    ]);
+
+    const agent = new Agent({
+      systemPrompt: 'Answer briefly.',
+      business: { id: seed.business.id, name: seed.business.name },
+      history: [{ from: 'customer', content: 'Is the red one cotton?' }],
+      conversationId: seed.conversation.id,
+      pageToken: 'tok',
+      customerPlatformId: 'cust',
+      llm: main,
+      productInfoLlm: answerWithUsage(),
+    });
+
+    const { metrics } = await agent.run();
+
+    expect(metrics.inputTokens).toBeGreaterThanOrEqual(100);
+    expect(metrics.outputTokens).toBeGreaterThanOrEqual(20);
+    expect(metrics.cacheHitTokens).toBeGreaterThanOrEqual(40);
   });
 
   it('refuses instead of letting the sales agent answer an unknown product', async () => {

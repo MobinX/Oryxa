@@ -70,6 +70,8 @@ export function createCommentAgentTools(
     paymentStrategy?: import('@repo/shared').PaymentStrategy;
     /** Injected in tests so the product-answer helper never reaches the network. */
     productInfoLlm?: import('@langchain/core/language_models/chat_models').BaseChatModel;
+    /** Folds helper token usage into the run's metrics. */
+    onTokenUsage?: (usage: import('@agent/usage').AgentTokenUsage) => void;
   },
   onSent?: (text: string, kind: 'public' | 'private') => void,
 ) {
@@ -299,6 +301,7 @@ export function createCommentAgentTools(
       emitSse: context.emitSse,
       paymentStrategy: context.paymentStrategy,
       productInfoLlm: context.productInfoLlm,
+      onTokenUsage: context.onTokenUsage,
     }, { includeOrderTools: false }),
     replyCommentTool,
     sendPrivateMessageTool,

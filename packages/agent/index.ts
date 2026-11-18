@@ -14,6 +14,11 @@ export {
   agentModelName,
   type AgentProvider,
 } from '@agent/model';
+export {
+  createAgentUsageCollector,
+  type AgentTokenUsage,
+  type AgentUsageCollector,
+} from '@agent/usage';
 export { cardsAsText } from '@agent/tools';
 export {
   createSuggestionTools,

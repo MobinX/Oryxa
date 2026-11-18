@@ -1,6 +1,7 @@
 import {
   COMMENT_REPLY_GUIDANCE,
   INSTAGRAM_COMMENT_AGENT_GUIDANCE,
+  createAgentUsageCollector,
   type TokenUsageMetrics,
 } from '@repo/agent';
 import { emit, emitAnomaly, errorFields } from '@api/lib/log';
@@ -223,6 +224,9 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
     emit('agent_input', agentInputFields({ history, catalogCount: catalog.total, systemPrompt: answering.systemPrompt }));
 
     const graphReplyToId = await resolveGraphReplyTargetId(current, thread.platformItemId);
+    // The comment tool set is built here, not inside Agent, so the collector has to be handed to
+    // both: the tool reports helper tokens, the Agent folds them into the returned metrics.
+    const usageCollector = createAgentUsageCollector();
     const tools = createCommentAgentTools(
       {
         businessId: thread.businessId,
@@ -236,6 +240,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         platform,
         businessName: thread.business?.name,
         emitSse: trace.emitSse,
+        onTokenUsage: (usage) => usageCollector.add(usage),
         paymentStrategy: (thread.business as { paymentStrategy?: import('@repo/shared').PaymentStrategy } | null)?.paymentStrategy,
       },
       (text, kind) => {
@@ -256,6 +261,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
       platform,
       catalogSummary,
       tools,
+      usageCollector,
       replyGuidance:
         answering.commentReplyGuidance ||
         (platform === 'instagram' ? INSTAGRAM_COMMENT_AGENT_GUIDANCE : COMMENT_REPLY_GUIDANCE),

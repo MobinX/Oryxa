@@ -7,6 +7,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { getProductById } from '@repo/db/crud/product';
 import { createStoreAgentModel, defaultAgentProvider, agentModelName } from '@agent/model';
 import { agentLog } from '@agent/log';
+import type { AgentTokenUsage } from '@agent/usage';
 import type { SseEmitter } from '@agent/Agent';
 
 /** One variant of a product, flattened to the facts a customer question can be answered from. */
@@ -141,6 +142,8 @@ export interface ProductInfoToolContext {
   businessId: string;
   businessName?: string | null;
   emitSse?: SseEmitter;
+  /** Folds the helper's tokens into the run the customer is being billed for. */
+  onTokenUsage?: (usage: AgentTokenUsage) => void;
   /** Injected in tests so the helper never reaches the network. */
   llm?: BaseChatModel;
 }
@@ -208,6 +211,10 @@ export function createProductInfoTool(context: ProductInfoToolContext) {
         const usage = usageOf(answer.messages);
         const ranked = [...answer.messages].reverse().find((message) => message._getType() === 'ai');
         const generated = cleanProductAnswer(textOf(ranked?.content));
+
+        // The helper is part of this turn: its tokens join the run's totals so the usage row the
+        // runner writes is the provider's bill, not the sales model's share of it.
+        context.onTokenUsage?.(usage);
 
         agentLog('product_info', {
           productId,

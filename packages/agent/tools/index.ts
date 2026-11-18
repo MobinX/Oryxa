@@ -27,6 +27,7 @@ import {
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import type { SseEmitter } from '@agent/Agent';
 import { createProductInfoTool } from '@agent/tools/product-info';
+import type { AgentTokenUsage } from '@agent/usage';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
   matchPaymentMethod,
@@ -237,6 +238,8 @@ export function createCatalogTools(context: {
   emitSse?: SseEmitter;
   /** Injected in tests so the product-answer helper never reaches the network. */
   productInfoLlm?: BaseChatModel;
+  /** Folds helper token usage into the run's metrics. */
+  onTokenUsage?: (usage: AgentTokenUsage) => void;
   agentState?: ConversationAgentState;
   persistAgentState?: (state: ConversationAgentState) => Promise<void>;
 }, options: {
@@ -1030,6 +1033,7 @@ export function createCatalogTools(context: {
     businessName: context.businessName,
     emitSse: context.emitSse,
     llm: context.productInfoLlm,
+    onTokenUsage: context.onTokenUsage,
   });
 
   const readOnlyTools = [
@@ -1079,6 +1083,8 @@ export function createAgentTools(
     lastSelfReply?: string | null;
     /** Injected in tests so the product-answer helper never reaches the network. */
     productInfoLlm?: BaseChatModel;
+    /** Folds helper token usage into the run's metrics. */
+    onTokenUsage?: (usage: AgentTokenUsage) => void;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the
