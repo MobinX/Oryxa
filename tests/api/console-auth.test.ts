@@ -88,4 +88,56 @@ describe('console DB auth and capabilities', () => {
     const payload = (await superAttempt.json()) as { admins?: Array<{ email?: string }> };
     expect(payload.admins?.some((admin) => admin.email === superEmail)).toBe(true);
   });
+
+  it('grants the subagent capability, which is a page the console offers', async () => {
+    const superEmail = 'api-super-capabilities@onlyorders.tech';
+    const adminEmail = 'api-capability-target@onlyorders.tech';
+    const password = 'test-password-123';
+    await createConsoleUser({
+      email: superEmail,
+      passwordHash: await hashConsolePassword(password),
+      role: 'superuser',
+      capabilities: [],
+    });
+    const target = await createConsoleUser({
+      email: adminEmail,
+      passwordHash: await hashConsolePassword(password),
+      capabilities: ['dashboard'],
+    });
+
+    const superLogin = await login('/api2/superuser/login', superEmail, password);
+    const superToken = superLogin.body.token!;
+
+    // Before the grant the capability is genuinely absent. An unmapped `/api2/admin/*` path would let
+    // this through, so a 200 here would mean the subagent routes were not gated at all.
+    const beforeLogin = await login('/api2/admin/login', adminEmail, password);
+    const beforeGrant = await app.request('/api2/admin/subagents/product_info', {
+      headers: { Authorization: `Bearer ${beforeLogin.body.token!}` },
+    });
+    expect(beforeGrant.status).toBe(403);
+
+    // This is the request the superuser page sends when it ticks "Subagent prompts". It used to come
+    // back 400 "Unknown capability: subagent" because the API kept its own list that lacked the key.
+    const granted = await app.request(`/api2/superuser/admins/${target.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${superToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ capabilities: ['dashboard', 'subagent'] }),
+    });
+    expect(granted.status).toBe(200);
+    const grantedBody = (await granted.json()) as { admin?: { capabilities?: string[] } };
+    expect(grantedBody.admin?.capabilities).toEqual(['dashboard', 'subagent']);
+
+    // And the grant is worth something: the new capability opens its admin API and its page gate.
+    const adminLogin = await login('/api2/admin/login', adminEmail, password);
+    const adminToken = adminLogin.body.token!;
+    const subagentApi = await app.request('/api2/admin/subagents/product_info', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(subagentApi.status).toBe(200);
+
+    const stillForbidden = await app.request('/api2/admin/default-agent', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(stillForbidden.status).toBe(403);
+  });
 });
