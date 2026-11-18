@@ -1,5 +1,6 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   searchProducts,
   countSearchResults,
@@ -25,6 +26,7 @@ import {
 } from '@repo/integrations/facebook';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import type { SseEmitter } from '@agent/Agent';
+import { createProductInfoTool } from '@agent/tools/product-info';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
   matchPaymentMethod,
@@ -230,7 +232,11 @@ export function createCatalogTools(context: {
    */
   customerPlatformId?: string | null;
   customerName?: string | null;
+  /** The store's display name, so the product-answer helper writes in the brand's voice. */
+  businessName?: string | null;
   emitSse?: SseEmitter;
+  /** Injected in tests so the product-answer helper never reaches the network. */
+  productInfoLlm?: BaseChatModel;
   agentState?: ConversationAgentState;
   persistAgentState?: (state: ConversationAgentState) => Promise<void>;
 }, options: {
@@ -277,7 +283,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product',
-      description: 'Read-only search by product name or SKU. Use when answering text questions about price, stock, or specs without a productId; do NOT use to send cards.',
+      description: 'Read-only search by product name or SKU. Use ONLY to find the productId you pass to getProductInfoWithQuery; never answer a product question from its result. Do NOT use to send cards.',
       schema: z.object({
         query: z.string().describe('Product name or SKU to search for'),
       }),
@@ -408,7 +414,7 @@ export function createCatalogTools(context: {
     },
     {
       name: 'get_product_options',
-      description: 'Read-only lookup of one productId\u2019s declared options with every value they take, plus parsed colors/sizes, prices, stock and photo counts. Use for \u2018how many colors/sizes?\u2019 or stock questions; do NOT use when customer wants cards.',
+      description: 'Read-only lookup of one productId\u2019s declared options with every value they take, plus parsed colors/sizes, prices, stock and photo counts. Use it to pin a variant for an order or a card; for a customer’s product question use getProductInfoWithQuery instead. Do NOT use when customer wants cards.',
       schema: z.object({ productId: z.string().uuid() }),
     },
   );
@@ -1014,8 +1020,27 @@ export function createCatalogTools(context: {
     },
   );
 
-  const readOnlyTools = [getProductTool, getProductByVariantIdTool, getProductOptionsTool, findVariantTool];
+  /**
+   * The answer writer. Every product question goes through it, so the sales model relays a
+   * verified row instead of composing materials, prices and stock from memory. It lives in the
+   * catalog set because both transports — Messenger and comments — read products the same way.
+   */
+  const productInfoTool = createProductInfoTool({
+    businessId: context.businessId,
+    businessName: context.businessName,
+    emitSse: context.emitSse,
+    llm: context.productInfoLlm,
+  });
+
+  const readOnlyTools = [
+    getProductTool,
+    getProductByVariantIdTool,
+    getProductOptionsTool,
+    findVariantTool,
+    productInfoTool,
+  ];
   if (options.includeOrderTools === false) return readOnlyTools;
+
   return [
     ...readOnlyTools,
     createOrderTool,
@@ -1032,6 +1057,8 @@ export function createAgentTools(
     pageToken: string;
     customerPlatformId: string;
     customerName?: string | null;
+    /** The store's display name, used by the product-answer helper. */
+    businessName?: string | null;
     emitSse?: SseEmitter;
     /** Which inbox the page token sends into. Defaults to Messenger for the existing channels. */
     platform?: MessagingPlatform;
@@ -1050,6 +1077,8 @@ export function createAgentTools(
     paymentStrategy?: PaymentStrategy;
     /** The last thing this customer was told, so a restatement of it can be refused. */
     lastSelfReply?: string | null;
+    /** Injected in tests so the product-answer helper never reaches the network. */
+    productInfoLlm?: BaseChatModel;
   },
   /**
    * Called when something actually reached Messenger, with what kind of send it was: `reply` is text the

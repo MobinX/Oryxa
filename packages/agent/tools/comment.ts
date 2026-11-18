@@ -50,6 +50,8 @@ export function createCommentAgentTools(
     commenterPlatformId?: string | null;
     /** The comment's platform; the private reply and its wording follow it. */
     platform?: 'facebook' | 'instagram';
+    /** The store's display name, used by the product-answer helper. */
+    businessName?: string | null;
     emitSse?: SseEmitter;
     /**
      * Override the Graph reply function (e.g. no-op in test mode). The mirror of
@@ -66,6 +68,8 @@ export function createCommentAgentTools(
     sendPrivateMessageOverride?: (pageToken: string, commentId: string, text: string) => Promise<void>;
     /** Store-wide default payment strategy, so product reads price payment the same way here. */
     paymentStrategy?: import('@repo/shared').PaymentStrategy;
+    /** Injected in tests so the product-answer helper never reaches the network. */
+    productInfoLlm?: import('@langchain/core/language_models/chat_models').BaseChatModel;
   },
   onSent?: (text: string, kind: 'public' | 'private') => void,
 ) {
@@ -291,8 +295,10 @@ export function createCommentAgentTools(
     ...createCatalogTools({
       businessId: context.businessId,
       customerName: context.customerName,
+      businessName: context.businessName,
       emitSse: context.emitSse,
       paymentStrategy: context.paymentStrategy,
+      productInfoLlm: context.productInfoLlm,
     }, { includeOrderTools: false }),
     replyCommentTool,
     sendPrivateMessageTool,

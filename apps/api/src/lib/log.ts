@@ -65,6 +65,23 @@ const ALLOWLIST: Record<Evt, readonly string[]> = {
     'durationMs',
   ],
   agent_input: ['historyLength', 'turns', 'catalogCount', 'systemPromptLength'],
+  product_info: [
+    'productId',
+    'ok',
+    'found',
+    'variantCount',
+    'queryChars',
+    'responseChars',
+    'durationMs',
+    'provider',
+    'model',
+    'inputTokens',
+    'outputTokens',
+    'totalTokens',
+    'cacheHitTokens',
+    'estimatedCostUsd',
+    'errorName',
+  ],
   tool_call: ['tool', 'toolCallId', 'args'],
   tool_result: ['tool', 'toolCallId', 'ok', 'result', 'durationMs'],
   bg: ['task', 'ok', 'durationMs', 'name', 'message', 'stack'],
@@ -98,6 +115,7 @@ const LANE: Record<Evt, string> = {
   db_summary: '[db]',
   agent_input: '[agent]',
   agent_run: '[agent]',
+  product_info: '[product]',
   tool_call: '[tool]',
   tool_result: '[tool]',
   bg: '[bg]',
@@ -434,6 +452,22 @@ function describeEvent(evt: Evt, f: Fields): string {
       );
       break;
     }
+    case 'product_info':
+      add(
+        'product answer',
+        f.ok === false ? 'FAILED' : 'ready',
+        f.found === false ? 'NO SUCH PRODUCT' : '',
+        plural(f.variantCount, 'variant', 'variants'),
+        f.queryChars !== undefined ? `question ${f.queryChars} chars` : '',
+        f.responseChars !== undefined ? `answer ${f.responseChars} chars` : '',
+        f.totalTokens !== undefined ? `${f.totalTokens} tokens` : '',
+        f.estimatedCostUsd !== undefined ? `~$${f.estimatedCostUsd}` : '',
+        span(f.durationMs, 'in'),
+        text(f.provider) ? `${text(f.provider)}/${text(f.model)}` : '',
+        text(f.productId) ? `product ${text(f.productId, 36)}` : '',
+        f.errorName ? `(${text(f.errorName)})` : '',
+      );
+      break;
     case 'tool_call':
       add('the model calls', text(f.tool) || 'a tool', argsLine(f.args, 220));
       break;

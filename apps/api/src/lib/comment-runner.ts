@@ -234,6 +234,7 @@ export async function runAgentForCommentThread(commentThreadId: string): Promise
         channelId: thread.channelId,
         commenterPlatformId: thread.commenterPlatformId,
         platform,
+        businessName: thread.business?.name,
         emitSse: trace.emitSse,
         paymentStrategy: (thread.business as { paymentStrategy?: import('@repo/shared').PaymentStrategy } | null)?.paymentStrategy,
       },

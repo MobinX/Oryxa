@@ -35,6 +35,7 @@ import { companiesRouter } from '@api/routes/companies';
 import { customersRouter } from '@api/routes/customers';
 import { logRequest, handleError, handleNotFound } from '@api/lib/logmiddleware';
 import { emit } from '@api/lib/log';
+import { setAgentLogSink } from '@agent/log';
 import { wireDatabaseLogging } from '@api/lib/db-log';
 import { setIntegrationLogSink } from '@repo/integrations/http-log';
 import { setNotificationPushHandler, setMessengerNoticeHandler } from '@repo/db/crud/notification';
@@ -63,6 +64,11 @@ app.notFound(handleNotFound);
 // this is the one place that connects it to the queue, so a token URL never
 // reaches the ingest path.
 setIntegrationLogSink((evt, fields) => emit(evt, fields));
+
+// The product-answer helper runs inside @repo/agent, which knows nothing about Axiom. One
+// sink here gives every helper turn a `product_info` row: what was asked, which model wrote
+// it, how long it took and what it cost — the same lane the store run's own metrics use.
+setAgentLogSink((evt, fields) => emit(evt, fields));
 
 // The db wrapper reports; what becomes a row is decided here, next to the rest of
 // the log policy.

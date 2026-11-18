@@ -1,5 +1,3 @@
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { ChatOpenAI } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import type { BaseMessage, ContentBlock } from '@langchain/core/messages';
@@ -7,6 +5,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { StructuredTool } from '@langchain/core/tools';
 import { getB2ObjectBytes } from '@repo/integrations/b2';
 import { createAgentTools } from '@agent/tools';
+import { createStoreAgentModel, defaultAgentProvider, agentModelName } from '@agent/model';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
@@ -124,6 +123,8 @@ export interface AgentConfig {
   postContext?: string | null;
   /** Inject a fake or test chat model (defaults to Gemini in production). */
   llm?: BaseChatModel;
+  /** Inject a fake model for the product-answer helper (tests only; production uses the store model). */
+  productInfoLlm?: BaseChatModel;
   /** Select the LLM provider to use (defaults to 'openai' if OPENAI_API_KEY is set, otherwise 'gemini'). */
   llmProvider?: 'gemini' | 'openai';
   /** Override the default Messenger tool set (e.g. the comment tool set). */
@@ -299,12 +300,9 @@ export class Agent {
     const startTime = Date.now();
     const provider =
       this.config.llmProvider ??
-      (process.env.OPENAI_API_KEY || process.env.AZURE_API_KEY ? 'openai' : 'gemini');
+      defaultAgentProvider();
 
-    const modelName =
-      provider === 'openai'
-        ? (process.env.OPENAI_MODEL || 'gpt-6-luna')
-        : 'gemini-flash-lite-latest';
+    const modelName = agentModelName(provider);
     const replyGuidance = this.config.replyGuidance ?? DEFAULT_REPLY_GUIDANCE;
     const promptCacheKey = this.config.promptCacheKey ?? (replyGuidance === COMMENT_REPLY_GUIDANCE
       ? 'oryxa:comment:v1'
@@ -321,26 +319,11 @@ export class Agent {
 
     const llm =
       this.config.llm ??
-      (provider === 'openai'
-        ? new ChatOpenAI({
-            model: modelName,
-            apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
-            configuration: {
-              baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
-            },
-            // The Responses API is the path that forwards `reasoning` to a reasoning deployment. On chat
-            // completions LangChain names the reply cap from its own model test — o\d and gpt-5* — so a
-            // deployment called gpt-6-luna gets `max_tokens`, which Azure rejects with a 400. No cap and
-            // no temperature are set, which is what this model expects.
-            reasoning: { effort: reasoningEffort },
-            promptCacheKey,
-            useResponsesApi: true,
-          })
-        : new ChatGoogleGenerativeAI({
-            model: modelName,
-            apiKey: process.env.GEMINI_API_KEY,
-            temperature: 0.3,
-          }));
+      createStoreAgentModel({
+        provider,
+        reasoningEffort,
+        promptCacheKey,
+      });
 
     // `gemini-flash-lite-latest` — the only model this path uses on Gemini — has no eyes: its
     // adapter throws on an image part instead of ignoring it. A picture goes to a model that can
@@ -374,6 +357,8 @@ export class Agent {
           pageToken: this.config.pageToken,
           customerPlatformId: this.config.customerPlatformId,
           customerName: this.config.customerName,
+          businessName: this.config.business.name,
+          productInfoLlm: this.config.productInfoLlm,
           platform: this.config.platform,
           suppressSuggestions: this.config.suppressSuggestions,
           emitSse,

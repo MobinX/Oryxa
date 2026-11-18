@@ -51,6 +51,7 @@ export const LANES: Record<string, Lane> = {
   db_summary: FAMILIES.stone,
   agent_input: FAMILIES.violet,
   agent_run: FAMILIES.purple,
+  product_info: FAMILIES.cyan,
   tool_call: FAMILIES.fuchsia,
   tool_result: FAMILIES.teal,
   bg: FAMILIES.yellow,
