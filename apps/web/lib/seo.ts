@@ -47,12 +47,13 @@ export function socialMetadata(input: {
 }
 
 /**
- * Public routes worth indexing. Docs and solutions now ship real content.
- * Features and developers stay out until they do; console routes are noindexed.
+ * Public routes worth indexing. Console routes are noindexed.
  */
 export const SITEMAP_ROUTES: readonly string[] = [
   "/",
   "/pricing",
+  "/features",
+  "/developers",
   "/docs",
   ...DOC_SLUGS.map((slug) => `/docs/${slug}`),
   "/solutions",

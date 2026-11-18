@@ -18,6 +18,7 @@ export * from '@shared/schemas/official';
 export * from '@shared/schemas/plan';
 export * from '@shared/schemas/subagent';
 export * from '@shared/schemas/billing';
+export * from '@shared/schemas/chat';
 export * from './prompts/agent';
 export * from './prompts/subagent';
 export * from './payment-methods';

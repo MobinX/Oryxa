@@ -2048,3 +2048,48 @@ export type CustomerHistory = {
 export const getCustomer = (token: string, businessId: string, customerId: string) =>
   apiFetch<CustomerHistory>(`/api/v1/${businessId}/customers/${customerId}`, { token });
 
+
+// Site assistant (landing widget + merchant assistant page).
+export type ChatHistoryTurn = { role: 'user' | 'assistant'; content: string };
+
+export type ChatReply = { reply: string; remaining: number | null };
+
+export type PublicChatReply = ChatReply & { resetsAt: string };
+
+export type AssistantQuota = {
+  assigned: boolean;
+  planId: string | null;
+  planName: string | null;
+  cycle: { period: string; startedAt: string; resetsAt: string; daysLeft: number };
+  assistantLimit: number | null;
+  used: number;
+  blocked: boolean;
+};
+
+/** Anonymous landing chat — no token. Throws ApiError (429 when today's IP budget is spent). */
+export const sendPublicChatMessage = (data: {
+  message: string;
+  history: ChatHistoryTurn[];
+  lang: 'en' | 'bn';
+  brand: string;
+}) =>
+  apiFetch<PublicChatReply>('/api/v1/chat/public', {
+    method: 'POST',
+    signInPath: null,
+    body: JSON.stringify(data),
+  });
+
+export const sendAssistantChatMessage = (
+  token: string,
+  businessId: string,
+  data: { message: string; history: ChatHistoryTurn[]; lang: 'en' | 'bn'; brand: string },
+) =>
+  apiFetch<ChatReply>(`/api/v1/${businessId}/assistant/chat`, {
+    method: 'POST',
+    token,
+    signInPath: null,
+    body: JSON.stringify(data),
+  });
+
+export const getAssistantQuota = (token: string, businessId: string) =>
+  apiFetch<{ businessId: string; quota: AssistantQuota }>(`/api/v1/${businessId}/assistant/quota`, { token });

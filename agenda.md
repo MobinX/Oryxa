@@ -46,3 +46,24 @@ Self-test: web runs at http://127.0.0.1:3410 (after build) — use Playwright.
 - Library: Motion (motion/react, MIT) with LazyMotion+domAnimation, useInView, useReducedMotion — IntersectionObserver-based lazy triggers, WAAPI transform/opacity at 60fps, about 30KB gz vs GSAP+ScrollTrigger 44KB.
 - Code written by OpenCode deepseek-v4.1-flash-free (Z Code CLI: Model creation failed; OpenCode glm-5.3-flash-free ran out before writing).
 - Autoplay 3.5s loop while in view, click to select, mobile chips, reduced-motion static final states. e2e/home-motion.spec.ts + video.
+
+## 2026-11-19 UI polish pass
+- Browser rule: Obscura only for local screenshots/DOM checks; Chromium/Playwright browsers banned. Documented in AGENTS.md + agent.md (with the working `obscura mcp --http` recipe).
+- NVIDIA Inception badge: replaced the skewed mark with an accurate eye SVG; compact 30px band + inline caption (no green halo); footer mark 26px.
+- Console sidebar: grouped nav (Workspace / Growth / Manage), featured AI Assistant card, real plan name in the workspace switcher, working Ctrl/Cmd+K search that routes to `/search`.
+- AI Assistant chat: quota pill + meter, suggestion cards, avatars, typing dots, copy reply, auto-grow composer, Enter send / Shift+Enter newline, New chat.
+- Landing chat: redesigned panel (online header, suggestion chips, avatars, typing dots, Esc close, mobile full-screen) and portaled above the cookie banner.
+- Verify: `bun --filter web build` green.
+
+## 2026-11-19 UI review pass (screenshots via Obscura)
+- NVIDIA badge: switched to the supplied official PNG at `apps/web/public/badges/nvidia-inception-member.png` (38px band, 30px footer), removed the re-drawn SVG and the redundant caption line.
+- Landing chat: sits above the cookie banner instead of covering it (launcher + panel lift by the banner's height, measured and re-measured on dismiss); panel 560px; suggestion chips no longer wrap ("Pricing & plans" / "Bangla replies" / "Connect Messenger").
+- Sidebar: assistant sub-label shortened to "Ask about your store"; arrow is now a ghost icon (no grey block); active card keeps a solid fallback colour under the gradient.
+- Assistant: greeting changed to "How can I help?" with a neutral subtitle.
+- Verify: `bun --filter web build` exit 0; desktop landing, chat, footer, and console (sidebar + assistant) screenshotted.
+
+## 2026-11-19 second UI pass (badge scale + live chat polish)
+- NVIDIA badge: middle 50px with a gentle 5px float (respects prefers-reduced-motion); footer 56px so it is never smaller than the middle one. Both use the official PNG.
+- Landing live chat: gradient header with "AI" tag and online line, orb welcome ("Ask me anything"), three full-width suggestion cards with icons/arrows, gradient composer inside a pill, start-over button, hover tooltip on the launcher, pulsing halo, footer disclaimer. Panel 404×600.
+- Sidebar: assistant entry now shows a green online dot and the "Live chat · ask anything" sub-label.
+- Verify: `bun --filter web build` exit 0; desktop + mobile chat screenshotted.

@@ -9,6 +9,7 @@ export const integrationTypeSchema = z.enum([
   'ai_post_generation',
   'ai_post_tuning',
   'inbox_suggestion',
+  'assistant_chat',
 ]);
 
 export const tokenUsageTotalsSchema = z.object({

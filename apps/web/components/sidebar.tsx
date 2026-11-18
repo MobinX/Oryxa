@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Home,
   MessageSquare,
@@ -35,27 +35,46 @@ import { cn } from '@/lib/utils';
 import { SignOutForm } from '@/components/sign-out-button';
 import { useBrand } from '@/components/brand-provider';
 
-const primaryNav: Array<{
+type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   badgeKey?: 'notifications';
-}> = [
-  { href: 'dashboard', label: 'Dashboard', icon: Home },
-  { href: 'inbox', label: 'Inbox', icon: MessageSquare },
-  { href: 'orders', label: 'Orders', icon: ClipboardList },
-  { href: 'products', label: 'Products', icon: Package },
-  { href: 'customers', label: 'Customers', icon: Users },
-  { href: 'posts', label: 'Social Media', icon: Megaphone },
-  { href: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { href: 'ads', label: 'Ads', icon: Target },
-  { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
-  { href: 'channels', label: 'Integrations', icon: Blocks },
-  { href: 'categories', label: 'Categories', icon: FolderTree },
-  { href: 'storefront', label: 'Storefront', icon: Store },
-  { href: 'payments', label: 'Payments', icon: Wallet },
-  { href: 'billing', label: 'Billing', icon: CreditCard },
-  { href: 'settings', label: 'Settings', icon: Settings },
+};
+
+const assistantNav: NavItem = { href: 'assistant', label: 'AI Assistant', icon: Sparkles };
+
+const navGroups: Array<{ title: string; items: NavItem[] }> = [
+  {
+    title: 'Workspace',
+    items: [
+      { href: 'dashboard', label: 'Dashboard', icon: Home },
+      { href: 'inbox', label: 'Inbox', icon: MessageSquare },
+      { href: 'orders', label: 'Orders', icon: ClipboardList },
+      { href: 'products', label: 'Products', icon: Package },
+      { href: 'customers', label: 'Customers', icon: Users },
+    ],
+  },
+  {
+    title: 'Growth',
+    items: [
+      { href: 'posts', label: 'Social Media', icon: Megaphone },
+      { href: 'analytics', label: 'Analytics', icon: BarChart3 },
+      { href: 'ads', label: 'Ads', icon: Target },
+      { href: 'storefront', label: 'Storefront', icon: Store },
+    ],
+  },
+  {
+    title: 'Manage',
+    items: [
+      { href: 'notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
+      { href: 'channels', label: 'Integrations', icon: Blocks },
+      { href: 'categories', label: 'Categories', icon: FolderTree },
+      { href: 'payments', label: 'Payments', icon: Wallet },
+      { href: 'billing', label: 'Billing', icon: CreditCard },
+      { href: 'settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 export function OnlyOrdesLogo({ className, lightText = false }: { className?: string; lightText?: boolean }) {
@@ -86,13 +105,56 @@ export function DashboardTopHeader({
   userName?: string;
   unreadNotificationsCount?: number;
 }) {
+  const router = useRouter();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+
+  // Ctrl/Cmd+K focuses search from anywhere in the console, like every tool
+  // this console is modelled on. Escape hands focus back to the page.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const submitSearch = () => {
+    const q = query.trim();
+    if (!q) {
+      searchRef.current?.focus();
+      return;
+    }
+    router.push(`/b/${businessId}/search?q=${encodeURIComponent(q)}`);
+  };
+
   return (
     <header className="sticky top-0 z-30 hidden h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-md dark:border-slate-800 dark:bg-[#111427]/90 lg:flex">
       {/* Global Search Bar with Ctrl K */}
-      <div className="relative flex w-full max-w-md items-center">
+      <form
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitSearch();
+        }}
+        className="relative flex w-full max-w-md items-center"
+      >
         <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-slate-400" />
         <input
+          ref={searchRef}
           type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setQuery('');
+              event.currentTarget.blur();
+            }
+          }}
           placeholder="Search conversations, orders, products..."
           aria-label="Search conversations, orders, products"
           className="h-10 w-full rounded-xl border border-slate-200/90 bg-slate-50/80 pl-10 pr-16 text-xs text-slate-800 placeholder:text-slate-400 focus:border-[#5B3DF5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B3DF5]/15 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-100"
@@ -100,7 +162,7 @@ export function DashboardTopHeader({
         <kbd className="pointer-events-none absolute right-2.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-500 shadow-2xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
           Ctrl K
         </kbd>
-      </div>
+      </form>
 
       {/* Right Action Cluster */}
       <div className="flex items-center gap-3">
@@ -246,46 +308,102 @@ export function Sidebar({
   };
 
   const renderNavItems = (onItemClick?: () => void) => (
-    <div className="space-y-1">
-      {primaryNav.map((item) => {
-        const active = isActive(item.href);
-        const Icon = item.icon;
-        const badgeCount = item.badgeKey === 'notifications' && unreadNotificationsCount > 0 ? unreadNotificationsCount : null;
+    <div className="space-y-5">
+      {/* Assistant gets its own featured card: it is a conversation, not a page
+          in the same rhythm as the CRUD screens below. */}
+      <Link
+        href={`/b/${businessId}/${assistantNav.href}`}
+        onClick={onItemClick}
+        className={cn(
+          'group relative flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 transition-all duration-150',
+          isActive(assistantNav.href)
+            ? 'border-[#8B5CF6]/70 bg-[#5B3DF5] bg-gradient-to-r from-[#5B3DF5] via-[#6D4BF6] to-[#8B5CF6] text-white shadow-lg shadow-[#5B3DF5]/30'
+            : 'border-[#5B3DF5]/30 bg-[#5B3DF5]/10 text-slate-100 hover:border-[#8B5CF6]/60 hover:bg-[#5B3DF5]/20',
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full bg-white/15 blur-2xl transition-opacity group-hover:opacity-100"
+        />
+        <span
+          className={cn(
+            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+            isActive(assistantNav.href)
+              ? 'bg-white/20 text-white'
+              : 'bg-[#5B3DF5] text-white shadow-sm shadow-[#5B3DF5]/30',
+          )}
+        >
+          <Sparkles className="h-4 w-4" />
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#141733] bg-emerald-400"
+          />
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-xs font-semibold">AI Assistant</span>
+          <span className="block truncate text-[10px] text-slate-400 group-hover:text-slate-300">
+            Live chat · ask anything
+          </span>
+        </span>
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-white">
+          <ArrowRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
 
-        return (
-          <Link
-            key={item.href}
-            href={`/b/${businessId}/${item.href}`}
-            onClick={onItemClick}
-            className={cn(
-              'group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-medium transition-all duration-150',
-              active
-                ? 'bg-[#5B3DF5] text-white font-semibold shadow-sm shadow-[#5B3DF5]/30'
-                : 'text-slate-300/85 hover:bg-white/8 hover:text-white',
-            )}
-          >
-            <span className="flex items-center gap-3">
-              <Icon
-                className={cn(
-                  'h-4 w-4 shrink-0 transition-colors',
-                  active ? 'text-white' : 'text-slate-400 group-hover:text-white',
-                )}
-              />
-              <span>{item.label}</span>
-            </span>
+      {navGroups.map((group) => (
+        <div key={group.title}>
+          <p className="px-2 pb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {group.title}
+          </p>
+          <div className="space-y-0.5">
+            {group.items.map((item) => {
+              const active = isActive(item.href);
+              const Icon = item.icon;
+              const badgeCount =
+                item.badgeKey === 'notifications' && unreadNotificationsCount > 0
+                  ? unreadNotificationsCount
+                  : null;
 
-            {badgeCount !== null && (
-              <span
-                className={cn(
-                  'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold bg-rose-500 text-white',
-                )}
-              >
-                {badgeCount}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+              return (
+                <Link
+                  key={item.href}
+                  href={`/b/${businessId}/${item.href}`}
+                  onClick={onItemClick}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'group relative flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150',
+                    active
+                      ? 'bg-white/[0.09] text-white'
+                      : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100',
+                  )}
+                >
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-[#A78BFA]"
+                    />
+                  )}
+                  <span className="flex items-center gap-2.5">
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0 transition-colors',
+                        active ? 'text-[#C4B5FD]' : 'text-slate-500 group-hover:text-slate-200',
+                      )}
+                    />
+                    <span>{item.label}</span>
+                  </span>
+
+                  {badgeCount !== null && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                      {badgeCount}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 
@@ -363,7 +481,7 @@ export function Sidebar({
                 <p className="truncate text-xs font-semibold text-white">
                   {businessName || 'StyleHub BD'}
                 </p>
-                <p className="truncate text-[10px] text-slate-400">Business · Pro Plan</p>
+                <p className="truncate text-[10px] text-slate-400">Business · {planName}</p>
               </div>
             </div>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />

@@ -99,6 +99,36 @@ Do not remove or weaken this policy during future instruction-file updates.
 
 ---
 
+## Browser & screenshot tooling — Obscura only
+
+**Do not install or launch Chromium, Chrome, Puppeteer browsers, or Playwright browser binaries.** They are heavy and the user has explicitly banned them.
+
+Use **Obscura** (`~/.local/bin/obscura`), which is already installed:
+
+```bash
+# Read a page as clean markdown/text (renders JS)
+obscura fetch "http://127.0.0.1:3412/" --dump markdown --allow-private-network
+
+# Web search
+obscura fetch "https://html.duckduckgo.com/html/?q=QUERY" --dump text
+
+# Interactive automation: run the CDP server and drive it
+obscura serve --port 9222 --allow-private-network
+# then talk CDP (ws://127.0.0.1:9222/devtools/browser) or use an obscura MCP client
+
+# Screenshots / DOM checks (works today): HTTP MCP mode
+obscura mcp --http --port 3999 --allow-private-network
+# POST http://127.0.0.1:3999/mcp  method=tools/call
+#   browser_navigate {url, waitUntil:"networkidle0"}
+#   browser_screenshot {width, height}  -> content[].data (base64 PNG)
+#   browser_evaluate / browser_snapshot / browser_click / browser_fill
+```
+
+- Never run `npx playwright install` / download browser binaries for local verification.
+- Existing Playwright *specs* in `e2e/` stay as CI tests, but run them only where a browser already exists — never install one locally.
+- For screenshots, capture through Obscura's CDP `Page.captureScreenshot` (or its MCP screenshot tool), not via a bundled Chromium.
+- Always add `--allow-private-network` for `localhost`/`127.0.0.1`.
+
 ## FINAL RULE
 
 **THE USER'S LOCAL SECRETS BELONG TO THE USER.**

@@ -38,10 +38,14 @@ export async function generateMetadata(): Promise<Metadata> {
     robots: { index: true, follow: true },
     manifest: "/manifest.webmanifest",
     alternates: { canonical: "/" },
-    // Search-console proofs. Empty env = tag omitted. Codes come from Bing
-    // Webmaster Tools (msvalidate.01) and Yandex Webmaster after adding the
-    // site there; IndexNow needs no per-engine code (see lib/indexnow.ts).
+    // Search-console proofs. Empty env = tag omitted. Codes come from Google
+    // Search Console (HTML-tag method), Bing Webmaster Tools (msvalidate.01)
+    // and Yandex Webmaster after adding the site there; IndexNow needs no
+    // per-engine code (see lib/indexnow.ts).
     verification: {
+      ...(process.env.GOOGLE_SITE_VERIFICATION
+        ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+        : {}),
       ...(process.env.YANDEX_SITE_VERIFICATION
         ? { yandex: process.env.YANDEX_SITE_VERIFICATION }
         : {}),

@@ -47,6 +47,7 @@ export const integrationTypeEnum = pgEnum('integration_type', [
   'ai_post_generation',
   'ai_post_tuning',
   'inbox_suggestion',
+  'assistant_chat',
 ]);
 export const planActorKindEnum = pgEnum('plan_actor_kind', ['operator', 'merchant', 'system']);
 
@@ -436,6 +437,11 @@ export const plans = pgTable('plans', {
   currency: varchar('currency', { length: 8 }).default('USD').notNull(),
   messageLimit: integer('message_limit'),
   commentLimit: integer('comment_limit'),
+  /**
+   * Assistant-chat allowance per 30-day cycle: NULL uncapped, 0 none.
+   * Kept beside the reply caps so one plan row carries every budget.
+   */
+  assistantLimit: integer('assistant_limit'),
   features: jsonb('features').$type<string[]>().default([]).notNull(),
   position: integer('position').default(0).notNull(),
   active: boolean('active').default(true).notNull(),
@@ -534,6 +540,8 @@ export const businesses = pgTable('businesses', {
    */
   messageLimitOverride: integer('message_limit_override'),
   commentLimitOverride: integer('comment_limit_override'),
+  /** Per-business assistant-chat cap; NULL follows the plan (or unlimited with no plan). */
+  assistantLimitOverride: integer('assistant_limit_override'),
   /**
    * The cycle anchor: 30-day allowances roll from this date, not from the 1st of a
    * month. Set once, at the first assignment, and deliberately never moved afterwards —
@@ -1188,6 +1196,36 @@ export const quotaUsage = pgTable('quota_usage', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
   businessPeriodUniq: uniqueIndex('quota_usage_business_period_uniq_idx').on(t.businessId, t.period),
+}));
+
+/**
+ * One row per business per 30-day cycle for the sidebar AI assistant.
+ * Mirrors quota_usage: the period key rotates the allowance with no job,
+ * and the spend is a single conditional upsert in crud/assistant.ts.
+ */
+export const assistantUsage = pgTable('assistant_usage', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
+  period: varchar('period', { length: 10 }).notNull(),
+  used: integer('used').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  businessPeriodUniq: uniqueIndex('assistant_usage_business_period_uniq_idx').on(t.businessId, t.period),
+}));
+
+/**
+ * Anonymous landing-page chat, keyed by salted IP hash — never a raw address.
+ * One row per IP per UTC day; the spend is a single conditional upsert in
+ * crud/assistant.ts so serverless instances share one distributed cap.
+ */
+export const publicChatUsage = pgTable('public_chat_usage', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ipHash: varchar('ip_hash', { length: 64 }).notNull(),
+  day: varchar('day', { length: 10 }).notNull(),
+  count: integer('count').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  ipDayUniq: uniqueIndex('public_chat_usage_ip_day_uniq_idx').on(t.ipHash, t.day),
 }));
 
 /**

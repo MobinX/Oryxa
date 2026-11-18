@@ -16,6 +16,7 @@ import { playgroundRouter } from '@api/routes/playground';
 import { uploadsRouter } from '@api/routes/uploads';
 import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { plansRouter } from '@api/routes/plans';
+import { chatRouter } from '@api/routes/chat';
 import { billingRouter } from '@api/routes/billing';
 import { pushRouter } from '@api/routes/push';
 import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
@@ -99,6 +100,9 @@ app.route('/api/v1', visitsRouter);
 app.route('/api/v1', plansRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);
+// Site assistant: the public door must register before the `/:businessId/*`
+// routers below, or "chat" would match as a business id and answer 401.
+app.route('/api/v1', chatRouter);
 app.route('/api/v1', productsRouter);
 app.route('/api/v1', customersRouter);
 app.route('/api/v1', ordersRouter);

@@ -1,36 +1,37 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useBrand } from '@/components/brand-provider';
-import { CookieSettingsButton } from '@/components/cookie-consent';
-import { OnlyOrdesLogo } from '@/components/sidebar';
+import Link from "next/link";
+import { useBrand } from "@/components/brand-provider";
+import { CookieSettingsButton } from "@/components/cookie-consent";
+import { OnlyOrdesLogo } from "@/components/sidebar";
+import { NvidiaInceptionMark } from "@/components/landing/inception-badge";
 
 const FOOTER_COLUMNS = [
   {
-    heading: 'Product',
+    heading: "Product",
     links: [
-      { label: 'Live demo', href: '#live-demo' },
-      { label: 'Features', href: '#workflow' },
-      { label: 'Pricing', href: '/pricing' },
-      { label: 'Solutions', href: '/solutions' },
+      { label: "Live demo", href: "#live-demo" },
+      { label: "Features", href: "#workflow" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Solutions", href: "/solutions" },
     ],
   },
   {
-    heading: 'Resources',
+    heading: "Resources",
     links: [
-      { label: 'Documentation', href: '/docs' },
-      { label: 'Contact', href: '/contact' },
-      { label: 'Sign in', href: '/login' },
-      { label: 'Get started', href: '/login' },
+      { label: "Documentation", href: "/docs" },
+      { label: "Contact", href: "/contact" },
+      { label: "Sign in", href: "/login" },
+      { label: "Get started", href: "/login" },
     ],
   },
   {
-    heading: 'Trust',
+    heading: "Trust",
     links: [
-      { label: 'Privacy policy', href: '/privacy' },
-      { label: 'Terms of service', href: '/terms' },
-      { label: 'Cookie policy', href: '/cookies' },
-      { label: 'Data deletion', href: '/data-delete-instructions' },
+      { label: "Privacy policy", href: "/privacy" },
+      { label: "Terms of service", href: "/terms" },
+      { label: "Cookie policy", href: "/cookies" },
+      { label: "Data deletion", href: "/data-delete-instructions" },
     ],
   },
 ];
@@ -41,7 +42,6 @@ export function MarketingFooter() {
   return (
     <footer className="relative mt-24 border-t border-white/10 bg-black/40 backdrop-blur-xl">
       <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
-
         <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-12 py-14 md:flex-row md:justify-between">
           {/* Brand block */}
           <div className="max-w-xs space-y-4">
@@ -53,6 +53,10 @@ export function MarketingFooter() {
               The AI copilot for social sellers — from the first salaam to the
               five-star review.
             </p>
+            <NvidiaInceptionMark
+              alt="NVIDIA Inception program member badge"
+              label="Member of the NVIDIA Inception program"
+            />
           </div>
 
           {/* Link columns */}
