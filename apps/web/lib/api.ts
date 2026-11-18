@@ -1683,6 +1683,61 @@ export const adminMakeAgentFollowDefault = (bearer: string, agentId: string) =>
     body: JSON.stringify({ agentId }),
   });
 
+/**
+ * A hidden helper agent whose instructions the console edits — the product-answer writer today.
+ * `defaultPrompt` is the reviewed text the row was seeded from, so the page can offer a restore
+ * without carrying a second copy of the prompt in the browser.
+ */
+export type Subagent = {
+  key: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  defaultPrompt: string;
+  isDefault: boolean;
+  updatedAt: string;
+};
+
+export const adminGetSubagent = (bearer: string, key: string) =>
+  apiFetch<Subagent>(`/api2/admin/subagents/${encodeURIComponent(key)}`, { token: bearer, signInPath: null });
+
+export const adminUpdateSubagentPrompt = (bearer: string, key: string, systemPrompt: string) =>
+  apiFetch<Subagent>(`/api2/admin/subagents/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    token: bearer,
+    signInPath: null,
+    body: JSON.stringify({ systemPrompt }),
+  });
+
+/** What one playground run of the product-answer writer spent and returned. */
+export type ProductInfoPreview = {
+  answer: string;
+  usedStoredPrompt: boolean;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheHitTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+};
+
+/**
+ * The subagent playground's run. It takes the merchant API's operator token (the sandbox store is
+ * the operator's), and the editor's draft as the prompt, so a change can be tried before it is saved.
+ */
+export const runProductInfoPreview = (
+  token: string,
+  businessId: string,
+  input: { productId: string; userQuery: string; systemPrompt?: string },
+) =>
+  apiFetch<ProductInfoPreview>(`/api/v1/${businessId}/playground/product-info`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(input),
+  });
+
 /* Official Channels (spec Official): the console's own channels, inbox, tickets, prospects. */
 
 export type OfficialSettings = {

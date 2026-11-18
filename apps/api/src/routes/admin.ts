@@ -7,7 +7,10 @@ import {
   followDefaultAgentInputSchema,
   platformAgentSchema,
   resolveTimeZone,
+  subagentListSchema,
+  subagentSchema,
   updatePlatformAgentInputSchema,
+  updateSubagentPromptInputSchema,
   type AdminStatsResponse,
 } from '@repo/shared';
 import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@repo/agent';
@@ -22,6 +25,7 @@ import {
   makeAgentFollowDefault,
   updatePlatformAgent,
 } from '@repo/db/crud/default-agent';
+import { getSubagent, listSubagents, updateSubagentPrompt } from '@repo/db/crud/subagent';
 import {
   getAdminDailySeries,
   getAdminSnapshot,
@@ -563,4 +567,101 @@ adminRouter.openapi(followDefaultAgentRoute, async (c) => {
   const updated = await makeAgentFollowDefault(agentId);
   if (!updated) return c.json({ error: 'Agent not found' }, 404);
   return c.json({ id: updated.id, followsDefault: true as const }, 200);
+});
+
+/**
+ * The hidden helper agents a tool calls mid-turn. Their text is operator-editable because it is what
+ * a customer reads, and a wording fix should not wait for a deploy.
+ *
+ * The list is built from the code registry and filled from the table, so a key that exists only in
+ * code still appears (created on read) and a stale row cannot invent a subagent that no longer runs.
+ */
+const listSubagentsRoute = createRoute({
+  method: 'get',
+  path: '/admin/subagents',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { 'application/json': { schema: subagentListSchema } },
+      description: 'Every registered subagent, with its current prompt and the reviewed default',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+  },
+});
+
+adminRouter.openapi(listSubagentsRoute, async (c) => c.json({ subagents: await listSubagents() }, 200));
+
+const getSubagentRoute = createRoute({
+  method: 'get',
+  path: '/admin/subagents/{key}',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ key: z.string().min(1).max(64) }) },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: subagentSchema } },
+      description: 'The subagent, created from the reviewed text if this is the first read of it',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No subagent is registered under that key',
+    },
+  },
+});
+
+adminRouter.openapi(getSubagentRoute, async (c) => {
+  const subagent = await getSubagent(c.req.param('key'));
+  if (!subagent) return c.json({ error: 'Subagent not found' }, 404);
+  return c.json(subagent, 200);
+});
+
+const updateSubagentPromptRoute = createRoute({
+  method: 'put',
+  path: '/admin/subagents/{key}',
+  tags: ['Admin'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ key: z.string().min(1).max(64) }),
+    body: { content: { 'application/json': { schema: updateSubagentPromptInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: subagentSchema } },
+      description: 'The saved prompt. The next customer turn runs with it.',
+    },
+    401: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No usable session — a Firebase token or the log console password',
+    },
+    403: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'Caller is authenticated but not the operator',
+    },
+    404: {
+      content: { 'application/json': { schema: errorSchema } },
+      description: 'No subagent is registered under that key',
+    },
+  },
+});
+
+adminRouter.openapi(updateSubagentPromptRoute, async (c) => {
+  const updated = await updateSubagentPrompt(c.req.param('key'), c.req.valid('json').systemPrompt);
+  if (!updated) return c.json({ error: 'Subagent not found' }, 404);
+  return c.json(updated, 200);
 });

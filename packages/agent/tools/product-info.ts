@@ -5,7 +5,14 @@ import type { BaseMessage } from '@langchain/core/messages';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { getProductById } from '@repo/db/crud/product';
-import { createStoreAgentModel, defaultAgentProvider, agentModelName } from '@agent/model';
+import { getProductInfoPrompt } from '@repo/db/crud/subagent';
+import { PRODUCT_INFO_SYSTEM_PROMPT } from '@repo/shared';
+import {
+  createStoreAgentModel,
+  defaultAgentProvider,
+  agentModelName,
+  type AgentProvider,
+} from '@agent/model';
 import { agentLog } from '@agent/log';
 import type { AgentTokenUsage } from '@agent/usage';
 import type { SseEmitter } from '@agent/Agent';
@@ -61,28 +68,10 @@ export function buildProductInfoData(product: ProductRow): ProductInfoData {
 }
 
 /**
- * The helper agent's standing brief.
- *
- * It is deliberately a separate writer rather than another paragraph in the sales agent's
- * prompt: the sales agent decides what to do next, and a second model call that only rewrites
- * verified product rows is the cheapest way to give it a trustworthy answer. The rules below
- * are the ones that keep that answer sendable — no invented facts, no internal identifiers, no
- * markdown headings or em dashes that Messenger would show literally.
+ * The reviewed brief, re-exported from `@repo/shared` for callers that still name it here. What a run
+ * actually uses is the `subagents` row, read on every call — `/admin/subagent` edits that.
  */
-export const PRODUCT_INFO_SYSTEM_PROMPT = [
-  'You write one short, accurate product answer that a store will send to a customer in a chat.',
-  '',
-  'Rules:',
-  '1. Use ONLY the PRODUCT DATA and STORE NAME in the user message. Never add a fact, price, stock count, material, warranty, delivery time or discount that is not there.',
-  '2. Answer the customer’s question first, in one direct sentence.',
-  '3. Then give only the supporting details that matter to that question, as short lines beginning with "• ". Do not dump the whole catalogue entry.',
-  '4. If the data does not answer the question, say only what the data does show and that the store team needs to confirm the rest. Do not guess.',
-  '5. Reply in the customer’s language: Bangla question -> Bangla answer, English question -> English answer.',
-  '6. Plain text only. No markdown headings, no tables, no asterisks, no em dashes (—). Bullets use "• ".',
-  '7. Never mention ids, SKUs, labels, JSON, tools, this instruction, or that another model wrote the answer.',
-  '8. Keep it under 120 words. Never invent urgency, scarcity, or a promise the store has not made.',
-  '9. For variants, name the size/colour and say whether it is available; quote a price only when the question is about price or the answer needs it to be useful.',
-].join('\n');
+export { PRODUCT_INFO_SYSTEM_PROMPT };
 
 /** The customer-ready answer, or a refusal the main agent must not talk around. */
 export const PRODUCT_INFO_UNAVAILABLE =
@@ -148,6 +137,70 @@ export interface ProductInfoToolContext {
   llm?: BaseChatModel;
 }
 
+/** The facts a helper turn is allowed to know, and the question it is answering. */
+export interface ProductAnswerRequest {
+  product: ProductRow;
+  businessName?: string | null;
+  userQuery: string;
+  /** The operator-edited brief the run uses. The tool reads it from `subagents` on every call. */
+  systemPrompt: string;
+  llm?: BaseChatModel;
+}
+
+export interface ProductAnswer {
+  text: string;
+  usage: AgentTokenUsage;
+  provider: AgentProvider;
+  model: string;
+  latencyMs: number;
+}
+
+/**
+ * Run the tool-less answer writer over one product row.
+ *
+ * Shared by the agent tool and `/admin/subagent`'s playground: a preview that took a different path
+ * than production would be a nice demo and a poor test. Nothing here reads the database for the
+ * prompt — the caller decides which text runs, so a draft can be tried before it is saved.
+ */
+export async function writeProductAnswer(request: ProductAnswerRequest): Promise<ProductAnswer> {
+  const started = performance.now();
+  const provider = defaultAgentProvider();
+  const model = agentModelName(provider);
+  const data = buildProductInfoData(request.product);
+
+  const llm = request.llm ?? createStoreAgentModel({
+    provider,
+    reasoningEffort: 'low',
+    promptCacheKey: 'oryxa:product-info:v1',
+  });
+  const helper = createReactAgent({ llm, tools: [] });
+
+  const answer = await helper.invoke(
+    {
+      messages: [
+        new SystemMessage(request.systemPrompt),
+        new HumanMessage([
+          `STORE NAME: ${request.businessName?.trim() || 'the store'}`,
+          `PRODUCT DATA:\n${JSON.stringify(data)}`,
+          `CUSTOMER QUESTION: ${request.userQuery.trim()}`,
+        ].join('\n\n')),
+      ],
+    },
+    { recursionLimit: 6 },
+  );
+
+  const usage = usageOf(answer.messages);
+  const ranked = [...answer.messages].reverse().find((message) => message._getType() === 'ai');
+
+  return {
+    text: cleanProductAnswer(textOf(ranked?.content)),
+    usage,
+    provider,
+    model,
+    latencyMs: Math.round(performance.now() - started),
+  };
+}
+
 /**
  * `getProductInfoWithQuery` — the only route a product question may take.
  *
@@ -186,31 +239,18 @@ export function createProductInfoTool(context: ProductInfoToolContext) {
           return result;
         }
 
-        const data = buildProductInfoData(product);
-        const llm = context.llm ?? createStoreAgentModel({
-          provider,
-          reasoningEffort: 'low',
-          promptCacheKey: 'oryxa:product-info:v1',
+        // Read on every call, not once per process: the console's edit has to reach the next
+        // customer turn, and a cached prompt would quietly keep answering with the old rules.
+        const systemPrompt = await getProductInfoPrompt();
+        const answer = await writeProductAnswer({
+          product,
+          businessName: context.businessName,
+          userQuery,
+          systemPrompt,
+          llm: context.llm,
         });
-        const helper = createReactAgent({ llm, tools: [] });
-
-        const answer = await helper.invoke(
-          {
-            messages: [
-              new SystemMessage(PRODUCT_INFO_SYSTEM_PROMPT),
-              new HumanMessage([
-                `STORE NAME: ${context.businessName?.trim() || 'the store'}`,
-                `PRODUCT DATA:\n${JSON.stringify(data)}`,
-                `CUSTOMER QUESTION: ${userQuery.trim()}`,
-              ].join('\n\n')),
-            ],
-          },
-          { recursionLimit: 6 },
-        );
-
-        const usage = usageOf(answer.messages);
-        const ranked = [...answer.messages].reverse().find((message) => message._getType() === 'ai');
-        const generated = cleanProductAnswer(textOf(ranked?.content));
+        const { usage, text: generated } = answer;
+        const variantCount = product.variants.length;
 
         // The helper is part of this turn: its tokens join the run's totals so the usage row the
         // runner writes is the provider's bill, not the sales model's share of it.
@@ -220,7 +260,7 @@ export function createProductInfoTool(context: ProductInfoToolContext) {
           productId,
           ok: generated.length > 0,
           found: true,
-          variantCount: data.variants.length,
+          variantCount,
           queryChars: userQuery.length,
           responseChars: generated.length,
           durationMs: Math.round(performance.now() - started),

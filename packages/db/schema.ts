@@ -756,6 +756,23 @@ export const defaultAgents = pgTable('default_agent', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/**
+ * The hidden helper agents a tool calls mid-turn — the product-answer writer today.
+ *
+ * These are not store agents: no channel points at one and no merchant edits one. Their instructions
+ * are operator text because the answer they write is sent to customers, and changing it should not
+ * need a deploy. `key` is the code-side name (see `SUBAGENT_DEFINITIONS` in @repo/shared); the row is
+ * created from the reviewed default on first read, the same way `default_agent` is.
+ */
+export const subagents = pgTable('subagents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 64 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  systemPrompt: text('system_prompt').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const channels = pgTable('channels', {
   id: uuid('id').primaryKey().defaultRandom(),
   /** Null on a platform channel: it belongs to the operator, not to any store. */

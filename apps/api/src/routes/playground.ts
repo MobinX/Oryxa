@@ -7,9 +7,18 @@ import { runCommentTest } from '@api/lib/comment-test-runner';
 import type { SseEmitter } from '@repo/agent';
 import { getChannelById, listChannels, createChannel, updateChannel } from '@repo/db/crud/channel';
 import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
+import { getProductById } from '@repo/db/crud/product';
+import { getProductInfoPrompt } from '@repo/db/crud/subagent';
+import { getBusinessById } from '@repo/db/crud/business';
+import { writeProductAnswer } from '@agent/tools/product-info';
 import { processInboundMessage } from '@repo/db/crud/conversation';
 import { assertB2KeyForBusiness } from '@repo/integrations';
-import { testRunInputSchema, commentTestRunInputSchema } from '@repo/shared';
+import {
+  commentTestRunInputSchema,
+  productInfoPreviewInputSchema,
+  productInfoPreviewSchema,
+  testRunInputSchema,
+} from '@repo/shared';
 
 export const playgroundRouter = new OpenAPIHono();
 playgroundRouter.use('/:businessId/*', authMiddleware, businessAccessMiddleware);
@@ -349,4 +358,72 @@ playgroundRouter.post('/:businessId/playground/comment-test-run', async (c) => {
       await write('error', { message: String(err) });
     }
   });
+});
+
+/**
+ * POST /:businessId/playground/product-info
+ * One run of the product-answer writer against a real catalog row, for `/admin/subagent`.
+ *
+ * It runs the same `writeProductAnswer` the tool runs, so a preview cannot drift from production.
+ * The difference is only where the brief comes from: the draft in the editor when one is sent, the
+ * stored `subagents` row otherwise. Nothing is written and no Axiom `product_info` row is emitted —
+ * a preview is not a customer turn, and counting it in the production lane would distort it.
+ */
+const productInfoPreviewRoute = createRoute({
+  method: 'post',
+  path: '/{businessId}/playground/product-info',
+  tags: ['Playground'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: productInfoPreviewInputSchema } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: productInfoPreviewSchema } },
+      description: 'The answer the helper would return, with the tokens and latency it spent writing it',
+    },
+    404: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'No live product with that id in this store',
+    },
+  },
+});
+
+playgroundRouter.openapi(productInfoPreviewRoute, async (c) => {
+  const { businessId } = c.req.param();
+  const { productId, userQuery, systemPrompt } = c.req.valid('json');
+
+  const [product, business] = await Promise.all([
+    getProductById(businessId, productId),
+    getBusinessById(businessId),
+  ]);
+  if (!product) return c.json({ error: 'Product not found in this store' }, 404);
+
+  const prompt = systemPrompt?.trim() ? systemPrompt : await getProductInfoPrompt();
+  const answer = await writeProductAnswer({
+    product,
+    businessName: business?.name ?? null,
+    userQuery,
+    systemPrompt: prompt,
+  });
+
+  const totalTokens = answer.usage.inputTokens + answer.usage.outputTokens;
+  const rateIn = answer.provider === 'openai' ? 0.15 : 0.075;
+  const rateOut = answer.provider === 'openai' ? 0.60 : 0.30;
+
+  return c.json({
+    answer: answer.text,
+    usedStoredPrompt: !systemPrompt?.trim(),
+    provider: answer.provider,
+    model: answer.model,
+    inputTokens: answer.usage.inputTokens,
+    outputTokens: answer.usage.outputTokens,
+    totalTokens,
+    cacheHitTokens: answer.usage.cacheHitTokens,
+    estimatedCostUsd: Number(
+      (((answer.usage.inputTokens / 1e6) * rateIn) + ((answer.usage.outputTokens / 1e6) * rateOut)).toFixed(6),
+    ),
+    latencyMs: answer.latencyMs,
+  }, 200);
 });

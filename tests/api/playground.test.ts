@@ -95,4 +95,30 @@ describe('Playground API', () => {
     expect(typeof data.reply).toBe('string');
     expect(data.conversationId).toBeDefined();
   });
+
+  it('rejects a product-info preview without business access and for a product outside the store', async () => {
+    const { business } = await seedTestWorld();
+
+    const anonymous = await app.request(`/api/v1/${business.id}/playground/product-info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: '00000000-0000-4000-8000-000000000000', userQuery: 'Is it cotton?' }),
+    });
+    expect(anonymous.status).toBe(401);
+
+    // The shape is checked before any product read, so this never reaches a model.
+    const invalid = await app.request(`/api/v1/${business.id}/playground/product-info`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: 'not-a-uuid', userQuery: '' }),
+    });
+    expect(invalid.status).toBe(400);
+
+    const missing = await app.request(`/api/v1/${business.id}/playground/product-info`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: '00000000-0000-4000-8000-000000000000', userQuery: 'Is it cotton?' }),
+    });
+    expect(missing.status).toBe(404);
+  });
 });
