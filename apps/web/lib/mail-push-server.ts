@@ -9,7 +9,7 @@ import { logsBearer } from './logs-session';
  */
 export async function mailPushProxy(
   request: Request,
-  action: 'subscribe' | 'unsubscribe' | 'heartbeat' | 'status',
+  action: 'subscribe' | 'unsubscribe' | 'heartbeat' | 'status' | 'test',
   method: 'GET' | 'POST',
 ): Promise<NextResponse> {
   const token = await logsBearer();

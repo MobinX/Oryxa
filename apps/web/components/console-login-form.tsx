@@ -29,6 +29,20 @@ export function ConsoleLoginForm({
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
     const password = String(form.get('password') ?? '');
+
+    // Ask before the first await: Safari (and older Chrome) drop the transient user
+    // activation once the handler suspends, so a prompt after the login request is
+    // silently ignored.
+    if (askPush && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        try {
+          await Notification.requestPermission();
+        } catch {
+          // The mailbox bell explains a blocked browser instead of failing sign-in.
+        }
+      }
+    }
+
     setPending(true);
     setError(null);
     try {
@@ -59,18 +73,6 @@ export function ConsoleLoginForm({
           // DB sign-in already succeeded; the console still works. The shared Firebase
           // account only restores the legacy operator/playground capabilities.
           console.warn('Firebase compatibility sign-in failed', firebaseError);
-        }
-      }
-
-      // The browser only allows the permission prompt from a gesture like this submit.
-      // Subscribe itself happens in the mailbox, where the console cookie is present.
-      if (askPush && typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'default') {
-          try {
-            await Notification.requestPermission();
-          } catch {
-            // The mailbox prompt will explain a blocked browser instead.
-          }
         }
       }
 

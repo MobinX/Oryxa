@@ -486,8 +486,7 @@ function clip(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
-export interface InboundPushInput {
-  mailboxId: string;
+export interface InboundPushInput {  mailboxId: string;
   emailId: string;
   fromEmail: string;
   fromName?: string | null;
@@ -569,4 +568,76 @@ export async function notifyInboundEmail(env: Env, input: InboundPushInput): Pro
       failed: deliveries.filter((delivery) => delivery.status === "failed").length,
     }),
   );
+}
+
+export interface TestPushResult {
+  configured: boolean;
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  errorCode: string | null;
+}
+
+/**
+ * Sends a single "mail alerts are working" push to this session's devices. It exists so an
+ * admin can prove the browser registration and the FCM credentials end to end instead of
+ * waiting for real mail to arrive.
+ */
+export async function sendTestPush(
+  env: Env,
+  filter: { mailboxId: string; sessionId?: string },
+): Promise<TestPushResult> {
+  if (!pushConfigured(env)) {
+    return { configured: false, subscriptions: 0, sent: 0, failed: 0, errorCode: "not-configured" };
+  }
+
+  const active = await listActiveSubscriptions(env, filter.mailboxId);
+  const targets = filter.sessionId
+    ? active.filter((subscription) => subscription.session_id === filter.sessionId)
+    : active;
+
+  let sent = 0;
+  let failed = 0;
+  let errorCode: string | null = null;
+  const now = new Date().toISOString();
+  const deliveries: Array<{ subscriptionId: string; status: string; errorCode: string | null }> = [];
+
+  for (const subscription of targets) {
+    const result = await sendFcmMessage(env, {
+      token: subscription.token,
+      title: "Mail alerts are on",
+      body: "This is a test. New mail will notify this device.",
+      link: "/mails",
+      data: { mailboxId: filter.mailboxId, test: "1" },
+    });
+    if (result.ok) sent += 1;
+    else {
+      failed += 1;
+      errorCode = result.errorCode ?? "send-failed";
+    }
+    deliveries.push({
+      subscriptionId: subscription.id,
+      status: result.ok ? "sent" : "failed",
+      errorCode: result.errorCode ?? null,
+    });
+  }
+
+  if (deliveries.length > 0) {
+    await env.DB.batch(
+      deliveries.map((delivery) =>
+        env.DB.prepare(
+          `INSERT INTO push_deliveries (id, subscription_id, email_id, status, error_code, created_at)
+           VALUES (?, ?, NULL, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(),
+          delivery.subscriptionId,
+          delivery.status,
+          delivery.errorCode,
+          now,
+        ),
+      ),
+    ).catch(() => null);
+  }
+
+  return { configured: true, subscriptions: targets.length, sent, failed, errorCode };
 }

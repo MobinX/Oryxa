@@ -13,7 +13,11 @@ function firebaseApp() {
 
 async function registrationToken(): Promise<string | null> {
   const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
-  if (!firebaseConfig.apiKey || !vapidKey) return null;
+  if (!firebaseConfig.apiKey) return null;
+  if (!vapidKey) {
+    // The business push client already fails loudly here; the mail one should too.
+    throw new Error('Web push is not configured (missing NEXT_PUBLIC_FIREBASE_VAPID_KEY).');
+  }
   const registration = await ensurePushWorker();
   if (!registration) return null;
   const token = await getToken(getMessaging(firebaseApp()), {
@@ -110,4 +114,28 @@ export async function disableMailPush(): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(token ? { token } : {}),
   }).catch(() => {});
+}
+
+export type TestPushResult = {
+  configured: boolean;
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  errorCode: string | null;
+};
+
+/** Sends one test alert to this session's devices so the admin can see the path works. */
+export async function sendTestMailPush(): Promise<TestPushResult> {
+  const response = await fetch('/api/push/mail/test', { method: 'POST', cache: 'no-store' });
+  const body = (await response.json().catch(() => ({}))) as Partial<TestPushResult> & {
+    error?: string;
+  };
+  if (!response.ok) throw new Error(body.error || 'The test alert could not be sent.');
+  return {
+    configured: Boolean(body.configured),
+    subscriptions: Number(body.subscriptions || 0),
+    sent: Number(body.sent || 0),
+    failed: Number(body.failed || 0),
+    errorCode: body.errorCode ?? null,
+  };
 }

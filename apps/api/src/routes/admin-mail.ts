@@ -12,6 +12,7 @@ import {
   mailPushHeartbeat,
   mailPushStatus,
   mailPushSubscribe,
+  mailPushTest,
   mailPushUnsubscribe,
   mailWorkerJson,
   mailWorkerResponse,
@@ -427,6 +428,14 @@ adminMailRouter.get('/admin/mail/push/status', async (c) => {
   const binding = await sessionBinding(c);
   const status = await mailPushStatus(mailbox.id, binding.sessionId);
   return c.json({ ...status, mailbox_id: mailbox.id });
+});
+
+adminMailRouter.post('/admin/mail/push/test', async (c) => {
+  const mailbox = await mailboxFor(c);
+  if (!mailbox) return c.json({ error: 'Unauthorized' }, 401);
+  const binding = await sessionBinding(c);
+  const result = await mailPushTest({ mailboxId: mailbox.id, sessionId: binding.sessionId });
+  return c.json(result);
 });
 
 adminMailRouter.onError((error, c) => {

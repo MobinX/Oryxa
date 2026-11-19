@@ -10,6 +10,7 @@ import {
   heartbeatMailPush,
   mailPushStatus,
   pushConfigured,
+  sendTestPush,
   subscribeToMailPush,
   unsubscribeFromMailPush,
 } from "./lib/push";
@@ -450,6 +451,7 @@ app.get("/", (c) =>
       "POST /api/push/subscribe",
       "POST /api/push/unsubscribe",
       "POST /api/push/heartbeat",
+      "POST /api/push/test",
       "GET /api/push/status",
     ],
     auth: "x-api-key or Authorization: Bearer",
@@ -1209,6 +1211,15 @@ app.get("/api/push/status", async (c) => {
 
   const status = await mailPushStatus(c.env, mailboxId, sessionId);
   return ok({ mailbox_id: mailboxId, ...status });
+});
+
+app.post("/api/push/test", async (c) => {
+  const body = await readJson(c);
+  const mailboxId = optionalString(body.mailbox_id ?? body.mailboxId, "mailbox_id", 100);
+  const sessionId = optionalString(body.session_id ?? body.sessionId, "session_id", 200);
+  assert(mailboxId, 400, "missing_field", "mailbox_id is required");
+  const result = await sendTestPush(c.env, { mailboxId, sessionId });
+  return ok({ mailbox_id: mailboxId, ...result });
 });
 
 app.notFound((c) => fail(404, "not_found", `No route for ${c.req.method} ${c.req.path}`));

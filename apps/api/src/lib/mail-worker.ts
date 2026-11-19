@@ -368,3 +368,25 @@ export async function mailPushStatus(
   if (sessionId) params.set('session_id', sessionId);
   return await mailWorkerJson(`/api/push/status?${params.toString()}`);
 }
+
+export interface WorkerTestPushResult {
+  mailbox_id: string;
+  configured: boolean;
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  errorCode: string | null;
+}
+
+export async function mailPushTest(input: {
+  mailboxId: string;
+  sessionId?: string;
+}): Promise<WorkerTestPushResult> {
+  return await mailWorkerJson('/api/push/test', {
+    method: 'POST',
+    body: JSON.stringify({
+      mailbox_id: input.mailboxId,
+      ...(input.sessionId ? { session_id: input.sessionId } : {}),
+    }),
+  });
+}
