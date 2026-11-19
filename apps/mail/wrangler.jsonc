@@ -3,6 +3,7 @@
   "name": "onlyorders-mail",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-30",
+  "keep_vars": true,
   "observability": {
     "enabled": true
   },
