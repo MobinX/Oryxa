@@ -9,9 +9,16 @@ type Props = {
   endpoint: '/api/admin/login' | '/api/superuser/login';
   nextPath: string;
   firebaseBackfill?: boolean;
+  /** The mail console asks for inbox notifications as part of signing in. */
+  askPush?: boolean;
 };
 
-export function ConsoleLoginForm({ endpoint, nextPath, firebaseBackfill = false }: Props) {
+export function ConsoleLoginForm({
+  endpoint,
+  nextPath,
+  firebaseBackfill = false,
+  askPush = false,
+}: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -52,6 +59,18 @@ export function ConsoleLoginForm({ endpoint, nextPath, firebaseBackfill = false 
           // DB sign-in already succeeded; the console still works. The shared Firebase
           // account only restores the legacy operator/playground capabilities.
           console.warn('Firebase compatibility sign-in failed', firebaseError);
+        }
+      }
+
+      // The browser only allows the permission prompt from a gesture like this submit.
+      // Subscribe itself happens in the mailbox, where the console cookie is present.
+      if (askPush && typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          try {
+            await Notification.requestPermission();
+          } catch {
+            // The mailbox prompt will explain a blocked browser instead.
+          }
         }
       }
 

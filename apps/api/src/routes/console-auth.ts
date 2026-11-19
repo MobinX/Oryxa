@@ -28,7 +28,7 @@ import {
   consoleUserFromContext,
   superuserMiddleware,
 } from '@api/middleware/console-session';
-import { ensureMailbox, MailWorkerError } from '@api/lib/mail-worker';
+import { ensureMailbox, MailWorkerError, mailPushUnsubscribe } from '@api/lib/mail-worker';
 
 export const consoleAuthRouter = new Hono();
 
@@ -138,8 +138,16 @@ consoleAuthRouter.get('/admin/me', consoleAuthMiddleware, (c) => {
 consoleAuthRouter.post('/admin/logout', consoleAuthMiddleware, async (c) => {
   const header = c.req.header('Authorization');
   const bearer = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const user = consoleUserFromContext(c);
   if (bearer && isConsoleSessionToken(bearer)) {
-    await deleteConsoleSession(hashConsoleSessionToken(bearer));
+    const hash = hashConsoleSessionToken(bearer);
+    // Stop inbox alerts before the session row disappears. A Worker outage must not
+    // keep an admin signed in, so this call never blocks the logout.
+    await mailPushUnsubscribe({ sessionId: hash, quick: true }).catch(() => {});
+    await deleteConsoleSession(hash);
+  } else if (user) {
+    // Legacy operator sessions are one shared bearer, so only that account's rows go.
+    await mailPushUnsubscribe({ adminId: user.id, quick: true }).catch(() => {});
   }
   return c.body(null, 204);
 });
@@ -168,6 +176,7 @@ consoleAuthRouter.post('/admin/password', consoleAuthMiddleware, async (c) => {
     user.id,
     bearer && isConsoleSessionToken(bearer) ? hashConsoleSessionToken(bearer) : undefined,
   );
+  await mailPushUnsubscribe({ adminId: user.id, quick: true }).catch(() => {});
   return c.body(null, 204);
 });
 
@@ -246,7 +255,10 @@ consoleAuthRouter.patch('/superuser/admins/:id', superuserMiddleware, async (c) 
 
   const updated = await updateConsoleUser(id, patch);
   if (!updated) return c.json({ error: 'Admin not found' }, 404);
-  if (patch.passwordHash || patch.isActive === false) await deleteConsoleSessionsForUser(id);
+  if (patch.passwordHash || patch.isActive === false) {
+    await deleteConsoleSessionsForUser(id);
+    await mailPushUnsubscribe({ adminId: id, quick: true }).catch(() => {});
+  }
   return c.json({ admin: publicUser(updated) });
 });
 
@@ -256,6 +268,7 @@ consoleAuthRouter.delete('/superuser/admins/:id', superuserMiddleware, async (c)
   if (!target) return c.json({ error: 'Admin not found' }, 404);
   if (target.role === 'superuser') return c.json({ error: 'The superuser cannot be deleted' }, 403);
   await deleteConsoleUser(id);
+  await mailPushUnsubscribe({ adminId: id, quick: true }).catch(() => {});
   return c.body(null, 204);
 });
 

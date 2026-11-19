@@ -117,6 +117,19 @@ export async function getConsoleUserBySessionHash(
   return (row as ConsoleUserPublic | undefined) ?? null;
 }
 
+/**
+ * The expiry for the exact session token hash. Push subscriptions mirror this value, so an
+ * inbox alert stops the same moment the console session does.
+ */
+export async function getConsoleSessionExpiry(tokenHash: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ expiresAt: consoleSessions.expiresAt })
+    .from(consoleSessions)
+    .where(and(eq(consoleSessions.tokenHash, tokenHash), gt(consoleSessions.expiresAt, new Date())))
+    .limit(1);
+  return row?.expiresAt ?? null;
+}
+
 export async function deleteConsoleSession(tokenHash: string): Promise<void> {
   await db.delete(consoleSessions).where(eq(consoleSessions.tokenHash, tokenHash));
 }

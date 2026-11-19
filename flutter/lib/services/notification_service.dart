@@ -94,9 +94,11 @@ class NotificationService {
   bool _firebaseInitialized = false;
   String? _fcmToken;
   final Set<String> _subscribedBusinessIds = <String>{};
+  bool _adminMailPush = false;
 
   static const String _prefDialogShown = 'fcm_permission_dialog_shown';
   static const String _prefSubscribedBiz = 'fcm_subscribed_business_ids';
+  static const String _prefAdminMailPush = 'fcm_admin_mail_push';
 
   /// Navigation callback when a notification is clicked.
   void Function(String link)? onNotificationClicked;
@@ -206,6 +208,10 @@ class NotificationService {
         tag: 'FCM_LISTENERS_ERROR',
       );
     }
+
+    // A saved admin session renews its inbox alerts silently. No permission dialog on
+    // boot: the prompt belongs to signing in, and a denied browser is simply skipped.
+    unawaited(restoreAdminMailPush(apiService));
   }
 
   Future<void> _ensureFirebaseInitialized(ApiService apiService) async {
@@ -592,5 +598,122 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_prefSubscribedBiz);
     } catch (_) {}
+  }
+
+  /// Asks for notification permission (on admin sign-in) and registers this device for
+  /// the signed-in admin's mailbox alerts. The API derives the admin and console session
+  /// from the bearer token, so only the FCM token crosses the wire.
+  Future<bool> requestAdminMailPush(
+    ApiService apiService, {
+    bool requestPermission = true,
+  }) async {
+    await _ensureFirebaseInitialized(apiService);
+    if (!_firebaseInitialized) return false;
+
+    try {
+      if (requestPermission) {
+        var settings = await FirebaseMessaging.instance.getNotificationSettings();
+        if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+            settings.authorizationStatus != AuthorizationStatus.provisional) {
+          try {
+            final androidPlugin = _localNotifications
+                .resolvePlatformSpecificImplementation<
+                    AndroidFlutterLocalNotificationsPlugin>();
+            await androidPlugin?.requestNotificationsPermission();
+          } catch (_) {}
+          settings = await FirebaseMessaging.instance.requestPermission(
+            alert: true,
+            announcement: false,
+            badge: true,
+            carPlay: false,
+            criticalAlert: false,
+            provisional: false,
+            sound: true,
+          );
+        }
+        if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+            settings.authorizationStatus != AuthorizationStatus.provisional) {
+          axiomService.info(
+            'Admin mail push not subscribed: permission ${settings.authorizationStatus}',
+            tag: 'FCM_ADMIN_MAIL',
+          );
+          return false;
+        }
+      }
+
+      final token = await getDeviceToken(apiService);
+      if (token == null || token.isEmpty) return false;
+
+      await apiService.post(
+        ApiConfig.pathAdminMailPushSubscribe,
+        body: {
+          'token': token,
+          'platform': Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'web'),
+          'device_label':
+              Platform.isAndroid ? 'Android app' : (Platform.isIOS ? 'iOS app' : 'Device'),
+        },
+      );
+
+      _adminMailPush = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefAdminMailPush, true);
+      axiomService.info('Admin mailbox push subscribed', tag: 'FCM_ADMIN_MAIL');
+      return true;
+    } catch (e, st) {
+      axiomService.error(
+        'Admin mail push subscribe failed: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_ADMIN_MAIL_ERROR',
+      );
+      debugPrint('[NotificationService] Admin mail push subscribe failed: $e');
+      return false;
+    }
+  }
+
+  /// Removes this device from the admin mailbox alerts. Called on admin sign-out, before
+  /// the console session itself is deleted.
+  Future<void> unsubscribeAdminMailPush(ApiService apiService) async {
+    bool wasSubscribed = _adminMailPush;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      wasSubscribed = wasSubscribed || (prefs.getBool(_prefAdminMailPush) ?? false);
+    } catch (_) {}
+    if (!wasSubscribed) return;
+
+    final token = _fcmToken ?? await getDeviceToken(apiService);
+    try {
+      await apiService.post(
+        ApiConfig.pathAdminMailPushUnsubscribe,
+        body: {
+          if (token != null && token.isNotEmpty) 'token': token,
+        },
+      );
+      axiomService.info('Admin mailbox push unsubscribed', tag: 'FCM_ADMIN_MAIL');
+    } catch (e) {
+      debugPrint('[NotificationService] Admin mail push unsubscribe failed: $e');
+    }
+
+    _adminMailPush = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefAdminMailPush);
+    } catch (_) {}
+  }
+
+  /// Called once at startup. Re-registers only when the app is in an admin session that
+  /// previously enabled alerts, so boot never shows a permission prompt.
+  Future<void> restoreAdminMailPush(ApiService apiService) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
+      final adminToken = prefs.getString(ApiConfig.storageKeyAdminToken);
+      final enabled = prefs.getBool(_prefAdminMailPush) ?? false;
+      if (sessionType != 'admin' || !enabled) return;
+      if (adminToken == null || adminToken.isEmpty) return;
+      await requestAdminMailPush(apiService, requestPermission: false);
+    } catch (e) {
+      debugPrint('[NotificationService] Admin mail push restore skipped: $e');
+    }
   }
 }

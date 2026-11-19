@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -9,6 +10,7 @@ import '../models/admin_stats.dart';
 import '../models/admin_user.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 
 class AdminProvider extends ChangeNotifier {
   final ApiService apiService;
@@ -181,6 +183,10 @@ class AdminProvider extends ChangeNotifier {
         debugPrint('[AdminProvider] Firebase compatibility notice: $fbErr');
       }
 
+      // An admin signs in, so this device asks for inbox alerts and subscribes its FCM
+      // token. The call is not awaited: the console opens even if FCM is slow.
+      unawaited(NotificationService.instance.requestAdminMailPush(apiService));
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -193,6 +199,17 @@ class AdminProvider extends ChangeNotifier {
   }
 
   Future<void> adminLogout() async {
+    // Stop this device's mailbox alerts while the admin token is still valid. The API
+    // logout below also revokes the session on the server, so a failed call here is not
+    // a hole.
+    try {
+      await NotificationService.instance
+          .unsubscribeAdminMailPush(apiService)
+          .timeout(const Duration(seconds: 6), onTimeout: () {});
+    } catch (e) {
+      debugPrint('[AdminProvider] Mail push unsubscribe skipped: $e');
+    }
+
     try {
       if (_adminToken != null) {
         await http.post(

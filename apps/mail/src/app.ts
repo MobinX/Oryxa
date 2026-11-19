@@ -7,6 +7,13 @@ import { providerFallbackOrder } from "./lib/send-policy";
 import { spamThresholdFromEnv } from "./lib/spam";
 import { sendStoredOutbound } from "./lib/outbound";
 import {
+  heartbeatMailPush,
+  mailPushStatus,
+  pushConfigured,
+  subscribeToMailPush,
+  unsubscribeFromMailPush,
+} from "./lib/push";
+import {
   allMailboxStorage,
   ensureMailbox,
   getEmailRow,
@@ -440,9 +447,14 @@ app.get("/", (c) =>
       "POST /api/emails/restore",
       "POST /api/emails/delete",
       "GET /api/storage",
+      "POST /api/push/subscribe",
+      "POST /api/push/unsubscribe",
+      "POST /api/push/heartbeat",
+      "GET /api/push/status",
     ],
     auth: "x-api-key or Authorization: Bearer",
     sending: "Brevo transactional API (primary) with optional Sender.net fallback",
+    push: "Firebase Cloud Messaging HTTP v1 for inbound-mail inbox alerts",
     storage_note: "used_bytes excludes trash; trash is soft until POST /api/emails/delete",
   }),
 );
@@ -466,6 +478,7 @@ app.get("/health", async (c) => {
       send_provider_order: providerFallbackOrder(c.env),
       spam_threshold: spamThresholdFromEnv(c.env.SPAM_THRESHOLD),
       from_domain_restricted: Boolean((c.env.ALLOWED_FROM_DOMAINS || "").trim()),
+      push_configured: pushConfigured(c.env),
       time: new Date().toISOString(),
     },
     ready ? 200 : 503,
@@ -1115,6 +1128,87 @@ app.get("/api/storage", async (c) => {
     ...storageView({ mailbox_id: "", ...total }),
     mailboxes: rows.map(storageView),
   });
+});
+
+app.post("/api/push/subscribe", async (c) => {
+  const body = await readJson(c);
+  const adminId = optionalString(body.admin_id ?? body.adminId, "admin_id", 100);
+  const adminEmail = optionalString(body.admin_email ?? body.adminEmail, "admin_email", 320);
+  const sessionId = optionalString(body.session_id ?? body.sessionId, "session_id", 200);
+  const token = optionalString(body.token, "token", 4096);
+  assert(adminId, 400, "missing_field", "admin_id is required");
+  assert(adminEmail && isEmail(adminEmail), 400, "invalid_field", "admin_email must be a valid address");
+  assert(sessionId, 400, "missing_field", "session_id is required");
+  assert(token && token.length >= 20, 400, "invalid_field", "token must be a valid FCM registration");
+
+  const platformRaw = optionalString(body.platform, "platform", 20) || "web";
+  assert(
+    ["web", "android", "ios"].includes(platformRaw),
+    400,
+    "invalid_field",
+    "platform must be web, android or ios",
+  );
+  const deviceLabel = optionalString(
+    body.device_label ?? body.deviceLabel,
+    "device_label",
+    300,
+  );
+  const expiresAt = optionalString(body.expires_at ?? body.expiresAt, "expires_at", 40);
+
+  const subscription = await subscribeToMailPush(c.env, {
+    adminId,
+    adminEmail,
+    sessionId,
+    token,
+    platform: platformRaw,
+    deviceLabel,
+    expiresAt,
+  });
+  return ok({ subscribed: true, subscription });
+});
+
+app.post("/api/push/unsubscribe", async (c) => {
+  const body = await readJson(c);
+  const token = optionalString(body.token, "token", 4096);
+  const sessionId = optionalString(body.session_id ?? body.sessionId, "session_id", 200);
+  const adminId = optionalString(body.admin_id ?? body.adminId, "admin_id", 100);
+  assert(
+    token || sessionId || adminId,
+    400,
+    "missing_field",
+    "Provide token, session_id or admin_id",
+  );
+  const removed = await unsubscribeFromMailPush(c.env, { token, sessionId, adminId });
+  return ok({ unsubscribed: true, removed });
+});
+
+app.post("/api/push/heartbeat", async (c) => {
+  const body = await readJson(c);
+  const token = optionalString(body.token, "token", 4096);
+  const sessionId = optionalString(body.session_id ?? body.sessionId, "session_id", 200);
+  assert(token || sessionId, 400, "missing_field", "Provide token or session_id");
+  const expiresAt = optionalString(body.expires_at ?? body.expiresAt, "expires_at", 40);
+  const updated = await heartbeatMailPush(c.env, { token, sessionId }, expiresAt);
+  return ok({ updated });
+});
+
+app.get("/api/push/status", async (c) => {
+  const mailboxIdQuery = optionalString(c.req.query("mailbox_id"), "mailbox_id", 100);
+  const address = optionalString(c.req.query("address"), "address", 320);
+  const sessionId = optionalString(c.req.query("session_id"), "session_id", 200);
+
+  let mailboxId = mailboxIdQuery;
+  if (!mailboxId) {
+    assert(address, 400, "missing_field", "mailbox_id or address query parameter is required");
+    const mailbox = await getMailboxByAddress(c.env, address);
+    if (!mailbox) return fail(404, "mailbox_not_found", "No mailbox exists for that address");
+    mailboxId = mailbox.id;
+  } else if (!(await getMailbox(c.env, mailboxId))) {
+    return fail(404, "mailbox_not_found", "Mailbox not found");
+  }
+
+  const status = await mailPushStatus(c.env, mailboxId, sessionId);
+  return ok({ mailbox_id: mailboxId, ...status });
 });
 
 app.notFound((c) => fail(404, "not_found", `No route for ${c.req.method} ${c.req.path}`));

@@ -3,6 +3,7 @@ import type { Env } from "./types";
 import { ensureMailbox, findInboundDuplicate, persistEmail } from "./lib/store";
 import { MimeParseError, parseInboundEmail } from "./lib/mime";
 import { scoreInboundSpam, spamThresholdFromEnv } from "./lib/spam";
+import { notifyInboundEmail } from "./lib/push";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -12,7 +13,7 @@ export default {
   async email(
     message: ForwardableEmailMessage,
     env: Env,
-    _ctx: ExecutionContext,
+    ctx: ExecutionContext,
   ): Promise<void> {
     const recipient = message.to.trim().toLowerCase();
     if (!recipient) {
@@ -121,6 +122,28 @@ export default {
         spamScore: spam.score,
         isSpam: spam.isSpam,
         spamReasons: spam.reasons,
+      }),
+    );
+
+    // The mailbox alert is deliberately off the delivery path: Cloudflare has
+    // already accepted the message, and a slow or failing FCM call must not turn
+    // an accepted email into a retry.
+    ctx.waitUntil(
+      notifyInboundEmail(env, {
+        mailboxId: mailbox.id,
+        emailId: result.row.id,
+        fromEmail: parsed.from.email,
+        fromName: parsed.from.name,
+        subject: parsed.subject,
+        isSpam: spam.isSpam,
+      }).catch((error) => {
+        console.error(
+          JSON.stringify({
+            event: "push_inbound_failed",
+            emailId: result.row.id,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
       }),
     );
   },

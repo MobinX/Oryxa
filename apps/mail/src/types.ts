@@ -19,6 +19,33 @@ export interface Env {
   DEFAULT_FROM_EMAIL: string;
   DEFAULT_FROM_NAME: string;
   MAX_SEND_BYTES?: string;
+  // Firebase Cloud Messaging (FCM HTTP v1). The service account is the same one
+  // the API uses, configured as Worker secrets.
+  FIREBASE_PROJECT_ID?: string;
+  FIREBASE_CLIENT_EMAIL?: string;
+  FIREBASE_PRIVATE_KEY?: string;
+  /** Set to "1" to push obvious spam into the inbox alert stream too. */
+  MAIL_PUSH_INCLUDE_SPAM?: string;
+  /** Cap for a subscription lifetime, in seconds (default 30 days). */
+  MAIL_PUSH_MAX_TTL_SECONDS?: string;
+}
+
+export type PushPlatform = "web" | "android" | "ios";
+
+export interface PushSubscriptionRow {
+  id: string;
+  admin_id: string;
+  admin_email: string;
+  mailbox_id: string;
+  session_id: string;
+  token: string;
+  platform: PushPlatform;
+  device_label: string | null;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at: string | null;
 }
 
 export interface MailboxRow {

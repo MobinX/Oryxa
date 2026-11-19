@@ -1,12 +1,18 @@
 import { Hono, type Context } from 'hono';
 import { getSignedUploadUrl } from '@repo/integrations/b2';
+import { getConsoleSessionExpiry } from '@repo/db/crud/console-users';
 import { consoleMailMiddleware, consoleUserFromContext } from '@api/middleware/console-session';
+import { hashConsoleSessionToken, isConsoleSessionToken } from '@api/lib/console-auth';
 import {
   MailWorkerError,
   ensureMailbox,
   forwardWorkerEmail,
   getWorkerEmail,
   listMailboxEmails,
+  mailPushHeartbeat,
+  mailPushStatus,
+  mailPushSubscribe,
+  mailPushUnsubscribe,
   mailWorkerJson,
   mailWorkerResponse,
   mailboxStorage,
@@ -67,6 +73,34 @@ async function mailboxFor(c: Context): Promise<WorkerMailbox | null> {
   const current = user(c);
   if (!current) return null;
   return await ensureMailbox(current.email, current.name);
+}
+
+/**
+ * The mail Worker never learns the console session token: it only stores the same SHA-256
+ * hash the API already keeps in `console_sessions`. The expiry travels with the
+ * subscription, so an alert cannot outlive the login that asked for it.
+ */
+async function sessionBinding(c: Context): Promise<{ sessionId: string; expiresAt: string }> {
+  const header = c.req.header('Authorization');
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (bearer && isConsoleSessionToken(bearer)) {
+    const hash = hashConsoleSessionToken(bearer);
+    const expiresAt = await getConsoleSessionExpiry(hash);
+    if (expiresAt) return { sessionId: hash, expiresAt: expiresAt.toISOString() };
+  }
+  const current = user(c);
+  return {
+    sessionId: `legacy_${current?.id ?? 'operator'}`,
+    expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
+function readPushToken(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 4096) : '';
+}
+
+function readPushPlatform(value: unknown): 'web' | 'android' | 'ios' {
+  return value === 'android' || value === 'ios' ? value : 'web';
 }
 
 adminMailRouter.post('/admin/mail/attachments/sign', async (c) => {
@@ -335,6 +369,64 @@ adminMailRouter.post('/admin/mail/emails/:id/delete', async (c) => {
     body: JSON.stringify({ ids: [checked.id] }),
   });
   return c.json(result);
+});
+
+adminMailRouter.post('/admin/mail/push/subscribe', async (c) => {
+  const current = user(c);
+  if (!current) return c.json({ error: 'Unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const token = readPushToken(body.token);
+  if (token.length < 20) return c.json({ error: 'A valid FCM registration token is required' }, 400);
+  const platform = readPushPlatform(body.platform);
+  const deviceLabel =
+    typeof body.device_label === 'string' ? body.device_label.trim().slice(0, 300) : null;
+  const binding = await sessionBinding(c);
+
+  const result = await mailPushSubscribe({
+    adminId: current.id,
+    adminEmail: current.email,
+    sessionId: binding.sessionId,
+    token,
+    platform,
+    deviceLabel,
+    expiresAt: binding.expiresAt,
+  });
+  return c.json(result);
+});
+
+adminMailRouter.post('/admin/mail/push/unsubscribe', async (c) => {
+  const current = user(c);
+  if (!current) return c.json({ error: 'Unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const token = readPushToken(body.token);
+  const binding = await sessionBinding(c);
+  const result = await mailPushUnsubscribe({
+    ...(token ? { token } : {}),
+    sessionId: binding.sessionId,
+  });
+  return c.json(result);
+});
+
+adminMailRouter.post('/admin/mail/push/heartbeat', async (c) => {
+  const current = user(c);
+  if (!current) return c.json({ error: 'Unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const token = readPushToken(body.token);
+  const binding = await sessionBinding(c);
+  const result = await mailPushHeartbeat({
+    ...(token ? { token } : {}),
+    sessionId: binding.sessionId,
+    expiresAt: binding.expiresAt,
+  });
+  return c.json(result);
+});
+
+adminMailRouter.get('/admin/mail/push/status', async (c) => {
+  const mailbox = await mailboxFor(c);
+  if (!mailbox) return c.json({ error: 'Unauthorized' }, 401);
+  const binding = await sessionBinding(c);
+  const status = await mailPushStatus(mailbox.id, binding.sessionId);
+  return c.json({ ...status, mailbox_id: mailbox.id });
 });
 
 adminMailRouter.onError((error, c) => {

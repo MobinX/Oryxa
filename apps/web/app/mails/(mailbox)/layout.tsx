@@ -7,6 +7,7 @@ import { SignOutForm } from '@/components/sign-out-button';
 import { getActiveConsoleUser } from '@/lib/console-session';
 import { consoleCan } from '@/lib/console-capabilities';
 import { getBrand } from '@/lib/brand-server';
+import { MailPushPrompt } from '@/components/mail-push-prompt';
 import { mailSignOutAction } from '@/app/mails/actions';
 
 /** The dedicated mail console: never indexed. */
@@ -77,6 +78,7 @@ export default async function MailboxLayout({ children }: { children: React.Reac
       <main className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 pb-3 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
         {children}
       </main>
+      <MailPushPrompt email={user.email} />
     </div>
   );
 }

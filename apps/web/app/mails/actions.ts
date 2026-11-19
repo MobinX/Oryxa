@@ -3,14 +3,14 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { clearOperatorAuthCookie } from '@/lib/admin-access';
-import { clearLogsSession } from '@/lib/logs-session';
-import { clearConsoleCookie, getConsoleToken } from '@/lib/console-cookie';
+import { clearLogsSession, logsBearer } from '@/lib/logs-session';
+import { clearConsoleCookie } from '@/lib/console-cookie';
 import { API_BASE_URL } from '@/lib/api-base';
 import { consoleApiFetch, ConsoleApiError } from '@/lib/console-session';
 import { parseUploadedAttachmentsField } from '@/lib/mail-attachments';
 
 export async function mailSignOutAction(): Promise<void> {
-  const token = await getConsoleToken();
+  const token = await logsBearer();
   if (token) {
     await fetch(`${API_BASE_URL}/api2/admin/logout`, {
       method: 'POST',

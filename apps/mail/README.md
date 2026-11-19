@@ -66,7 +66,17 @@ Migrations live in `migrations/` and are applied manually per environment:
 ```sh
 wrangler d1 execute onlyorders-mail-db --local  --file=./migrations/0002_spam_and_failures.sql
 wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0002_spam_and_failures.sql
+wrangler d1 execute onlyorders-mail-db --local  --file=./migrations/0003_push_subscriptions.sql
+wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0003_push_subscriptions.sql
 ```
+
+`push_subscriptions` (migration 0003) holds one FCM registration per device and
+console session: `admin_id`, `admin_email`, `mailbox_id`, the SHA-256
+`session_id` (never the session token), `token`, `platform`, `expires_at` and
+`revoked_at`. `push_deliveries` is the append-only audit of each alert. A browser
+or app signs in, subscribes, and the inbound handler sends one alert per active
+row with `ctx.waitUntil`, so FCM latency never delays mail delivery. Signing out
+deletes the rows for that session; an expired session simply stops matching.
 
 The Worker tolerates a pre-0002 database (spam verdicts still land in the B2
 JSON document; `?spam=` filtering reports `spam_unavailable: true`), but

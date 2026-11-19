@@ -14,6 +14,8 @@
     "db:migrate:remote": "wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0001_init.sql",
     "db:migrate:local:0002": "wrangler d1 execute onlyorders-mail-db --local --file=./migrations/0002_spam_and_failures.sql",
     "db:migrate:remote:0002": "wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0002_spam_and_failures.sql",
+    "db:migrate:local:0003": "wrangler d1 execute onlyorders-mail-db --local --file=./migrations/0003_push_subscriptions.sql",
+    "db:migrate:remote:0003": "wrangler d1 execute onlyorders-mail-db --remote --file=./migrations/0003_push_subscriptions.sql",
     "test:api": "bun run scripts/test-api.ts",
     "test:provider": "bun run scripts/test-provider.ts"
   },

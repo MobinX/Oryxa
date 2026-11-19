@@ -44,12 +44,27 @@ function logRetry(path: string, attempt: number, attempts: number, detail: strin
   console.warn(JSON.stringify({ event: 'mail_worker_retry', path, attempt, attempts, detail }));
 }
 
-export async function mailWorkerResponse(path: string, init: RequestInit = {}): Promise<Response> {
+/** Per-call overrides, used by callers that must not hold a request open. */
+export interface MailWorkerOptions {
+  attempts?: number;
+  timeoutMs?: number;
+}
+
+const QUICK_TIMEOUT_MS = 2_500;
+
+export async function mailWorkerResponse(
+  path: string,
+  init: RequestInit = {},
+  options: MailWorkerOptions = {},
+): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('x-api-key', apiKey());
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  const attempts = maxAttempts();
-  const timeout = timeoutMs();
+  const attempts = Math.min(maxAttempts(), Math.max(1, Math.floor(options.attempts ?? maxAttempts())));
+  const timeout =
+    options.timeoutMs !== undefined
+      ? Math.min(120_000, Math.max(1_000, Math.floor(options.timeoutMs)))
+      : timeoutMs();
   let lastError: unknown = null;
   // Retries are safe here: the Worker only answers 5xx when the provider
   // send failed (nothing was delivered) or the request never completed;
@@ -88,8 +103,9 @@ export async function mailWorkerResponse(path: string, init: RequestInit = {}): 
 export async function mailWorkerJson<T = Record<string, unknown>>(
   path: string,
   init: RequestInit = {},
+  options: MailWorkerOptions = {},
 ): Promise<T> {
-  const response = await mailWorkerResponse(path, init);
+  const response = await mailWorkerResponse(path, init, options);
   const text = await response.text();
   let body: unknown = null;
   try {
@@ -257,4 +273,98 @@ export async function forwardWorkerEmail(
 
 export async function mailboxStorage(mailboxId: string): Promise<Record<string, unknown>> {
   return await mailWorkerJson(`/api/storage?mailbox_id=${encodeURIComponent(mailboxId)}`);
+}
+
+export interface WorkerPushSubscription {
+  id: string;
+  admin_id: string;
+  admin_email: string;
+  mailbox_id: string;
+  platform: 'web' | 'android' | 'ios';
+  device_label: string | null;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+  expires_at: string;
+}
+
+/**
+ * Registers one FCM device token for an admin's mailbox. The Worker derives the mailbox
+ * from the admin email, stores only a hash of the console session, and refuses a token
+ * that does not look like an FCM registration.
+ */
+export async function mailPushSubscribe(input: {
+  adminId: string;
+  adminEmail: string;
+  sessionId: string;
+  token: string;
+  platform: 'web' | 'android' | 'ios';
+  deviceLabel?: string | null;
+  expiresAt: string;
+}): Promise<{ subscribed: boolean; subscription: WorkerPushSubscription }> {
+  return await mailWorkerJson('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      admin_id: input.adminId,
+      admin_email: input.adminEmail,
+      session_id: input.sessionId,
+      token: input.token,
+      platform: input.platform,
+      ...(input.deviceLabel ? { device_label: input.deviceLabel } : {}),
+      expires_at: input.expiresAt,
+    }),
+  });
+}
+
+export async function mailPushUnsubscribe(filter: {
+  token?: string;
+  sessionId?: string;
+  adminId?: string;
+  /** Sign-out/revocation path: one short attempt, because the session must close anyway. */
+  quick?: boolean;
+}): Promise<{ unsubscribed: boolean; removed: number }> {
+  return await mailWorkerJson(
+    '/api/push/unsubscribe',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(filter.token ? { token: filter.token } : {}),
+        ...(filter.sessionId ? { session_id: filter.sessionId } : {}),
+        ...(filter.adminId ? { admin_id: filter.adminId } : {}),
+      }),
+    },
+    filter.quick ? { attempts: 1, timeoutMs: QUICK_TIMEOUT_MS } : {},
+  );
+}
+
+export async function mailPushHeartbeat(filter: {
+  token?: string;
+  sessionId?: string;
+  expiresAt?: string;
+}): Promise<{ updated: number }> {
+  return await mailWorkerJson('/api/push/heartbeat', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(filter.token ? { token: filter.token } : {}),
+      ...(filter.sessionId ? { session_id: filter.sessionId } : {}),
+      ...(filter.expiresAt ? { expires_at: filter.expiresAt } : {}),
+    }),
+  });
+}
+
+export interface WorkerPushStatus {
+  mailbox_id: string;
+  subscribed: boolean;
+  count: number;
+  last_seen_at: string | null;
+  expires_at: string | null;
+}
+
+export async function mailPushStatus(
+  mailboxId: string,
+  sessionId?: string,
+): Promise<WorkerPushStatus> {
+  const params = new URLSearchParams({ mailbox_id: mailboxId });
+  if (sessionId) params.set('session_id', sessionId);
+  return await mailWorkerJson(`/api/push/status?${params.toString()}`);
 }

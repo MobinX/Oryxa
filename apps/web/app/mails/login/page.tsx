@@ -51,7 +51,7 @@ export default async function MailLoginPage() {
             </p>
           </div>
 
-          <ConsoleLoginForm endpoint="/api/admin/login" nextPath="/mails" />
+          <ConsoleLoginForm endpoint="/api/admin/login" nextPath="/mails" askPush />
 
           <p className="mt-6 border-t border-border/50 pt-4 text-center text-xs leading-relaxed text-muted-foreground">
             Accounts are created and reset by the superuser in the admin console.

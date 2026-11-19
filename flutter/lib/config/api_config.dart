@@ -242,6 +242,10 @@ class ApiConfig {
   static String pathAdminMailTrash(String id) => '/api2/admin/mail/emails/$id/trash';
   static String pathAdminMailRestore(String id) => '/api2/admin/mail/emails/$id/restore';
   static String pathAdminMailDelete(String id) => '/api2/admin/mail/emails/$id/delete';
+  static const String pathAdminMailPushSubscribe = '/api2/admin/mail/push/subscribe';
+  static const String pathAdminMailPushUnsubscribe = '/api2/admin/mail/push/unsubscribe';
+  static const String pathAdminMailPushHeartbeat = '/api2/admin/mail/push/heartbeat';
+  static const String pathAdminMailPushStatus = '/api2/admin/mail/push/status';
   static const String pathAdminTokenAnalytics = '/admin/token-analytics';
   static String pathAdminTokenUsage({String? month}) =>
       '/api2/admin/token-analytics/businesses${month != null ? '?month=$month' : ''}';
