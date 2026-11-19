@@ -197,6 +197,11 @@ class NotificationService {
         if (_subscribedBusinessIds.isNotEmpty) {
           syncSubscriptions(apiService, _subscribedBusinessIds.toList());
         }
+        // An FCM registration can rotate at any time. Re-bind the mail alert to the
+        // new token, otherwise the Worker keeps sending to a dead registration.
+        if (_adminMailPush) {
+          unawaited(requestAdminMailPush(apiService, requestPermission: false));
+        }
       });
 
       axiomService.info('FCM message listeners registered successfully', tag: 'FCM_LISTENERS');

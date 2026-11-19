@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_theme.dart';
 import '../../providers/admin_provider.dart';
+import '../../services/notification_service.dart';
 import '../auth/login_screen.dart';
 import '../main_scaffold.dart';
 import 'channels/admin_channels_screen.dart';
@@ -52,6 +53,19 @@ class AdminScaffold extends StatefulWidget {
 
 class _AdminScaffoldState extends State<AdminScaffold> {
   String _selectedKey = 'dashboard';
+
+  @override
+  void initState() {
+    super.initState();
+    // Mail alerts carry /mails/<id> links. The merchant scaffold handles its own
+    // routes; the admin console needs to open the mailbox when a mail alert is tapped.
+    NotificationService.instance.onNotificationClicked = (link) {
+      if (!mounted) return;
+      if (link.contains('/mails') || link.contains('/mail')) {
+        setState(() => _selectedKey = 'inbox');
+      }
+    };
+  }
 
   final List<_NavGroup> _allGroups = [
     _NavGroup(
