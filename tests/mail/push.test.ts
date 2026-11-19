@@ -61,7 +61,7 @@ describe('mail push', () => {
         token: string;
         notification: { title: string; body: string };
         data: Record<string, string>;
-        android: { notification: { channelId: string; icon: string } };
+        android: { priority: string; notification: Record<string, unknown> };
       };
     };
 
@@ -80,6 +80,10 @@ describe('mail push', () => {
     });
     expect(body.message.android.notification.channelId).toBe('high_importance_channel');
     expect(body.message.android.notification.icon).toBe('ic_notification');
+    // FCM HTTP v1 has no message.android.notification.priority field; putting it
+    // there makes every send fail with INVALID_ARGUMENT.
+    expect(body.message.android.priority).toBe('high');
+    expect(body.message.android.notification).not.toHaveProperty('priority');
   });
 
   it('never issues a subscription past the configured cap', () => {

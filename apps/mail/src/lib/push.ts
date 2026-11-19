@@ -184,7 +184,6 @@ export function buildFcmMessage(notice: FcmNotification): Record<string, unknown
           icon: "ic_notification",
           color: "#10B981",
           channelId: "high_importance_channel",
-          priority: "high",
           defaultSound: true,
           defaultVibrateTimings: true,
         },
@@ -218,17 +217,26 @@ async function sendFcmMessage(env: Env, notice: FcmNotification): Promise<FcmRes
     const raw = await response.text().catch(() => "");
     let errorCode = `http-${response.status}`;
     let status = "";
+    let invalidTokenField = false;
     try {
       const parsed = JSON.parse(raw) as {
         error?: {
           status?: string;
-          details?: Array<{ errorCode?: string }>;
+          details?: Array<{
+            errorCode?: string;
+            fieldViolations?: Array<{ field?: string; description?: string }>;
+          }>;
         };
       };
-      const detailCode = parsed.error?.details?.find((item) => item.errorCode)?.errorCode;
+      const detail = parsed.error?.details?.find((item) => item.errorCode || item.fieldViolations?.length);
+      const detailCode = detail?.errorCode;
       status = parsed.error?.status ?? "";
       if (detailCode) errorCode = detailCode;
       else if (status) errorCode = status;
+      const field = detail?.fieldViolations?.map((violation) => violation.field ?? "").join(" ") ?? "";
+      // INVALID_ARGUMENT also covers a malformed message. Only drop the token when FCM
+      // names the token field; a bad payload must not silently unregister a good device.
+      invalidTokenField = field.includes("token");
     } catch {
       // Keep the HTTP status as the code.
     }
@@ -236,8 +244,9 @@ async function sendFcmMessage(env: Env, notice: FcmNotification): Promise<FcmRes
     const stale =
       response.status === 404 ||
       errorCode === "UNREGISTERED" ||
-      errorCode === "INVALID_ARGUMENT" ||
-      errorCode === "SENDER_ID_MISMATCH";
+      errorCode === "SENDER_ID_MISMATCH" ||
+      errorCode === "NOT_FOUND" ||
+      (errorCode === "INVALID_ARGUMENT" && invalidTokenField);
 
     console.warn(
       JSON.stringify({
