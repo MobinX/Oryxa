@@ -184,8 +184,11 @@ export function buildFcmMessage(notice: FcmNotification): Record<string, unknown
           icon: "ic_notification",
           color: "#10B981",
           channelId: "high_importance_channel",
+          channel_id: "high_importance_channel",
           defaultSound: true,
+          default_sound: true,
           defaultVibrateTimings: true,
+          default_vibrate_timings: true,
         },
       },
       apns: {

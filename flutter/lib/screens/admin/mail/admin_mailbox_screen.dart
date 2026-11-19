@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../config/app_theme.dart';
 import '../../../models/admin_mail.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../services/api_service.dart';
+import '../../../services/notification_service.dart';
 
 class AdminMailboxScreen extends StatefulWidget {
   const AdminMailboxScreen({super.key});
@@ -118,6 +120,26 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(width: 8),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _showNotificationSheet(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.notifications_active_outlined, size: 12, color: AppTheme.primaryColor),
+                          SizedBox(width: 4),
+                          Text('Alerts', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -317,6 +339,136 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
       selected: isSelected,
       onSelected: (_) {
         admin.fetchEmails(folder: key, refresh: true);
+      },
+    );
+  }
+
+  void _showNotificationSheet(BuildContext context) {
+    final apiService = context.read<ApiService>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E1F30) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        bool sending = false;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.notifications_active_outlined, color: AppTheme.primaryColor),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Mail Notifications',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Incoming mail alerts are delivered to this device using Firebase Cloud Messaging.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: sending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.send_outlined, size: 18),
+                        label: Text(sending ? 'Sending test alert...' : 'Send test alert'),
+                        onPressed: sending
+                            ? null
+                            : () async {
+                                setSheetState(() => sending = true);
+                                try {
+                                  final res = await NotificationService.instance
+                                      .sendTestAdminMailPush(apiService);
+                                  if (ctx.mounted) {
+                                    Navigator.of(ctx).pop();
+                                  }
+                                  final sent = (res?['sent'] as num?)?.toInt() ?? 0;
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          sent > 0
+                                              ? 'Test alert sent ($sent device)! Check notification bar.'
+                                              : 'Alert dispatched to registered devices.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setSheetState(() => sending = false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to send test alert: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Re-register this device'),
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          final ok = await NotificationService.instance
+                              .requestAdminMailPush(apiService, requestPermission: true);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  ok
+                                      ? 'Device registered for mail alerts.'
+                                      : 'Registration failed. Check system notification permission.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
       },
     );
   }

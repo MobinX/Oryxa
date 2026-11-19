@@ -340,6 +340,37 @@ class NotificationService {
       SystemSound.play(SystemSoundType.alert);
     } catch (_) {}
 
+    // On Android, FCM suppresses status bar / heads-up banners when the app is in the
+    // foreground. Explicitly show the notification through FlutterLocalNotificationsPlugin
+    // so the heads-up banner and notification shade alert appear.
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'high_importance_channel',
+        'Order & Customer Alerts',
+        channelDescription:
+            'Notifications for new customer orders, urgent help requests, and sales updates.',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: 'ic_notification',
+        largeIcon: DrawableResourceAndroidBitmap('ic_launcher'),
+        color: Color(0xFF5B3DF5),
+        playSound: true,
+        enableVibration: true,
+      );
+
+      final notificationId =
+          (message.messageId?.hashCode ?? message.hashCode) & 0x7FFFFFFF;
+      await _localNotifications.show(
+        id: notificationId,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(android: androidDetails),
+        payload: data['link']?.toString(),
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Foreground local notification display error: $e');
+    }
+
     // In-app snack feedback with link navigation
     try {
       final link = data['link']?.toString();
@@ -704,6 +735,27 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_prefAdminMailPush);
     } catch (_) {}
+  }
+
+  /// Sends a single test notification to verify that the FCM path to this device is working.
+  Future<Map<String, dynamic>?> sendTestAdminMailPush(ApiService apiService) async {
+    try {
+      final response = await apiService.post(ApiConfig.pathAdminMailPushTest);
+      if (response is Map<String, dynamic>) {
+        axiomService.info('Admin test mail push triggered', tag: 'FCM_ADMIN_MAIL');
+        return response;
+      }
+      return null;
+    } catch (e, st) {
+      axiomService.error(
+        'Admin test mail push failed: $e',
+        error: e,
+        stack: st,
+        tag: 'FCM_ADMIN_MAIL_ERROR',
+      );
+      debugPrint('[NotificationService] Admin test mail push failed: $e');
+      rethrow;
+    }
   }
 
   /// Called once at startup. Re-registers only when the app is in an admin session that

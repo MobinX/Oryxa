@@ -246,6 +246,7 @@ class ApiConfig {
   static const String pathAdminMailPushUnsubscribe = '/api2/admin/mail/push/unsubscribe';
   static const String pathAdminMailPushHeartbeat = '/api2/admin/mail/push/heartbeat';
   static const String pathAdminMailPushStatus = '/api2/admin/mail/push/status';
+  static const String pathAdminMailPushTest = '/api2/admin/mail/push/test';
   static const String pathAdminTokenAnalytics = '/admin/token-analytics';
   static String pathAdminTokenUsage({String? month}) =>
       '/api2/admin/token-analytics/businesses${month != null ? '?month=$month' : ''}';
