@@ -1016,14 +1016,12 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
         externalRedirectUrl: verified.returnOrigin,
         ...(adsToken ? { adsToken } : {}),
       });
-      const apiBase = (
-        process.env.API_PUBLIC_URL ??
-        process.env.NEXT_PUBLIC_API_URL ??
-        process.env.WEB_URL ??
-        'http://localhost:3001'
-      ).replace(/\/+$/, '');
+      // Derive the host from the request itself: the callback is a public deployment URL, while
+      // API_PUBLIC_URL/NEXT_PUBLIC_API_URL may still hold a machine-local address. Using the env
+      // here used to bounce the browser to http://localhost:3001 after the Page selection.
+      const origin = new URL(c.req.url).origin;
       return c.redirect(
-        `${apiBase}/api2/ext-service/internal_facebook_url?token=${encodeURIComponent(pagesToken)}`,
+        `${origin}/api2/ext-service/internal_facebook_url?token=${encodeURIComponent(pagesToken)}`,
       );
     }
 

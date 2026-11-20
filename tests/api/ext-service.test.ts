@@ -195,6 +195,8 @@ describe('External service API', () => {
     expect(callback.status).toBe(302);
     const location = callback.headers.get('location') ?? '';
     expect(location).toContain('/api2/ext-service/internal_facebook_url?token=');
+    // The callback must redirect on the host the browser actually used, never a localhost env value.
+    expect(location.startsWith('http://localhost/api2/ext-service/')).toBe(true);
 
     const token = new URL(location).searchParams.get('token');
     expect(token).toBeTruthy();
