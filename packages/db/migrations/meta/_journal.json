@@ -414,6 +414,13 @@
       "when": 1794223100000,
       "tag": "0058_assistant_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1794300000000,
+      "tag": "0059_external_services",
+      "breakpoints": true
     }
   ]
 }

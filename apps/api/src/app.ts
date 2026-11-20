@@ -22,6 +22,7 @@ import { pushRouter } from '@api/routes/push';
 import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
 import { adminChannelsRouter } from '@api/routes/admin-channels';
 import { adminOfficialRouter } from '@api/routes/admin-official';
+import { extServiceRouter } from '@api/routes/ext-service';
 import { logsRouter } from '@api/routes/logs';
 import { adminRouter } from '@api/routes/admin';
 import { adminPlansRouter } from '@api/routes/admin-plans';
@@ -122,6 +123,10 @@ app.route('/api/v1', messengerNotificationsRouter);
 app.route('/api/v1', billingRouter);
 // A prefix of its own so nothing is added inside /api/v1, which the Flutter
 // client's generated contract lives on.
+// External-service integration API. `/api2` is the operator-proxy prefix; `/api` is the
+// shorter path the web app also rewrites, so external callers can use either.
+app.route('/api2', extServiceRouter);
+app.route('/api', extServiceRouter);
 app.route('/api2', consoleAuthRouter);
 app.route('/api2', adminMailRouter);
 app.route('/api2', adminChannelsRouter);

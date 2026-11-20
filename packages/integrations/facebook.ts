@@ -432,6 +432,8 @@ function isOutsideWindow(code?: number, subcode?: number): boolean {
   return code === 10 && subcode != null && OUTSIDE_WINDOW_SUBCODES.has(subcode);
 }
 
+type MediaAttachmentType = 'image' | 'video' | 'audio' | 'file';
+
 type MessengerAttachment =
   | {
       type: 'template';
@@ -452,6 +454,11 @@ type MessengerAttachment =
         text: string;
         buttons: Array<{ type: 'postback'; title: string; payload: string }>;
       };
+    }
+  | {
+      /** A customer-visible media bubble; Messenger and Instagram both accept a URL payload. */
+      type: MediaAttachmentType;
+      payload: { url: string };
     };
 
 type SendPayload = {
@@ -806,6 +813,24 @@ export async function sendMessage(
 }
 
 /**
+ * Sends one media bubble (image/video/audio/file) by URL. Meta fetches the URL itself, so it
+ * has to be publicly reachable; the external-service SendMessage endpoint passes the caller's
+ * `mediaUrl` straight through.
+ */
+export async function sendMediaMessage(
+  pageToken: string,
+  recipientId: string,
+  mediaUrl: string,
+  mediaType: MediaAttachmentType = 'image',
+): Promise<void> {
+  await postMessengerSend(pageToken, {
+    recipient: { id: recipientId },
+    message: { attachment: { type: mediaType, payload: { url: mediaUrl } } },
+    messaging_type: 'RESPONSE',
+  });
+}
+
+/**
  * Delivers a Page message into the inbox of the person who wrote `commentId`. This is the
  * only door from a public comment into a private thread, and Meta closes it when the
  * commenter cannot be messaged — a refused send must never swallow the answer, so callers
@@ -1082,6 +1107,12 @@ export async function createOAuthState(
     returnOrigin?: string;
     /** Mobile (Flutter) flow: redirect the picker to the mobile callback page. */
     mobile?: boolean;
+    /**
+     * External-service flow: after Meta returns, send the Pages to
+     * `internal_facebook_url` instead of the web picker, and remember where the external
+     * caller wants the selected Page name/id posted.
+     */
+    externalRedirectUrl?: string;
   },
   ttlSeconds = 600,
 ): Promise<string> {
@@ -1089,10 +1120,12 @@ export async function createOAuthState(
   if (!secret) throw new Error('INTERNAL_KEY is required to start Facebook OAuth');
   const exp = Date.now() + ttlSeconds * 1000;
   const flags =
-    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}${payload.ads ? 'a' : ''}${payload.mobile ? 'm' : ''}` || null;
-  const origin = payload.returnOrigin
-    ? toBase64Url(encoder.encode(payload.returnOrigin))
-    : null;
+    `${payload.portfolio ? 'p' : ''}${payload.platform === 'instagram' ? 'i' : ''}${payload.ads ? 'a' : ''}${payload.mobile ? 'm' : ''}${payload.externalRedirectUrl ? 'x' : ''}` || null;
+  const origin = payload.externalRedirectUrl
+    ? toBase64Url(encoder.encode(payload.externalRedirectUrl))
+    : payload.returnOrigin
+      ? toBase64Url(encoder.encode(payload.returnOrigin))
+      : null;
 
   // A return origin keeps the flags slot even when it is empty, so the last three segments
   // stay `exp.flags.origin.sig` and an old 4/5-part token still parses unambiguously.
@@ -1124,6 +1157,11 @@ export async function verifyOAuthState(
   returnOrigin?: string;
   /** Mobile (Flutter) flow. */
   mobile: boolean;
+  /**
+   * External-service flow. `returnOrigin` is then the external callback URL the selected
+   * Page name/id is posted to once the login returns.
+   */
+  external: boolean;
 } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !state) return null;
@@ -1132,7 +1170,7 @@ export async function verifyOAuthState(
   const [businessId, userId, expStr] = parts;
   // 4 parts: no flags, no origin. 5: flags + signature. 6: flags + origin + signature.
   const flags = parts.length >= 5 ? parts[3]! : '';
-  if (flags !== '' && !/^p?i?a?m?$/.test(flags)) return null;
+  if (flags !== '' && !/^p?i?a?m?x?$/.test(flags)) return null;
   const originB64 = parts.length === 6 ? parts[4]! : '';
   const sig = parts[parts.length - 1]!;
   const exp = Number(expStr);
@@ -1159,6 +1197,7 @@ export async function verifyOAuthState(
     platform: flags.includes('i') ? 'instagram' : 'facebook',
     ...(returnOrigin ? { returnOrigin } : {}),
     mobile: flags.includes('m'),
+    external: flags.includes('x'),
   };
 }
 
@@ -1208,6 +1247,8 @@ export async function createFacebookPagesSelectionToken(
     platform?: MessagingPlatform;
     /** Long-lived user token for Ads Insights, present only when the login asked for `ads_read`. */
     adsToken?: string;
+    /** External-service flow: where the selected Page name/id is posted after the login. */
+    externalRedirectUrl?: string;
   },
   ttlSeconds = 600,
 ): Promise<string> {
@@ -1223,6 +1264,7 @@ export async function createFacebookPagesSelectionToken(
         platform: payload.platform ?? 'facebook',
         pages: payload.pages,
         ...(payload.adsToken ? { adsToken: payload.adsToken } : {}),
+        ...(payload.externalRedirectUrl ? { externalRedirectUrl: payload.externalRedirectUrl } : {}),
       }),
     ),
   );
@@ -1239,6 +1281,8 @@ export async function verifyFacebookPagesSelectionToken(
   pages: FacebookPageOption[];
   platform: MessagingPlatform;
   adsToken?: string;
+  /** Set for the external-service flow; the URL the selected Page name/id is posted to. */
+  externalRedirectUrl?: string;
 } | null> {
   const secret = process.env.INTERNAL_KEY;
   if (!secret || !token) return null;
@@ -1256,6 +1300,7 @@ export async function verifyFacebookPagesSelectionToken(
       platform?: MessagingPlatform;
       pages?: FacebookPageOption[];
       adsToken?: string;
+      externalRedirectUrl?: string;
     };
     if (
       !parsed.businessId ||
@@ -1273,6 +1318,9 @@ export async function verifyFacebookPagesSelectionToken(
       pages: parsed.pages,
       platform: parsed.platform === 'instagram' ? 'instagram' : 'facebook',
       ...(typeof parsed.adsToken === 'string' && parsed.adsToken ? { adsToken: parsed.adsToken } : {}),
+      ...(typeof parsed.externalRedirectUrl === 'string' && parsed.externalRedirectUrl
+        ? { externalRedirectUrl: parsed.externalRedirectUrl }
+        : {}),
     };
   } catch {
     return null;

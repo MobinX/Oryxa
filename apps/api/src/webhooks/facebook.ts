@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { getChannelByPageId, getChannelByPlatformAccountId } from '@repo/db/crud/channel';
+import { findExternalWebhookTargets } from '@repo/db/crud/external-service';
 import {
   processInboundMessage,
   setConversationProfileIfMissing,
@@ -748,6 +749,195 @@ async function processAdminPageCommands(
   return handled;
 }
 
+/** The media kinds an external webhook can name; anything unknown becomes a file. */
+function externalMediaType(type: string | undefined): 'image' | 'video' | 'audio' | 'file' {
+  if (type === 'image' || type === 'video' || type === 'audio' || type === 'file') return type;
+  return 'file';
+}
+
+type ExternalEvent = {
+  payload_type: 'message' | 'comment';
+  customerInfo: { id: string; name: string | null; avatar: string | null };
+  payload: Record<string, unknown>;
+};
+
+/**
+ * Fans every inbound Messenger message / feed comment out to the external services that
+ * connected this Page. This runs before the store-channel lookup on purpose: an external
+ * service may own a Page that no store channel holds, and it must still receive the event.
+ * Delivery is best-effort — one dead webhook never stops the others or the store flow.
+ */
+async function forwardToExternalServices(
+  pageId: string,
+  platform: ChannelPlatform,
+  messaging: MessagingEvent[],
+  changes: WebhookChange[],
+): Promise<void> {
+  let targets: Awaited<ReturnType<typeof findExternalWebhookTargets>>;
+  try {
+    targets = await findExternalWebhookTargets(pageId, platform);
+  } catch (err) {
+    fbLog('external fan-out lookup failed', {
+      pageId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
+  if (!targets || targets.webhooks.length === 0) return;
+
+  const events: ExternalEvent[] = [];
+
+  for (const ev of messaging) {
+    if (ev.message?.is_echo) continue;
+    const senderId = ev.sender?.id;
+    if (!senderId) continue;
+
+    // "All possible customer info" Meta handed over: the PSID plus the public profile
+    // the Page token can resolve. A refused profile lookup is simply a missing name.
+    let profile: { name?: string | null; avatar?: string | null } = {};
+    try {
+      profile = await getFacebookUserProfile(targets.accessToken, senderId);
+    } catch (err) {
+      fbLog('external fan-out profile lookup failed', {
+        pageId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    const customerInfo = {
+      id: senderId,
+      name: profile.name ?? null,
+      avatar: profile.avatar ?? null,
+    };
+
+    const images = imageAttachmentUrls(ev);
+    if (images.length > 0) {
+      events.push({
+        payload_type: 'message',
+        customerInfo,
+        payload: {
+          type: 'media',
+          mediatype: 'image',
+          mediaUrl: images[0],
+          ...(ev.message?.text ? { text: ev.message.text } : {}),
+        },
+      });
+      continue;
+    }
+
+    const audioUrl = audioAttachmentUrl(ev);
+    if (audioUrl) {
+      events.push({
+        payload_type: 'message',
+        customerInfo,
+        payload: { type: 'media', mediatype: 'audio', mediaUrl: audioUrl },
+      });
+      continue;
+    }
+
+    const otherAttachment = ev.message?.attachments?.find(
+      (attachment) => attachment.payload?.url ?? attachment.url,
+    );
+    const otherUrl = otherAttachment?.payload?.url ?? otherAttachment?.url;
+    if (otherUrl) {
+      events.push({
+        payload_type: 'message',
+        customerInfo,
+        payload: {
+          type: 'media',
+          mediatype: externalMediaType(otherAttachment?.type),
+          mediaUrl: otherUrl,
+          ...(ev.message?.text ? { text: ev.message.text } : {}),
+        },
+      });
+      continue;
+    }
+
+    const text =
+      ev.message?.quick_reply?.payload?.trim() ||
+      ev.message?.text ||
+      (ev.postback ? postbackMessage(ev.postback) : '') ||
+      '';
+    if (text) {
+      events.push({ payload_type: 'message', customerInfo, payload: { type: 'text', text } });
+    }
+  }
+
+  for (const change of changes) {
+    if (change.field === 'feed') {
+      const value = change.value;
+      if (value?.item !== 'comment' || value.verb !== 'add') continue;
+      const commentId = value.comment_id;
+      const fromId = value.from?.id;
+      if (!commentId || !fromId || fromId === pageId) continue;
+      events.push({
+        payload_type: 'comment',
+        customerInfo: { id: fromId, name: value.from?.name ?? null, avatar: null },
+        payload: {
+          type: 'text',
+          text: value.message ?? '',
+          commentId,
+          postId: value.post_id ?? null,
+        },
+      });
+      continue;
+    }
+
+    if (change.field === 'comments') {
+      const value = change.value as unknown as InstagramCommentValue | undefined;
+      const legacy = (value ?? {}) as {
+        id?: string;
+        media_id?: string;
+        post_id?: string;
+        from?: { name?: string };
+      };
+      const commentId = value?.comment_id ?? legacy.id;
+      const fromId = value?.from?.id;
+      if (!commentId || !fromId || fromId === pageId) continue;
+      const postId = value?.media?.id ?? legacy.media_id ?? legacy.post_id;
+      events.push({
+        payload_type: 'comment',
+        customerInfo: {
+          id: fromId,
+          name: value?.from?.username ?? legacy.from?.name ?? null,
+          avatar: null,
+        },
+        payload: {
+          type: 'text',
+          text: value?.text ?? '',
+          commentId,
+          postId: postId ?? null,
+        },
+      });
+    }
+  }
+
+  if (events.length === 0) return;
+
+  await Promise.allSettled(
+    events.flatMap((event) =>
+      targets!.webhooks.map((hook) =>
+        fetch(hook, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...event, pageId }),
+          signal: AbortSignal.timeout(10_000),
+        })
+          .then((res) => {
+            if (!res.ok) {
+              fbLog('external webhook answered non-2xx', { pageId, status: res.status });
+            }
+          })
+          .catch((err) => {
+            fbLog('external webhook delivery failed', {
+              pageId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }),
+      ),
+    ),
+  );
+}
+
 /**
  * Processes every entry in a batched webhook payload. A single page can deliver
  * either Messenger `messaging` events (DMs) or `changes` events (page feed,
@@ -775,6 +965,17 @@ async function processEntries(
     if (messaging.length === 0 && changes.length === 0) {
       fbLog('processEntries skip entry — no messaging or changes', { accountId: entry.id });
       continue;
+    }
+
+    // External services first: they may own this Page without a store channel existing.
+    // A fan-out failure is logged and never blocks the store's own flow.
+    try {
+      await forwardToExternalServices(entry.id, platform, messaging, changes);
+    } catch (err) {
+      fbLog('external fan-out failed', {
+        pageId: entry.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     const channel =

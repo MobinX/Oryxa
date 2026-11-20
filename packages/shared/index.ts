@@ -7,6 +7,7 @@ export * from '@shared/schemas/store';
 export * from '@shared/schemas/product';
 export * from '@shared/schemas/order';
 export * from '@shared/schemas/channel';
+export * from '@shared/schemas/external-service';
 export * from '@shared/schemas/conversation';
 export * from '@shared/schemas/conversation-agent-state';
 export * from '@shared/schemas/post';

@@ -812,6 +812,84 @@ export const channels = pgTable('channels', {
 }));
 
 /**
+ * An external service: a third-party integration that connects Facebook/Instagram/WhatsApp/
+ * Telegram accounts through Oryxa and receives the inbound events it cares about.
+ *
+ * `uniqueName` is the caller-facing identifier used by `ext-service/search?uname=`. The row is
+ * soft-deleted through `deletedAt`, matching every other tenant-scoped table.
+ */
+export const externalServices = pgTable('external_service', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull(),
+  uniqueName: varchar('unique_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  uniq: uniqueIndex('external_service_unique_name_idx').on(t.uniqueName),
+}));
+
+/** One outbound webhook URL for a service. A service may have many; each is soft-deleted. */
+export const externalServiceWebhooks = pgTable('external_service_webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  serviceId: uuid('service_id').references(() => externalServices.id, { onDelete: 'cascade' }).notNull(),
+  webhookUrl: text('webhook_url').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  serviceIdx: index('external_service_webhooks_service_idx').on(t.serviceId),
+}));
+
+/**
+ * A platform account connected for an external service. Mirrors `channels` but belongs to an
+ * external service rather than a store: `platformChannelId` is the Page/account id Meta (or
+ * another platform) hands over, and both tokens are encrypted with the same envelope as
+ * `channels.api_token`.
+ */
+export const externalServiceChannels = pgTable('external_service_channel', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  serviceId: uuid('service_id').references(() => externalServices.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  platform: platformEnum('platform').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  platformChannelId: varchar('platform_channel_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  uniq: uniqueIndex('external_service_channel_service_platform_account_idx').on(
+    t.serviceId,
+    t.platform,
+    t.platformChannelId,
+  ),
+  // One live external connection per platform account, for the same reason `channels` has it:
+  // inbound webhooks carry only the page id and must resolve to exactly one owner.
+  liveUniq: uniqueIndex('external_service_channel_platform_account_live_idx')
+    .on(t.platform, t.platformChannelId)
+    .where(sql`${t.deletedAt} is null`),
+}));
+
+/**
+ * Short-lived page tokens banked between the OAuth callback and `connectChannel`. The external
+ * redirect only ever receives the page name/id, never a token; `connectChannel` redeems the
+ * token here by page id. Rows are consumed on connect and pruned by `expiresAt`.
+ */
+export const externalServicePendingPages = pgTable('external_service_pending_page', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: varchar('business_id', { length: 255 }).notNull(),
+  pageId: varchar('page_id', { length: 255 }).notNull(),
+  pageName: varchar('page_name', { length: 255 }).notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex('external_service_pending_page_business_page_idx').on(t.businessId, t.pageId),
+}));
+
+/**
  * One notification code per business. The merchant sends it as a DM to the operator's page;
  * the webhook binds that Messenger account to this business, and every later notice is also
  * delivered there as a message. `token` is a uuid so it cannot be guessed and never repeats.

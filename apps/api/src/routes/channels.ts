@@ -1000,6 +1000,33 @@ facebookCallbackRouter.get('/auth/facebook/callback', async (c) => {
       pages = combined;
     }
 
+    // External-service flow: the caller is not a merchant's browser. Bank the Page tokens
+    // behind internal_facebook_url, which posts the selected Page name/id to the external
+    // redirect; connectChannel later redeems the token by page id.
+    if (verified.external) {
+      if (!verified.returnOrigin) return c.text('Missing external redirect URL', 400);
+      if (pages.length === 0) {
+        return c.text('No Facebook Pages are available for this account', 400);
+      }
+      const pagesToken = await createFacebookPagesSelectionToken({
+        businessId: verified.businessId,
+        userId: verified.userId,
+        pages,
+        platform: 'facebook',
+        externalRedirectUrl: verified.returnOrigin,
+        ...(adsToken ? { adsToken } : {}),
+      });
+      const apiBase = (
+        process.env.API_PUBLIC_URL ??
+        process.env.NEXT_PUBLIC_API_URL ??
+        process.env.WEB_URL ??
+        'http://localhost:3001'
+      ).replace(/\/+$/, '');
+      return c.redirect(
+        `${apiBase}/api2/ext-service/internal_facebook_url?token=${encodeURIComponent(pagesToken)}`,
+      );
+    }
+
     if (platform === 'instagram') {
       const accounts = await withInstagramAccounts(pages);
       console.log('[fb-callback] pages linked to Instagram accounts', {
