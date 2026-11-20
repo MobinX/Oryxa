@@ -421,6 +421,13 @@
       "when": 1794300000000,
       "tag": "0059_external_services",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795173000000,
+      "tag": "0060_external_service_posts",
+      "breakpoints": true
     }
   ]
 }

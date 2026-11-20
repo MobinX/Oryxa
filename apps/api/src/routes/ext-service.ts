@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import {
   connectExternalChannelInputSchema,
+  createExternalPostInputSchema,
   createExternalServiceInputSchema,
   createExternalServiceWebhookInputSchema,
   externalSenderActionInputSchema,
@@ -9,6 +10,7 @@ import {
   getFacebookConnectOauthUrlInputSchema,
   sendExternalCommentReplyInputSchema,
   sendExternalMessageInputSchema,
+  updateExternalPostInputSchema,
   updateExternalServiceInputSchema,
   updateExternalServiceWebhookInputSchema,
 } from '@repo/shared';
@@ -17,30 +19,39 @@ import {
   ExternalServiceTakenError,
   createExternalService,
   createExternalServiceWebhook,
+  createExternalServicePost,
   deleteExternalService,
+  deleteExternalServicePost,
   deleteExternalServiceWebhook,
   deletePendingPage,
   getExternalService,
   getExternalServiceChannel,
+  getExternalServicePost,
   getExternalServiceWebhook,
   getPendingPage,
   listExternalServices,
   pruneExpiredPendingPages,
   savePendingPage,
   searchExternalServices,
+  updateExternalServicePost,
   updateExternalService,
   updateExternalServiceWebhook,
   upsertExternalServiceChannel,
 } from '@repo/db/crud/external-service';
 import {
   createOAuthState,
+  deleteFacebookPost,
   getFacebookOAuthUrl,
+  getFacebookPostComments,
+  getFacebookPostDetails,
   getPageIdForToken,
+  publishExternalPost,
   replyToFacebookComment,
   sendMediaMessage,
   sendMessage,
   senderAction,
   subscribeFacebookPageToWebhooks,
+  updateFacebookPost,
   verifyFacebookPagesSelectionToken,
 } from '@repo/integrations/facebook';
 
@@ -335,6 +346,139 @@ extServiceRouter.delete('/ext-service/:id/webhook/:webhookId', async (c) => {
     c.req.param('webhookId'),
   );
   if (!result) return c.json(badRequest('Webhook not found'), 404);
+  return c.json(result, 200);
+});
+
+// ── Posts ────────────────────────────────────────────────────────────────────
+
+/** A stored post plus the channel whose token may call Meta for it. */
+async function postWithChannel(serviceId: string, postId: string) {
+  const post = await getExternalServicePost(serviceId, postId);
+  if (!post) return null;
+  // The DB platform enum is wider than the external-service platforms; every stored post here
+  // was created through this router, so the value is always one of the four external platforms.
+  const platform = post.platform as 'facebook' | 'instagram' | 'whatsapp' | 'telegram';
+  const channel = await getExternalServiceChannel(serviceId, post.platformChannelId, platform);
+  if (!channel) return null;
+  return { post, channel };
+}
+
+function platformSupportsPosts(platform: string): boolean {
+  // Only Facebook has a post publisher registered; Instagram/WhatsApp/Telegram do not.
+  return platform === 'facebook';
+}
+
+extServiceRouter.post('/ext-service/:id/post', async (c) => {
+  const parsed = createExternalPostInputSchema.safeParse(await jsonBody(c));
+  if (!parsed.success) return c.json(badRequest('Invalid body', parsed.error.flatten()), 400);
+  const data = parsed.data;
+  if (!platformSupportsPosts(data.platform)) {
+    return c.json(badRequest('Post publishing is only supported for facebook'), 400);
+  }
+
+  const channel = await getExternalServiceChannel(c.req.param('id'), data.pageId, data.platform);
+  if (!channel) return c.json(badRequest('Channel not found for that page'), 404);
+
+  try {
+    const postId = await publishExternalPost(
+      channel.accessToken,
+      data.pageId,
+      data.postContent.text ?? '',
+      data.postContent.media ?? [],
+    );
+    await createExternalServicePost({
+      serviceId: c.req.param('id'),
+      channelId: channel.id,
+      platform: data.platform,
+      platformPostId: postId,
+      platformChannelId: data.pageId,
+      text: data.postContent.text ?? null,
+      media: data.postContent.media ?? [],
+    });
+    return c.json({ postId, id: postId, status: 'created' as const }, 201);
+  } catch (err) {
+    return c.json(
+      badRequest(err instanceof Error ? err.message : 'Post publishing failed'),
+      502,
+    );
+  }
+});
+
+extServiceRouter.get('/ext-service/:id/post/:postId', async (c) => {
+  const found = await postWithChannel(c.req.param('id'), c.req.param('postId'));
+  if (!found) return c.json(badRequest('Post not found'), 404);
+  if (!platformSupportsPosts(found.post.platform)) {
+    return c.json(badRequest('Post reading is only supported for facebook'), 400);
+  }
+
+  try {
+    const details = await getFacebookPostDetails(found.channel.accessToken, found.post.platformPostId);
+    return c.json({
+      id: found.post.platformPostId,
+      platform: found.post.platform,
+      pageId: found.post.platformChannelId,
+      text: details.text,
+      media: details.media,
+      createdAt: details.createdAt,
+      permalinkUrl: details.permalinkUrl,
+      stats: details.stats,
+    }, 200);
+  } catch (err) {
+    return c.json(badRequest(err instanceof Error ? err.message : 'Post read failed'), 502);
+  }
+});
+
+extServiceRouter.get('/ext-service/:id/post/:postId/comment', async (c) => {
+  const found = await postWithChannel(c.req.param('id'), c.req.param('postId'));
+  if (!found) return c.json(badRequest('Post not found'), 404);
+  if (!platformSupportsPosts(found.post.platform)) {
+    return c.json(badRequest('Comment reading is only supported for facebook'), 400);
+  }
+
+  try {
+    const comments = await getFacebookPostComments(found.channel.accessToken, found.post.platformPostId);
+    return c.json({ comments }, 200);
+  } catch (err) {
+    return c.json(badRequest(err instanceof Error ? err.message : 'Comment read failed'), 502);
+  }
+});
+
+extServiceRouter.put('/ext-service/:id/post/:postId', async (c) => {
+  const parsed = updateExternalPostInputSchema.safeParse(await jsonBody(c));
+  if (!parsed.success) return c.json(badRequest('Invalid body', parsed.error.flatten()), 400);
+  const found = await postWithChannel(c.req.param('id'), c.req.param('postId'));
+  if (!found) return c.json(badRequest('Post not found'), 404);
+  if (!platformSupportsPosts(found.post.platform)) {
+    return c.json(badRequest('Post updating is only supported for facebook'), 400);
+  }
+
+  try {
+    await updateFacebookPost(found.channel.accessToken, found.post.platformPostId, parsed.data.text);
+  } catch (err) {
+    return c.json(badRequest(err instanceof Error ? err.message : 'Post update failed'), 502);
+  }
+  const updated = await updateExternalServicePost(
+    c.req.param('id'),
+    c.req.param('postId'),
+    parsed.data.text,
+  );
+  return c.json({ postId: c.req.param('postId'), updated: true, text: updated?.text ?? parsed.data.text }, 200);
+});
+
+extServiceRouter.delete('/ext-service/:id/post/:postId', async (c) => {
+  const found = await postWithChannel(c.req.param('id'), c.req.param('postId'));
+  if (!found) return c.json(badRequest('Post not found'), 404);
+  if (!platformSupportsPosts(found.post.platform)) {
+    return c.json(badRequest('Post deleting is only supported for facebook'), 400);
+  }
+
+  try {
+    await deleteFacebookPost(found.channel.accessToken, found.post.platformPostId);
+  } catch (err) {
+    return c.json(badRequest(err instanceof Error ? err.message : 'Post delete failed'), 502);
+  }
+  const result = await deleteExternalServicePost(c.req.param('id'), c.req.param('postId'));
+  if (!result) return c.json(badRequest('Post not found'), 404);
   return c.json(result, 200);
 });
 

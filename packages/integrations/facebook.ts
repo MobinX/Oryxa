@@ -1379,6 +1379,207 @@ export async function publishFacebookPost(
   return data.post_id || data.id;
 }
 
+export type ExternalPostMediaItem = {
+  mediatype: 'image' | 'video' | 'audio' | 'file';
+  mediaUrl: string;
+};
+
+function postMediaType(metaType: string | undefined): ExternalPostMediaItem['mediatype'] {
+  if (metaType === 'photo' || metaType === 'image') return 'image';
+  if (metaType === 'video') return 'video';
+  if (metaType === 'audio') return 'audio';
+  return 'file';
+}
+
+async function requireGraph(formUrl: string, init: RequestInit, what: string): Promise<Response> {
+  const res = await loggedFetch(formUrl, init);
+  if (!res.ok) throw new Error(`${what} failed (HTTP ${res.status}): ${await res.text()}`);
+  return res;
+}
+
+/**
+ * Publishes a Page post for an external service. Text-only and single-image posts use the same
+ * endpoints as the store publisher. Several images are staged as unpublished photos and then
+ * attached to one feed post; video is uploaded on its own endpoint. Audio/file bubbles are not
+ * supported by the Page feed API and are rejected rather than silently dropped.
+ */
+export async function publishExternalPost(
+  pageToken: string,
+  pageId: string,
+  text: string,
+  media: ExternalPostMediaItem[] = [],
+): Promise<string> {
+  if (media.some((item) => item.mediatype === 'audio' || item.mediatype === 'file')) {
+    throw new Error('Audio and file media are not supported in Page posts');
+  }
+  const video = media.find((item) => item.mediatype === 'video');
+  if (video) {
+    const params = new URLSearchParams({
+      access_token: pageToken,
+      file_url: video.mediaUrl,
+      description: text,
+    });
+    const res = await requireGraph(
+      `${GRAPH_API}/${pageId}/videos`,
+      { method: 'POST', body: params },
+      'Facebook video upload',
+    );
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  const images = media.filter((item) => item.mediatype === 'image');
+  if (images.length <= 1) {
+    return publishFacebookPost(pageToken, pageId, text, images.map((item) => item.mediaUrl));
+  }
+
+  const photoIds: string[] = [];
+  for (const image of images) {
+    const params = new URLSearchParams({
+      access_token: pageToken,
+      url: image.mediaUrl,
+      published: 'false',
+    });
+    const res = await requireGraph(
+      `${GRAPH_API}/${pageId}/photos`,
+      { method: 'POST', body: params },
+      'Facebook photo upload',
+    );
+    photoIds.push(((await res.json()) as { id: string }).id);
+  }
+
+  const feedParams = new URLSearchParams({
+    access_token: pageToken,
+    media_fbid: photoIds.join(','),
+    message: text,
+  });
+  const res = await requireGraph(
+    `${GRAPH_API}/${pageId}/feed`,
+    { method: 'POST', body: feedParams },
+    'Facebook multi-photo publish',
+  );
+  const data = (await res.json()) as { id: string; post_id?: string };
+  return data.post_id || data.id;
+}
+
+/** Reads a Page post's content and the stats an external service needs to show. */
+export async function getFacebookPostDetails(
+  pageToken: string,
+  postId: string,
+): Promise<{
+  id: string;
+  text: string | null;
+  createdAt: string | null;
+  permalinkUrl: string | null;
+  media: ExternalPostMediaItem[];
+  stats: { likeCount: number; commentCount: number; shareCount: number; reachCount: number };
+}> {
+  const fields = [
+    'id',
+    'message',
+    'created_time',
+    'permalink_url',
+    'attachments{media_type,url,title}',
+    'likes.summary(true).limit(0)',
+    'comments.summary(true).limit(0)',
+    'shares',
+  ].join(',');
+  const res = await loggedFetch(
+    `${GRAPH_API}/${postId}?fields=${encodeURIComponent(fields)}&access_token=${pageToken}`,
+  );
+  if (!res.ok) throw new Error(`Facebook fetch post failed (HTTP ${res.status}): ${await res.text()}`);
+  const d = (await res.json()) as {
+    id?: string;
+    message?: string;
+    created_time?: string;
+    permalink_url?: string;
+    attachments?: { data?: Array<{ media_type?: string; url?: string }> };
+    likes?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+    shares?: { count?: number };
+  };
+  return {
+    id: d.id ?? postId,
+    text: d.message ?? null,
+    createdAt: d.created_time ?? null,
+    permalinkUrl: d.permalink_url ?? null,
+    media: (d.attachments?.data ?? [])
+      .map((att) => ({ mediatype: postMediaType(att.media_type), mediaUrl: att.url ?? '' }))
+      .filter((item) => item.mediaUrl.length > 0),
+    stats: {
+      likeCount: d.likes?.summary?.total_count ?? 0,
+      commentCount: d.comments?.summary?.total_count ?? 0,
+      shareCount: d.shares?.count ?? 0,
+      reachCount: 0,
+    },
+  };
+}
+
+/** All top-level comments (including replies) on a Page post, oldest first. */
+export async function getFacebookPostComments(
+  pageToken: string,
+  postId: string,
+): Promise<
+  Array<{
+    id: string;
+    text: string;
+    commenterId: string | null;
+    commenterName: string | null;
+    createdAt: string | null;
+    likeCount: number;
+    parentId: string | null;
+  }>
+> {
+  const fields = 'id,message,from,created_time,like_count,parent';
+  const res = await loggedFetch(
+    `${GRAPH_API}/${postId}/comments?fields=${encodeURIComponent(fields)}&filter=stream&order=chronological&limit=100&access_token=${pageToken}`,
+  );
+  if (!res.ok) {
+    throw new Error(`Facebook fetch comments failed (HTTP ${res.status}): ${await res.text()}`);
+  }
+  const d = (await res.json()) as {
+    data?: Array<{
+      id?: string;
+      message?: string;
+      from?: { id?: string; name?: string };
+      created_time?: string;
+      like_count?: number;
+      parent?: { id?: string };
+    }>;
+  };
+  return (d.data ?? []).map((item) => ({
+    id: item.id ?? '',
+    text: item.message ?? '',
+    commenterId: item.from?.id ?? null,
+    commenterName: item.from?.name ?? null,
+    createdAt: item.created_time ?? null,
+    likeCount: item.like_count ?? 0,
+    parentId: item.parent?.id ?? null,
+  }));
+}
+
+/** Edits a Page post's text. Meta only allows editing text, never the attachments. */
+export async function updateFacebookPost(
+  pageToken: string,
+  postId: string,
+  text: string,
+): Promise<void> {
+  const params = new URLSearchParams({ access_token: pageToken, message: text });
+  await requireGraph(
+    `${GRAPH_API}/${postId}`,
+    { method: 'POST', body: params },
+    'Facebook post update',
+  );
+}
+
+/** Removes a Page post. */
+export async function deleteFacebookPost(pageToken: string, postId: string): Promise<void> {
+  await requireGraph(
+    `${GRAPH_API}/${postId}?access_token=${pageToken}`,
+    { method: 'DELETE' },
+    'Facebook post delete',
+  );
+}
+
 export async function fetchFacebookPostStats(
   pageToken: string,
   postId: string,

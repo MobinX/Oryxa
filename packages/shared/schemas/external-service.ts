@@ -115,3 +115,54 @@ export const externalSenderActionInputSchema = z.object({
   recipientId: z.string().min(1),
   platformType: externalServicePlatformSchema.default('facebook'),
 });
+
+/** One media bubble in an external-service post. */
+export const externalPostMediaSchema = z.object({
+  mediatype: z.enum(['image', 'video', 'audio', 'file']),
+  mediaUrl: z.string().url(),
+});
+export type ExternalPostMedia = z.infer<typeof externalPostMediaSchema>;
+
+export const createExternalPostInputSchema = z.object({
+  pageId: z.string().min(1),
+  platform: externalServicePlatformSchema.default('facebook'),
+  postContent: z
+    .object({
+      text: z.string().max(5000).optional(),
+      media: z.array(externalPostMediaSchema).max(10).optional(),
+    })
+    .refine((content) => Boolean(content.text?.trim() || content.media?.length), {
+      message: 'A post needs text or at least one media item',
+    }),
+});
+
+export const updateExternalPostInputSchema = z.object({
+  text: z.string().max(5000).min(1),
+});
+
+export const externalPostStatsSchema = z.object({
+  likeCount: z.number(),
+  commentCount: z.number(),
+  shareCount: z.number(),
+  reachCount: z.number(),
+});
+
+export const externalPostSchema = z.object({
+  id: z.string(),
+  platform: externalServicePlatformSchema,
+  pageId: z.string(),
+  text: z.string().nullable(),
+  media: z.array(externalPostMediaSchema),
+  createdAt: z.string(),
+});
+
+export const externalPostCommentSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  commenterId: z.string().nullable(),
+  commenterName: z.string().nullable(),
+  createdAt: z.string(),
+  likeCount: z.number(),
+  parentId: z.string().nullable(),
+});
+

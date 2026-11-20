@@ -3,13 +3,18 @@ import { withPglite } from '../helpers/with-pglite';
 import { app } from '@api/app';
 import {
   createFacebookPagesSelectionToken,
+  deleteFacebookPost,
   getFacebookOAuthUrl,
+  getFacebookPostComments,
+  getFacebookPostDetails,
   getPageIdForToken,
+  publishExternalPost,
   replyToFacebookComment,
   sendMediaMessage,
   sendMessage,
   senderAction,
   subscribeFacebookPageToWebhooks,
+  updateFacebookPost,
 } from '@repo/integrations/facebook';
 import {
   getExternalServiceChannel,
@@ -39,6 +44,28 @@ vi.mock('@repo/integrations/facebook', async (importOriginal) => {
     sendMediaMessage: vi.fn(async () => undefined),
     senderAction: vi.fn(async () => undefined),
     replyToFacebookComment: vi.fn(async () => 'REPLY_1'),
+    publishExternalPost: vi.fn(async () => 'FB_POST_1'),
+    getFacebookPostDetails: vi.fn(async () => ({
+      id: 'FB_POST_1',
+      text: 'Hello from the external service',
+      createdAt: '2026-11-20T11:00:00.000Z',
+      permalinkUrl: 'https://facebook.com/posts/FB_POST_1',
+      media: [],
+      stats: { likeCount: 3, commentCount: 2, shareCount: 1, reachCount: 0 },
+    })),
+    getFacebookPostComments: vi.fn(async () => [
+      {
+        id: 'COMMENT_1',
+        text: 'Nice post',
+        commenterId: 'USER_1',
+        commenterName: 'Mobin',
+        createdAt: '2026-11-20T11:01:00.000Z',
+        likeCount: 1,
+        parentId: null,
+      },
+    ]),
+    updateFacebookPost: vi.fn(async () => undefined),
+    deleteFacebookPost: vi.fn(async () => undefined),
   };
 });
 
@@ -377,5 +404,109 @@ describe('External service API', () => {
     const { verifyFacebookPagesSelectionToken } = await import('@repo/integrations/facebook');
     const verified = await verifyFacebookPagesSelectionToken(token);
     expect(verified?.externalRedirectUrl).toBe('https://external.example.com/hook');
+  });
+
+  it('creates, reads, updates, lists comments on and deletes a post', async () => {
+    const service = await createService('Posts', `posts-${crypto.randomUUID()}`);
+    await upsertExternalServiceChannel({
+      serviceId: service.id,
+      name: 'Post Page',
+      platform: 'facebook',
+      accessToken: 'page-token-post',
+      platformChannelId: 'PAGE_POST',
+    });
+
+    const created = await app.request(`/api2/ext-service/${service.id}/post`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        pageId: 'PAGE_POST',
+        platform: 'facebook',
+        postContent: {
+          text: 'Hello from the external service',
+          media: [{ mediatype: 'image', mediaUrl: 'https://cdn.example.com/a.jpg' }],
+        },
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toEqual({
+      postId: 'FB_POST_1',
+      id: 'FB_POST_1',
+      status: 'created',
+    });
+    expect(publishExternalPost).toHaveBeenCalledWith('page-token-post', 'PAGE_POST', 'Hello from the external service', [
+      { mediatype: 'image', mediaUrl: 'https://cdn.example.com/a.jpg' },
+    ]);
+
+    const read = await app.request(`/api2/ext-service/${service.id}/post/FB_POST_1`);
+    expect(read.status).toBe(200);
+    const body = (await read.json()) as {
+      id: string;
+      text: string;
+      stats: { likeCount: number; commentCount: number; shareCount: number };
+    };
+    expect(body).toMatchObject({
+      id: 'FB_POST_1',
+      text: 'Hello from the external service',
+      stats: { likeCount: 3, commentCount: 2, shareCount: 1 },
+    });
+
+    const comments = await app.request(`/api2/ext-service/${service.id}/post/FB_POST_1/comment`);
+    expect(comments.status).toBe(200);
+    expect(await comments.json()).toEqual({
+      comments: [
+        {
+          id: 'COMMENT_1',
+          text: 'Nice post',
+          commenterId: 'USER_1',
+          commenterName: 'Mobin',
+          createdAt: '2026-11-20T11:01:00.000Z',
+          likeCount: 1,
+          parentId: null,
+        },
+      ],
+    });
+
+    const updated = await app.request(`/api2/ext-service/${service.id}/post/FB_POST_1`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ text: 'Edited text' }),
+    });
+    expect(updated.status).toBe(200);
+    expect(updateFacebookPost).toHaveBeenCalledWith('page-token-post', 'FB_POST_1', 'Edited text');
+
+    const removed = await app.request(`/api2/ext-service/${service.id}/post/FB_POST_1`, {
+      method: 'DELETE',
+    });
+    expect(removed.status).toBe(200);
+    expect(deleteFacebookPost).toHaveBeenCalledWith('page-token-post', 'FB_POST_1');
+
+    const gone = await app.request(`/api2/ext-service/${service.id}/post/FB_POST_1`);
+    expect(gone.status).toBe(404);
+  });
+
+  it('rejects posts for platforms without a publisher and posts with no content', async () => {
+    const service = await createService('No Posts', `noposts-${crypto.randomUUID()}`);
+    await upsertExternalServiceChannel({
+      serviceId: service.id,
+      name: 'IG Page',
+      platform: 'instagram',
+      accessToken: 'ig-token',
+      platformChannelId: 'IG_POST',
+    });
+
+    const unsupported = await app.request(`/api2/ext-service/${service.id}/post`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ pageId: 'IG_POST', platform: 'instagram', postContent: { text: 'Hi' } }),
+    });
+    expect(unsupported.status).toBe(400);
+
+    const empty = await app.request(`/api2/ext-service/${service.id}/post`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ pageId: 'IG_POST', platform: 'facebook', postContent: {} }),
+    });
+    expect(empty.status).toBe(400);
   });
 });

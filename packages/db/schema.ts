@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
-import type { ConversationAgentState } from '@repo/shared';
+import type { ConversationAgentState, ExternalPostMedia } from '@repo/shared';
 
 /** One region the merchant delivers to and the charge they quote for it. */
 export type DeliveryZone = {
@@ -887,6 +887,27 @@ export const externalServicePendingPages = pgTable('external_service_pending_pag
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
   uniq: uniqueIndex('external_service_pending_page_business_page_idx').on(t.businessId, t.pageId),
+}));
+
+/**
+ * Posts published through an external service. The platform post id is the key the caller uses
+ * in `/ext-service/:id/post/:postId`; the row remembers which channel's token may read/edit it.
+ */
+export const externalServicePosts = pgTable('external_service_post', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  serviceId: uuid('service_id').references(() => externalServices.id, { onDelete: 'cascade' }).notNull(),
+  channelId: uuid('channel_id').references(() => externalServiceChannels.id, { onDelete: 'cascade' }).notNull(),
+  platform: platformEnum('platform').notNull(),
+  platformPostId: varchar('platform_post_id', { length: 255 }).notNull(),
+  platformChannelId: varchar('platform_channel_id', { length: 255 }).notNull(),
+  text: text('text'),
+  media: jsonb('media').$type<ExternalPostMedia[]>().default([]).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => ({
+  uniq: uniqueIndex('external_service_post_service_platform_post_idx').on(t.serviceId, t.platformPostId),
+  serviceIdx: index('external_service_post_service_idx').on(t.serviceId),
 }));
 
 /**

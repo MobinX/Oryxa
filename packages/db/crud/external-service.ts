@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import {
   externalServiceChannels,
   externalServicePendingPages,
+  externalServicePosts,
   externalServices,
   externalServiceWebhooks,
 } from '@db/schema';
@@ -10,6 +11,7 @@ import { decryptChannelToken, encryptChannelToken } from '@repo/db/crud/channel'
 import {
   createExternalServiceInputSchema,
   updateExternalServiceInputSchema,
+  type ExternalPostMedia,
 } from '@repo/shared';
 
 /** A unique_name that is already in use by a live service. */
@@ -384,4 +386,74 @@ export async function pruneExpiredPendingPages() {
   await db
     .delete(externalServicePendingPages)
     .where(sql`${externalServicePendingPages.expiresAt} <= now()`);
+}
+
+// ── Posts ────────────────────────────────────────────────────────────────────
+
+export async function createExternalServicePost(input: {
+  serviceId: string;
+  channelId: string;
+  platform: ExternalPlatform;
+  platformPostId: string;
+  platformChannelId: string;
+  text?: string | null;
+  media?: ExternalPostMedia[];
+}) {
+  const [created] = await db
+    .insert(externalServicePosts)
+    .values({
+      serviceId: input.serviceId,
+      channelId: input.channelId,
+      platform: input.platform,
+      platformPostId: input.platformPostId,
+      platformChannelId: input.platformChannelId,
+      text: input.text ?? null,
+      media: input.media ?? [],
+    })
+    .returning();
+  return created;
+}
+
+export async function getExternalServicePost(serviceId: string, platformPostId: string) {
+  return db.query.externalServicePosts.findFirst({
+    where: and(
+      eq(externalServicePosts.serviceId, serviceId),
+      eq(externalServicePosts.platformPostId, platformPostId),
+      isNull(externalServicePosts.deletedAt),
+    ),
+  });
+}
+
+export async function updateExternalServicePost(
+  serviceId: string,
+  platformPostId: string,
+  text: string,
+) {
+  const [updated] = await db
+    .update(externalServicePosts)
+    .set({ text, updatedAt: new Date() })
+    .where(
+      and(
+        eq(externalServicePosts.serviceId, serviceId),
+        eq(externalServicePosts.platformPostId, platformPostId),
+        isNull(externalServicePosts.deletedAt),
+      ),
+    )
+    .returning();
+  return updated ?? null;
+}
+
+export async function deleteExternalServicePost(serviceId: string, platformPostId: string) {
+  const [deleted] = await db
+    .update(externalServicePosts)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(externalServicePosts.serviceId, serviceId),
+        eq(externalServicePosts.platformPostId, platformPostId),
+        isNull(externalServicePosts.deletedAt),
+      ),
+    )
+    .returning({ id: externalServicePosts.id });
+  return deleted ? { deleted: true } : null;
 }
