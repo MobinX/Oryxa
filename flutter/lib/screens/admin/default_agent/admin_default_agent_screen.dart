@@ -248,10 +248,13 @@ class _AdminDefaultAgentScreenState extends State<AdminDefaultAgentScreen> with 
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'System Prompt',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                Flexible(
+                                  child: Text(
+                                    'System Prompt',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   '${_systemPromptController.text.length} / 40,000 chars',
                                   style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),
@@ -300,10 +303,13 @@ class _AdminDefaultAgentScreenState extends State<AdminDefaultAgentScreen> with 
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Messenger Wording (Reply Guidance)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                Flexible(
+                                  child: Text(
+                                    'Messenger Wording (Reply Guidance)',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   '${_replyGuidanceController.text.length} / 12,000 chars',
                                   style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),
@@ -352,10 +358,13 @@ class _AdminDefaultAgentScreenState extends State<AdminDefaultAgentScreen> with 
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Public Comment Wording (Page Comments)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                Flexible(
+                                  child: Text(
+                                    'Public Comment Wording (Page Comments)',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   '${_commentGuidanceController.text.length} / 12,000 chars',
                                   style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),

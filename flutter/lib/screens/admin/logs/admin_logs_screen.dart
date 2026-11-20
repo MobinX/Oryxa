@@ -125,35 +125,43 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (isError
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (isError
+                                    ? AppTheme.danger
+                                    : isWarn
+                                        ? Colors.amber
+                                        : Colors.blue)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            (item['evt'] ?? 'EVENT').toString().toUpperCase(),
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isError
                                   ? AppTheme.danger
                                   : isWarn
-                                      ? Colors.amber
-                                      : Colors.blue)
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          (item['evt'] ?? 'EVENT').toString().toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isError
-                                ? AppTheme.danger
-                                : isWarn
-                                    ? Colors.amber.shade800
-                                    : Colors.blue,
+                                      ? Colors.amber.shade800
+                                      : Colors.blue,
+                            ),
                           ),
                         ),
                       ),
-                      Text(
-                        _dateFormat.format(item['time'] as DateTime),
-                        style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _dateFormat.format(item['time'] as DateTime),
+                          textAlign: TextAlign.end,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),
+                        ),
                       ),
                     ],
                   ),

@@ -38,9 +38,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Header & Range Selector
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // Header & Range Selector — wrap so the range chips drop to a
+                // second line instead of overflowing on narrow screens.
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,8 +169,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          Wrap(
+                            alignment: WrapAlignment.spaceAround,
+                            spacing: 12,
+                            runSpacing: 12,
                             children: [
                               _buildSnapshotItem('Merchants', stats.snapshot.users),
                               _buildSnapshotItem('Stores', stats.snapshot.businesses),
@@ -274,12 +280,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                Flexible(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                    ),
                   ),
                 ),
                 Container(

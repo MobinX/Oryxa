@@ -390,20 +390,26 @@ class _AdminBusinessTokenScreenState extends State<AdminBusinessTokenScreen> {
                                 ),
                                 const SizedBox(height: 6),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      '$runs runs · $tokens tokens ($inTokens in / $outTokens out)',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                    Flexible(
+                                      child: Text(
+                                        '$runs runs · $tokens tokens ($inTokens in / $outTokens out)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                        ),
                                       ),
                                     ),
-                                    Text(
-                                      'Hit: $hitPercent% · Avg: $avgRun',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        'Hit: $hitPercent% · Avg: $avgRun',
+                                        textAlign: TextAlign.end,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -466,67 +472,74 @@ class _AdminBusinessTokenScreenState extends State<AdminBusinessTokenScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 90,
-                                      child: Text(
-                                        date,
-                                        style: TextStyle(
-                                          fontFamily: 'monospace',
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                // Fixed table columns are wider than a phone viewport,
+                                // so let the row scroll instead of overflowing the card.
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 90,
+                                        child: Text(
+                                          date,
+                                          style: TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    Expanded(
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: LinearProgressIndicator(
-                                          value: ratio,
-                                          minHeight: 8,
-                                          backgroundColor: isDark ? Colors.white10 : Colors.black12,
-                                          color: AppTheme.primaryColor,
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 80,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: ratio,
+                                            minHeight: 8,
+                                            backgroundColor: isDark ? Colors.white10 : Colors.black12,
+                                            color: AppTheme.primaryColor,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    SizedBox(
-                                      width: 75,
-                                      child: Text(
-                                        AdminFormat.whole(tTokens),
-                                        textAlign: TextAlign.right,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    SizedBox(
-                                      width: 50,
-                                      child: Text(
-                                        '${AdminFormat.whole(dRuns)}r',
-                                        textAlign: TextAlign.right,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                      const SizedBox(width: 10),
+                                      SizedBox(
+                                        width: 75,
+                                        child: Text(
+                                          AdminFormat.whole(tTokens),
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    SizedBox(
-                                      width: 65,
-                                      child: Text(
-                                        dCost,
-                                        textAlign: TextAlign.right,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF10B981),
-                                          fontFamily: 'monospace',
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 50,
+                                        child: Text(
+                                          '${AdminFormat.whole(dRuns)}r',
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 65,
+                                        child: Text(
+                                          dCost,
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF10B981),
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),

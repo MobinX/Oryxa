@@ -408,20 +408,26 @@ class _AdminTokensScreenState extends State<AdminTokensScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'Tokens: ${AdminFormat.whole(bTotal)} (${AdminFormat.whole(bIn)} in / ${AdminFormat.whole(bOut)} out)',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                      Flexible(
+                                        child: Text(
+                                          'Tokens: ${AdminFormat.whole(bTotal)} (${AdminFormat.whole(bIn)} in / ${AdminFormat.whole(bOut)} out)',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                          ),
                                         ),
                                       ),
-                                      Text(
-                                        'Hit: ${bHit.toStringAsFixed(1)}% · Avg: ${AdminFormat.whole(bAvg.round())}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'Hit: ${bHit.toStringAsFixed(1)}% · Avg: ${AdminFormat.whole(bAvg.round())}',
+                                          textAlign: TextAlign.end,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
+                                          ),
                                         ),
                                       ),
                                     ],

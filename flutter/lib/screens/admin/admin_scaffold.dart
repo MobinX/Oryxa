@@ -245,9 +245,12 @@ class _AdminScaffoldState extends State<AdminScaffold> {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              currentItem.label,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            Flexible(
+              child: Text(
+                currentItem.label,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
