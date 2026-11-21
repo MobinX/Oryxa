@@ -340,3 +340,31 @@ export function classifyTurnIntent(
 
   return 'general';
 }
+
+/**
+ * Token-safe color and size extraction from a variant name (e.g. "Black XL", "Navy M", "Crimson").
+ */
+export function parseVariantAttributes(name: string): { color: string | null; size: string | null } {
+  let norm = (name || '').trim();
+  // If variant name is formatted as "Product Name - Variant Details", isolate variant details
+  if (norm.includes(' - ')) {
+    norm = norm.split(' - ').slice(1).join(' - ').trim();
+  } else if (norm.includes(' — ')) {
+    norm = norm.split(' — ').slice(1).join(' — ').trim();
+  }
+
+  const tokens = norm.split(/\s+/);
+  const knownSizes = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'SMALL', 'MEDIUM', 'LARGE', 'FREE', 'FREESIZE']);
+  let size: string | null = null;
+  const colorTokens: string[] = [];
+  for (const t of tokens) {
+    if (knownSizes.has(t.toUpperCase())) {
+      size = t;
+    } else {
+      colorTokens.push(t);
+    }
+  }
+  const color = colorTokens.length > 0 ? colorTokens.join(' ') : null;
+  return { color, size };
+}
+
