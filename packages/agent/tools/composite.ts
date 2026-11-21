@@ -286,9 +286,9 @@ export function createCompositeTools(context: CompositeToolsContext) {
 
       // Extract all declared colors and sizes
       const allVariants = targetProduct.variants ?? [];
-      const parsedVariants = allVariants.map((v: any) => parseVariantAttributes(v.name));
-      const availableColors = Array.from(new Set(parsedVariants.map((p) => p.color).filter(Boolean)));
-      const availableSizes = Array.from(new Set(parsedVariants.map((p) => p.size).filter(Boolean)));
+      const parsedVariants: Array<{ color: string | null; size: string | null }> = allVariants.map((v: any) => parseVariantAttributes(v.name));
+      const availableColors = Array.from(new Set(parsedVariants.map((p: { color: string | null }) => p.color).filter((c): c is string => Boolean(c))));
+      const availableSizes = Array.from(new Set(parsedVariants.map((p: { size: string | null }) => p.size).filter((s): s is string => Boolean(s))));
 
       // Update agent state
       if (context.agentState) {
@@ -325,8 +325,8 @@ export function createCompositeTools(context: CompositeToolsContext) {
         stockAvailable,
         availableColors,
         availableSizes,
-        paymentStrategy: PAYMENT_STRATEGY_LABELS[effectiveStrategy],
-        paymentStrategyDetails: PAYMENT_STRATEGY_DESCRIPTIONS[effectiveStrategy],
+        paymentStrategy: PAYMENT_STRATEGY_LABELS[effectiveStrategy.effective],
+        paymentStrategyDetails: PAYMENT_STRATEGY_DESCRIPTIONS[effectiveStrategy.effective],
       };
 
       return logResult(JSON.stringify(quote));

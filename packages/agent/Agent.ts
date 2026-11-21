@@ -15,6 +15,7 @@ import {
   classifyTurnIntent,
   classifyTurnHybrid,
   type JevClassificationResult,
+  type JevIntentCategory,
   validateAndSanitizeReply,
   isRepeatAnswer,
   repeatAlert,
