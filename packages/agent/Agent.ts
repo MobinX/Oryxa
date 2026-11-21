@@ -388,12 +388,17 @@ export class Agent {
         (text) => sentTexts.push(text),
       );
 
-    const latestCustomerMsg = [...this.config.history].reverse().find((m) => m.from === 'customer')?.content ?? '';
+    const latestCustomerTurn = [...this.config.history].reverse().find((m) => m.from === 'customer');
+    const latestCustomerMsg = latestCustomerTurn?.content ?? '';
+    const hasImages = (latestCustomerTurn?.imageKeys?.length ?? 0) > 0 || Boolean(latestCustomerTurn?.hadImages);
     const turnLanguage = detectTurnLanguage(latestCustomerMsg, this.config.agentState);
     const turnIntent = classifyTurnIntent(latestCustomerMsg, this.config.agentState, this.config.postContext);
 
     // Hybrid Jev + Deterministic semantic intent classification
-    const hybridIntentResult = await classifyTurnHybrid(latestCustomerMsg, this.config.agentState);
+    // If the turn has an image but no typed caption, fast-path deterministically to visual catalog lookup
+    const hybridIntentResult = (!latestCustomerMsg.trim() && hasImages)
+      ? { intents: ['browse', 'quote'] as JevIntentCategory[], confidence: 1.0, scores: { browse: 1.0, quote: 1.0 }, source: 'deterministic' as const, latencyMs: 0 }
+      : await classifyTurnHybrid(latestCustomerMsg, this.config.agentState);
 
     // Dynamic tool selection: bind 2 to 4 optimal tools if not manually overridden
     const activeTools = this.config.tools ?? selectToolsForTurn({
@@ -402,6 +407,7 @@ export class Agent {
       allTools: Object.fromEntries(tools.map((t) => [t.name, t])),
       enableCompositeTools: true,
       maxTools: 4,
+      hasImages,
     });
 
     const agent = createReactAgent({ llm, tools: activeTools });

@@ -305,4 +305,18 @@ describe('Dynamic Tool Selector', () => {
     expect(names).toContain('get_product');
     expect(names).toContain('send_suggestions');
   });
+
+  it('prioritizes catalog search tools when customer uploads an image', () => {
+    const selected = selectToolsForTurn({
+      intents: ['general'],
+      allTools: mockRegistry,
+      enableCompositeTools: true,
+      maxTools: 4,
+      hasImages: true,
+    });
+
+    const names = selected.map((t) => t.name);
+    expect(names).toContain('browse_catalog');
+    expect(names).toContain('get_product_quote');
+  });
 });

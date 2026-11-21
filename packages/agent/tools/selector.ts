@@ -20,13 +20,26 @@ export interface DynamicToolSelectorOptions {
   enableCompositeTools?: boolean;
   /** Maximum tools to provide to GPT Luna in one turn (defaults to 4) */
   maxTools?: number;
+  /** Whether the customer provided an image in the current exchange */
+  hasImages?: boolean;
 }
 
 export function selectToolsForTurn(options: DynamicToolSelectorOptions): StructuredTool[] {
-  const { intents, agentState, allTools, enableCompositeTools = true, maxTools = 4 } = options;
+  const { intents, agentState, allTools, enableCompositeTools = true, maxTools = 4, hasImages = false } = options;
   const selectedToolNames = new Set<string>();
 
-  // 1. Check active pending checkout state
+  // 1. If customer sent an image, ensure visual catalog search/quote tools are prioritized
+  if (hasImages) {
+    if (enableCompositeTools && allTools.browse_catalog) {
+      selectedToolNames.add('browse_catalog');
+      selectedToolNames.add('get_product_quote');
+    } else {
+      if (allTools.get_product) selectedToolNames.add('get_product');
+      if (allTools.find_variant) selectedToolNames.add('find_variant');
+    }
+  }
+
+  // 2. Check active pending checkout state
   if (agentState?.pendingOrder) {
     if (enableCompositeTools && allTools.place_order) {
       selectedToolNames.add('place_order');

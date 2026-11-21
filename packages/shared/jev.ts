@@ -88,7 +88,12 @@ export async function classifyWithJev(
   options: JevClientOptions = {}
 ): Promise<JevClassificationResult> {
   const started = Date.now();
-  const apiKey = options.apiKey ?? process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY;
+  const apiKey =
+    options.apiKey ??
+    process.env.TYPESAFE_API_KEY ??
+    process.env.JEV_API_KEY ??
+    process.env.jev_api ??
+    process.env.JEV_API;
   const baseUrl = (options.baseUrl ?? process.env.TYPESAFE_BASE_URL ?? DEFAULT_JEV_BASE_URL).replace(/\/$/, '');
   const model = options.model ?? process.env.JEV_MODEL ?? DEFAULT_JEV_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS;
