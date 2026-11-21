@@ -13,12 +13,15 @@ import {
   formatCompactAgentState,
   detectTurnLanguage,
   classifyTurnIntent,
+  classifyTurnHybrid,
+  type JevClassificationResult,
   validateAndSanitizeReply,
   isRepeatAnswer,
   repeatAlert,
   PAYMENT_STRATEGY_DESCRIPTIONS,
   PAYMENT_STRATEGY_LABELS,
 } from '@repo/shared';
+import { selectToolsForTurn } from '@agent/tools';
 
 /** Callback type for emitting structured debug/observability events. */
 export type SseEmitter = (event: string, data: unknown) => void;
@@ -385,15 +388,27 @@ export class Agent {
         (text) => sentTexts.push(text),
       );
 
-    const agent = createReactAgent({ llm, tools });
+    const latestCustomerMsg = [...this.config.history].reverse().find((m) => m.from === 'customer')?.content ?? '';
+    const turnLanguage = detectTurnLanguage(latestCustomerMsg, this.config.agentState);
+    const turnIntent = classifyTurnIntent(latestCustomerMsg, this.config.agentState, this.config.postContext);
+
+    // Hybrid Jev + Deterministic semantic intent classification
+    const hybridIntentResult = await classifyTurnHybrid(latestCustomerMsg, this.config.agentState);
+
+    // Dynamic tool selection: bind 2 to 4 optimal tools if not manually overridden
+    const activeTools = this.config.tools ?? selectToolsForTurn({
+      intents: hybridIntentResult.intents,
+      agentState: this.config.agentState,
+      allTools: Object.fromEntries(tools.map((t) => [t.name, t])),
+      enableCompositeTools: true,
+      maxTools: 4,
+    });
+
+    const agent = createReactAgent({ llm, tools: activeTools });
 
     const systemContent = [this.config.systemPrompt, replyGuidance]
       .filter(Boolean)
       .join('\n');
-
-    const latestCustomerMsg = [...this.config.history].reverse().find((m) => m.from === 'customer')?.content ?? '';
-    const turnLanguage = detectTurnLanguage(latestCustomerMsg, this.config.agentState);
-    const turnIntent = classifyTurnIntent(latestCustomerMsg, this.config.agentState, this.config.postContext);
 
     // Save detected language to agentState
     if (this.config.agentState) {
@@ -433,13 +448,16 @@ export class Agent {
       turnIntent ? `Turn intent: ${turnIntent}.` : '',
     ].filter(Boolean).join('\n');
 
-    console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length} lang=${turnLanguage} intent=${turnIntent}`);
+    console.log(`[agent] starting run — conversationId=${this.config.conversationId} historyLen=${this.config.history.length} lang=${turnLanguage} intent=${turnIntent} hybridIntents=${hybridIntentResult.intents.join(',')}`);
     emitSse?.('agent_start', {
       conversationId: this.config.conversationId,
       business: this.config.business.name,
       historyLen: this.config.history.length,
       turnLanguage,
       turnIntent,
+      hybridIntents: hybridIntentResult.intents,
+      hybridSource: hybridIntentResult.source,
+      hybridConfidence: hybridIntentResult.confidence,
     });
 
     const messages: BaseMessage[] = [

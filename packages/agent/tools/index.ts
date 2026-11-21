@@ -41,6 +41,10 @@ import {
   upfrontKind,
 } from '@repo/shared';
 
+import { createCompositeTools } from '@agent/tools/composite';
+export { createCompositeTools } from '@agent/tools/composite';
+export { selectToolsForTurn, type DynamicToolSelectorOptions } from '@agent/tools/selector';
+
 /** A catalog row with its variants, exactly as `searchProducts` hands it back. */
 type SearchedProduct = Awaited<ReturnType<typeof searchProducts>>[number];
 
@@ -2180,6 +2184,32 @@ export function createAgentTools(
     },
   );
 
+  const composite = createCompositeTools({
+    businessId: context.businessId,
+    conversationId: context.conversationId,
+    pageToken: context.pageToken,
+    customerPlatformId: context.customerPlatformId,
+    customerName: context.customerName,
+    platform: context.platform,
+    emitSse: context.emitSse,
+    sendMessageOverride: context.sendMessageOverride,
+    onOrderCreated: async ({ id, totalPrice }) => {
+      await context.onOrderCreated?.(id).catch((err) => {
+        console.error('[agent-tool] order created but conversation state could not be saved:', err);
+      });
+      await trackCreatedOrder({
+        id,
+        totalPrice,
+      });
+    },
+    agentState: context.agentState,
+    persistAgentState: context.persistAgentState,
+    deliveryZones: context.deliveryZones,
+    paymentMethods: context.paymentMethods,
+    paymentStrategy: context.paymentStrategy,
+    onSent,
+  });
+
   return [
     ...createCatalogTools(context, {
       onOrderCreated: async ({ id, totalPrice }) => {
@@ -2200,5 +2230,10 @@ export function createAgentTools(
     sendMessageTool,
     sendSuggestionsTool,
     reportHumanInterveneTool,
+    // Composite business tools
+    composite.browseCatalogTool,
+    composite.getProductQuoteTool,
+    composite.placeOrderTool,
+    composite.getOrderStatusTool,
   ];
 }

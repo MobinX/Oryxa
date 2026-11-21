@@ -25,6 +25,7 @@ export * from './payment-methods';
 export * from './reply-repeat';
 export * from './payment-strategy';
 export * from './language';
+export * from './jev';
 export * from '@shared/timezone';
 
 export { z } from '@hono/zod-openapi';
