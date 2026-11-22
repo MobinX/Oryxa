@@ -155,28 +155,64 @@ export function MobileGoogleLogin() {
     }
 
     const started = readFlag();
-    clearFlag();
-
     let cancelled = false;
     (async () => {
-      // Returning from Google: only the redirect credential counts. A persisted
-      // auth.currentUser (e.g. an old test account) must never be treated as the
-      // account the operator just picked.
+      // Returning from Google: the redirect credential is the only proof that
+      // the operator picked an account. A persisted auth.currentUser could be
+      // an old account, so it is never used as a substitute.
       if (started) {
-        try {
-          const result = await getGoogleRedirectResult();
-          if (cancelled) return;
-          const user = (result?.user as any) ?? null;
-          if (user) {
-            await finish(user);
+        let user: any = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const result = await getGoogleRedirectResult();
+            if (cancelled) return;
+            user = (result?.user as any) ?? null;
+          } catch (error) {
+            if (cancelled) return;
+            clearFlag();
+            setStep('error');
+            setMessage(mapError(error));
             return;
           }
-        } catch (error) {
-          if (cancelled) return;
-          setStep('error');
-          setMessage(mapError(error));
+          if (user) break;
+          // Firebase's pending redirect is occasionally still being written
+          // when the page first runs (Custom Tabs / slow storage).
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+        }
+        if (cancelled) return;
+        if (user) {
+          clearFlag();
+          await finish(user);
           return;
         }
+
+        // The result was genuinely lost. Try a popup immediately so the first
+        // selection still completes without making the operator tap again.
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        try {
+          const cred = await signInWithPopup(auth, provider);
+          if (cancelled) return;
+          clearFlag();
+          await finish(cred.user as any);
+          return;
+        } catch (popupError) {
+          const code = (popupError as { code?: string } | null)?.code ?? '';
+          const expected =
+            code === 'auth/popup-blocked' ||
+            code === 'auth/operation-not-supported-in-this-environment' ||
+            code === 'auth/cancelled-popup-request' ||
+            code === 'auth/popup-closed-by-user';
+          if (!expected) {
+            if (cancelled) return;
+            clearFlag();
+            setStep('error');
+            setMessage(mapError(popupError));
+            return;
+          }
+        }
+        if (cancelled) return;
+        clearFlag();
         setStep('ready');
         setMessage('Google sign-in was not completed. Tap below to select your Google account.');
         return;
