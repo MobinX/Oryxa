@@ -180,7 +180,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 onButtonPressed: _showAddCategoryDialog,
               )
             : ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
                 itemCount: prods.categories.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {

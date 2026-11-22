@@ -199,7 +199,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       body: _isUpdating
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 // Profile Card
                 AppCard(

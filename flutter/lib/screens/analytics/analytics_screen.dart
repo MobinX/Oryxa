@@ -8,6 +8,7 @@ import '../../models/order.dart';
 import '../../providers/business_provider.dart';
 import '../../services/api_service.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/standalone_tab_page.dart';
 import '../orders/orders_screen.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -134,7 +135,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       body: RefreshIndicator(
         onRefresh: _loadAnalytics,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.fromLTRB(
+            16, 12, 16, 12 + MediaQuery.viewPaddingOf(context).bottom),
           children: [
             // Header Description & Window Selector
             _buildWindowHeader(isDark),
@@ -925,7 +927,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const OrdersScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const StandaloneTabPage(
+                          title: 'Orders',
+                          child: OrdersScreen(),
+                        ),
+                      ),
                     );
                   },
                   child: const Row(

@@ -71,7 +71,7 @@ class _OtaUpdateScreenState extends State<OtaUpdateScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('OTA Remote Hotfixes')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
         children: [
           // Runtime patch status: what is installed vs what this launch loaded.
           AppCard(

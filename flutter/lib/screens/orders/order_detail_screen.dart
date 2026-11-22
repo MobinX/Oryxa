@@ -12,6 +12,7 @@ import '../../providers/orders_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../services/diagnostics_service.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/standalone_tab_page.dart';
 import '../customers/customer_detail_screen.dart';
 import '../inbox/chat_thread_screen.dart';
 import '../inbox/inbox_screen.dart';
@@ -283,9 +284,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('Inbox')),
-            body: const InboxScreen(),
+          builder: (_) => const StandaloneTabPage(
+            title: 'Inbox',
+            child: InboxScreen(),
           ),
         ),
       );
@@ -348,7 +349,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: EdgeInsets.fromLTRB(
+              16, 16, 16, 32 + MediaQuery.viewPaddingOf(context).bottom),
             children: [
               // Header
               Row(

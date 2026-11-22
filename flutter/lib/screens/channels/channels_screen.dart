@@ -245,7 +245,7 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Channels')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
         children: [
           AppCard(
             child: Column(

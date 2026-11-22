@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../config/app_theme.dart';
 import '../../models/notification_item.dart';
 import '../../providers/business_provider.dart';
+import '../../widgets/standalone_tab_page.dart';
 import '../inbox/inbox_screen.dart';
 import '../orders/orders_screen.dart';
 import '../payments/payments_screen.dart';
@@ -193,12 +194,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (item.kind == 'order_placed') {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        MaterialPageRoute(
+          builder: (_) => const StandaloneTabPage(
+            title: 'Orders',
+            child: OrdersScreen(),
+          ),
+        ),
       );
     } else if (item.kind == 'payment_order_failed' || item.kind == 'human_help') {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const InboxScreen()),
+        MaterialPageRoute(
+          builder: (_) => const StandaloneTabPage(
+            title: 'Inbox',
+            child: InboxScreen(),
+          ),
+        ),
       );
     } else {
       Navigator.push(
@@ -252,7 +263,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.fromLTRB(
+            16, 12, 16, 12 + MediaQuery.viewPaddingOf(context).bottom),
           children: [
             // Top Header Section
             _buildTopHeader(isDark, unreadCount, biz),
