@@ -100,6 +100,7 @@ class AdminProvider extends ChangeNotifier {
         _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson));
         if (sessionType == 'admin') {
           apiService.setToken(savedToken);
+          apiService.setOperatorToken(_adminFirebaseToken);
           // The merchant Firebase refresher must never run on a console bearer.
           apiService.setTokenRefresher(null);
         }
@@ -132,6 +133,7 @@ class AdminProvider extends ChangeNotifier {
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;
+    apiService.setOperatorToken(null);
     _mailbox = null;
     _storage = null;
     _emails = [];
@@ -149,6 +151,7 @@ class AdminProvider extends ChangeNotifier {
 
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
+    apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
     _clearingSession = false;
     notifyListeners();
@@ -232,6 +235,7 @@ class AdminProvider extends ChangeNotifier {
       // Update API Service to use admin token. The merchant Firebase refresher
       // cannot renew a console session and would replace this bearer on 401.
       apiService.setToken(token);
+      apiService.setOperatorToken(null);
       apiService.setTokenRefresher(null);
 
       // Persist session
@@ -258,6 +262,9 @@ class AdminProvider extends ChangeNotifier {
         if (fbToken != null && fbToken.isNotEmpty) {
           _adminFirebaseToken = fbToken;
           await prefs.setString(ApiConfig.storageKeyAdminFirebaseToken, fbToken);
+          // Merchant/playground calls use this operator Firebase token, exactly
+          // like the web console's httpOnly oryxa_operator_token cookie.
+          apiService.setOperatorToken(fbToken);
 
           // Notify web firebase-session if available
           try {
@@ -316,6 +323,7 @@ class AdminProvider extends ChangeNotifier {
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;
+    apiService.setOperatorToken(null);
     _sessionType = 'merchant';
     _mailbox = null;
     _storage = null;
@@ -331,6 +339,7 @@ class AdminProvider extends ChangeNotifier {
     // Restore merchant token if available
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
+    apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
 
     notifyListeners();
@@ -342,6 +351,7 @@ class AdminProvider extends ChangeNotifier {
     await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
+    apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
     notifyListeners();
   }
@@ -352,6 +362,7 @@ class AdminProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
       apiService.setToken(_adminToken);
+      apiService.setOperatorToken(_adminFirebaseToken);
       apiService.setTokenRefresher(null);
       unawaited(validateSession());
       notifyListeners();
@@ -361,7 +372,10 @@ class AdminProvider extends ChangeNotifier {
   void setSessionType(String type) {
     _sessionType = type;
     if (type == 'admin') {
-      if (_adminToken != null) apiService.setToken(_adminToken);
+      if (_adminToken != null) {
+        apiService.setToken(_adminToken);
+        apiService.setOperatorToken(_adminFirebaseToken);
+      }
       apiService.setTokenRefresher(null);
     } else {
       authService.attachTokenRefresher();

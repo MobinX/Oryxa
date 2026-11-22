@@ -26,6 +26,11 @@ class ApiService {
   String _baseUrl = ApiConfig.defaultBaseUrl;
   String? _token;
 
+  /// The operator's Firebase ID token. The web console keeps this in an httpOnly
+  /// cookie and uses it for merchant endpoints (playground, catalog, etc.) while
+  /// console APIs use the DB session bearer above.
+  String? _operatorToken;
+
   /// Called when a request comes back 401. It returns a fresh ID token, or null when
   /// the session cannot be renewed (the caller then gets the original 401).
   Future<String?> Function()? _tokenRefresher;
@@ -60,13 +65,38 @@ class ApiService {
     _onUnauthorized = handler;
   }
 
-  Map<String, String> _headers() {
+  void setOperatorToken(String? token) {
+    _operatorToken = token;
+  }
+
+  bool _isConsoleApiPath(String path) {
+    final clean = path.startsWith('/') ? path : '/$path';
+    return clean.startsWith('/api2/') ||
+        clean.startsWith('/api/') ||
+        clean.startsWith('/admin/');
+  }
+
+  String? _bearerFor(String path) {
+    // Merchant endpoints live under /api/v1 and need the operator's Firebase
+    // token; console endpoints need the DB-issued bearer and reject Firebase tokens.
+    if (_operatorToken != null &&
+        _operatorToken!.isNotEmpty &&
+        !path.startsWith('http://') &&
+        !path.startsWith('https://') &&
+        !_isConsoleApiPath(path)) {
+      return _operatorToken;
+    }
+    return _token;
+  }
+
+  Map<String, String> _headers([String path = '']) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
-    if (_token != null && _token!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $_token';
+    final bearer = _bearerFor(path);
+    if (bearer != null && bearer.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $bearer';
     }
     return headers;
   }
@@ -121,7 +151,7 @@ class ApiService {
     debugPrint('[API GET] $uri');
     try {
       final res = await _send(
-        () => http.get(uri, headers: _headers()).timeout(const Duration(seconds: 15)),
+        () => http.get(uri, headers: _headers(path)).timeout(const Duration(seconds: 15)),
       );
       return _handleResponse(res);
     } catch (e) {
@@ -135,7 +165,7 @@ class ApiService {
   Future<String> getText(String path) async {
     final uri = _buildUri(path);
     final res = await _send(
-      () => http.get(uri, headers: _headers()).timeout(const Duration(seconds: 30)),
+      () => http.get(uri, headers: _headers(path)).timeout(const Duration(seconds: 30)),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException('HTTP ${res.statusCode}', statusCode: res.statusCode);
@@ -166,7 +196,7 @@ class ApiService {
         () => http
             .post(
               uri,
-              headers: _headers(),
+              headers: _headers(path),
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
@@ -187,7 +217,7 @@ class ApiService {
         () => http
             .put(
               uri,
-              headers: _headers(),
+              headers: _headers(path),
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
@@ -208,7 +238,7 @@ class ApiService {
         () => http
             .patch(
               uri,
-              headers: _headers(),
+              headers: _headers(path),
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
@@ -226,7 +256,7 @@ class ApiService {
     debugPrint('[API DELETE] $uri');
     try {
       final res = await _send(
-        () => http.delete(uri, headers: _headers()).timeout(const Duration(seconds: 20)),
+        () => http.delete(uri, headers: _headers(path)).timeout(const Duration(seconds: 20)),
       );
       return _handleResponse(res);
     } catch (e) {
@@ -323,8 +353,9 @@ class ApiService {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
     });
-    if (_token != null && _token!.isNotEmpty) {
-      request.headers['Authorization'] = 'Bearer $_token';
+    final bearer = _bearerFor(path);
+    if (bearer != null && bearer.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $bearer';
     }
     if (body != null) {
       request.body = jsonEncode(body);
