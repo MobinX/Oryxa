@@ -22,6 +22,8 @@ class AdminProvider extends ChangeNotifier {
   String _sessionType = 'merchant';
   bool _isLoading = false;
   String? _errorMessage;
+  String? _apiError;
+  bool _clearingSession = false;
 
   // Mailbox state
   MailboxInfo? _mailbox;
@@ -40,7 +42,9 @@ class AdminProvider extends ChangeNotifier {
   bool _officialMigrationPending = false;
   bool get officialMigrationPending => _officialMigrationPending;
 
-  AdminProvider({required this.apiService, required this.authService});
+  AdminProvider({required this.apiService, required this.authService}) {
+    apiService.setUnauthorizedHandler(_handleUnauthorized);
+  }
 
   AdminUser? get adminUser => _adminUser;
   String? get adminToken => _adminToken;
@@ -49,6 +53,18 @@ class AdminProvider extends ChangeNotifier {
   bool get isAuthenticated => _adminToken != null && _adminToken!.isNotEmpty && _adminUser != null;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String? get apiError => _apiError;
+
+  void clearApiError() {
+    if (_apiError == null) return;
+    _apiError = null;
+    notifyListeners();
+  }
+
+  void _setApiError(Object error) {
+    _apiError = apiErrorMessage(error);
+    notifyListeners();
+  }
 
   // Mailbox getters
   MailboxInfo? get mailbox => _mailbox;
@@ -84,12 +100,83 @@ class AdminProvider extends ChangeNotifier {
         _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson));
         if (sessionType == 'admin') {
           apiService.setToken(savedToken);
+          // The merchant Firebase refresher must never run on a console bearer.
+          apiService.setTokenRefresher(null);
         }
       } catch (e) {
         debugPrint('[AdminProvider] Error restoring admin user: $e');
+        _setApiError(e);
       }
     }
     notifyListeners();
+
+    // Startup check runs off the critical path so an offline launch still renders
+    // immediately; a dead session is cleared before the first API call completes.
+    if (_sessionType == 'admin') unawaited(validateSession());
+  }
+
+  /// Called by [ApiService] whenever any request is still 401 after the merchant
+  /// token refresh. Only an active admin session is affected here.
+  Future<void> _handleUnauthorized() async {
+    if (_sessionType != 'admin' || _adminToken == null || _clearingSession) return;
+    await _clearAdminSessionLocally(
+      'Your admin session expired. Sign in to the console again.',
+    );
+  }
+
+  /// Drops the console session without making another API call: an expired bearer
+  /// cannot log itself out and no UI state should outlive the credentials.
+  Future<void> _clearAdminSessionLocally(String reason) async {
+    if (_adminToken == null && _sessionType != 'admin') return;
+    _clearingSession = true;
+    _adminToken = null;
+    _adminUser = null;
+    _adminFirebaseToken = null;
+    _mailbox = null;
+    _storage = null;
+    _emails = [];
+    _stats = null;
+    _statsError = null;
+    _apiError = null;
+    _sessionType = 'merchant';
+    _errorMessage = reason;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(ApiConfig.storageKeyAdminToken);
+    await prefs.remove(ApiConfig.storageKeyAdminUser);
+    await prefs.remove(ApiConfig.storageKeyAdminFirebaseToken);
+    await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
+
+    final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
+    apiService.setToken(merchantToken);
+    authService.attachTokenRefresher();
+    _clearingSession = false;
+    notifyListeners();
+  }
+
+  /// One authoritative check of the stored console bearer. Called on startup,
+  /// periodically by the admin scaffold, and on app resume.
+  Future<void> validateSession() async {
+    if (_sessionType != 'admin' || _adminToken == null || _adminUser == null) return;
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminMe);
+      if (res is Map && res['user'] is Map) {
+        final fresh = AdminUser.fromJson(Map<String, dynamic>.from(res['user'] as Map));
+        _adminUser = fresh;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(ApiConfig.storageKeyAdminUser, jsonEncode(fresh.toJson()));
+        notifyListeners();
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await _clearAdminSessionLocally(
+          'Your admin session expired. Sign in to the console again.',
+        );
+      }
+    } catch (e) {
+      debugPrint('[AdminProvider] session check failed: $e');
+      _setApiError(e);
+    }
   }
 
   /// Logs into the console using the admin endpoint. Automatically performs Firebase
@@ -142,8 +229,10 @@ class AdminProvider extends ChangeNotifier {
       _adminUser = user;
       _sessionType = 'admin';
 
-      // Update API Service to use admin token
+      // Update API Service to use admin token. The merchant Firebase refresher
+      // cannot renew a console session and would replace this bearer on 401.
       apiService.setToken(token);
+      apiService.setTokenRefresher(null);
 
       // Persist session
       final prefs = await SharedPreferences.getInstance();
@@ -212,6 +301,7 @@ class AdminProvider extends ChangeNotifier {
           .timeout(const Duration(seconds: 6), onTimeout: () {});
     } catch (e) {
       debugPrint('[AdminProvider] Mail push unsubscribe skipped: $e');
+      _setApiError(e);
     }
 
     try {
@@ -241,6 +331,7 @@ class AdminProvider extends ChangeNotifier {
     // Restore merchant token if available
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
+    authService.attachTokenRefresher();
 
     notifyListeners();
   }
@@ -251,6 +342,7 @@ class AdminProvider extends ChangeNotifier {
     await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
+    authService.attachTokenRefresher();
     notifyListeners();
   }
 
@@ -260,12 +352,20 @@ class AdminProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
       apiService.setToken(_adminToken);
+      apiService.setTokenRefresher(null);
+      unawaited(validateSession());
       notifyListeners();
     }
   }
 
   void setSessionType(String type) {
     _sessionType = type;
+    if (type == 'admin') {
+      if (_adminToken != null) apiService.setToken(_adminToken);
+      apiService.setTokenRefresher(null);
+    } else {
+      authService.attachTokenRefresher();
+    }
     notifyListeners();
   }
 
@@ -283,6 +383,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error loading mailbox: $e');
+      _setApiError(e);
     }
   }
 
@@ -296,6 +397,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error loading storage: $e');
+      _setApiError(e);
     }
   }
 
@@ -341,6 +443,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching emails: $e');
+      _setApiError(e);
     } finally {
       _isMailLoading = false;
       notifyListeners();
@@ -373,6 +476,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching email detail: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -404,6 +508,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error sending email: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -432,6 +537,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error replying to email: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -444,6 +550,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error trashing email: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -456,6 +563,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error restoring email: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -468,6 +576,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error deleting email: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -492,6 +601,7 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       _statsError = e.toString().replaceFirst(RegExp(r'^ApiException: '), '');
       debugPrint('[AdminProvider] Error fetching admin stats: $e');
+      _setApiError(e);
     } finally {
       _isStatsLoading = false;
       notifyListeners();
@@ -507,6 +617,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching default agent: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -528,6 +639,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating default agent: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -538,6 +650,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching default agent overrides: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -551,6 +664,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error reverting override: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -564,6 +678,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching model billing: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -589,6 +704,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating model billing: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -609,6 +725,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching log types: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -619,6 +736,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching log storage: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -641,6 +759,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching log events: $e');
+      _setApiError(e);
       rethrow;
     }
     return null;
@@ -655,6 +774,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching subagent: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -669,6 +789,7 @@ class AdminProvider extends ChangeNotifier {
       return <String, dynamic>{};
     } catch (e) {
       debugPrint('[AdminProvider] Error saving subagent: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -692,6 +813,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching token usage: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -702,6 +824,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching business token usage detail: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -717,6 +840,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching plans: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -731,6 +855,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching business plans: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -741,6 +866,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error creating plan: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -752,6 +878,7 @@ class AdminProvider extends ChangeNotifier {
       return 0;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating plan: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -783,6 +910,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error assigning plan: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -803,6 +931,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error setting business caps: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -813,6 +942,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error resetting cycle: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -825,6 +955,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching assignments: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -844,6 +975,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official channels: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -855,6 +987,7 @@ class AdminProvider extends ChangeNotifier {
       return {'verified': false, 'error': 'Invalid response'};
     } catch (e) {
       debugPrint('[AdminProvider] Error verifying channel: $e');
+      _setApiError(e);
       return {'verified': false, 'error': e.toString()};
     }
   }
@@ -865,6 +998,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error disconnecting channel: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -879,6 +1013,7 @@ class AdminProvider extends ChangeNotifier {
       return {'verified': false, 'error': 'Invalid server response'};
     } catch (e) {
       debugPrint('[AdminProvider] Error connecting WhatsApp: $e');
+      _setApiError(e);
       return {'verified': false, 'error': e.toString()};
     }
   }
@@ -893,6 +1028,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official settings: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -903,6 +1039,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating official settings: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -919,6 +1056,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official conversations: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -932,6 +1070,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official thread: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -948,6 +1087,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error replying to official thread: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -961,6 +1101,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error setting takeover: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -977,6 +1118,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official tickets: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -994,6 +1136,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating ticket: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -1012,6 +1155,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching official prospects: $e');
+      _setApiError(e);
     }
     return {'prospects': <Map<String, dynamic>>[], 'weights': <String, dynamic>{}};
   }
@@ -1028,6 +1172,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error updating prospect: $e');
+      _setApiError(e);
       return false;
     }
   }
@@ -1041,6 +1186,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error saving weights: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -1054,6 +1200,7 @@ class AdminProvider extends ChangeNotifier {
         _officialMigrationPending = true;
       }
       debugPrint('[AdminProvider] Error fetching ticket detail: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -1067,6 +1214,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error adding ticket note: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -1077,6 +1225,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching prospect: $e');
+      _setApiError(e);
     }
     return null;
   }
@@ -1092,6 +1241,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching prospect events: $e');
+      _setApiError(e);
     }
     return [];
   }
@@ -1103,6 +1253,7 @@ class AdminProvider extends ChangeNotifier {
       return 0;
     } catch (e) {
       debugPrint('[AdminProvider] Error re-scoring prospects: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -1116,6 +1267,7 @@ class AdminProvider extends ChangeNotifier {
       if (res is Map) return res['url']?.toString();
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching Facebook auth URL: $e');
+      _setApiError(e);
       rethrow;
     }
     return null;
@@ -1129,6 +1281,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[AdminProvider] Error fetching pending Facebook pages: $e');
+      _setApiError(e);
       rethrow;
     }
     return [];
@@ -1144,6 +1297,7 @@ class AdminProvider extends ChangeNotifier {
       return {'connected': [], 'failed': []};
     } catch (e) {
       debugPrint('[AdminProvider] Error connecting Facebook pages: $e');
+      _setApiError(e);
       rethrow;
     }
   }
@@ -1192,6 +1346,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error forwarding email: $e');
+      _setApiError(e);
       rethrow;
     }
   }

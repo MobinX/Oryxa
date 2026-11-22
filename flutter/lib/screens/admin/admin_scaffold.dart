@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -52,12 +54,19 @@ class AdminScaffold extends StatefulWidget {
   State<AdminScaffold> createState() => _AdminScaffoldState();
 }
 
-class _AdminScaffoldState extends State<AdminScaffold> {
+class _AdminScaffoldState extends State<AdminScaffold> with WidgetsBindingObserver {
   String _selectedKey = 'dashboard';
+  Timer? _sessionCheckTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // A console bearer lasts 12 hours. Recheck periodically so an expired session
+    // cannot leave a mailbox full of cached data and a dead API layer.
+    _sessionCheckTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (mounted) context.read<AdminProvider>().validateSession();
+    });
     // Mail alerts carry /mails/<id> links. The merchant scaffold handles its own
     // routes; the admin console needs to open the mailbox when a mail alert is tapped.
     NotificationService.instance.onNotificationClicked = (link) {
@@ -66,6 +75,20 @@ class _AdminScaffoldState extends State<AdminScaffold> {
         setState(() => _selectedKey = 'inbox');
       }
     };
+  }
+
+  @override
+  void dispose() {
+    _sessionCheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<AdminProvider>().validateSession();
+    }
   }
 
   final List<_NavGroup> _allGroups = [
@@ -471,12 +494,45 @@ class _AdminScaffoldState extends State<AdminScaffold> {
       // The console has no bottomNavigationBar, so Scaffold does not inset its
       // body for the Android navigation bar in edge-to-edge mode. Keep every
       // admin screen above it without changing each screen's own scrolling.
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        left: false,
-        right: false,
-        child: currentItem.builder(),
+      body: Column(
+        children: [
+          if (admin.apiError != null && admin.isAuthenticated)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: AppTheme.dangerBg,
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_off, size: 16, color: AppTheme.danger),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Some console data could not load: ${admin.apiError}',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.danger),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16, color: AppTheme.danger),
+                    onPressed: admin.clearApiError,
+                    tooltip: 'Dismiss',
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            // The console has no bottomNavigationBar, so Scaffold does not inset
+            // its body for Android navigation in edge-to-edge mode.
+            child: SafeArea(
+              bottom: true,
+              top: false,
+              left: false,
+              right: false,
+              child: currentItem.builder(),
+            ),
+          ),
+        ],
       ),
     );
   }

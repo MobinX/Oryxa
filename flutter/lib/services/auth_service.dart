@@ -41,6 +41,13 @@ class AuthService extends ChangeNotifier {
     };
   }
 
+  /// Re-attaches the merchant Firebase refresher after an admin session ends.
+  /// Admin requests must not use it: a Firebase ID token cannot renew a console
+  /// session and mail routes reject it outright.
+  void attachTokenRefresher() {
+    apiService.setTokenRefresher(_refreshIdToken);
+  }
+
   UserModel? get currentUser => _currentUser;
   String? get token => _token;
   String? get selectedBusinessId => _selectedBusinessId;
@@ -93,6 +100,12 @@ class AuthService extends ChangeNotifier {
     }
 
     unawaited(_googleAuth.init());
+
+    // A saved admin session owns the API bearer. Restoring the merchant token here
+    // (or refreshing it in the background) would silently replace the console key
+    // while the mailbox still showed the admin address.
+    final sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
+    if (sessionType == 'admin') return;
 
     if (_token == null || _token!.isEmpty) return;
     apiService.setToken(_token);

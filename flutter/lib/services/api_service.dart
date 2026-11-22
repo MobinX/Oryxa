@@ -31,6 +31,11 @@ class ApiService {
   Future<String?> Function()? _tokenRefresher;
   bool _isRefreshing = false;
 
+  /// Called when a request is still 401 after the optional token refresh. The
+  /// admin console uses this to drop an expired console session instead of
+  /// leaving prefs and the UI claiming the operator is still signed in.
+  Future<void> Function()? _onUnauthorized;
+
   String get baseUrl => _baseUrl;
   String? get token => _token;
 
@@ -49,6 +54,10 @@ class ApiService {
 
   void setTokenRefresher(Future<String?> Function()? refresher) {
     _tokenRefresher = refresher;
+  }
+
+  void setUnauthorizedHandler(Future<void> Function()? handler) {
+    _onUnauthorized = handler;
   }
 
   Map<String, String> _headers() {
@@ -80,12 +89,15 @@ class ApiService {
   /// without this every write after the first hour looks like "Unauthorized".
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     var response = await request();
-    if (response.statusCode != 401 || _tokenRefresher == null || _isRefreshing) {
-      return response;
+    if (response.statusCode == 401 && _tokenRefresher != null && !_isRefreshing) {
+      final refreshed = await _refreshToken();
+      if (refreshed) response = await request();
     }
-    final refreshed = await _refreshToken();
-    if (!refreshed) return response;
-    return request();
+    if (response.statusCode == 401) {
+      final handler = _onUnauthorized;
+      if (handler != null) await handler();
+    }
+    return response;
   }
 
   Future<bool> _refreshToken() async {
