@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../config/app_theme.dart';
 import '../../../../providers/admin_provider.dart';
+import 'official_migration_card.dart';
+import 'official_ticket_detail_sheet.dart';
 
 class AdminOfficialInboxScreen extends StatefulWidget {
   const AdminOfficialInboxScreen({super.key});
@@ -13,7 +15,6 @@ class AdminOfficialInboxScreen extends StatefulWidget {
 
 class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
   bool _isLoading = true;
-  String _statusFilter = 'all'; // all, pending, done
   List<Map<String, dynamic>> _conversations = [];
 
   @override
@@ -25,9 +26,7 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
   Future<void> _loadConversations() async {
     setState(() => _isLoading = true);
     final admin = context.read<AdminProvider>();
-    final rows = await admin.fetchOfficialConversations(
-      status: _statusFilter == 'all' ? null : _statusFilter,
-    );
+    final rows = await admin.fetchOfficialConversations();
 
     if (mounted) {
       setState(() {
@@ -42,7 +41,7 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _OfficialThreadSheet(
+      builder: (ctx) => OfficialThreadSheet(
         conversationId: (conversation['id'] ?? '').toString(),
         initialData: conversation,
         onChanged: _loadConversations,
@@ -53,6 +52,7 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final migrationPending = context.watch<AdminProvider>().officialMigrationPending;
 
     return RefreshIndicator(
       onRefresh: _loadConversations,
@@ -81,22 +81,12 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
               color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
             ),
           ),
-          const SizedBox(height: 12),
-
-          // Status Filter Tabs
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildFilterChip('all', 'All Threads'),
-                const SizedBox(width: 8),
-                _buildFilterChip('pending', 'Pending Response'),
-                const SizedBox(width: 8),
-                _buildFilterChip('done', 'Done'),
-              ],
-            ),
-          ),
           const SizedBox(height: 16),
+
+          if (migrationPending) ...[
+            const OfficialMigrationCard(),
+            const SizedBox(height: 16),
+          ],
 
           if (_isLoading) ...[
             const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
@@ -238,38 +228,24 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
     );
   }
 
-  Widget _buildFilterChip(String key, String label) {
-    final selected = _statusFilter == key;
-    return ChoiceChip(
-      label: Text(label, style: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
-      selected: selected,
-      selectedColor: AppTheme.primaryColor.withValues(alpha: 0.2),
-      onSelected: (val) {
-        if (val) {
-          setState(() => _statusFilter = key);
-          _loadConversations();
-        }
-      },
-    );
-  }
 }
 
-class _OfficialThreadSheet extends StatefulWidget {
+class OfficialThreadSheet extends StatefulWidget {
   final String conversationId;
   final Map<String, dynamic> initialData;
   final VoidCallback onChanged;
 
-  const _OfficialThreadSheet({
+  const OfficialThreadSheet({
     required this.conversationId,
     required this.initialData,
     required this.onChanged,
   });
 
   @override
-  State<_OfficialThreadSheet> createState() => _OfficialThreadSheetState();
+  State<OfficialThreadSheet> createState() => _OfficialThreadSheetState();
 }
 
-class _OfficialThreadSheetState extends State<_OfficialThreadSheet> {
+class _OfficialThreadSheetState extends State<OfficialThreadSheet> {
   bool _isLoading = true;
   Map<String, dynamic>? _conversation;
   List<Map<String, dynamic>> _messages = [];
@@ -465,10 +441,11 @@ class _OfficialThreadSheetState extends State<_OfficialThreadSheet> {
                                         fontSize: 13,
                                       ),
                                     ),
-                                    if (time.isNotEmpty) ...[
+                                    if (time.isNotEmpty || !isCustomer) ...[
                                       const SizedBox(height: 4),
                                       Text(
-                                        time.contains('T') ? time.split('T').last.substring(0, 5) : time,
+                                        '${!isCustomer ? 'you via ${(msg['sentBy'] ?? 'console').toString()} · ' : ''}'
+                                        '${time.isEmpty ? '' : (time.contains('T') && time.split('T').last.length >= 5 ? time.split('T').last.substring(0, 5) : time)}',
                                         style: TextStyle(
                                           color: isCustomer
                                               ? (isDark ? Colors.white38 : Colors.black38)
@@ -490,14 +467,34 @@ class _OfficialThreadSheetState extends State<_OfficialThreadSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 color: Colors.amber.withValues(alpha: 0.12),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.support_agent, size: 14, color: Colors.amber),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${_tickets.length} linked support ticket(s)',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                    Row(
+                      children: [
+                        const Icon(Icons.support_agent, size: 14, color: Colors.amber),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${_tickets.length} linked support ticket(s)',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                        ),
+                      ],
                     ),
+                    ..._tickets.map((t) => TextButton(
+                          onPressed: () => showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => OfficialTicketDetailSheet(
+                              ticketId: (t['id'] ?? '').toString(),
+                              onChanged: _loadThread,
+                            ),
+                          ),
+                          child: Text(
+                            '${t['type'] ?? 'ticket'} · ${t['subject'] ?? t['id'] ?? ''}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        )),
                   ],
                 ),
               ),

@@ -5,6 +5,7 @@ class AdminUser {
   final String role; // 'superuser' | 'admin'
   final List<String> capabilities;
   final bool isActive;
+  final bool legacy;
 
   const AdminUser({
     required this.id,
@@ -13,6 +14,7 @@ class AdminUser {
     required this.role,
     required this.capabilities,
     this.isActive = true,
+    this.legacy = false,
   });
 
   bool get isSuperuser => role == 'superuser';
@@ -38,6 +40,7 @@ class AdminUser {
       role: (json['role'] ?? 'admin').toString(),
       capabilities: caps,
       isActive: json['isActive'] != false,
+      legacy: json['legacy'] == true,
     );
   }
 
@@ -48,5 +51,6 @@ class AdminUser {
     'role': role,
     'capabilities': capabilities,
     'isActive': isActive,
+    'legacy': legacy,
   };
 }

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../config/app_theme.dart';
 import '../../../../providers/admin_provider.dart';
+import 'official_migration_card.dart';
+import 'official_ticket_detail_sheet.dart';
 
 class AdminOfficialTicketsScreen extends StatefulWidget {
   const AdminOfficialTicketsScreen({super.key});
@@ -172,6 +174,7 @@ class _AdminOfficialTicketsScreenState extends State<AdminOfficialTicketsScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final migrationPending = context.watch<AdminProvider>().officialMigrationPending;
 
     return RefreshIndicator(
       onRefresh: _loadTickets,
@@ -226,6 +229,11 @@ class _AdminOfficialTicketsScreenState extends State<AdminOfficialTicketsScreen>
             ),
           ),
           const SizedBox(height: 16),
+
+          if (migrationPending) ...[
+            const OfficialMigrationCard(),
+            const SizedBox(height: 16),
+          ],
 
           if (_isLoading) ...[
             const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
@@ -333,12 +341,32 @@ class _AdminOfficialTicketsScreenState extends State<AdminOfficialTicketsScreen>
                         ),
                       ],
                       const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
                           Text(
                             createdAt.isNotEmpty ? 'Logged: ${createdAt.split('T').first}' : '',
                             style: TextStyle(fontSize: 10, color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => OfficialTicketDetailSheet(
+                                ticketId: (ticket['id'] ?? '').toString(),
+                                onChanged: _loadTickets,
+                              ),
+                            ),
+                            icon: const Icon(Icons.open_in_new, size: 13),
+                            label: const Text('Open', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              minimumSize: Size.zero,
+                            ),
                           ),
                           OutlinedButton.icon(
                             onPressed: () => _showUpdateDialog(ticket),

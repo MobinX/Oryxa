@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../../config/app_theme.dart';
 import '../../../../providers/admin_provider.dart';
+import 'admin_official_inbox_screen.dart';
+import 'admin_official_tickets_screen.dart';
+import 'official_migration_card.dart';
 
 class AdminOfficialChannelsScreen extends StatefulWidget {
   const AdminOfficialChannelsScreen({super.key});
@@ -220,6 +223,7 @@ class _AdminOfficialChannelsScreenState extends State<AdminOfficialChannelsScree
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final migrationPending = context.watch<AdminProvider>().officialMigrationPending;
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -250,6 +254,11 @@ class _AdminOfficialChannelsScreenState extends State<AdminOfficialChannelsScree
             ),
           ),
           const SizedBox(height: 16),
+
+          if (migrationPending) ...[
+            const OfficialMigrationCard(),
+            const SizedBox(height: 16),
+          ],
 
           if (_isLoading) ...[
             const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
@@ -341,6 +350,23 @@ class _AdminOfficialChannelsScreenState extends State<AdminOfficialChannelsScree
                             style: TextStyle(fontSize: 10, color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary),
                           ),
                         ],
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AdminOfficialInboxScreen()),
+                              ),
+                              child: const Text('Inbox', style: TextStyle(fontSize: 11)),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AdminOfficialTicketsScreen()),
+                              ),
+                              child: const Text('Tickets', style: TextStyle(fontSize: 11)),
+                            ),
+                          ],
+                        ),
                         const Divider(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,

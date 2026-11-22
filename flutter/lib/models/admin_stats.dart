@@ -1,3 +1,23 @@
+class AdminAnomalies {
+  final int errors;
+  final int authRejections;
+  final int cap;
+
+  const AdminAnomalies({
+    required this.errors,
+    required this.authRejections,
+    required this.cap,
+  });
+
+  factory AdminAnomalies.fromJson(Map<String, dynamic> json) {
+    return AdminAnomalies(
+      errors: (json['errors'] as num?)?.toInt() ?? 0,
+      authRejections: (json['authRejections'] as num?)?.toInt() ?? 0,
+      cap: (json['cap'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class AdminWindowMetrics {
   final int conversations;
   final int messages;
@@ -138,20 +158,26 @@ class AdminDailyPoint {
 class AdminStatsData {
   final int days;
   final String tz;
+  final String startTime;
+  final String endTime;
   final AdminSnapshot snapshot;
   final AdminWindowMetrics window;
   final AdminWindowMetrics previous;
   final List<AdminDailyPoint> daily;
   final List<AdminTopBusiness> topBusinesses;
+  final AdminAnomalies? anomalies;
 
   const AdminStatsData({
     required this.days,
     required this.tz,
+    required this.startTime,
+    required this.endTime,
     required this.snapshot,
     required this.window,
     required this.previous,
     required this.daily,
     required this.topBusinesses,
+    this.anomalies,
   });
 
   factory AdminStatsData.fromJson(Map<String, dynamic> json) {
@@ -172,11 +198,16 @@ class AdminStatsData {
     return AdminStatsData(
       days: (range['days'] as num?)?.toInt() ?? 30,
       tz: (range['tz'] ?? 'UTC').toString(),
+      startTime: (range['startTime'] ?? '').toString(),
+      endTime: (range['endTime'] ?? '').toString(),
       snapshot: AdminSnapshot.fromJson(json['snapshot'] as Map<String, dynamic>? ?? {}),
       window: AdminWindowMetrics.fromJson(json['window'] as Map<String, dynamic>? ?? {}),
       previous: AdminWindowMetrics.fromJson(json['previous'] as Map<String, dynamic>? ?? {}),
       daily: dailyList,
       topBusinesses: topList,
+      anomalies: json['anomalies'] is Map
+          ? AdminAnomalies.fromJson(Map<String, dynamic>.from(json['anomalies'] as Map))
+          : null,
     );
   }
 }

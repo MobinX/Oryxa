@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -18,6 +19,8 @@ class AdminMailboxScreen extends StatefulWidget {
 class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
   final _searchController = TextEditingController();
   final _dateFormat = DateFormat('MMM d, h:mm a');
+  int _offset = 0;
+  static const int _pageSize = 40;
 
   @override
   void initState() {
@@ -26,7 +29,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
       final admin = context.read<AdminProvider>();
       admin.fetchMailbox();
       admin.fetchStorage();
-      admin.fetchEmails(refresh: true);
+      admin.fetchEmails(refresh: true, offset: _offset, limit: _pageSize);
     });
   }
 
@@ -36,7 +39,13 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
     super.dispose();
   }
 
-  void _openComposeDialog({String? replyTo, String? initialSubject, String? initialBody, String? replyId}) {
+  void _openComposeDialog({
+    String? replyTo,
+    String? initialSubject,
+    String? initialBody,
+    String? replyId,
+    String? forwardId,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -46,6 +55,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
         initialSubject: initialSubject,
         initialBody: initialBody,
         replyId: replyId,
+        forwardId: forwardId,
       ),
     );
   }
@@ -63,6 +73,11 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
           initialBody: body,
           replyId: id,
         ),
+        onForward: (subject, body, id) => _openComposeDialog(
+          initialSubject: subject,
+          initialBody: body,
+          forwardId: id,
+        ),
       ),
     );
   }
@@ -77,7 +92,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
         onRefresh: () async {
           await admin.fetchMailbox();
           await admin.fetchStorage();
-          await admin.fetchEmails(refresh: true);
+          await admin.fetchEmails(refresh: true, offset: _offset, limit: _pageSize);
         },
         child: Column(
           children: [
@@ -159,7 +174,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                               icon: const Icon(Icons.clear, size: 16),
                               onPressed: () {
                                 _searchController.clear();
-                                admin.fetchEmails(query: '', refresh: true);
+                                admin.fetchEmails(query: '', refresh: true, offset: 0, limit: _pageSize);
                               },
                             )
                           : null,
@@ -167,7 +182,8 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                       isDense: true,
                     ),
                     onSubmitted: (query) {
-                      admin.fetchEmails(query: query.trim(), refresh: true);
+                      _offset = 0;
+                      admin.fetchEmails(query: query.trim(), refresh: true, offset: 0, limit: _pageSize);
                     },
                   ),
                   const SizedBox(height: 10),
@@ -316,6 +332,46 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                           },
                         ),
             ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton.icon(
+                    onPressed: _offset == 0
+                        ? null
+                        : () {
+                            setState(() {
+                              _offset = (_offset - _pageSize).clamp(0, 1 << 30).toInt();
+                            });
+                            admin.fetchEmails(offset: _offset, limit: _pageSize);
+                          },
+                    icon: const Icon(Icons.chevron_left, size: 16),
+                    label: const Text('Newer', style: TextStyle(fontSize: 12)),
+                  ),
+                  Text(
+                    '${admin.emails.isEmpty ? 0 : _offset + 1}–${_offset + admin.emails.length} of ${admin.mailTotal}',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  TextButton.icon(
+                    onPressed: _offset + _pageSize >= admin.mailTotal
+                        ? null
+                        : () {
+                            setState(() => _offset += _pageSize);
+                            admin.fetchEmails(offset: _offset, limit: _pageSize);
+                          },
+                    icon: const Icon(Icons.chevron_right, size: 16),
+                    label: const Text('Older', style: TextStyle(fontSize: 12)),
+                    textDirection: TextDirection.rtl,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -338,7 +394,8 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
       label: Text(label),
       selected: isSelected,
       onSelected: (_) {
-        admin.fetchEmails(folder: key, refresh: true);
+        _offset = 0;
+        admin.fetchEmails(folder: key, refresh: true, offset: 0, limit: _pageSize);
       },
     );
   }
@@ -479,12 +536,14 @@ class _ComposeEmailSheet extends StatefulWidget {
   final String? initialSubject;
   final String? initialBody;
   final String? replyId;
+  final String? forwardId;
 
   const _ComposeEmailSheet({
     this.replyTo,
     this.initialSubject,
     this.initialBody,
     this.replyId,
+    this.forwardId,
   });
 
   @override
@@ -494,10 +553,15 @@ class _ComposeEmailSheet extends StatefulWidget {
 class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
   final _toController = TextEditingController();
   final _ccController = TextEditingController();
+  final _bccController = TextEditingController();
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
   bool _showCc = false;
+  bool _showBcc = false;
   bool _isSending = false;
+  bool _picking = false;
+  final List<Map<String, dynamic>> _uploads = [];
+  final List<String> _attachmentNames = [];
 
   @override
   void initState() {
@@ -505,72 +569,122 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
     if (widget.replyTo != null) _toController.text = widget.replyTo!;
     if (widget.initialSubject != null) _subjectController.text = widget.initialSubject!;
     if (widget.initialBody != null) _bodyController.text = widget.initialBody!;
+    if (widget.replyId != null) _showCc = true;
   }
 
   @override
   void dispose() {
     _toController.dispose();
     _ccController.dispose();
+    _bccController.dispose();
     _subjectController.dispose();
     _bodyController.dispose();
     super.dispose();
+  }
+
+  List<String> _addresses(String value) => value
+      .split(RegExp(r'[,;]'))
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  Future<void> _pickAttachments() async {
+    setState(() => _picking = true);
+    try {
+      final files = await ImagePicker().pickMultiImage() ?? <XFile>[];
+      final admin = context.read<AdminProvider>();
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        final name = file.name;
+        final contentType = file.mimeType ?? 'application/octet-stream';
+        final signed = await admin.signMailAttachment(
+          filename: name,
+          contentType: contentType,
+          size: bytes.length,
+        );
+        await admin.apiService.putBytes(
+          signed['uploadUrl'].toString(),
+          bytes,
+          contentType,
+        );
+        _uploads.add(signed);
+        _attachmentNames.add(name);
+      }
+      if (mounted && files.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${files.length} attachment${files.length == 1 ? '' : 's'} ready')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not attach file: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
   }
 
   void _handleSend() async {
     final toText = _toController.text.trim();
     final subject = _subjectController.text.trim();
     final body = _bodyController.text.trim();
+    final isForward = widget.forwardId != null;
+    final isReply = widget.replyId != null;
 
-    if (toText.isEmpty) {
+    if (toText.isEmpty && !isReply) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter recipient email')),
       );
       return;
     }
-    if (subject.isEmpty) {
+    if (subject.isEmpty && !isForward && !isReply) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter subject')),
       );
       return;
     }
-    if (body.isEmpty) {
+    if (body.isEmpty && !isForward) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter message body')),
       );
       return;
     }
 
-    final recipients = toText
-        .split(RegExp(r'[,;]'))
-        .map((e) => e.trim())
-        .filter((e) => e.isNotEmpty)
-        .toList();
-
-    final ccList = _ccController.text.trim().isNotEmpty
-        ? _ccController.text
-            .trim()
-            .split(RegExp(r'[,;]'))
-            .map((e) => e.trim())
-            .filter((e) => e.isNotEmpty)
-            .toList()
-        : null;
+    final recipients = _addresses(toText);
+    final ccList = _ccController.text.trim().isNotEmpty ? _addresses(_ccController.text) : null;
+    final bccList = _bccController.text.trim().isNotEmpty ? _addresses(_bccController.text) : null;
 
     setState(() => _isSending = true);
     final admin = context.read<AdminProvider>();
 
     try {
-      if (widget.replyId != null) {
+      if (isReply) {
         await admin.replyEmail(
           widget.replyId!,
           text: body,
           cc: ccList,
+          bcc: bccList,
+          uploadedAttachments: _uploads,
+        );
+      } else if (isForward) {
+        await admin.forwardEmail(
+          widget.forwardId!,
+          to: recipients,
+          cc: ccList,
+          bcc: bccList,
+          text: body,
+          uploadedAttachments: _uploads,
         );
       } else {
         await admin.sendEmail(
           to: recipients,
           cc: ccList,
+          bcc: bccList,
           subject: subject,
           text: body,
+          uploadedAttachments: _uploads,
         );
       }
 
@@ -600,6 +714,11 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = widget.forwardId != null
+        ? 'Forward Message'
+        : widget.replyId != null
+            ? 'Reply Message'
+            : 'New Message';
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -619,10 +738,7 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.replyId != null ? 'Reply Message' : 'New Message',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.of(context).pop(),
@@ -630,9 +746,9 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
             ],
           ),
           const Divider(),
-          // To Field
           TextField(
             controller: _toController,
+            enabled: widget.replyId == null,
             decoration: InputDecoration(
               labelText: 'To',
               hintText: 'recipient@domain.com',
@@ -658,9 +774,24 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
             ),
             const Divider(height: 1),
           ],
-          // Subject Field
+          TextField(
+            controller: _bccController,
+            decoration: InputDecoration(
+              labelText: 'Bcc',
+              hintText: 'Optional, comma-separated',
+              border: InputBorder.none,
+              suffixIcon: _showBcc
+                  ? null
+                  : IconButton(
+                      icon: const Text('+Bcc', style: TextStyle(fontSize: 12)),
+                      onPressed: () => setState(() => _showBcc = true),
+                    ),
+            ),
+          ),
+          const Divider(height: 1),
           TextField(
             controller: _subjectController,
+            enabled: !isForwardLike && !isReplyLike,
             decoration: const InputDecoration(
               labelText: 'Subject',
               hintText: 'Subject line',
@@ -668,7 +799,26 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
             ),
           ),
           const Divider(height: 1),
-          // Body Field
+          if (_attachmentNames.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              children: _attachmentNames
+                  .map((n) => Chip(
+                        label: Text(n, style: const TextStyle(fontSize: 10)),
+                        visualDensity: VisualDensity.compact,
+                      ))
+                  .toList(),
+            ),
+          Row(
+            children: [
+              IconButton(
+                onPressed: _picking ? null : _pickAttachments,
+                icon: const Icon(Icons.attach_file, size: 18),
+                tooltip: 'Attach images (max 10 MB each)',
+              ),
+              if (_picking) const Text('Uploading…', style: TextStyle(fontSize: 11)),
+            ],
+          ),
           Expanded(
             child: TextField(
               controller: _bodyController,
@@ -682,7 +832,6 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          // Send Button
           ElevatedButton.icon(
             onPressed: _isSending ? null : _handleSend,
             icon: _isSending
@@ -692,19 +841,28 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.send),
-            label: Text(_isSending ? 'Sending…' : 'Send Message'),
+            label: Text(_isSending ? 'Sending…' :
+                (widget.forwardId != null ? 'Forward message' : widget.replyId != null ? 'Send reply' : 'Send message')),
           ),
         ],
       ),
     );
   }
+
+  bool get isForwardLike => widget.forwardId != null;
+  bool get isReplyLike => widget.replyId != null;
 }
 
 class _EmailDetailSheet extends StatefulWidget {
   final MailRow email;
   final Function(String to, String subject, String body, String id) onReply;
+  final Function(String subject, String body, String id) onForward;
 
-  const _EmailDetailSheet({required this.email, required this.onReply});
+  const _EmailDetailSheet({
+    required this.email,
+    required this.onReply,
+    required this.onForward,
+  });
 
   @override
   State<_EmailDetailSheet> createState() => _EmailDetailSheetState();
@@ -713,6 +871,7 @@ class _EmailDetailSheet extends StatefulWidget {
 class _EmailDetailSheetState extends State<_EmailDetailSheet> {
   MailContent? _content;
   bool _isLoading = true;
+  bool _showHtml = false;
 
   @override
   void initState() {
@@ -777,6 +936,22 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
                     ),
                   ],
                   IconButton(
+                    icon: const Icon(Icons.forward),
+                    tooltip: 'Forward',
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      final subject = widget.email.subject.startsWith('Fwd:')
+                          ? widget.email.subject
+                          : 'Fwd: ${widget.email.subject}';
+                      final body = '\n\n---------- Forwarded message ----------\n'
+                          'From: ${_content?.from.display ?? widget.email.from.display}\n'
+                          'Date: ${widget.email.date}\n'
+                          'Subject: ${widget.email.subject}\n'
+                          '${_content?.text ?? ''}';
+                      widget.onForward(subject, body, widget.email.id);
+                    },
+                  ),
+                  IconButton(
                     icon: Icon(widget.email.isTrashed ? Icons.restore : Icons.delete_outline),
                     tooltip: widget.email.isTrashed ? 'Restore' : 'Trash',
                     onPressed: () async {
@@ -840,6 +1015,16 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
                         color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary,
                       ),
                     ),
+                    if (_content?.cc.isNotEmpty == true)
+                      Text(
+                        'Cc: ${_content!.cc.map((a) => a.display).join(', ')}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    if (_content?.bcc.isNotEmpty == true)
+                      Text(
+                        'Bcc: ${_content!.bcc.map((a) => a.display).join(', ')}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
                   ],
                 ),
               ),
@@ -902,14 +1087,29 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        // Body Text
+                        // Body: text or the stored HTML source.
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => setState(() => _showHtml = false),
+                              child: const Text('Text'),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() => _showHtml = true),
+                              child: const Text('HTML'),
+                            ),
+                          ],
+                        ),
                         SelectableText(
-                          _content?.text.isNotEmpty == true
-                              ? _content!.text
-                              : '(No plain text content available)',
-                          style: const TextStyle(
+                          _showHtml
+                              ? (_content?.html.isNotEmpty == true ? _content!.html : '(No HTML stored)')
+                              : (_content?.text.isNotEmpty == true
+                                  ? _content!.text
+                                  : '(No plain text content available)'),
+                          style: TextStyle(
                             fontSize: 13,
                             height: 1.5,
+                            fontFamily: _showHtml ? 'monospace' : null,
                           ),
                         ),
                       ],

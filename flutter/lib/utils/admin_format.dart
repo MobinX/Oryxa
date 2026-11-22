@@ -1,4 +1,21 @@
+class AdminDelta {
+  final String text;
+  final String tone; // up | down | flat
+
+  const AdminDelta(this.text, this.tone);
+}
+
 class AdminFormat {
+  /// Clones `apps/web/lib/format.ts:deltaOf`.
+  static AdminDelta? deltaOf(num current, num previous) {
+    if (current == 0 && previous == 0) return null;
+    if (previous == 0) return const AdminDelta('new', 'up');
+    final percent = ((current - previous) / previous) * 100;
+    if (percent.abs() < 0.5) return const AdminDelta('flat', 'flat');
+    final rounded = percent.abs() >= 100 ? percent.round() : (percent * 10).round() / 10;
+    return AdminDelta('${percent > 0 ? '↑' : '↓'}${rounded.abs()}%', percent > 0 ? 'up' : 'down');
+  }
+
   /// Numbers the way an operator reads them: grouped with commas, never a raw float.
   static String whole(num? value) {
     if (value == null || !value.isFinite) return '0';

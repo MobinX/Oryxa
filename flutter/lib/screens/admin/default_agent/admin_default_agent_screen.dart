@@ -475,7 +475,7 @@ class _AdminDefaultAgentScreenState extends State<AdminDefaultAgentScreen> with 
                             trailing: OutlinedButton(
                               onPressed: () => _handleRevertOverride(agentId, storeName),
                               style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                              child: const Text('Revert to Default', style: TextStyle(fontSize: 11)),
+                              child: const Text('Follow the default', style: TextStyle(fontSize: 11)),
                             ),
                           ),
                         );

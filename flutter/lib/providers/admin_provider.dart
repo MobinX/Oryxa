@@ -36,6 +36,9 @@ class AdminProvider extends ChangeNotifier {
   AdminStatsData? _stats;
   bool _isStatsLoading = false;
   int _statsDays = 30;
+  String? _statsError;
+  bool _officialMigrationPending = false;
+  bool get officialMigrationPending => _officialMigrationPending;
 
   AdminProvider({required this.apiService, required this.authService});
 
@@ -60,6 +63,7 @@ class AdminProvider extends ChangeNotifier {
   AdminStatsData? get stats => _stats;
   bool get isStatsLoading => _isStatsLoading;
   int get statsDays => _statsDays;
+  String? get statsError => _statsError;
 
   bool can(String capability) {
     if (_adminUser == null) return false;
@@ -380,6 +384,7 @@ class AdminProvider extends ChangeNotifier {
     required String subject,
     required String text,
     String? html,
+    List<Map<String, dynamic>>? uploadedAttachments,
   }) async {
     try {
       await apiService.post(
@@ -391,6 +396,8 @@ class AdminProvider extends ChangeNotifier {
           'subject': subject,
           'text': text,
           'html': html ?? text,
+          if (uploadedAttachments != null && uploadedAttachments.isNotEmpty)
+            'uploaded_attachments': uploadedAttachments,
         },
       );
       await fetchEmails(refresh: true);
@@ -407,6 +414,7 @@ class AdminProvider extends ChangeNotifier {
     String? html,
     List<String>? cc,
     List<String>? bcc,
+    List<Map<String, dynamic>>? uploadedAttachments,
   }) async {
     try {
       await apiService.post(
@@ -416,6 +424,8 @@ class AdminProvider extends ChangeNotifier {
           'html': html ?? text,
           if (cc != null && cc.isNotEmpty) 'cc': cc,
           if (bcc != null && bcc.isNotEmpty) 'bcc': bcc,
+          if (uploadedAttachments != null && uploadedAttachments.isNotEmpty)
+            'uploaded_attachments': uploadedAttachments,
         },
       );
       await fetchEmails(refresh: true);
@@ -473,12 +483,14 @@ class AdminProvider extends ChangeNotifier {
     _isStatsLoading = true;
     notifyListeners();
 
+    _statsError = null;
     try {
       final res = await apiService.get(ApiConfig.pathAdminStats(days: _statsDays));
       if (res is Map) {
         _stats = AdminStatsData.fromJson(Map<String, dynamic>.from(res));
       }
     } catch (e) {
+      _statsError = e.toString().replaceFirst(RegExp(r'^ApiException: '), '');
       debugPrint('[AdminProvider] Error fetching admin stats: $e');
     } finally {
       _isStatsLoading = false;
@@ -557,21 +569,21 @@ class AdminProvider extends ChangeNotifier {
   }
 
   Future<bool> updateModelBilling({
-    required double promptPerMillion,
-    required double completionPerMillion,
-    double? cachedPromptPerMillion,
-    String? provider,
-    String? model,
+    required String provider,
+    required String model,
+    required double inputUsdPerMillion,
+    required double outputUsdPerMillion,
+    required double cachedInputUsdPerMillion,
   }) async {
     try {
       await apiService.put(
         ApiConfig.pathAdminModelBilling,
         body: {
-          'provider': (provider != null && provider.isNotEmpty) ? provider : 'google',
-          'model': (model != null && model.isNotEmpty) ? model : 'gemini-2.5-flash-lite',
-          'inputUsdPerMillion': promptPerMillion,
-          'outputUsdPerMillion': completionPerMillion,
-          'cachedInputUsdPerMillion': cachedPromptPerMillion ?? (promptPerMillion * 0.25),
+          'provider': provider,
+          'model': model,
+          'inputUsdPerMillion': inputUsdPerMillion,
+          'outputUsdPerMillion': outputUsdPerMillion,
+          'cachedInputUsdPerMillion': cachedInputUsdPerMillion,
         },
       );
       return true;
@@ -579,6 +591,96 @@ class AdminProvider extends ChangeNotifier {
       debugPrint('[AdminProvider] Error updating model billing: $e');
       rethrow;
     }
+  }
+
+  /// The web dashboard's CSV link. Returns the raw text so the caller can save/share it.
+  Future<String> fetchAdminCsv() => apiService.getText(ApiConfig.pathAdminExportCsv);
+
+  // ==========================================
+  // EVENT LOG ACTIONS
+  // ==========================================
+  Future<List<Map<String, dynamic>>> fetchLogTypes() async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminLogTypes());
+      if (res is Map && res['types'] is List) {
+        return (res['types'] as List)
+            .map((t) => Map<String, dynamic>.from(t as Map))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching log types: $e');
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> fetchLogStorage() async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminLogStorage);
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching log storage: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> fetchLogEvents({
+    String? type,
+    String? start,
+    String? end,
+    String? cursor,
+    int limit = 50,
+  }) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminLogsQuery(
+        type: type,
+        start: start,
+        end: end,
+        cursor: cursor,
+        limit: limit,
+      ));
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching log events: $e');
+      rethrow;
+    }
+    return null;
+  }
+
+  // ==========================================
+  // SUBAGENT PROMPTS
+  // ==========================================
+  Future<Map<String, dynamic>?> fetchSubagent(String key) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminSubagent(key));
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching subagent: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> saveSubagent(String key, String systemPrompt) async {
+    try {
+      final res = await apiService.put(
+        ApiConfig.pathAdminSubagent(key),
+        body: {'systemPrompt': systemPrompt},
+      );
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return <String, dynamic>{};
+    } catch (e) {
+      debugPrint('[AdminProvider] Error saving subagent: $e');
+      rethrow;
+    }
+  }
+
+  // ==========================================
+  // CONSOLE PASSWORD
+  // ==========================================
+  Future<void> changeConsolePassword(String current, String next) async {
+    await apiService.post(
+      ApiConfig.pathAdminChangePassword,
+      body: {'current': current, 'next': next},
+    );
   }
 
   // ==========================================
@@ -609,7 +711,7 @@ class AdminProvider extends ChangeNotifier {
   // ==========================================
   Future<List<Map<String, dynamic>>> fetchAdminPlans() async {
     try {
-      final res = await apiService.get(ApiConfig.pathPlans);
+      final res = await apiService.get(ApiConfig.pathAdminPlans);
       if (res is List) {
         return res.map((item) => Map<String, dynamic>.from(item as Map)).toList();
       }
@@ -633,29 +735,114 @@ class AdminProvider extends ChangeNotifier {
     return [];
   }
 
-  Future<bool> updateBusinessCustomCap(String businessId, int? customCap) async {
+  Future<bool> createPlan(Map<String, dynamic> body) async {
+    try {
+      await apiService.post(ApiConfig.pathAdminPlans, body: body);
+      return true;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error creating plan: $e');
+      rethrow;
+    }
+  }
+
+  Future<int> updatePlan(String id, Map<String, dynamic> body) async {
+    try {
+      final res = await apiService.patch(ApiConfig.pathAdminPlan(id), body: body);
+      if (res is Map) return (res['notified'] as num?)?.toInt() ?? 0;
+      return 0;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error updating plan: $e');
+      rethrow;
+    }
+  }
+
+  /// Returns the list of businesses still on the plan when the API refused deletion.
+  Future<List<dynamic>?> deletePlan(String id) async {
+    try {
+      await apiService.delete(ApiConfig.pathAdminPlan(id));
+      return null;
+    } on ApiException catch (e) {
+      if (e.statusCode == 409 && e.body is Map && e.body['businesses'] is List) {
+        return e.body['businesses'] as List;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> retirePlan(String id, Map<String, dynamic> plan) async {
+    final body = Map<String, dynamic>.from(plan)..['active'] = false;
+    await updatePlan(id, body);
+  }
+
+  Future<bool> assignBusinessPlan(String businessId, String? planId) async {
     try {
       await apiService.put(
-        '${ApiConfig.pathAdminBusinessPlans}/$businessId',
-        body: {'customMonthlyReplies': customCap},
+        ApiConfig.pathAdminBusinessPlan(businessId),
+        body: {'planId': planId},
       );
       return true;
     } catch (e) {
-      debugPrint('[AdminProvider] Error updating custom cap: $e');
-      return false;
+      debugPrint('[AdminProvider] Error assigning plan: $e');
+      rethrow;
     }
+  }
+
+  Future<bool> setBusinessCaps(
+    String businessId, {
+    required int? messageLimitOverride,
+    required int? commentLimitOverride,
+  }) async {
+    try {
+      await apiService.put(
+        ApiConfig.pathAdminBusinessCaps(businessId),
+        body: {
+          'messageLimitOverride': messageLimitOverride,
+          'commentLimitOverride': commentLimitOverride,
+        },
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error setting business caps: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> resetBusinessCycle(String businessId) async {
+    try {
+      await apiService.post(ApiConfig.pathAdminBusinessPlanReset(businessId));
+      return true;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error resetting cycle: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchBusinessAssignments(String businessId) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminBusinessAssignments(businessId));
+      if (res is List) {
+        return res.map((a) => Map<String, dynamic>.from(a as Map)).toList();
+      }
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching assignments: $e');
+    }
+    return [];
   }
 
   // ==========================================
   // OFFICIAL CHANNELS & TICKETS & PROSPECTS
   // ==========================================
   Future<List<Map<String, dynamic>>> fetchOfficialChannels() async {
+    _officialMigrationPending = false;
     try {
       final res = await apiService.get(ApiConfig.pathAdminOfficialChannels);
       if (res is Map && res['channels'] is List) {
         return (res['channels'] as List).map((c) => Map<String, dynamic>.from(c as Map)).toList();
       }
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official channels: $e');
     }
     return [];
@@ -697,10 +884,14 @@ class AdminProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> fetchOfficialSettings() async {
+    _officialMigrationPending = false;
     try {
       final res = await apiService.get(ApiConfig.pathAdminOfficialSettings);
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official settings: $e');
     }
     return null;
@@ -717,13 +908,16 @@ class AdminProvider extends ChangeNotifier {
   }
 
   // Official Inbox
-  Future<List<Map<String, dynamic>>> fetchOfficialConversations({String? platform, String? status}) async {
+  Future<List<Map<String, dynamic>>> fetchOfficialConversations({String? platform}) async {
     try {
-      final res = await apiService.get(ApiConfig.pathAdminOfficialConversations(platform: platform, status: status));
+      final res = await apiService.get(ApiConfig.pathAdminOfficialConversations(platform: platform));
       if (res is Map && res['conversations'] is List) {
         return (res['conversations'] as List).map((c) => Map<String, dynamic>.from(c as Map)).toList();
       }
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official conversations: $e');
     }
     return [];
@@ -734,6 +928,9 @@ class AdminProvider extends ChangeNotifier {
       final res = await apiService.get(ApiConfig.pathAdminOfficialConversation(conversationId));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official thread: $e');
     }
     return null;
@@ -776,6 +973,9 @@ class AdminProvider extends ChangeNotifier {
         return (res['tickets'] as List).map((t) => Map<String, dynamic>.from(t as Map)).toList();
       }
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official tickets: $e');
     }
     return [];
@@ -808,6 +1008,9 @@ class AdminProvider extends ChangeNotifier {
         return {'prospects': prospects, 'weights': weights};
       }
     } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
       debugPrint('[AdminProvider] Error fetching official prospects: $e');
     }
     return {'prospects': <Map<String, dynamic>>[], 'weights': <String, dynamic>{}};
@@ -838,7 +1041,158 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[AdminProvider] Error saving weights: $e');
-      return false;
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchOfficialTicketDetail(String id) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminOfficialTicket(id));
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      if (e is ApiException && e.statusCode == 503) {
+        _officialMigrationPending = true;
+      }
+      debugPrint('[AdminProvider] Error fetching ticket detail: $e');
+    }
+    return null;
+  }
+
+  Future<bool> addOfficialTicketNote(String id, String note) async {
+    try {
+      await apiService.post(
+        ApiConfig.pathAdminOfficialTicketNotes(id),
+        body: {'note': note},
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error adding ticket note: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchOfficialProspectDetail(String id) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminOfficialProspect(id));
+      if (res is Map) return Map<String, dynamic>.from(res);
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching prospect: $e');
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchOfficialProspectEvents(String id) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminOfficialProspectEvents(id));
+      if (res is Map && res['events'] is List) {
+        return (res['events'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      if (res is List) {
+        return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching prospect events: $e');
+    }
+    return [];
+  }
+
+  Future<int> rescoreOfficialProspects() async {
+    try {
+      final res = await apiService.post(ApiConfig.pathAdminOfficialProspectRescore, body: {});
+      if (res is Map) return (res['rescanned'] as num?)?.toInt() ?? 0;
+      return 0;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error re-scoring prospects: $e');
+      rethrow;
+    }
+  }
+
+  // ==========================================
+  // STORE CHANNELS (FACEBOOK OAUTH)
+  // ==========================================
+  Future<String?> fetchFacebookAuthUrl() async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminFacebookAuth);
+      if (res is Map) return res['url']?.toString();
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching Facebook auth URL: $e');
+      rethrow;
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchFacebookPendingPages(String token) async {
+    try {
+      final res = await apiService.get(ApiConfig.pathAdminFacebookPending(token));
+      if (res is Map && res['pages'] is List) {
+        return (res['pages'] as List).map((p) => Map<String, dynamic>.from(p as Map)).toList();
+      }
+    } catch (e) {
+      debugPrint('[AdminProvider] Error fetching pending Facebook pages: $e');
+      rethrow;
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> connectFacebookPages(String token, List<String> pageIds) async {
+    try {
+      final res = await apiService.post(
+        ApiConfig.pathAdminFacebookConnect,
+        body: {'token': token, 'pageIds': pageIds},
+      );
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return {'connected': [], 'failed': []};
+    } catch (e) {
+      debugPrint('[AdminProvider] Error connecting Facebook pages: $e');
+      rethrow;
+    }
+  }
+
+  // ==========================================
+  // MAIL ATTACHMENTS & FORWARD
+  // ==========================================
+  Future<Map<String, dynamic>> signMailAttachment({
+    required String filename,
+    required String contentType,
+    required int size,
+  }) async {
+    final res = await apiService.post(
+      ApiConfig.pathAdminMailAttachmentSign,
+      body: {'filename': filename, 'contentType': contentType, 'size': size},
+    );
+    if (res is Map) return Map<String, dynamic>.from(res);
+    throw Exception('Invalid attachment signing response');
+  }
+
+  Future<String> mailAttachmentUrl(String emailId, String attachmentId) =>
+      '${ApiConfig.webOrigin(apiService.baseUrl)}'
+      '${ApiConfig.pathAdminMailAttachment(emailId, attachmentId)}';
+
+  Future<bool> forwardEmail(
+    String id, {
+    required List<String> to,
+    List<String>? cc,
+    List<String>? bcc,
+    String? text,
+    List<Map<String, dynamic>>? uploadedAttachments,
+  }) async {
+    try {
+      await apiService.post(
+        ApiConfig.pathAdminMailForward(id),
+        body: {
+          'to': to,
+          if (cc != null && cc.isNotEmpty) 'cc': cc,
+          if (bcc != null && bcc.isNotEmpty) 'bcc': bcc,
+          if (text != null) 'text': text,
+          if (uploadedAttachments != null && uploadedAttachments.isNotEmpty)
+            'uploaded_attachments': uploadedAttachments,
+        },
+      );
+      await fetchEmails(refresh: true);
+      return true;
+    } catch (e) {
+      debugPrint('[AdminProvider] Error forwarding email: $e');
+      rethrow;
     }
   }
 }

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../config/app_theme.dart';
 import '../../../../providers/admin_provider.dart';
+import 'admin_official_inbox_screen.dart';
+import 'official_migration_card.dart';
 
 class AdminOfficialProspectsScreen extends StatefulWidget {
   const AdminOfficialProspectsScreen({super.key});
@@ -81,26 +83,42 @@ class _AdminOfficialProspectsScreenState extends State<AdminOfficialProspectsScr
 
     final Map<String, dynamic> payload = {};
     for (final key in _weightKeys) {
-      final val = int.tryParse(_weightControllers[key]?.text ?? '1');
-      if (val != null) payload[key] = val;
+      final val = int.tryParse(_weightControllers[key]?.text ?? '0');
+      if (val == null || val < 0 || val > 10) {
+        if (mounted) {
+          setState(() => _isSavingWeights = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Each weight must be a whole number between 0 and 10.'),
+              backgroundColor: AppTheme.danger,
+            ),
+          );
+        }
+        return;
+      }
+      payload[key] = val;
     }
 
-    final ok = await admin.saveOfficialWeights(payload);
-    if (mounted) {
-      setState(() => _isSavingWeights = false);
-      if (ok) {
+    try {
+      await admin.saveOfficialWeights(payload);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSavingWeights = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Weights saved and prospects re-scored'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-        _loadProspects();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save weights'), backgroundColor: AppTheme.danger),
+          SnackBar(content: Text('Failed to save weights: $e'), backgroundColor: AppTheme.danger),
         );
       }
+      return;
+    }
+    if (mounted) {
+      setState(() => _isSavingWeights = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Weights saved and prospects re-scored'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+      _loadProspects();
     }
   }
 
@@ -207,6 +225,7 @@ class _AdminOfficialProspectsScreenState extends State<AdminOfficialProspectsScr
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final migrationPending = context.watch<AdminProvider>().officialMigrationPending;
 
     return RefreshIndicator(
       onRefresh: _loadProspects,
@@ -264,6 +283,11 @@ class _AdminOfficialProspectsScreenState extends State<AdminOfficialProspectsScr
             ),
           ),
           const SizedBox(height: 16),
+
+          if (migrationPending) ...[
+            const OfficialMigrationCard(),
+            const SizedBox(height: 16),
+          ],
 
           // Scoring weights expansion card
           ExpansionTile(
@@ -431,6 +455,29 @@ class _AdminOfficialProspectsScreenState extends State<AdminOfficialProspectsScr
                         const SizedBox(height: 4),
                         Text('Needs: $needs', style: const TextStyle(fontSize: 12)),
                       ],
+
+                      if (prospect['conversationId'] != null)
+                        TextButton(
+                          onPressed: () {
+                            final conversation = <String, dynamic>{
+                              'id': prospect['conversationId'].toString(),
+                              'customerName': name,
+                              'platform': prospect['platform'] ?? '',
+                              'customerPlatformId': prospect['contactPlatformId'] ?? '',
+                            };
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => OfficialThreadSheet(
+                                conversationId: conversation['id'] as String,
+                                initialData: conversation,
+                                onChanged: _loadProspects,
+                              ),
+                            );
+                          },
+                          child: const Text('Open conversation', style: TextStyle(fontSize: 11)),
+                        ),
 
                       const SizedBox(height: 6),
                       Row(

@@ -19,6 +19,7 @@ import 'official/admin_official_tickets_screen.dart';
 import 'plans/admin_plans_screen.dart';
 import 'playground/admin_playground_screen.dart';
 import 'settings/admin_settings_screen.dart';
+import 'subagent/admin_subagent_screen.dart';
 import 'tokens/admin_tokens_screen.dart';
 
 class _NavItem {
@@ -99,7 +100,7 @@ class _AdminScaffoldState extends State<AdminScaffold> {
       items: [
         _NavItem(
           key: 'inbox',
-          label: 'Mailbox',
+          label: 'Inbox',
           icon: Icons.mail_outline,
           capability: 'inbox',
           builder: () => const AdminMailboxScreen(),
@@ -129,6 +130,13 @@ class _AdminScaffoldState extends State<AdminScaffold> {
           icon: Icons.description_outlined,
           capability: 'default_agent',
           builder: () => const AdminDefaultAgentScreen(),
+        ),
+        _NavItem(
+          key: 'subagent',
+          label: 'Subagent prompts',
+          icon: Icons.science_outlined,
+          capability: 'subagent',
+          builder: () => const AdminSubagentScreen(),
         ),
         _NavItem(
           key: 'playground',

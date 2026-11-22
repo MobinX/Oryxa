@@ -216,7 +216,8 @@ class ApiConfig {
   static const String pathApi2AdminLogin = '/api2/admin/login';
   static const String pathAdminMe = '/api2/admin/me';
   static const String pathAdminLogout = '/api2/admin/logout';
-  static String pathAdminStats({int days = 30}) => '/admin/stats?days=$days';
+  static String pathAdminStats({int days = 30, String tz = 'UTC'}) =>
+      '/api2/admin/stats?days=$days&tz=${Uri.encodeComponent(tz)}';
   static const String pathAdminMailbox = '/api2/admin/mail/mailbox';
   static const String pathAdminMailStorage = '/api2/admin/mail/storage';
   static String pathAdminEmails({String folder = 'inbox', String? q, int limit = 40, int offset = 0}) {
@@ -247,26 +248,38 @@ class ApiConfig {
   static const String pathAdminMailPushHeartbeat = '/api2/admin/mail/push/heartbeat';
   static const String pathAdminMailPushStatus = '/api2/admin/mail/push/status';
   static const String pathAdminMailPushTest = '/api2/admin/mail/push/test';
-  static const String pathAdminTokenAnalytics = '/admin/token-analytics';
+  static const String pathAdminTokenAnalytics = '/api2/admin/token-analytics';
   static String pathAdminTokenUsage({String? month}) =>
       '/api2/admin/token-analytics/businesses${month != null ? '?month=$month' : ''}';
   static String pathAdminBusinessTokenUsage(String businessId, {String? month}) =>
       '/api2/admin/token-analytics/businesses/$businessId${month != null ? '?month=$month' : ''}';
-  static const String pathAdminModelBilling = '/admin/model-billing';
-  static const String pathAdminPlans = '/admin/plans';
+  static const String pathAdminModelBilling = '/api2/admin/model-billing';
+  static const String pathAdminPlans = '/api2/admin/plans';
   static const String pathAdminBusinessPlans = '/api2/admin/plans/businesses';
-  static const String pathAdminChannels = '/admin/channels';
+  static String pathAdminPlan(String id) => '/api2/admin/plans/$id';
+  static String pathAdminBusinessPlan(String businessId) =>
+      '/api2/admin/businesses/$businessId/plan';
+  static String pathAdminBusinessCaps(String businessId) =>
+      '/api2/admin/businesses/$businessId/caps';
+  static String pathAdminBusinessPlanReset(String businessId) =>
+      '/api2/admin/businesses/$businessId/plan/reset';
+  static String pathAdminBusinessAssignments(String businessId) =>
+      '/api2/admin/businesses/$businessId/assignments';
+  static const String pathAdminChannels = '/api2/admin/channels';
+  static const String pathAdminFacebookAuth = '/api2/admin/channels/facebook/auth';
+  static String pathAdminFacebookPending(String token) =>
+      '/api2/admin/channels/facebook/pending?token=${Uri.encodeComponent(token)}';
+  static const String pathAdminFacebookConnect = '/api2/admin/channels/facebook/connect';
   static const String pathAdminOfficialChannels = '/api2/admin/official/channels';
   static String pathAdminOfficialChannelVerify(String id) => '/api2/admin/official/channels/$id/verify';
   static String pathAdminOfficialChannelDisconnect(String id) => '/api2/admin/official/channels/$id/disconnect';
   static const String pathAdminOfficialWhatsAppConnect = '/api2/admin/official/channels/whatsapp/connect';
   static const String pathAdminOfficialSettings = '/api2/admin/official/settings';
-  static String pathAdminOfficialConversations({String? platform, String? status}) {
+  static String pathAdminOfficialConversations({String? platform}) {
     var p = '/api2/admin/official/conversations';
-    final params = <String>[];
-    if (platform != null && platform.isNotEmpty) params.add('platform=${Uri.encodeComponent(platform)}');
-    if (status != null && status.isNotEmpty && status != 'all') params.add('status=${Uri.encodeComponent(status)}');
-    if (params.isNotEmpty) p += '?${params.join('&')}';
+    if (platform != null && platform.isNotEmpty) {
+      p += '?platform=${Uri.encodeComponent(platform)}';
+    }
     return p;
   }
   static String pathAdminOfficialConversation(String id) => '/api2/admin/official/conversations/$id';
@@ -294,6 +307,35 @@ class ApiConfig {
   static const String pathAdminDefaultAgent = '/api2/admin/default-agent';
   static const String pathAdminDefaultAgentOverrides = '/api2/admin/default-agent/overrides';
   static const String pathAdminDefaultAgentFollow = '/api2/admin/default-agent/overrides/follow';
-  static const String pathAdminLogs = '/admin/logs';
-  static const String pathAdminSettings = '/admin/settings';
+  static const String pathAdminLogs = '/api2/logs';
+  static String pathAdminLogTypes() => '/api2/logs/types';
+  static const String pathAdminLogStorage = '/api2/logs/storage';
+  static String pathAdminLogsQuery({
+    String? type,
+    String? start,
+    String? end,
+    String? cursor,
+    int limit = 50,
+  }) {
+    final params = <String>[];
+    if (type != null && type.isNotEmpty) params.add('type=${Uri.encodeComponent(type)}');
+    if (start != null && start.isNotEmpty) params.add('start=${Uri.encodeComponent(start)}');
+    if (end != null && end.isNotEmpty) params.add('end=${Uri.encodeComponent(end)}');
+    if (cursor != null && cursor.isNotEmpty) params.add('cursor=${Uri.encodeComponent(cursor)}');
+    params.add('limit=$limit');
+    return '$pathAdminLogs?${params.join('&')}';
+  }
+  static const String pathAdminExportCsv = '/api2/admin/export.csv';
+  static const String pathAdminChangePassword = '/api2/admin/password';
+  static const String pathAdminMailAttachmentSign = '/api2/admin/mail/attachments/sign';
+  static String pathAdminMailAttachment(
+          String emailId, String attachmentId) =>
+      '/api2/admin/mail/emails/${Uri.encodeComponent(emailId)}/attachments/${Uri.encodeComponent(attachmentId)}';
+  static const String pathAdminSubagents = '/api2/admin/subagents';
+  static String pathAdminSubagent(String key) => '/api2/admin/subagents/${Uri.encodeComponent(key)}';
+  static String pathAdminOfficialTicketNotes(String id) =>
+      '/api2/admin/official/tickets/$id/notes';
+  static String pathAdminOfficialProspectEvents(String id) =>
+      '/api2/admin/official/prospects/$id/events';
+  static const String pathAdminOfficialProspectRescore = '/api2/admin/official/prospects/rescore';
 }

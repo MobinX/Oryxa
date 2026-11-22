@@ -119,6 +119,33 @@ class ApiService {
     }
   }
 
+  /// Raw text response for CSV downloads. `get()` JSON-decodes, so it cannot be used here.
+  Future<String> getText(String path) async {
+    final uri = _buildUri(path);
+    final res = await _send(
+      () => http.get(uri, headers: _headers()).timeout(const Duration(seconds: 30)),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException('HTTP ${res.statusCode}', statusCode: res.statusCode);
+    }
+    return res.body;
+  }
+
+  /// PUT raw bytes to a pre-signed storage URL (no console token: the URL is the credential).
+  Future<void> putBytes(String url, List<int> bytes, String contentType) async {
+    final res = await http
+        .put(
+          Uri.parse(url),
+          headers: {'Content-Type': contentType},
+          body: bytes,
+        )
+        .timeout(const Duration(seconds: 60));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException('Attachment upload failed (HTTP ${res.statusCode})',
+          statusCode: res.statusCode);
+    }
+  }
+
   Future<dynamic> post(String path, {dynamic body}) async {
     final uri = _buildUri(path);
     debugPrint('[API POST] $uri');
