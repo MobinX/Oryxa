@@ -468,7 +468,16 @@ class _AdminScaffoldState extends State<AdminScaffold> {
           ),
         ),
       ),
-      body: currentItem.builder(),
+      // The console has no bottomNavigationBar, so Scaffold does not inset its
+      // body for the Android navigation bar in edge-to-edge mode. Keep every
+      // admin screen above it without changing each screen's own scrolling.
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        left: false,
+        right: false,
+        child: currentItem.builder(),
+      ),
     );
   }
 }
