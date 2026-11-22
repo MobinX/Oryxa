@@ -352,7 +352,7 @@ class _AdminOfficialTicketsScreenState extends State<AdminOfficialTicketsScreen>
                             style: TextStyle(fontSize: 10, color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary),
                           ),
                           OutlinedButton.icon(
-                            onPressed: () => showModalBottomSheet(
+                            onPressed: () => showModalBottomSheet(useSafeArea: true,
                               context: context,
                               isScrollControlled: true,
                               backgroundColor: Colors.transparent,

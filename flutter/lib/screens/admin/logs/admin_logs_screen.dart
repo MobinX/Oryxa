@@ -124,7 +124,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.scrollable_text_outlined, color: AppTheme.primaryColor),
+              const Icon(Icons.article_outlined, color: AppTheme.primaryColor),
               const SizedBox(width: 8),
               Text(
                 'Event log',
@@ -470,7 +470,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.hard_drive_outlined,
+                Icon(Icons.storage,
                     size: 18, color: isDark ? AppTheme.textDarkSecondary : AppTheme.textLightSecondary),
                 const SizedBox(width: 8),
                 const Text('Axiom storage', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),

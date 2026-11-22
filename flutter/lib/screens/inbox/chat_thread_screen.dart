@@ -389,7 +389,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
   }
 
   Future<void> _openTools() async {
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showModalBottomSheet<String>(useSafeArea: true,
       context: context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
@@ -443,7 +443,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
     _ToolResult? result;
 
     if (choice == 'product_list') {
-      result = await showModalBottomSheet<_ToolResult>(
+      result = await showModalBottomSheet<_ToolResult>(useSafeArea: true,
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
@@ -468,7 +468,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
     } else if (choice == 'product_variant') {
       final product = await _pickProduct(context, widget.businessId);
       if (product == null || !mounted) return;
-      result = await showModalBottomSheet<_ToolResult>(
+      result = await showModalBottomSheet<_ToolResult>(useSafeArea: true,
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
@@ -479,7 +479,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
         ),
       );
     } else if (choice == 'order') {
-      result = await showModalBottomSheet<_ToolResult>(
+      result = await showModalBottomSheet<_ToolResult>(useSafeArea: true,
         context: context,
         isScrollControlled: true,
         isDismissible: true,
@@ -531,7 +531,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
 
   Future<void> _sendSuggestion(InboxSuggestion suggestion) async {
     if (suggestion.kind == 'order') {
-      final result = await showModalBottomSheet<_ToolResult>(
+      final result = await showModalBottomSheet<_ToolResult>(useSafeArea: true,
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
@@ -606,7 +606,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
         break;
       }
     }
-    await showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -1736,7 +1736,7 @@ class _ToolMenuItem extends StatelessWidget {
 }
 
 Future<ProductModel?> _pickProduct(BuildContext context, String businessId) {
-  return showModalBottomSheet<ProductModel>(
+  return showModalBottomSheet<ProductModel>(useSafeArea: true,
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -1788,7 +1788,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.72,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2000,7 +2000,9 @@ class _ProductListSheetState extends State<_ProductListSheet> {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-            16, 0, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+            16, 0, 16,
+            16 + MediaQuery.of(context).viewInsets.bottom +
+                MediaQuery.viewPaddingOf(context).bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2117,7 +2119,7 @@ class _VariantPickerSheetState extends State<_VariantPickerSheet> {
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.62,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3123,7 +3125,7 @@ class _CustomerDetailsSheet extends StatelessWidget {
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.7,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.viewPaddingOf(context).bottom),
         children: [
           const Text(
             'CUSTOMER DETAILS',

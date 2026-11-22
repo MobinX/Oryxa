@@ -340,7 +340,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     }
 
     final picker = ImagePicker();
-    final source = await showModalBottomSheet<ImageSource>(
+    final source = await showModalBottomSheet<ImageSource>(useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

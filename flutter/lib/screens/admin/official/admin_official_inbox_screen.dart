@@ -37,7 +37,7 @@ class _AdminOfficialInboxScreenState extends State<AdminOfficialInboxScreen> {
   }
 
   void _openThread(Map<String, dynamic> conversation) {
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -481,7 +481,7 @@ class _OfficialThreadSheetState extends State<OfficialThreadSheet> {
                       ],
                     ),
                     ..._tickets.map((t) => TextButton(
-                          onPressed: () => showModalBottomSheet(
+                          onPressed: () => showModalBottomSheet(useSafeArea: true,
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,

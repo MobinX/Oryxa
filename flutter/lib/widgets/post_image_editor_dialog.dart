@@ -20,7 +20,7 @@ class PostImageEditorDialog {
 
     ImageSource? source = initialSource;
     if (source == null) {
-      source = await showModalBottomSheet<ImageSource>(
+      source = await showModalBottomSheet<ImageSource>(useSafeArea: true,
         context: context,
         backgroundColor: Theme.of(context).cardColor,
         shape: const RoundedRectangleBorder(

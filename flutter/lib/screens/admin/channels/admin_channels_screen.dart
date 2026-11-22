@@ -130,7 +130,7 @@ class _AdminChannelsScreenState extends State<AdminChannelsScreen> {
     try {
       final pages = await context.read<AdminProvider>().fetchFacebookPendingPages(token);
       if (!mounted) return;
-      showModalBottomSheet(
+      showModalBottomSheet(useSafeArea: true,
         context: context,
         isScrollControlled: true,
         builder: (ctx) => DraggableScrollableSheet(
@@ -164,7 +164,6 @@ class _AdminChannelsScreenState extends State<AdminChannelsScreen> {
                             final held = page['heldByStore'] == true;
                             return CheckboxListTile(
                               value: _selected.contains(id),
-                              disabled: held,
                               title: Text((page['name'] ?? '').toString()),
                               subtitle: Text('Page id $id'
                                   '${held ? ' · Connected to a store' : ''}'
@@ -185,7 +184,8 @@ class _AdminChannelsScreenState extends State<AdminChannelsScreen> {
                         ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.fromLTRB(
+                      16, 16, 16, 16 + MediaQuery.viewPaddingOf(ctx).bottom),
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

@@ -465,7 +465,7 @@ class _AdminOfficialProspectsScreenState extends State<AdminOfficialProspectsScr
                               'platform': prospect['platform'] ?? '',
                               'customerPlatformId': prospect['contactPlatformId'] ?? '',
                             };
-                            showModalBottomSheet(
+                            showModalBottomSheet(useSafeArea: true,
                               context: context,
                               isScrollControlled: true,
                               backgroundColor: Colors.transparent,

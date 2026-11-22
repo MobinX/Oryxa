@@ -713,7 +713,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     if (biz == null || _pendingPhotos.length >= 4) return;
 
     final picker = ImagePicker();
-    final source = await showModalBottomSheet<ImageSource>(
+    final source = await showModalBottomSheet<ImageSource>(useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => SafeArea(
@@ -771,7 +771,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   void _showConversationsSheet() {
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -781,7 +781,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
             final isDark = Theme.of(ctx).brightness == Brightness.dark;
             return Container(
               height: MediaQuery.of(ctx).size.height * 0.7,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + MediaQuery.viewPaddingOf(ctx).bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -880,7 +880,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   }
 
   void _showLogsSheet() {
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF0F111A),
@@ -890,7 +890,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
           builder: (ctx, setSheetState) {
             return Container(
               height: MediaQuery.of(ctx).size.height * 0.75,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(ctx).bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1078,7 +1078,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
     final totalTokens = totalIn + totalOut;
 
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -1086,7 +1086,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Container(
           height: MediaQuery.of(ctx).size.height * 0.75,
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(ctx).bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1210,7 +1210,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     final commentCtrl = TextEditingController(text: agent.commentReplyGuidance ?? agent.defaultCommentReplyGuidance ?? '');
     bool saving = false;
 
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -1218,7 +1218,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom +
+                    MediaQuery.viewPaddingOf(ctx).bottom),
               child: Container(
                 height: MediaQuery.of(ctx).size.height * 0.8,
                 padding: const EdgeInsets.all(16),

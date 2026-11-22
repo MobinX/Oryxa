@@ -96,7 +96,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       await Clipboard.setData(ClipboardData(text: csv));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CSV copied to clipboard (${csv.length} characters)')),
+          SnackBar(content: Text('CSV copied to clipboard (${csv.length} characters)')),
         );
       }
     } catch (e) {

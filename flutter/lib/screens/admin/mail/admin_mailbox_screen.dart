@@ -46,7 +46,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
     String? replyId,
     String? forwardId,
   }) {
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -61,7 +61,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
   }
 
   void _openEmailDetail(MailRow email) {
-    showModalBottomSheet(
+    showModalBottomSheet(useSafeArea: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -333,7 +333,8 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                         ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.fromLTRB(
+                16, 8, 16, 8 + MediaQuery.viewPaddingOf(context).bottom),
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(color: isDark ? Colors.white10 : Colors.black12),
@@ -367,7 +368,6 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
                           },
                     icon: const Icon(Icons.chevron_right, size: 16),
                     label: const Text('Older', style: TextStyle(fontSize: 12)),
-                    textDirection: TextDirection.rtl,
                   ),
                 ],
               ),
@@ -404,7 +404,7 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
     final apiService = context.read<ApiService>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    showModalBottomSheet<void>(
+    showModalBottomSheet<void>(useSafeArea: true,
       context: context,
       backgroundColor: isDark ? const Color(0xFF1E1F30) : Colors.white,
       shape: const RoundedRectangleBorder(
@@ -726,7 +726,9 @@ class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
         top: 16,
         left: 16,
         right: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom +
+            16 +
+            MediaQuery.viewPaddingOf(context).bottom,
       ),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1F30) : Colors.white,
@@ -897,7 +899,8 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(
+        20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1F30) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),

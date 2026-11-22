@@ -1164,7 +1164,7 @@ class AdminProvider extends ChangeNotifier {
     throw Exception('Invalid attachment signing response');
   }
 
-  Future<String> mailAttachmentUrl(String emailId, String attachmentId) =>
+  String mailAttachmentUrl(String emailId, String attachmentId) =>
       '${ApiConfig.webOrigin(apiService.baseUrl)}'
       '${ApiConfig.pathAdminMailAttachment(emailId, attachmentId)}';
 
