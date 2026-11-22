@@ -83,6 +83,9 @@ readme.file
 README.file
 master-prompt.md
 PROJECT_CONTEXT.md
+report.md
+report*.md
+suggestion*.md
 RTK.md
 .codex/
 .qoder/

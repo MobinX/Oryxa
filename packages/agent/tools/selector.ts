@@ -28,109 +28,120 @@ export function selectToolsForTurn(options: DynamicToolSelectorOptions): Structu
   const { intents, agentState, allTools, enableCompositeTools = true, maxTools = 4, hasImages = false } = options;
   const selectedToolNames = new Set<string>();
 
-  // 1. If customer sent an image, ensure visual catalog search/quote tools are prioritized
-  if (hasImages) {
-    if (enableCompositeTools && allTools.browse_catalog) {
-      selectedToolNames.add('browse_catalog');
-      selectedToolNames.add('get_product_quote');
-    } else {
-      if (allTools.get_product) selectedToolNames.add('get_product');
-      if (allTools.find_variant) selectedToolNames.add('find_variant');
+  // 0. When canonical composite suite is requested (maxTools >= 5), bind all composite tools in fixed alphabetical order
+  // Note: send_suggestions is excluded from canonical composite tools in favor of <<CHIPS: ...>> reply syntax,
+  // saving an entire 3.5-second LLM round-trip and thousands of tokens per turn.
+  if (enableCompositeTools && maxTools >= 5) {
+    if (allTools.browse_catalog) selectedToolNames.add('browse_catalog');
+    if (allTools.get_order_status) selectedToolNames.add('get_order_status');
+    if (allTools.get_product_quote) selectedToolNames.add('get_product_quote');
+    if (allTools.place_order) selectedToolNames.add('place_order');
+    if (allTools.report_human_intervene) selectedToolNames.add('report_human_intervene');
+  } else {
+    // 1. If customer sent an image, ensure visual catalog search/quote tools are prioritized
+    if (hasImages) {
+      if (enableCompositeTools && allTools.browse_catalog) {
+        selectedToolNames.add('browse_catalog');
+        selectedToolNames.add('get_product_quote');
+      } else {
+        if (allTools.get_product) selectedToolNames.add('get_product');
+        if (allTools.find_variant) selectedToolNames.add('find_variant');
+      }
     }
-  }
 
-  // 2. Check active pending checkout state
-  if (agentState?.pendingOrder) {
-    if (enableCompositeTools && allTools.place_order) {
-      selectedToolNames.add('place_order');
-      selectedToolNames.add('get_product_quote');
-    } else {
-      if (allTools.create_order) selectedToolNames.add('create_order');
-      if (allTools.find_variant) selectedToolNames.add('find_variant');
+    // 2. Check active pending checkout state
+    if (agentState?.pendingOrder) {
+      if (enableCompositeTools && allTools.place_order) {
+        selectedToolNames.add('place_order');
+        selectedToolNames.add('get_product_quote');
+      } else {
+        if (allTools.create_order) selectedToolNames.add('create_order');
+        if (allTools.find_variant) selectedToolNames.add('find_variant');
+      }
     }
-  }
 
-  // 2. Map classified intents to tool categories
-  for (const intent of intents) {
-    switch (intent) {
-      case 'browse':
-        if (enableCompositeTools && allTools.browse_catalog) {
-          selectedToolNames.add('browse_catalog');
-          selectedToolNames.add('get_product_quote');
-        } else {
-          if (allTools.show_products) selectedToolNames.add('show_products');
-          if (allTools.get_product) selectedToolNames.add('get_product');
-        }
-        break;
+    // 3. Map classified intents to tool categories
+    for (const intent of intents) {
+      switch (intent) {
+        case 'browse':
+          if (enableCompositeTools && allTools.browse_catalog) {
+            selectedToolNames.add('browse_catalog');
+            selectedToolNames.add('get_product_quote');
+          } else {
+            if (allTools.show_products) selectedToolNames.add('show_products');
+            if (allTools.get_product) selectedToolNames.add('get_product');
+          }
+          break;
 
-      case 'quote':
-        if (enableCompositeTools && allTools.get_product_quote) {
-          selectedToolNames.add('get_product_quote');
-          selectedToolNames.add('browse_catalog');
-        } else {
-          if (allTools.get_product_options) selectedToolNames.add('get_product_options');
-          if (allTools.find_variant) selectedToolNames.add('find_variant');
-          if (allTools.get_product_by_variant_id) selectedToolNames.add('get_product_by_variant_id');
-        }
-        if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
-        break;
+        case 'quote':
+          if (enableCompositeTools && allTools.get_product_quote) {
+            selectedToolNames.add('get_product_quote');
+            selectedToolNames.add('browse_catalog');
+          } else {
+            if (allTools.get_product_options) selectedToolNames.add('get_product_options');
+            if (allTools.find_variant) selectedToolNames.add('find_variant');
+            if (allTools.get_product_by_variant_id) selectedToolNames.add('get_product_by_variant_id');
+          }
+          if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
+          break;
 
-      case 'checkout':
-        if (enableCompositeTools && allTools.place_order) {
-          selectedToolNames.add('place_order');
-          selectedToolNames.add('get_product_quote');
-        } else {
-          if (allTools.create_order) selectedToolNames.add('create_order');
-          if (allTools.get_product_options) selectedToolNames.add('get_product_options');
-        }
-        break;
+        case 'checkout':
+          if (enableCompositeTools && allTools.place_order) {
+            selectedToolNames.add('place_order');
+            selectedToolNames.add('get_product_quote');
+          } else {
+            if (allTools.create_order) selectedToolNames.add('create_order');
+            if (allTools.get_product_options) selectedToolNames.add('get_product_options');
+          }
+          break;
 
-      case 'tracking':
-        if (enableCompositeTools && allTools.get_order_status) {
-          selectedToolNames.add('get_order_status');
-        } else {
-          if (allTools.get_order) selectedToolNames.add('get_order');
-          if (allTools.update_order) selectedToolNames.add('update_order');
-          if (allTools.cancel_order) selectedToolNames.add('cancel_order');
-        }
-        break;
+        case 'tracking':
+          if (enableCompositeTools && allTools.get_order_status) {
+            selectedToolNames.add('get_order_status');
+          } else {
+            if (allTools.get_order) selectedToolNames.add('get_order');
+            if (allTools.update_order) selectedToolNames.add('update_order');
+            if (allTools.cancel_order) selectedToolNames.add('cancel_order');
+          }
+          break;
 
-      case 'policy':
-        if (enableCompositeTools && allTools.get_product_quote) {
-          selectedToolNames.add('get_product_quote');
-          selectedToolNames.add('browse_catalog');
-        } else {
-          if (allTools.get_product) selectedToolNames.add('get_product');
-        }
-        if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
-        break;
+        case 'policy':
+          if (enableCompositeTools && allTools.get_product_quote) {
+            selectedToolNames.add('get_product_quote');
+            selectedToolNames.add('browse_catalog');
+          } else {
+            if (allTools.get_product) selectedToolNames.add('get_product');
+          }
+          if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
+          break;
 
-      case 'escalate':
-        if (allTools.report_human_intervene) selectedToolNames.add('report_human_intervene');
-        break;
+        case 'escalate':
+          if (allTools.report_human_intervene) selectedToolNames.add('report_human_intervene');
+          break;
 
-      case 'chitchat':
-        // No heavy catalog tools required for bare greetings or acknowledgements
-        break;
+        case 'chitchat':
+          // No heavy catalog tools required for bare greetings or acknowledgements
+          break;
 
-      case 'general':
-      default:
-        // Default core shopping fallback
-        if (enableCompositeTools && allTools.browse_catalog) {
-          selectedToolNames.add('browse_catalog');
-          selectedToolNames.add('get_product_quote');
-        } else {
-          if (allTools.show_products) selectedToolNames.add('show_products');
-          if (allTools.get_product) selectedToolNames.add('get_product');
-        }
-        if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
-        break;
+        case 'general':
+        default:
+          // Default core shopping fallback
+          if (enableCompositeTools && allTools.browse_catalog) {
+            selectedToolNames.add('browse_catalog');
+            selectedToolNames.add('get_product_quote');
+          } else {
+            if (allTools.show_products) selectedToolNames.add('show_products');
+            if (allTools.get_product) selectedToolNames.add('get_product');
+          }
+          if (allTools.getProductInfoWithQuery) selectedToolNames.add('getProductInfoWithQuery');
+          break;
+      }
     }
-  }
 
-  // 3. Always include conversational interaction helpers if room allows
-  if (allTools.send_suggestions && selectedToolNames.size < maxTools) {
-    selectedToolNames.add('send_suggestions');
+    // 4. Always include conversational interaction helpers if room allows
+    if (allTools.send_suggestions && selectedToolNames.size < maxTools) {
+      selectedToolNames.add('send_suggestions');
+    }
   }
 
   // 4. Resolve tool instances from names and enforce budget cap
@@ -147,6 +158,9 @@ export function selectToolsForTurn(options: DynamicToolSelectorOptions): Structu
   if (selectedTools.length === 0 && allTools.send_suggestions) {
     selectedTools.push(allTools.send_suggestions);
   }
+
+  // 5. Sort deterministically by name to guarantee stable prefix tokenization at Token 0
+  selectedTools.sort((a, b) => a.name.localeCompare(b.name));
 
   return selectedTools;
 }
