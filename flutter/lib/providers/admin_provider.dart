@@ -130,6 +130,13 @@ class AdminProvider extends ChangeNotifier {
   Future<void> _clearAdminSessionLocally(String reason) async {
     if (_adminToken == null && _sessionType != 'admin') return;
     _clearingSession = true;
+    // Best effort: the public unsubscribe works even after this bearer expires;
+    // any failure is retried by NotificationService in the background.
+    try {
+      await NotificationService.instance
+          .unsubscribeAdminMailPush(apiService)
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
+    } catch (_) {}
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;

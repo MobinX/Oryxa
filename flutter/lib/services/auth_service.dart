@@ -116,6 +116,38 @@ class AuthService extends ChangeNotifier {
     if (_isExpired && _refreshToken != null && _refreshToken!.isNotEmpty) {
       unawaited(_refreshIdToken());
     }
+    unawaited(_validateMerchantSession());
+  }
+
+  /// A stored merchant token can outlive its Firebase session. Without this
+  /// check the app shows a signed-in UI and the server keeps sending notices
+  /// to a device whose owner has effectively logged out.
+  Future<void> _validateMerchantSession() async {
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    try {
+      await apiService.get(ApiConfig.pathUsersMe);
+    } on ApiException catch (e) {
+      if (e.statusCode != 401 && e.statusCode != 403) return;
+      final prefs = await SharedPreferences.getInstance();
+      // The operator may have signed in again while the check was in flight.
+      if (prefs.getString(ApiConfig.storageKeyToken) != token) return;
+      _token = null;
+      _refreshToken = null;
+      _tokenExpiry = null;
+      _currentUser = null;
+      _selectedBusinessId = null;
+      apiService.setToken(null);
+      await prefs.remove(ApiConfig.storageKeyToken);
+      await prefs.remove(ApiConfig.storageKeyRefreshToken);
+      await prefs.remove(ApiConfig.storageKeyTokenExpiry);
+      await prefs.remove(ApiConfig.storageKeyUser);
+      await prefs.remove(ApiConfig.storageKeySelectedBusiness);
+      await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
+      notifyListeners();
+    } catch (_) {
+      // Offline or server error: keep the cached session, as before.
+    }
   }
 
   bool get _isExpired =>

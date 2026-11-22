@@ -76,6 +76,22 @@ pushRouter.openapi(globalUnsubscribeRoute, async (c) => {
   return c.json({ unsubscribed: true }, 200);
 });
 
+/**
+ * Logout cleanup that must work after the Firebase token has expired. The FCM
+ * registration token is high-entropy and device-local, so presenting it is enough
+ * to remove that one registration; without this, a dead session leaves notices
+ * arriving to a logged-out app.
+ */
+pushRouter.post('/push-unsubscribe', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  if (token.length < 20 || token.length > 500) {
+    return c.json({ error: 'A device token is required' }, 400);
+  }
+  await unregisterTokenFromAll(token);
+  return c.json({ unsubscribed: true }, 200);
+});
+
 pushRouter.use('/:businessId/*', authMiddleware, businessAccessMiddleware);
 
 const subscribeRoute = createRoute({

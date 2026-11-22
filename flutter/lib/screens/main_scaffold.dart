@@ -610,9 +610,10 @@ class _MainScaffoldState extends State<MainScaffold> {
             ListTile(
               leading: const Icon(Icons.logout, color: AppTheme.danger),
               title: const Text('Log Out', style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600)),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                auth.logout();
+                // Let the FCM unsubscribe finish before the app can be killed.
+                await auth.logout();
               },
             ),
           ],

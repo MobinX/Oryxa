@@ -95,10 +95,15 @@ class NotificationService {
   String? _fcmToken;
   final Set<String> _subscribedBusinessIds = <String>{};
   bool _adminMailPush = false;
+  bool _pendingUnsubscribe = false;
+  bool _pendingAdminUnsubscribe = false;
+  Timer? _unsubscribeRetryTimer;
 
   static const String _prefDialogShown = 'fcm_permission_dialog_shown';
   static const String _prefSubscribedBiz = 'fcm_subscribed_business_ids';
   static const String _prefAdminMailPush = 'fcm_admin_mail_push';
+  static const String _prefPendingUnsubscribe = 'fcm_pending_unsubscribe';
+  static const String _prefPendingAdminUnsubscribe = 'fcm_pending_admin_unsubscribe';
 
   /// Navigation callback when a notification is clicked.
   void Function(String link)? onNotificationClicked;
@@ -112,6 +117,8 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getStringList(_prefSubscribedBiz);
       if (saved != null) _subscribedBusinessIds.addAll(saved);
+      _pendingUnsubscribe = prefs.getBool(_prefPendingUnsubscribe) ?? false;
+      _pendingAdminUnsubscribe = prefs.getBool(_prefPendingAdminUnsubscribe) ?? false;
     } catch (_) {}
 
     // Initialize local notifications plugin safely
@@ -217,6 +224,14 @@ class NotificationService {
     // A saved admin session renews its inbox alerts silently. No permission dialog on
     // boot: the prompt belongs to signing in, and a denied browser is simply skipped.
     unawaited(restoreAdminMailPush(apiService));
+
+    // A logout whose unsubscribe failed must not leave a device registered
+    // forever. Retry in the background until the server confirms removal.
+    unawaited(_retryPendingUnsubscribes(apiService));
+    _unsubscribeRetryTimer?.cancel();
+    _unsubscribeRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(_retryPendingUnsubscribes(apiService));
+    });
   }
 
   Future<void> _ensureFirebaseInitialized(ApiService apiService) async {
@@ -317,7 +332,24 @@ class NotificationService {
     }
   }
 
+  Future<bool> _hasActiveSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final type = prefs.getString(ApiConfig.storageKeyUserSessionType);
+      if (type == 'admin') {
+        return (prefs.getString(ApiConfig.storageKeyAdminToken) ?? '').isNotEmpty;
+      }
+      return (prefs.getString(ApiConfig.storageKeyToken) ?? '').isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _showForegroundNotification(RemoteMessage message) async {
+    // A device registration can outlive a logout. Never surface an alert to a
+    // screen that no longer has a signed-in session.
+    if (!await _hasActiveSession()) return;
+
     final data = message.data;
     final notification = message.notification;
     final title = notification?.title ?? data['title']?.toString() ?? 'OnlyOrders Alert';
@@ -599,41 +631,124 @@ class NotificationService {
   }
 
   /// Unsubscribes from all businesses and forgets the device token on logout.
+  Future<bool> _removeDeviceRegistrationFromServer(
+    ApiService apiService,
+    String token,
+  ) async {
+    // The public endpoint works even when the Firebase bearer has expired.
+    try {
+      await apiService.post(
+        ApiConfig.pathGlobalPushUnsubscribePublic,
+        body: {'token': token},
+      );
+      return true;
+    } catch (_) {}
+    try {
+      await apiService.post(
+        ApiConfig.pathGlobalPushUnsubscribe,
+        body: {'token': token},
+      );
+      return true;
+    } catch (_) {}
+    return false;
+  }
+
+  Future<bool> _removeAdminRegistrationFromServer(
+    ApiService apiService,
+    String token,
+  ) async {
+    try {
+      await apiService.post(
+        ApiConfig.pathAdminMailPushUnsubscribePublic,
+        body: {'token': token},
+      );
+      return true;
+    } catch (_) {}
+    try {
+      await apiService.post(
+        ApiConfig.pathAdminMailPushUnsubscribe,
+        body: {'token': token},
+      );
+      return true;
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> _persistPendingFlags() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefPendingUnsubscribe, _pendingUnsubscribe);
+      await prefs.setBool(_prefPendingAdminUnsubscribe, _pendingAdminUnsubscribe);
+    } catch (_) {}
+  }
+
+  /// Retries unsubscribes that failed during logout. Runs on init and every
+  /// 30 seconds while either flag is set, so a dead session cannot keep sending
+  /// alerts to this device indefinitely.
+  Future<void> _retryPendingUnsubscribes(ApiService apiService) async {
+    if (!_pendingUnsubscribe && !_pendingAdminUnsubscribe) return;
+    final token = _fcmToken ?? await getDeviceToken(apiService);
+    if (token == null || token.isEmpty) return;
+
+    if (_pendingUnsubscribe &&
+        await _removeDeviceRegistrationFromServer(apiService, token)) {
+      _pendingUnsubscribe = false;
+      _subscribedBusinessIds.clear();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefSubscribedBiz);
+      } catch (_) {}
+    }
+
+    if (_pendingAdminUnsubscribe &&
+        await _removeAdminRegistrationFromServer(apiService, token)) {
+      _pendingAdminUnsubscribe = false;
+      _adminMailPush = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefAdminMailPush);
+      } catch (_) {}
+    }
+
+    await _persistPendingFlags();
+  }
+
+  /// Unsubscribes this device from merchant notices. Local state is only
+  /// cleared after the server confirms removal; otherwise a pending flag keeps
+  /// the cleanup alive until it succeeds.
   Future<void> onUserLoggedOut(ApiService apiService, [List<String>? businessIds]) async {
     final token = _fcmToken ?? await getDeviceToken(apiService);
     final toUnsubscribe = (businessIds != null && businessIds.isNotEmpty)
         ? businessIds
         : _subscribedBusinessIds.toList();
 
-    if (token != null && token.isNotEmpty) {
-      for (final bId in toUnsubscribe) {
-        if (bId.isEmpty) continue;
-        try {
-          await apiService.post(
-            ApiConfig.pathBusinessPushUnsubscribe(bId),
-            body: {'token': token},
-          );
-        } catch (_) {}
-        try {
-          await FirebaseMessaging.instance.unsubscribeFromTopic('business_$bId');
-        } catch (_) {}
-      }
-
+    for (final bId in toUnsubscribe) {
+      if (bId.isEmpty) continue;
       try {
-        await apiService.post(
-          ApiConfig.pathGlobalPushUnsubscribe,
-          body: {'token': token},
-        );
+        await FirebaseMessaging.instance.unsubscribeFromTopic('business_$bId');
       } catch (_) {}
     }
 
-    _subscribedBusinessIds.clear();
-    _fcmToken = null;
+    if (token == null || token.isEmpty) {
+      if (toUnsubscribe.isNotEmpty || _pendingUnsubscribe) {
+        _pendingUnsubscribe = true;
+        await _persistPendingFlags();
+      }
+      return;
+    }
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_prefSubscribedBiz);
-    } catch (_) {}
+    if (await _removeDeviceRegistrationFromServer(apiService, token)) {
+      _pendingUnsubscribe = false;
+      _subscribedBusinessIds.clear();
+      _fcmToken = null;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefSubscribedBiz);
+      } catch (_) {}
+    } else {
+      _pendingUnsubscribe = true;
+    }
+    await _persistPendingFlags();
   }
 
   /// Asks for notification permission (on admin sign-in) and registers this device for
@@ -691,8 +806,10 @@ class NotificationService {
       );
 
       _adminMailPush = true;
+      _pendingAdminUnsubscribe = false;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefAdminMailPush, true);
+      await prefs.setBool(_prefPendingAdminUnsubscribe, false);
       axiomService.info('Admin mailbox push subscribed', tag: 'FCM_ADMIN_MAIL');
       return true;
     } catch (e, st) {
@@ -713,28 +830,31 @@ class NotificationService {
     bool wasSubscribed = _adminMailPush;
     try {
       final prefs = await SharedPreferences.getInstance();
-      wasSubscribed = wasSubscribed || (prefs.getBool(_prefAdminMailPush) ?? false);
+      wasSubscribed = wasSubscribed ||
+          (prefs.getBool(_prefAdminMailPush) ?? false) ||
+          (prefs.getBool(_prefPendingAdminUnsubscribe) ?? false);
     } catch (_) {}
     if (!wasSubscribed) return;
 
     final token = _fcmToken ?? await getDeviceToken(apiService);
-    try {
-      await apiService.post(
-        ApiConfig.pathAdminMailPushUnsubscribe,
-        body: {
-          if (token != null && token.isNotEmpty) 'token': token,
-        },
-      );
-      axiomService.info('Admin mailbox push unsubscribed', tag: 'FCM_ADMIN_MAIL');
-    } catch (e) {
-      debugPrint('[NotificationService] Admin mail push unsubscribe failed: $e');
+    if (token == null || token.isEmpty) {
+      _pendingAdminUnsubscribe = true;
+      await _persistPendingFlags();
+      return;
     }
 
-    _adminMailPush = false;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_prefAdminMailPush);
-    } catch (_) {}
+    if (await _removeAdminRegistrationFromServer(apiService, token)) {
+      _pendingAdminUnsubscribe = false;
+      _adminMailPush = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefAdminMailPush);
+      } catch (_) {}
+      axiomService.info('Admin mailbox push unsubscribed', tag: 'FCM_ADMIN_MAIL');
+    } else {
+      _pendingAdminUnsubscribe = true;
+    }
+    await _persistPendingFlags();
   }
 
   /// Sends a single test notification to verify that the FCM path to this device is working.

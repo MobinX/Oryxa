@@ -76,6 +76,7 @@ class ApiConfig {
   static String pathBusinessPushSubscribe(String businessId) => '/$businessId/push/subscribe';
   static String pathBusinessPushUnsubscribe(String businessId) => '/$businessId/push/unsubscribe';
   static const String pathGlobalPushUnsubscribe = '/push/unsubscribe';
+  static const String pathGlobalPushUnsubscribePublic = '/push-unsubscribe';
 
   static String pathConversations(String businessId, {String? channelId, int limit = 50}) {
     var p = '/$businessId/conversations?limit=$limit';
@@ -245,6 +246,7 @@ class ApiConfig {
   static String pathAdminMailDelete(String id) => '/api2/admin/mail/emails/$id/delete';
   static const String pathAdminMailPushSubscribe = '/api2/admin/mail/push/subscribe';
   static const String pathAdminMailPushUnsubscribe = '/api2/admin/mail/push/unsubscribe';
+  static const String pathAdminMailPushUnsubscribePublic = '/api2/mail-push-unsubscribe';
   static const String pathAdminMailPushHeartbeat = '/api2/admin/mail/push/heartbeat';
   static const String pathAdminMailPushStatus = '/api2/admin/mail/push/status';
   static const String pathAdminMailPushTest = '/api2/admin/mail/push/test';

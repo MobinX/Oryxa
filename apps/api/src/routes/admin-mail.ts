@@ -395,6 +395,18 @@ adminMailRouter.post('/admin/mail/push/subscribe', async (c) => {
   return c.json(result);
 });
 
+/**
+ * Public cleanup for an expired admin session: only the device registration is
+ * removed. It cannot read mail or change any account, so a dead session does not
+ * keep delivering inbox alerts to a signed-out device.
+ */
+adminMailRouter.post('/mail-push-unsubscribe', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const token = readPushToken(body.token);
+  if (!token) return c.json({ error: 'A device token is required' }, 400);
+  return c.json(await mailPushUnsubscribe({ token, quick: true }));
+});
+
 adminMailRouter.post('/admin/mail/push/unsubscribe', async (c) => {
   const current = user(c);
   if (!current) return c.json({ error: 'Unauthorized' }, 401);
