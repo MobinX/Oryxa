@@ -35,6 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final success = await auth.loginWithGoogle();
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Signed in as ${auth.user?.email ?? auth.user?.name ?? 'your account'}')),
+      );
+    }
     if (!success && mounted && auth.errorMessage != null) {
       appDiagnostics.recordMessage('Google sign-in', auth.errorMessage!);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -63,6 +68,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final success = await auth.login(email, password);
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Signed in as ${auth.user?.email ?? email}')),
+      );
+    }
     if (!success && mounted && auth.errorMessage != null) {
       appDiagnostics.recordMessage('Sign in', auth.errorMessage!);
       ScaffoldMessenger.of(context).showSnackBar(

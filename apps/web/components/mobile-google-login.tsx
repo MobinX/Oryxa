@@ -20,6 +20,8 @@ interface Payload {
   name: string | null;
   expiresIn: number;
   issuedAt: number;
+  /** One-time nonce from the mobile app: a stale deep link must never sign in. */
+  state: string;
 }
 
 function base64Url(value: string): string {
@@ -94,6 +96,7 @@ export function MobileGoogleLogin() {
       const internal = user as unknown as { stsTokenManager?: { refreshToken?: string } };
       const refreshToken = internal.stsTokenManager?.refreshToken ?? null;
       const expiresIn = Math.max(60, Math.floor((new Date(tokenResult.expirationTime).getTime() - Date.now()) / 1000));
+      const state = new URLSearchParams(window.location.search).get('state') ?? '';
       const payload: Payload = {
         v: 1,
         idToken: tokenResult.token,
@@ -103,6 +106,7 @@ export function MobileGoogleLogin() {
         name: user.displayName ?? null,
         expiresIn,
         issuedAt: Date.now(),
+        state,
       };
 
       const encoded = base64Url(JSON.stringify(payload));
@@ -155,16 +159,14 @@ export function MobileGoogleLogin() {
 
     let cancelled = false;
     (async () => {
-      // If we are returning from Google redirect:
+      // Returning from Google: only the redirect credential counts. A persisted
+      // auth.currentUser (e.g. an old test account) must never be treated as the
+      // account the operator just picked.
       if (started) {
         try {
           const result = await getGoogleRedirectResult();
           if (cancelled) return;
-          let user = (result?.user as any) ?? null;
-          if (!user) {
-            const auth = getFirebaseAuth();
-            if (auth?.currentUser) user = auth.currentUser;
-          }
+          const user = (result?.user as any) ?? null;
           if (user) {
             await finish(user);
             return;
@@ -174,31 +176,6 @@ export function MobileGoogleLogin() {
           setStep('error');
           setMessage(mapError(error));
           return;
-        }
-
-        const auth = getFirebaseAuth();
-        if (auth) {
-          await new Promise<void>((resolve) => {
-            let settled = false;
-            const finishIfUser = (u: unknown) => {
-              if (settled || !u) return;
-              settled = true;
-              unsub();
-              window.clearTimeout(timer);
-              void finish(u as any).then(resolve);
-            };
-            const unsub = (auth as any).onAuthStateChanged
-              ? (auth as any).onAuthStateChanged(finishIfUser)
-              : () => {};
-            const timer = window.setTimeout(() => {
-              if (settled) return;
-              settled = true;
-              try { unsub(); } catch { /* ignore */ }
-              resolve();
-            }, 6000);
-          });
-          if (cancelled) return;
-          if (finishedRef.current) return;
         }
         setStep('ready');
         setMessage('Google sign-in was not completed. Tap below to select your Google account.');

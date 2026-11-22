@@ -16,11 +16,11 @@ export async function GET() {
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
     androidAppId: process.env.FIREBASE_ANDROID_APP_ID ?? '1:208924881683:android:b3dbcaab831f4576e7a0e6',
+    // Never put a write token here: this route is public. Mobile diagnostics go
+    // through the backend /api/v1/mobile/logs relay, which holds the ingest key.
     axiom: {
       enabled: process.env.AXIOM_ENABLED === '1',
       dataset: process.env.AXIOM_DATASET ?? 'app',
-      ingestUrl: 'https://api.axiom.co',
-      token: process.env.AXIOM_TOKEN ?? '',
     },
   };
 

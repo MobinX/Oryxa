@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:app_links/app_links.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,6 +16,7 @@ class GoogleSignInResult {
   final String? email;
   final String? name;
   final int expiresIn;
+  final String state;
 
   GoogleSignInResult({
     required this.idToken,
@@ -23,6 +25,7 @@ class GoogleSignInResult {
     required this.email,
     required this.name,
     required this.expiresIn,
+    required this.state,
   });
 }
 
@@ -33,6 +36,7 @@ class GoogleAuthService {
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _subscription;
   Completer<GoogleSignInResult>? _pending;
+  String? _pendingState;
 
   void Function(GoogleSignInResult)? onUnhandledResult;
 
@@ -54,7 +58,14 @@ class GoogleAuthService {
   Future<GoogleSignInResult> signIn() async {
     final completer = Completer<GoogleSignInResult>();
     _pending = completer;
-    final url = Uri.parse(ApiConfig.mobileGoogleLoginUrl(apiBaseUrl));
+    final nonce = base64Url.encode(
+      List<int>.generate(24, (_) => Random.secure().nextInt(256)),
+    );
+    _pendingState = nonce;
+    final loginUri = Uri.parse(ApiConfig.mobileGoogleLoginUrl(apiBaseUrl));
+    final url = loginUri.replace(
+      queryParameters: {...loginUri.queryParameters, 'state': nonce},
+    );
     appDiagnostics.recordMessage('Google sign-in', 'Opening embedded Chrome at $url');
 
     bool launched = false;
@@ -72,6 +83,7 @@ class GoogleAuthService {
     }
     if (!launched) {
       _pending = null;
+      _pendingState = null;
       throw AuthException('Could not open a browser window for Google sign-in.');
     }
 
@@ -80,6 +92,7 @@ class GoogleAuthService {
         const Duration(minutes: 5),
         onTimeout: () {
           _pending = null;
+          _pendingState = null;
           throw AuthException(
             'Google sign-in timed out. Complete the sign-in in Chrome and tap "Open OnlyOrders" if the app does not return.',
           );
@@ -87,6 +100,7 @@ class GoogleAuthService {
       );
     } finally {
       _pending = null;
+      _pendingState = null;
     }
   }
 
@@ -120,6 +134,22 @@ class GoogleAuthService {
       final json = jsonDecode(decoded);
       if (json is! Map) throw const FormatException('Invalid payload');
       final map = Map<String, dynamic>.from(json);
+      final state = map['state']?.toString();
+      // A deep link left over from an earlier attempt (or another account) must
+      // never replace the session the operator is signing into right now.
+      if (state == null || state.isEmpty || state != _pendingState) {
+        appDiagnostics.recordMessage(
+          'Google sign-in',
+          'Ignored a callback that does not match the current request',
+        );
+        final pending = _pending;
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(
+            AuthException('The Google response was stale. Please try again.'),
+          );
+        }
+        return;
+      }
       final idToken = map['idToken']?.toString();
       if (idToken == null || idToken.isEmpty) {
         throw const FormatException('Missing access token');
@@ -131,6 +161,7 @@ class GoogleAuthService {
         email: map['email']?.toString(),
         name: map['name']?.toString(),
         expiresIn: int.tryParse(map['expiresIn']?.toString() ?? '') ?? 3600,
+        state: state,
       );
       if (result.uid.isEmpty) {
         throw const FormatException('Missing user id');

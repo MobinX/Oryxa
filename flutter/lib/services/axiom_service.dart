@@ -10,8 +10,8 @@ import '../config/api_config.dart';
 
 final AxiomService axiomService = AxiomService.instance;
 
-/// Structured mobile logger streaming diagnostic and crash events directly to Axiom
-/// and the backend /api/v1/mobile/logs sink.
+/// Structured mobile logger sending diagnostic and crash events through the
+/// backend /api/v1/mobile/logs relay. No ingest credential lives in the app.
 class AxiomService {
   static final AxiomService instance = AxiomService._internal();
   AxiomService._internal();
@@ -20,11 +20,8 @@ class AxiomService {
   static const int _maxQueueSize = 200;
   static const int _flushBatchSize = 25;
   static const String _defaultDataset = 'app';
-  static const String _defaultIngestUrl = 'https://api.axiom.co';
 
   String _dataset = _defaultDataset;
-  String _ingestUrl = _defaultIngestUrl;
-  String? _axiomToken;
   String _apiBaseUrl = ApiConfig.defaultBaseUrl;
   bool _enabled = true;
   bool _initialized = false;
@@ -66,11 +63,6 @@ class AxiomService {
         if (axiomConfig is Map) {
           _enabled = axiomConfig['enabled'] != false;
           _dataset = axiomConfig['dataset']?.toString() ?? _defaultDataset;
-          _ingestUrl = axiomConfig['ingestUrl']?.toString() ?? _defaultIngestUrl;
-          final token = axiomConfig['token']?.toString();
-          if (token != null && token.isNotEmpty) {
-            _axiomToken = token;
-          }
         }
       }
     } catch (e) {
@@ -206,7 +198,8 @@ class AxiomService {
     }
   }
 
-  /// Flushes queued events directly to Axiom HTTP Ingest API, falling back to backend relay.
+  /// Flushes queued events through the backend relay. A write token must never
+  /// be shipped to a client, so direct ingest is deliberately not supported.
   Future<void> flush() async {
     if (_isFlushing || _queue.isEmpty) return;
     _isFlushing = true;
@@ -214,73 +207,40 @@ class AxiomService {
     final toSend = List<Map<String, dynamic>>.from(_queue);
     _queue.clear();
 
-    bool sent = false;
+    try {
+      final relayUrl = Uri.parse('$_apiBaseUrl/mobile/logs');
+      final response = await http
+          .post(
+            relayUrl,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'events': toSend}),
+          )
+          .timeout(const Duration(seconds: 10));
 
-    // 1. Try sending directly to Axiom Ingest API if token is available
-    if (_axiomToken != null && _axiomToken!.isNotEmpty) {
-      try {
-        final uri = Uri.parse('$_ingestUrl/v1/datasets/$_dataset/ingest');
-        final response = await http
-            .post(
-              uri,
-              headers: {
-                'Authorization': 'Bearer $_axiomToken',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode(toSend),
-            )
-            .timeout(const Duration(seconds: 10));
-
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          sent = true;
-        } else {
-          debugPrint('[AxiomService] Direct Axiom ingest status: ${response.statusCode} ${response.body}');
-        }
-      } catch (e) {
-        debugPrint('[AxiomService] Direct Axiom ingest error: $e');
-      }
-    }
-
-    // 2. Fallback to API relay endpoint: POST /api/v1/mobile/logs
-    if (!sent) {
-      try {
-        final relayUrl = Uri.parse('$_apiBaseUrl/mobile/logs');
-        final response = await http
-            .post(
-              relayUrl,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'events': toSend}),
-            )
-            .timeout(const Duration(seconds: 10));
-
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          sent = true;
-        }
-      } catch (e) {
-        debugPrint('[AxiomService] Backend relay error: $e');
-      }
-    }
-
-    // 3. If transmission failed, re-queue errors and persist to disk for next time
-    if (!sent) {
-      final keepErrors = toSend
-          .where((e) => e['level'] == 'error' || e['level'] == 'critical')
-          .take(30)
-          .toList();
-      _queue.insertAll(0, keepErrors);
-
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_prefsPendingKey, jsonEncode(keepErrors));
-      } catch (_) {}
-    } else {
-      // Clear persisted entries once successfully shipped
-      try {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_prefsPendingKey);
-      } catch (_) {}
+      } else {
+        debugPrint('[AxiomService] Backend relay status: ${response.statusCode}');
+        _requeueErrors(toSend);
+      }
+    } catch (e) {
+      debugPrint('[AxiomService] Backend relay error: $e');
+      _requeueErrors(toSend);
     }
 
     _isFlushing = false;
+  }
+
+  Future<void> _requeueErrors(List<Map<String, dynamic>> events) async {
+    final keepErrors = events
+        .where((e) => e['level'] == 'error' || e['level'] == 'critical')
+        .take(30)
+        .toList();
+    _queue.insertAll(0, keepErrors);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsPendingKey, jsonEncode(keepErrors));
+    } catch (_) {}
   }
 }

@@ -148,6 +148,11 @@ class AuthService extends ChangeNotifier {
       return _establishSession(token: customToken, firebaseUid: null);
     }
 
+    // Never keep a previous merchant session alive while trying different
+    // credentials: a failed password attempt must not leave the app showing
+    // the old account's cached email and businesses.
+    await logout();
+
     final apiKey = await _resolveFirebaseApiKey();
     final session = await _signInWithPassword(apiKey, email.trim(), password);
 
