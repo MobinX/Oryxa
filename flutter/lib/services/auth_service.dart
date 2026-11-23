@@ -252,13 +252,50 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Signs into Firebase using explicit credentials (e.g. admin fallback compatibility).
-  Future<String?> signInWithFirebaseCredentials(String email, String password) async {
+  Future<FirebaseSession?> signInWithFirebaseCredentials(
+    String email,
+    String password,
+  ) async {
     try {
       final apiKey = await _resolveFirebaseApiKey();
-      final session = await _signInWithPassword(apiKey, email.trim(), password);
-      return session.idToken;
+      return await _signInWithPassword(apiKey, email.trim(), password);
     } catch (e) {
       debugPrint('[AuthService] Firebase compatibility sign-in warning: $e');
+      return null;
+    }
+  }
+
+  /// Refreshes the operator Firebase session without touching merchant auth.
+  /// ID tokens live one hour; the refresh token keeps the playground usable for
+  /// the full 30-day console session.
+  Future<FirebaseSession?> refreshFirebaseSession(String refreshToken) async {
+    if (refreshToken.isEmpty) return null;
+    try {
+      final apiKey = await _resolveFirebaseApiKey();
+      final res = await http
+          .post(
+            Uri.parse('$_secureTokenUrl?key=$apiKey'),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: {
+              'grant_type': 'refresh_token',
+              'refresh_token': refreshToken,
+            },
+          )
+          .timeout(const Duration(seconds: 20));
+      final body = _decodeJson(res.body);
+      if (res.statusCode < 200 || res.statusCode >= 300) return null;
+      final idToken = body['id_token']?.toString();
+      if (idToken == null || idToken.isEmpty) return null;
+      return FirebaseSession(
+        idToken: idToken,
+        refreshToken: (body['refresh_token']?.toString() ?? refreshToken),
+        expiresIn: int.tryParse(body['expires_in']?.toString() ?? '') ?? 3600,
+      );
+    } catch (e) {
+      debugPrint('[AuthService] operator token refresh failed: $e');
       return null;
     }
   }
@@ -320,7 +357,7 @@ class AuthService extends ChangeNotifier {
     return user;
   }
 
-  Future<_FirebaseSession> _signInWithPassword(String apiKey, String email, String password) async {
+  Future<FirebaseSession> _signInWithPassword(String apiKey, String email, String password) async {
     final uri = Uri.parse('$_identityToolkitBase/accounts:signInWithPassword?key=$apiKey');
     http.Response res;
     try {
@@ -350,7 +387,7 @@ class AuthService extends ChangeNotifier {
       throw AuthException('The sign-in service returned an unexpected response.');
     }
 
-    return _FirebaseSession(
+    return FirebaseSession(
       idToken: idToken,
       refreshToken: refreshToken,
       expiresIn: int.tryParse(body['expiresIn']?.toString() ?? '') ?? 3600,
@@ -540,7 +577,7 @@ class AuthService extends ChangeNotifier {
   }
 }
 
-class _FirebaseSession {
+class FirebaseSession {
   final String idToken;
   final String refreshToken;
   final int expiresIn;
@@ -548,7 +585,7 @@ class _FirebaseSession {
   final String? email;
   final String? displayName;
 
-  _FirebaseSession({
+  FirebaseSession({
     required this.idToken,
     required this.refreshToken,
     required this.expiresIn,

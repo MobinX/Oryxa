@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../config/api_config.dart';
 import '../../../config/app_theme.dart';
 import '../../../models/business.dart';
 import '../../../providers/admin_provider.dart';
@@ -26,33 +27,48 @@ class _AdminPlaygroundScreenState extends State<AdminPlaygroundScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _initBusinesses());
   }
 
+  String? _loadError;
+
   Future<void> _initBusinesses() async {
     final admin = context.read<AdminProvider>();
-    final businesses = await admin.fetchAdminBusinessPlans();
-
-    if (mounted) {
-      setState(() {
-        _businesses = businesses;
-        if (businesses.isNotEmpty) {
-          // Look for sandbox store first
-          final sandbox = businesses.firstWhere(
-            (b) =>
-                (b['slug'] ?? '').toString() == 'oryxa-sandbox' ||
-                (b['name'] ?? '').toString().toLowerCase().contains('sandbox'),
-            orElse: () => businesses.first,
-          );
-          _selectedBusinessId = (sandbox['id'] ?? '').toString();
-          _selectedBusinessName = (sandbox['name'] ?? 'Sandbox Store').toString();
-          _selectedBusinessSlug = (sandbox['slug'] ?? 'oryxa-sandbox').toString();
-        } else {
-          // Default fallback sandbox
-          _selectedBusinessId = 'oryxa-sandbox-id';
-          _selectedBusinessName = 'Oryxa Sandbox';
-          _selectedBusinessSlug = 'oryxa-sandbox';
-        }
-        _isLoading = false;
-      });
+    List<Map<String, dynamic>> businesses = [];
+    try {
+      // The playground runs on merchant endpoints with the operator Firebase
+      // token, so read the real business list with that token. The admin plans
+      // endpoint returns `businessId`/`businessName`, not id/name/slug, and
+      // using those fields here produced an empty/fake sandbox id.
+      final res = await admin.apiService.get(ApiConfig.pathBusinesses);
+      if (res is Map && res['businesses'] is List) {
+        businesses = (res['businesses'] as List)
+            .whereType<Map>()
+            .map((b) => Map<String, dynamic>.from(b))
+            .toList();
+      }
+    } catch (e) {
+      _loadError = e.toString().replaceFirst(RegExp(r'^ApiException: '), '');
     }
+
+    if (!mounted) return;
+    final sandbox = businesses.firstWhere(
+      (b) => (b['slug'] ?? '').toString() == 'oryxa-sandbox',
+      orElse: () => <String, dynamic>{},
+    );
+
+    setState(() {
+      _businesses = businesses
+          .map((b) => {
+                'id': b['id'],
+                'name': b['name'],
+                'slug': b['slug'],
+              })
+          .toList();
+      if (sandbox.isNotEmpty) {
+        _selectedBusinessId = sandbox['id']?.toString();
+        _selectedBusinessName = (sandbox['name'] ?? 'Sandbox Store').toString();
+        _selectedBusinessSlug = 'oryxa-sandbox';
+      }
+      _isLoading = false;
+    });
   }
 
   void _onStoreChanged(String? newId) {
@@ -66,7 +82,7 @@ class _AdminPlaygroundScreenState extends State<AdminPlaygroundScreen> {
   }
 
   BusinessModel get _currentSelectedBusiness => BusinessModel(
-        id: _selectedBusinessId ?? 'oryxa-sandbox',
+        id: _selectedBusinessId ?? '',
         name: _selectedBusinessName,
         slug: _selectedBusinessSlug,
       );
@@ -106,7 +122,7 @@ class _AdminPlaygroundScreenState extends State<AdminPlaygroundScreen> {
           ],
         ),
         actions: [
-          if (_businesses.isNotEmpty) ...[
+          if (_selectedBusinessId != null && _businesses.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: DropdownButtonHideUnderline(
@@ -134,7 +150,24 @@ class _AdminPlaygroundScreenState extends State<AdminPlaygroundScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : _selectedBusinessId == null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          _loadError ??
+                              'The operator sandbox store (oryxa-sandbox) was not found. Seed it before using the playground.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : Column(
               children: [
                 // Testing Banner Notice
                 Container(
