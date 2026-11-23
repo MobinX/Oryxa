@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
@@ -78,9 +80,13 @@ class _MainScaffoldState extends State<MainScaffold> {
 
       if (biz.currentBusiness != null) {
         final bId = biz.currentBusiness!.id;
-        context.read<InboxProvider>().fetchConversations(bId);
-        context.read<OrdersProvider>().fetchOrders(bId);
-        context.read<ProductsProvider>().fetchProducts(bId);
+        // Fire the three independent store reads together instead of waiting
+        // for each provider to finish before starting the next one.
+        unawaited(Future.wait([
+          context.read<InboxProvider>().fetchConversations(bId),
+          context.read<OrdersProvider>().fetchOrders(bId),
+          context.read<ProductsProvider>().fetchProducts(bId),
+        ]));
       }
     });
   }

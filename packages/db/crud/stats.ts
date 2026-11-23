@@ -6,7 +6,15 @@ export async function getBusinessStats(businessId: string) {
   const base = eq(products.businessId, businessId);
   const notDeleted = isNull(products.deletedAt);
 
-  const [productsRow, ordersRow, channelsRow, conversationsRow, revenueRow, messagesRow] = await Promise.all([
+  const [
+    productsRow,
+    ordersRow,
+    channelsRow,
+    conversationsRow,
+    revenueRow,
+    messagesRow,
+    responseTimeRow,
+  ] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(products)
@@ -38,9 +46,7 @@ export async function getBusinessStats(businessId: string) {
           isNull(conversations.deletedAt),
         ),
       ),
-  ]);
-
-  const responseTimeRow = await db.execute(sql`
+    db.execute(sql`
     SELECT coalesce(
       (
         SELECT avg(extract(epoch from (m2.time - m1.time)))
@@ -65,7 +71,8 @@ export async function getBusinessStats(businessId: string) {
       ),
       0
     )::float as avg_seconds
-  `);
+  `),
+  ]);
 
   const responseTimeRows = (responseTimeRow as any).rows ?? responseTimeRow;
   const avgResponseTime = (responseTimeRows[0] as any)?.avg_seconds ?? 0;

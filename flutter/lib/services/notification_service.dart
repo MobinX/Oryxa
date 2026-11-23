@@ -230,6 +230,14 @@ class NotificationService {
     unawaited(_retryPendingUnsubscribes(apiService));
     _unsubscribeRetryTimer?.cancel();
     _unsubscribeRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      // Last-resort reconciliation: if no session is active but we still think
+      // this device is registered for a store, clean it up. This catches expired
+      // sessions and any logout that failed before reaching the server.
+      if (_subscribedBusinessIds.isNotEmpty && !_pendingUnsubscribe) {
+        unawaited(_hasActiveSession().then((active) {
+          if (!active) _pendingUnsubscribe = true;
+        }));
+      }
       unawaited(_retryPendingUnsubscribes(apiService));
     });
   }

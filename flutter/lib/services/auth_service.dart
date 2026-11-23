@@ -132,6 +132,15 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       // The operator may have signed in again while the check was in flight.
       if (prefs.getString(ApiConfig.storageKeyToken) != token) return;
+      // The session is already dead, but the device registration is not. The
+      // public unsubscribe works without this bearer, so stop store notices now.
+      try {
+        await NotificationService.instance
+            .onUserLoggedOut(apiService)
+            .timeout(const Duration(seconds: 6), onTimeout: () {});
+      } catch (e) {
+        debugPrint('[AuthService] expired-session push cleanup skipped: $e');
+      }
       _token = null;
       _refreshToken = null;
       _tokenExpiry = null;

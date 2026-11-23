@@ -182,8 +182,10 @@ adminRouter.openapi(getAdminStatsRoute, async (c) => {
   // the delta all describe the same days.
   const { range, previous: previousRange } = resolveAdminRange(days, tz);
 
-  const anomalies = await countAnomalies(range);
-  const [snapshot, window, previous, daily, topBusinesses] = await Promise.all([
+  // The log-store health check and the five Postgres aggregates are independent.
+  // Running them together avoids waiting for the slowest one twice.
+  const [anomalies, snapshot, window, previous, daily, topBusinesses] = await Promise.all([
+    countAnomalies(range),
     getAdminSnapshot(),
     getAdminWindowMetrics(range),
     getAdminWindowMetrics(previousRange),

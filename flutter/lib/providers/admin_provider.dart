@@ -39,6 +39,8 @@ class AdminProvider extends ChangeNotifier {
   bool _isStatsLoading = false;
   int _statsDays = 30;
   String? _statsError;
+  DateTime? _statsFetchedAt;
+  int? _statsCacheDays;
   bool _officialMigrationPending = false;
   bool get officialMigrationPending => _officialMigrationPending;
 
@@ -146,6 +148,8 @@ class AdminProvider extends ChangeNotifier {
     _emails = [];
     _stats = null;
     _statsError = null;
+    _statsFetchedAt = null;
+    _statsCacheDays = null;
     _apiError = null;
     _sessionType = 'merchant';
     _errorMessage = reason;
@@ -245,6 +249,17 @@ class AdminProvider extends ChangeNotifier {
       apiService.setOperatorToken(null);
       apiService.setTokenRefresher(null);
 
+      // Entering the console ends merchant store alerts on this device. Without
+      // this, a device that switches accounts keeps receiving the old store's
+      // orders because the FCM registration is independent of the UI session.
+      try {
+        await NotificationService.instance
+            .onUserLoggedOut(apiService)
+            .timeout(const Duration(seconds: 6), onTimeout: () {});
+      } catch (e) {
+        debugPrint('[AdminProvider] merchant push cleanup on admin login skipped: $e');
+      }
+
       // Persist session
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
@@ -336,6 +351,8 @@ class AdminProvider extends ChangeNotifier {
     _storage = null;
     _emails = [];
     _stats = null;
+    _statsFetchedAt = null;
+    _statsCacheDays = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(ApiConfig.storageKeyAdminToken);
@@ -371,6 +388,7 @@ class AdminProvider extends ChangeNotifier {
       apiService.setToken(_adminToken);
       apiService.setOperatorToken(_adminFirebaseToken);
       apiService.setTokenRefresher(null);
+      unawaited(NotificationService.instance.onUserLoggedOut(apiService));
       unawaited(validateSession());
       notifyListeners();
     }
@@ -606,10 +624,23 @@ class AdminProvider extends ChangeNotifier {
   // STATS & ANALYTICS ACTIONS
   // ==========================================
 
-  Future<void> fetchAdminStats({int? days}) async {
+  Future<void> fetchAdminStats({
+    int? days,
+    bool forceRefresh = false,
+  }) async {
     if (!can('dashboard')) return;
 
     if (days != null) _statsDays = days;
+    // The dashboard is rebuilt often (tab switches, rebuilds, resume). Reuse a
+    // fresh result instead of repeating a heavy platform-wide aggregation.
+    if (!forceRefresh &&
+        _stats != null &&
+        _statsCacheDays == _statsDays &&
+        _statsFetchedAt != null &&
+        DateTime.now().difference(_statsFetchedAt!).inSeconds < 30) {
+      return;
+    }
+
     _isStatsLoading = true;
     notifyListeners();
 
@@ -618,6 +649,8 @@ class AdminProvider extends ChangeNotifier {
       final res = await apiService.get(ApiConfig.pathAdminStats(days: _statsDays));
       if (res is Map) {
         _stats = AdminStatsData.fromJson(Map<String, dynamic>.from(res));
+        _statsFetchedAt = DateTime.now();
+        _statsCacheDays = _statsDays;
       }
     } catch (e) {
       _statsError = e.toString().replaceFirst(RegExp(r'^ApiException: '), '');

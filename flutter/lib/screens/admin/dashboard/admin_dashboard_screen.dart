@@ -57,7 +57,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _reload() async {
     await Future.wait([
-      context.read<AdminProvider>().fetchAdminStats(days: context.read<AdminProvider>().statsDays),
+      context.read<AdminProvider>().fetchAdminStats(
+            days: context.read<AdminProvider>().statsDays,
+            forceRefresh: true,
+          ),
       _loadRecent(),
     ]);
   }

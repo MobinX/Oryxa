@@ -24,11 +24,14 @@ class DashboardScreen extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: () async {
-        await biz.loadActiveBusinessData();
+        final refreshes = <Future<void>>[biz.loadActiveBusinessData()];
         if (currentStore != null) {
-          await orders.fetchOrders(currentStore.id);
-          await inbox.fetchConversations(currentStore.id);
+          refreshes.addAll([
+            orders.fetchOrders(currentStore.id),
+            inbox.fetchConversations(currentStore.id),
+          ]);
         }
+        await Future.wait(refreshes);
       },
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),

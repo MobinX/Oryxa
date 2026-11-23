@@ -72,43 +72,52 @@ class BusinessProvider extends ChangeNotifier {
     loadActiveBusinessData();
   }
 
+  Future<T?> _safeLoad<T>(String label, Future<T?> Function() load) async {
+    try {
+      return await load();
+    } catch (e) {
+      debugPrint('[BusinessProvider] $label error: $e');
+      return null;
+    }
+  }
+
   Future<void> loadActiveBusinessData() async {
     if (_currentBusiness == null) return;
     final bId = _currentBusiness!.id;
 
-    // Load stats
-    try {
-      final statsRes = await apiService.get(ApiConfig.pathBusinessStats(bId));
-      if (statsRes is Map<String, dynamic>) {
-        _stats = BusinessStats.fromJson(statsRes);
-      }
-    } catch (e) {
-      debugPrint('[BusinessProvider] fetch stats error: $e');
-    }
+    // These three reads are independent. Running them in parallel cuts the
+    // startup/dashboard wait from three round trips to one.
+    final results = await Future.wait<Object?>([
+      _safeLoad<Map<String, dynamic>>('fetch stats', () async {
+        final res = await apiService.get(ApiConfig.pathBusinessStats(bId));
+        return res is Map<String, dynamic> ? res : null;
+      }),
+      _safeLoad<List>('fetch channels', () async {
+        final res = await apiService.get(ApiConfig.pathChannels(bId));
+        return res is List ? res : null;
+      }),
+      _safeLoad<Map<String, dynamic>>('fetch notifications', () async {
+        final res = await apiService.get(ApiConfig.pathNotifications(bId));
+        return res is Map<String, dynamic> ? res : null;
+      }),
+    ]);
 
-    // Load channels
-    try {
-      final chRes = await apiService.get(ApiConfig.pathChannels(bId));
-      if (chRes is List) {
-        _channels = chRes
-            .map((c) => ChannelModel.fromJson(c as Map<String, dynamic>))
-            .toList();
-      }
-    } catch (e) {
-      debugPrint('[BusinessProvider] fetch channels error: $e');
-    }
+    final statsRes = results[0] as Map<String, dynamic>?;
+    final chRes = results[1] as List?;
+    final notifRes = results[2] as Map<String, dynamic>?;
 
-    // Load notifications
-    try {
-      final notifRes = await apiService.get(ApiConfig.pathNotifications(bId));
-      if (notifRes is Map && notifRes['notifications'] is List) {
-        _notifications = (notifRes['notifications'] as List)
-            .map((n) => NotificationItemModel.fromJson(n as Map<String, dynamic>))
-            .toList();
-        _unreadNotificationsCount = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
-      }
-    } catch (e) {
-      debugPrint('[BusinessProvider] fetch notifications error: $e');
+    if (statsRes != null) _stats = BusinessStats.fromJson(statsRes);
+    if (chRes != null) {
+      _channels = chRes
+          .whereType<Map>()
+          .map((c) => ChannelModel.fromJson(Map<String, dynamic>.from(c)))
+          .toList();
+    }
+    if (notifRes != null && notifRes['notifications'] is List) {
+      _notifications = (notifRes['notifications'] as List)
+          .map((n) => NotificationItemModel.fromJson(Map<String, dynamic>.from(n as Map)))
+          .toList();
+      _unreadNotificationsCount = (notifRes['unreadCount'] as num?)?.toInt() ?? 0;
     }
 
     notifyListeners();
