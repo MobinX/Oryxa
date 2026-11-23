@@ -17,14 +17,44 @@ class EmailHtmlView extends StatelessWidget {
     this.baseStyle,
   });
 
-  static String decodeEntities(String value) => value
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#39;', "'")
-      .replaceAll('&#x27;', "'");
+  static String decodeEntities(String value) {
+    var text = value
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'");
+    text = text.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      final code = int.tryParse(m.group(1)!);
+      return code == null ? m.group(0)! : String.fromCharCode(code);
+    });
+    text = text.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
+      final code = int.tryParse(m.group(1)!, radix: 16);
+      return code == null ? m.group(0)! : String.fromCharCode(code);
+    });
+    return text;
+  }
+
+  /// Strips the parts of a marketing email that are styling/metadata rather
+  /// than visible content: comments (incl. Outlook conditional ones), style,
+  /// script, head, title, doctype, meta and link blocks. Without this, raw CSS
+  /// such as `@import url(...)` and `@font-face { ... }` shows up as text.
+  static String sanitize(String html) {
+    var out = html.replaceAll(RegExp(r'<!--[\s\S]*?-->'), ' ');
+    for (final block in const ['style', 'script', 'head', 'title']) {
+      out = out.replaceAll(
+        RegExp(r'<$block\b[^>]*>[\s\S]*?</$block\s*>', caseSensitive: false),
+        ' ',
+      );
+    }
+    out = out.replaceAll(RegExp(r'<!DOCTYPE[^>]*>', caseSensitive: false), ' ');
+    out = out.replaceAll(
+      RegExp(r'<(meta|link)\b[^>]*>', caseSensitive: false),
+      ' ',
+    );
+    return out;
+  }
 
   static final RegExp _tag = RegExp(r'(</?[a-zA-Z][^>]*>)|([^<]+)', multiLine: true);
   static final RegExp _image = RegExp(r'<img[^>]*>', caseSensitive: false);
@@ -38,12 +68,13 @@ class EmailHtmlView extends StatelessWidget {
       color: isDark ? Colors.white70 : Colors.black87,
     );
 
+    final clean = sanitize(html);
     final children = <Widget>[];
-    final imageMatches = _image.allMatches(html);
+    final imageMatches = _image.allMatches(clean);
     var cursor = 0;
     for (final match in imageMatches) {
       if (match.start > cursor) {
-        children.addAll(_richSegments(html.substring(cursor, match.start), base));
+        children.addAll(_richSegments(clean.substring(cursor, match.start), base));
       }
       final tag = match.group(0) ?? '';
       final src = _attribute(tag, 'src');
@@ -52,8 +83,8 @@ class EmailHtmlView extends StatelessWidget {
       }
       cursor = match.end;
     }
-    if (cursor < html.length) {
-      children.addAll(_richSegments(html.substring(cursor), base));
+    if (cursor < clean.length) {
+      children.addAll(_richSegments(clean.substring(cursor), base));
     }
     if (children.isEmpty) {
       children.add(const Text('(empty message)'));

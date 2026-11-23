@@ -375,7 +375,6 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final isForward = widget.forwardId != null;
     final isReply = widget.replyId != null;
 
@@ -410,7 +409,7 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
         right: false,
         bottom: true,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(12, 8, 12, 8 + keyboard),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Column(
             children: [
               _field('To', _to, enabled: !isReply && !isForward),
