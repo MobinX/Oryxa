@@ -98,6 +98,7 @@ class NotificationService {
   bool _pendingUnsubscribe = false;
   bool _pendingAdminUnsubscribe = false;
   Timer? _unsubscribeRetryTimer;
+  Timer? _adminMailHeartbeatTimer;
 
   static const String _prefDialogShown = 'fcm_permission_dialog_shown';
   static const String _prefSubscribedBiz = 'fcm_subscribed_business_ids';
@@ -224,6 +225,14 @@ class NotificationService {
     // A saved admin session renews its inbox alerts silently. No permission dialog on
     // boot: the prompt belongs to signing in, and a denied browser is simply skipped.
     unawaited(restoreAdminMailPush(apiService));
+
+    // Mail-worker subscriptions expire (12h by default). The web console sends a
+    // heartbeat every 5 minutes; do the same here so a long-lived admin session
+    // does not silently lose inbox alerts.
+    _adminMailHeartbeatTimer?.cancel();
+    _adminMailHeartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      unawaited(heartbeatAdminMailPush(apiService));
+    });
 
     // A logout whose unsubscribe failed must not leave a device registered
     // forever. Retry in the background until the server confirms removal.
@@ -829,6 +838,18 @@ class NotificationService {
       );
       debugPrint('[NotificationService] Admin mail push subscribe failed: $e');
       return false;
+    }
+  }
+
+  /// Keeps the mail-worker registration alive while the admin session is active.
+  /// Without this the subscription expires after its default 12h TTL even though
+  /// the operator is still signed in.
+  Future<void> heartbeatAdminMailPush(ApiService apiService) async {
+    if (!_adminMailPush || !await _hasActiveSession()) return;
+    try {
+      await apiService.post(ApiConfig.pathAdminMailPushHeartbeat);
+    } catch (e) {
+      debugPrint('[NotificationService] Admin mail push heartbeat failed: $e');
     }
   }
 
