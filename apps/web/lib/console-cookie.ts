@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 
 export const CONSOLE_COOKIE = 'oryxa_console_session';
-export const CONSOLE_MAX_AGE = 12 * 60 * 60;
+export const CONSOLE_MAX_AGE = 30 * 24 * 60 * 60;
 
 export function consoleCookieOptions() {
   return {
