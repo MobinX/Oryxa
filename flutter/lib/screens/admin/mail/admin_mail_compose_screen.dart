@@ -1,9 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:extended_text_field/extended_text_field.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:image_picker/image_picker.dart';
@@ -93,6 +90,7 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
   final _body = TextEditingController();
   final List<Map<String, dynamic>> _uploads = [];
   final List<String> _attachmentNames = [];
+  final List<MapEntry<String, String>> _links = [];
   bool _isSending = false;
   bool _isPicking = false;
   bool _showPreview = false;
@@ -196,41 +194,54 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
     }
   }
 
-  Future<void> _pickFiles() async {
-    setState(() => _isPicking = true);
-    try {
-      final files = await FilePicker.pickFiles(type: FileType.any);
-      for (final file in files) {
-        if (file.path == null) continue;
-        final bytes = await File(file.path!).readAsBytes();
-        await _uploadBytes(
-          bytes: bytes,
-          filename: file.name,
-          contentType: _contentTypeFor(file.name),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not attach file: $e'), backgroundColor: AppTheme.danger),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isPicking = false);
+  Future<void> _addLink() async {
+    final label = TextEditingController();
+    final url = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Attach a link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: label,
+              decoration: const InputDecoration(
+                labelText: 'Label',
+                hintText: 'e.g. Invoice PDF',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: url,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'URL',
+                hintText: 'https://…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true && mounted) {
+      final link = url.text.trim();
+      if (link.isEmpty) return;
+      final name = label.text.trim().isEmpty ? link : label.text.trim();
+      setState(() => _links.add(MapEntry(name, link)));
     }
-  }
-
-  String _contentTypeFor(String filename) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.csv')) return 'text/csv';
-    if (lower.endsWith('.txt')) return 'text/plain';
-    if (lower.endsWith('.json')) return 'application/json';
-    return 'application/octet-stream';
   }
 
   Future<void> _uploadBytes({
@@ -253,6 +264,12 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
     await _addAttachment(signed, signed['filename']?.toString() ?? filename);
   }
 
+  String _composeMarkdown() {
+    if (_links.isEmpty) return _body.text;
+    final links = _links.map((e) => '[${e.key}](${e.value})').join('\n');
+    return '${_body.text}\n\n$links';
+  }
+
   Future<void> _send() async {
     final recipients = _addresses(_to.text);
     final isForward = widget.forwardId != null;
@@ -263,8 +280,9 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
       );
       return;
     }
-    final html = mailMarkdownToHtml(_body.text);
-    final plain = mailMarkdownToPlainText(_body.text);
+    final markdown = _composeMarkdown();
+    final html = mailMarkdownToHtml(markdown);
+    final plain = mailMarkdownToPlainText(markdown);
     if (plain.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please write a message')),
@@ -416,9 +434,9 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
                       tooltip: 'Edit & attach photo',
                     ),
                     IconButton.outlined(
-                      onPressed: _pickFiles,
-                      icon: const Icon(Icons.attach_file, size: 18),
-                      tooltip: 'Attach file',
+                      onPressed: _addLink,
+                      icon: const Icon(Icons.link, size: 18),
+                      tooltip: 'Attach link',
                     ),
                   ],
                 ),
@@ -441,11 +459,25 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
                     ),
                   ),
                 ),
+              if (_links.isNotEmpty)
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _links.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) => Chip(
+                      avatar: const Icon(Icons.link, size: 16),
+                      label: Text(_links[index].key, overflow: TextOverflow.ellipsis),
+                      onDeleted: () => setState(() => _links.removeAt(index)),
+                    ),
+                  ),
+                ),
               Expanded(
                 child: _showPreview
                     ? SingleChildScrollView(
                         child: Html(
-                          data: mailMarkdownToHtml(_body.text),
+                          data: mailMarkdownToHtml(_composeMarkdown()),
                           style: {
                             'body': Style(
                               color: isDark ? Colors.white70 : Colors.black87,
