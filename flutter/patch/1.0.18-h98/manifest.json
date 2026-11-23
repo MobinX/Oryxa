@@ -1,0 +1,11 @@
+{
+  "has_update": true,
+  "version": "1.0.18-h98",
+  "patch_url": "/28-arm64-v8a.fptc",
+  "md5": "b39a694b0fb71a8ab23f71a5798f285d",
+  "target_version_code": 28,
+  "targetVersionCode": 28,
+  "schemaVersion": 2,
+  "created_at": "2026-11-23T02:16:53Z",
+  "commit": "20fb2050149926ce0b18b7269c28f29abf4504d4"
+}
