@@ -157,9 +157,11 @@ export function MobileGoogleLogin() {
     const started = readFlag();
     let cancelled = false;
     (async () => {
-      // Returning from Google: the redirect credential is the only proof that
-      // the operator picked an account. A persisted auth.currentUser could be
-      // an old account, so it is never used as a substitute.
+      // Returning from Google: the redirect credential is the first choice.
+      // A persisted auth.currentUser is only a fallback, and only on a page load
+      // that this tab marked as a redirect return — otherwise an old account
+      // could be mistaken for the one just picked. The nonce in the payload is
+      // still the final gate on the Flutter side.
       if (started) {
         let user: any = null;
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -183,6 +185,36 @@ export function MobileGoogleLogin() {
         if (user) {
           clearFlag();
           await finish(user);
+          return;
+        }
+
+        // Firebase often restores the redirect user to persistence a beat after
+        // getRedirectResult() is called. Because the redirect flag proves this
+        // tab actually started the flow, waiting briefly for auth state is safe.
+        const restored = await new Promise<any>((resolve) => {
+          let settled = false;
+          let unsub: (() => void) | null = null;
+          let timer: number | undefined;
+          const done = (value: any) => {
+            if (settled) return;
+            settled = true;
+            try { unsub?.(); } catch { /* ignore */ }
+            if (timer !== undefined) window.clearTimeout(timer);
+            resolve(value);
+          };
+          timer = window.setTimeout(() => done(null), 3000);
+          try {
+            unsub = auth.onAuthStateChanged((value) => {
+              if (value) done(value);
+            });
+          } catch {
+            done(null);
+          }
+        });
+        if (cancelled) return;
+        if (restored) {
+          clearFlag();
+          await finish(restored);
           return;
         }
 
