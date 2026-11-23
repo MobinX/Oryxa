@@ -205,7 +205,14 @@ export function MobileGoogleLogin() {
           timer = window.setTimeout(() => done(null), 3000);
           try {
             unsub = auth.onAuthStateChanged((value) => {
-              if (value) done(value);
+              if (!value) return;
+              // Only accept an account that signed in during this flow. A stale
+              // persisted account must not masquerade as the one just picked.
+              const last = (value as any)?.metadata?.lastSignInTime;
+              const age = last ? Date.now() - Date.parse(last) : Number.NaN;
+              if (Number.isFinite(age) && age >= 0 && age < 10 * 60 * 1000) {
+                done(value);
+              }
             });
           } catch {
             done(null);
@@ -255,10 +262,11 @@ export function MobileGoogleLogin() {
       startedRef.current = true;
       setMessage('Signing out of existing session & opening Google Sign-In…');
 
+      // Always sign out, even when currentUser is still null at this instant:
+      // Firebase restores persistence asynchronously, so a conditional check
+      // can skip the sign-out and let the previous account survive the redirect.
       try {
-        if (auth.currentUser) {
-          await auth.signOut();
-        }
+        await auth.signOut();
       } catch {
         /* ignore */
       }
