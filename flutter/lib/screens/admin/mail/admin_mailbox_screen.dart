@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../config/app_theme.dart';
 import '../../../models/admin_mail.dart';
@@ -10,6 +8,7 @@ import '../../../providers/admin_provider.dart';
 import '../../../services/api_service.dart';
 import '../../../services/notification_service.dart';
 import 'admin_mail_compose_screen.dart';
+import '../../../widgets/email_html_view.dart';
 
 class AdminMailboxScreen extends StatefulWidget {
   const AdminMailboxScreen({super.key});
@@ -797,21 +796,7 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
                           ],
                         ),
                         if (_showRendered && _content?.html.isNotEmpty == true)
-                          Html(
-                            data: _content!.html,
-                            onLinkTap: (url, _, __) async {
-                              if (url == null) return;
-                              final uri = Uri.tryParse(url.toString());
-                              if (uri == null) return;
-                              if (await canLaunchUrl(uri)) await launchUrl(uri);
-                            },
-                            style: {
-                              'body': Style(
-                                fontSize: FontSize(13),
-                                color: isDark ? Colors.white70 : Colors.black87,
-                              ),
-                            },
-                          )
+                          EmailHtmlView(html: _content!.html)
                         else
                           SelectableText(
                             _showHtml

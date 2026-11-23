@@ -1,52 +1,78 @@
 import 'dart:typed_data';
 
-import 'package:extended_text_field/extended_text_field.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:provider/provider.dart';
 
 import '../../../config/app_theme.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../widgets/email_html_view.dart';
 
-/// Markdown markers are highlighted inside the editable field by
-/// extended_text_field, while the same text renders as real HTML via flutter_html.
-class _MarkdownSpan extends SpecialText {
-  _MarkdownSpan(String flag, TextStyle? style)
-      : super(flag, flag, style ?? const TextStyle());
+String _escapeHtml(String text) => text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 
-  @override
-  InlineSpan finishText() => TextSpan(text: getContent(), style: textStyle);
+String _inlineMarkdown(String text) {
+  var html = _escapeHtml(text);
+  html = html.replaceAllMapped(
+    RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
+    (m) => '<a href="${m.group(2)}">${m.group(1)}</a>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'__(.+?)__'),
+    (m) => '<b>${m.group(1)}</b>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'\*([^*]+)\*'),
+    (m) => '<i>${m.group(1)}</i>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'`([^`]+)`'),
+    (m) => '<code>${m.group(1)}</code>',
+  );
+  return html;
 }
 
-class MarkdownSpanBuilder extends SpecialTextSpanBuilder {
-  @override
-  SpecialText? createSpecialText(
-    String flag, {
-    TextStyle? textStyle,
-    SpecialTextGestureTapCallback? onTap,
-    required int index,
-  }) {
-    final base = textStyle ?? const TextStyle();
-    if (flag.endsWith('__')) {
-      return _MarkdownSpan('__', base.copyWith(fontWeight: FontWeight.bold));
+/// A small Flutter-only Markdown-to-HTML converter for the compose preview and
+/// the HTML part sent to the mail worker.
+String mailMarkdownToHtml(String markdown) {
+  final out = <String>[];
+  var inList = false;
+  void closeList() {
+    if (inList) {
+      out.add('</ul>');
+      inList = false;
     }
-    if (flag.endsWith('*')) {
-      return _MarkdownSpan('*', base.copyWith(fontStyle: FontStyle.italic));
-    }
-    if (flag.endsWith('`')) {
-      return _MarkdownSpan('`', base.copyWith(
-        fontFamily: 'monospace',
-        color: Colors.deepOrange,
-      ));
-    }
-    return null;
   }
-}
 
-String mailMarkdownToHtml(String markdown) => md.markdownToHtml(markdown);
+  for (final line in markdown.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('- ')) {
+      if (!inList) {
+        out.add('<ul>');
+        inList = true;
+      }
+      out.add('<li>${_inlineMarkdown(trimmed.substring(2))}</li>');
+      continue;
+    }
+    closeList();
+    if (trimmed.isEmpty) {
+      out.add('<br/>');
+    } else if (trimmed.startsWith('### ')) {
+      out.add('<h3>${_inlineMarkdown(trimmed.substring(4))}</h3>');
+    } else if (trimmed.startsWith('## ')) {
+      out.add('<h2>${_inlineMarkdown(trimmed.substring(3))}</h2>');
+    } else if (trimmed.startsWith('# ')) {
+      out.add('<h1>${_inlineMarkdown(trimmed.substring(2))}</h1>');
+    } else {
+      out.add('<p>${_inlineMarkdown(trimmed)}</p>');
+    }
+  }
+  closeList();
+  return out.join('\n');
+}
 
 String mailMarkdownToPlainText(String markdown) {
   var text = markdown
@@ -55,10 +81,10 @@ String mailMarkdownToPlainText(String markdown) {
         (m) => '${m.group(1)} (${m.group(2)})',
       )
       .replaceAll('__', '')
-      .replaceAll('**', '')
-      .replaceAll('`', '');
+      .replaceAll('`', '')
+      .replaceAll('*', '');
   text = text.replaceAllMapped(RegExp(r'(?m)^\s*#+\s*'), (_) => '');
-  text = text.replaceAllMapped(RegExp(r'(?m)^\s*[-*]\s+'), (_) => '');
+  text = text.replaceAllMapped(RegExp(r'(?m)^\s*-\s+'), (_) => '');
   return text.trim();
 }
 
@@ -476,19 +502,12 @@ class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
               Expanded(
                 child: _showPreview
                     ? SingleChildScrollView(
-                        child: Html(
-                          data: mailMarkdownToHtml(_composeMarkdown()),
-                          style: {
-                            'body': Style(
-                              color: isDark ? Colors.white70 : Colors.black87,
-                              fontSize: FontSize(14),
-                            ),
-                          },
+                        child: EmailHtmlView(
+                          html: mailMarkdownToHtml(_composeMarkdown()),
                         ),
                       )
-                    : ExtendedTextField(
+                    : TextField(
                         controller: _body,
-                        specialTextSpanBuilder: MarkdownSpanBuilder(),
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
