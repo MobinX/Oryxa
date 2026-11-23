@@ -1,21 +1,25 @@
-MIT License
+PROPRIETARY SOFTWARE LICENSE & ALL RIGHTS RESERVED
 
-Copyright (c) 2026 Mobin Chowdhury
+Copyright (c) 2026 Zul-Qarnain / MobinX / OnlyOrders. All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+IMPORTANT: PLEASE READ THIS LICENSE CAREFULLY BEFORE ACCESSING, VIEWING, OR USING ANY PORTION OF THIS SOFTWARE AND CODEBASE.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. PROPRIETARY AND CONFIDENTIAL NATURE
+This repository, software, source code, system architecture, database design, artificial intelligence agent prompts, workflows, and documentation (collectively, the "Software") are the exclusive, confidential, and proprietary intellectual property of Zul-Qarnain and MobinX ("Owner"). 
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. STRICT PROHIBITION AGAINST COPYING AND USE
+No person, entity, or automated system is granted any license, right, or permission to:
+  a. Copy, reproduce, clone, fork, duplicate, distribute, publicly display, or transmit the Software, in whole or in part, in any format or medium;
+  b. Modify, alter, adapt, translate, decompile, disassemble, reverse engineer, or create derivative works based upon the Software or any component thereof;
+  c. Sell, resell, sublicense, rent, lease, syndicate, transfer, or commercially exploit the Software in any manner;
+  d. Use the Software, its architecture, or its algorithms to build, train, benchmark, evaluate, or optimize competing products, software-as-a-service (SaaS) platforms, or artificial intelligence models.
+
+3. LEGAL ENFORCEMENT & REMEDIES
+Any unauthorized viewing, downloading, copying, distribution, or reproduction of this Software constitutes deliberate copyright infringement, misappropriation of trade secrets, and violation of international intellectual property laws and treaties. 
+The Owner actively monitors and enforces its intellectual property rights globally and will pursue all available legal remedies, including immediate temporary and permanent injunctive relief, seizure of infringing products or services, statutory damages, actual damages, disgorgement of profits, and recovery of full legal fees and litigation costs to the maximum extent permitted by applicable law.
+
+4. NO IMPLIED LICENSES
+No licenses, whether express, implied, by estoppel, or otherwise, are granted by the Owner under this Notice or by virtue of hosting, publishing, or sharing this repository on any public or private code-hosting service.
+
+5. DISCLAIMER OF WARRANTY
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.

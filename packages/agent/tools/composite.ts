@@ -41,6 +41,7 @@ import {
   upfrontAmount,
   upfrontKind,
   parseVariantAttributes,
+  resolveDeliveryZone,
 } from '@repo/shared';
 
 const CARD_LIST_LIMIT = 10;
@@ -258,20 +259,16 @@ export function createCompositeTools(context: CompositeToolsContext) {
       const stockAvailable = targetVariant ? targetVariant.stock : 999;
       const inStock = targetVariant ? targetVariant.isAvailable && targetVariant.stock >= qty : true;
 
-      // 5. Match delivery zone fee
+      // 5. Match delivery zone fee using deterministic Bangladesh geo-resolver
       let shippingCost = 0;
       let matchedZone: string | null = null;
       if (context.deliveryZones?.length) {
         if (deliveryArea) {
-          const areaNorm = deliveryArea.trim().toLowerCase();
-          const zone = context.deliveryZones.find((z) =>
-            areaNorm.includes(z.label.toLowerCase()) || z.label.toLowerCase().includes(areaNorm)
-          );
-          if (zone) {
-            shippingCost = zone.price;
-            matchedZone = zone.label;
+          const resolution = resolveDeliveryZone(deliveryArea, context.deliveryZones);
+          if (resolution.status === 'resolved' && resolution.zone) {
+            shippingCost = resolution.zone.price;
+            matchedZone = resolution.zone.label;
           } else {
-            // Default to first zone or general zone
             shippingCost = context.deliveryZones[0]?.price ?? 0;
             matchedZone = context.deliveryZones[0]?.label ?? null;
           }
@@ -387,6 +384,15 @@ export function createCompositeTools(context: CompositeToolsContext) {
       const variant = product.variants?.find((v: any) => v.id === variantId) ?? product.variants?.[0] ?? null;
       const effectivePrice = variant?.price ?? product.price;
 
+      // Automatically resolve delivery fee if omitted
+      let resolvedShippingCost = typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined;
+      if (resolvedShippingCost === undefined && customerAddress && context.deliveryZones?.length) {
+        const resolution = resolveDeliveryZone(customerAddress, context.deliveryZones);
+        if (resolution.status === 'resolved' && resolution.zone) {
+          resolvedShippingCost = resolution.zone.price;
+        }
+      }
+
       // Create order in database
       try {
         const createdOrder = await createOrder({
@@ -399,7 +405,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
           customerPhone: customerPhone || undefined,
           customerPlatformId: context.customerPlatformId || undefined,
           conversationId: context.conversationId || undefined,
-          shippingCost: typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined,
+          shippingCost: resolvedShippingCost,
           paymentMethod: paymentMethod?.trim() ? paymentMethod.trim() : undefined,
           transactionId: paidTransactionId || undefined,
         });
@@ -419,7 +425,11 @@ export function createCompositeTools(context: CompositeToolsContext) {
           };
         }
 
-        await context.onOrderCreated?.({ id: createdOrder.id, totalPrice: createdOrder.totalPrice });
+        try {
+          await context.onOrderCreated?.({ id: createdOrder.id, totalPrice: createdOrder.totalPrice });
+        } catch (sendErr) {
+          console.warn('[composite-tool] receipt send failed (non-fatal, e.g. test token):', sendErr);
+        }
 
         return logResult(
           JSON.stringify({

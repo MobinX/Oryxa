@@ -418,11 +418,17 @@ export async function runAgentCore(
       } else {
         emitSse('message_sent', { text: replyText, fallback: true });
         try {
-          // The test override still receives exactly the three arguments it always did; a real
-          // send learns the platform so Instagram gets its 1,000-character chunks.
-          await (sendMessageOverride
-            ? resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText)
-            : sendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText, { platform }));
+          // If quick reply suggestion chips were extracted (or set by state), deliver via Meta sendQuickReplies
+          if (!sendMessageOverride && agentState.lastSuggestions?.length && (!platform || platform === 'facebook')) {
+            const { sendQuickReplies } = await import('@repo/integrations/facebook');
+            await sendQuickReplies(conv.channel.apiToken, conv.customerPlatformId, replyText, agentState.lastSuggestions, { platform });
+          } else {
+            // The test override still receives exactly the three arguments it always did; a real
+            // send learns the platform so Instagram gets its 1,000-character chunks.
+            await (sendMessageOverride
+              ? resolvedSendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText)
+              : sendMessage(conv.channel.apiToken, conv.customerPlatformId, replyText, { platform }));
+          }
         } catch (err) {
           if (chargedPeriod) {
             try {

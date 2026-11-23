@@ -28,6 +28,8 @@
     "test:neon:crud": "vitest run tests/neon/crud.test.ts",
     "test:behaviour": "vitest run tests/agent/behaviour",
     "test:behaviour:watch": "vitest tests/agent/behaviour",
+    "test:chat": "bun run scripts/simulate-chat.ts",
+    "test:chat:interactive": "bun run scripts/simulate-chat.ts --interactive",
     "seed:sandbox:catalog": "bun --env-file=.env packages/db/scripts/seed-sandbox-catalog.ts"
   },
   "devDependencies": {

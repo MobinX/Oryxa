@@ -1,4 +1,4 @@
-export { Agent } from '@agent/Agent';
+export { Agent, extractQuickReplies } from '@agent/Agent';
 export {
   DEFAULT_REPLY_GUIDANCE,
   COMMENT_REPLY_GUIDANCE,
