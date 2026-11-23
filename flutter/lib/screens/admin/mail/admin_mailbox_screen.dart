@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../config/app_theme.dart';
 import '../../../models/admin_mail.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../services/api_service.dart';
 import '../../../services/notification_service.dart';
+import 'admin_mail_compose_screen.dart';
 
 class AdminMailboxScreen extends StatefulWidget {
   const AdminMailboxScreen({super.key});
@@ -46,16 +48,16 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
     String? replyId,
     String? forwardId,
   }) {
-    showModalBottomSheet(useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _ComposeEmailSheet(
-        replyTo: replyTo,
-        initialSubject: initialSubject,
-        initialBody: initialBody,
-        replyId: replyId,
-        forwardId: forwardId,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AdminMailComposeScreen(
+          replyTo: replyTo,
+          initialSubject: initialSubject,
+          initialBody: initialBody,
+          replyId: replyId,
+          forwardId: forwardId,
+        ),
       ),
     );
   }
@@ -531,330 +533,6 @@ class _AdminMailboxScreenState extends State<AdminMailboxScreen> {
   }
 }
 
-class _ComposeEmailSheet extends StatefulWidget {
-  final String? replyTo;
-  final String? initialSubject;
-  final String? initialBody;
-  final String? replyId;
-  final String? forwardId;
-
-  const _ComposeEmailSheet({
-    this.replyTo,
-    this.initialSubject,
-    this.initialBody,
-    this.replyId,
-    this.forwardId,
-  });
-
-  @override
-  State<_ComposeEmailSheet> createState() => _ComposeEmailSheetState();
-}
-
-class _ComposeEmailSheetState extends State<_ComposeEmailSheet> {
-  final _toController = TextEditingController();
-  final _ccController = TextEditingController();
-  final _bccController = TextEditingController();
-  final _subjectController = TextEditingController();
-  final _bodyController = TextEditingController();
-  bool _showCc = false;
-  bool _showBcc = false;
-  bool _isSending = false;
-  bool _picking = false;
-  final List<Map<String, dynamic>> _uploads = [];
-  final List<String> _attachmentNames = [];
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.replyTo != null) _toController.text = widget.replyTo!;
-    if (widget.initialSubject != null) _subjectController.text = widget.initialSubject!;
-    if (widget.initialBody != null) _bodyController.text = widget.initialBody!;
-    if (widget.replyId != null) _showCc = true;
-  }
-
-  @override
-  void dispose() {
-    _toController.dispose();
-    _ccController.dispose();
-    _bccController.dispose();
-    _subjectController.dispose();
-    _bodyController.dispose();
-    super.dispose();
-  }
-
-  List<String> _addresses(String value) => value
-      .split(RegExp(r'[,;]'))
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toList();
-
-  Future<void> _pickAttachments() async {
-    setState(() => _picking = true);
-    try {
-      final files = await ImagePicker().pickMultiImage() ?? <XFile>[];
-      final admin = context.read<AdminProvider>();
-      for (final file in files) {
-        final bytes = await file.readAsBytes();
-        final name = file.name;
-        final contentType = file.mimeType ?? 'application/octet-stream';
-        final signed = await admin.signMailAttachment(
-          filename: name,
-          contentType: contentType,
-          size: bytes.length,
-        );
-        await admin.apiService.putBytes(
-          signed['uploadUrl'].toString(),
-          bytes,
-          contentType,
-        );
-        _uploads.add(signed);
-        _attachmentNames.add(name);
-      }
-      if (mounted && files.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${files.length} attachment${files.length == 1 ? '' : 's'} ready')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not attach file: $e'), backgroundColor: AppTheme.danger),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _picking = false);
-    }
-  }
-
-  void _handleSend() async {
-    final toText = _toController.text.trim();
-    final subject = _subjectController.text.trim();
-    final body = _bodyController.text.trim();
-    final isForward = widget.forwardId != null;
-    final isReply = widget.replyId != null;
-
-    if (toText.isEmpty && !isReply) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter recipient email')),
-      );
-      return;
-    }
-    if (subject.isEmpty && !isForward && !isReply) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter subject')),
-      );
-      return;
-    }
-    if (body.isEmpty && !isForward) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter message body')),
-      );
-      return;
-    }
-
-    final recipients = _addresses(toText);
-    final ccList = _ccController.text.trim().isNotEmpty ? _addresses(_ccController.text) : null;
-    final bccList = _bccController.text.trim().isNotEmpty ? _addresses(_bccController.text) : null;
-
-    setState(() => _isSending = true);
-    final admin = context.read<AdminProvider>();
-
-    try {
-      if (isReply) {
-        await admin.replyEmail(
-          widget.replyId!,
-          text: body,
-          cc: ccList,
-          bcc: bccList,
-          uploadedAttachments: _uploads,
-        );
-      } else if (isForward) {
-        await admin.forwardEmail(
-          widget.forwardId!,
-          to: recipients,
-          cc: ccList,
-          bcc: bccList,
-          text: body,
-          uploadedAttachments: _uploads,
-        );
-      } else {
-        await admin.sendEmail(
-          to: recipients,
-          cc: ccList,
-          bcc: bccList,
-          subject: subject,
-          text: body,
-          uploadedAttachments: _uploads,
-        );
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message sent successfully'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send: $e'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final title = widget.forwardId != null
-        ? 'Forward Message'
-        : widget.replyId != null
-            ? 'Reply Message'
-            : 'New Message';
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      padding: EdgeInsets.only(
-        top: 16,
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom +
-            16 +
-            MediaQuery.viewPaddingOf(context).bottom,
-      ),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1F30) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-          const Divider(),
-          TextField(
-            controller: _toController,
-            enabled: widget.replyId == null,
-            decoration: InputDecoration(
-              labelText: 'To',
-              hintText: 'recipient@domain.com',
-              suffixIcon: IconButton(
-                icon: Text(
-                  _showCc ? 'Cc' : '+Cc',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                onPressed: () => setState(() => _showCc = !_showCc),
-              ),
-              border: InputBorder.none,
-            ),
-          ),
-          const Divider(height: 1),
-          if (_showCc) ...[
-            TextField(
-              controller: _ccController,
-              decoration: const InputDecoration(
-                labelText: 'Cc',
-                hintText: 'cc@domain.com',
-                border: InputBorder.none,
-              ),
-            ),
-            const Divider(height: 1),
-          ],
-          TextField(
-            controller: _bccController,
-            decoration: InputDecoration(
-              labelText: 'Bcc',
-              hintText: 'Optional, comma-separated',
-              border: InputBorder.none,
-              suffixIcon: _showBcc
-                  ? null
-                  : IconButton(
-                      icon: const Text('+Bcc', style: TextStyle(fontSize: 12)),
-                      onPressed: () => setState(() => _showBcc = true),
-                    ),
-            ),
-          ),
-          const Divider(height: 1),
-          TextField(
-            controller: _subjectController,
-            enabled: !isForwardLike && !isReplyLike,
-            decoration: const InputDecoration(
-              labelText: 'Subject',
-              hintText: 'Subject line',
-              border: InputBorder.none,
-            ),
-          ),
-          const Divider(height: 1),
-          if (_attachmentNames.isNotEmpty)
-            Wrap(
-              spacing: 6,
-              children: _attachmentNames
-                  .map((n) => Chip(
-                        label: Text(n, style: const TextStyle(fontSize: 10)),
-                        visualDensity: VisualDensity.compact,
-                      ))
-                  .toList(),
-            ),
-          Row(
-            children: [
-              IconButton(
-                onPressed: _picking ? null : _pickAttachments,
-                icon: const Icon(Icons.attach_file, size: 18),
-                tooltip: 'Attach images (max 10 MB each)',
-              ),
-              if (_picking) const Text('Uploading…', style: TextStyle(fontSize: 11)),
-            ],
-          ),
-          Expanded(
-            child: TextField(
-              controller: _bodyController,
-              maxLines: null,
-              expands: true,
-              keyboardType: TextInputType.multiline,
-              decoration: const InputDecoration(
-                hintText: 'Write your message…',
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _isSending ? null : _handleSend,
-            icon: _isSending
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.send),
-            label: Text(_isSending ? 'Sending…' :
-                (widget.forwardId != null ? 'Forward message' : widget.replyId != null ? 'Send reply' : 'Send message')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  bool get isForwardLike => widget.forwardId != null;
-  bool get isReplyLike => widget.replyId != null;
-}
-
 class _EmailDetailSheet extends StatefulWidget {
   final MailRow email;
   final Function(String to, String subject, String body, String id) onReply;
@@ -874,6 +552,7 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
   MailContent? _content;
   bool _isLoading = true;
   bool _showHtml = false;
+  bool _showRendered = true;
 
   @override
   void initState() {
@@ -1090,31 +769,64 @@ class _EmailDetailSheetState extends State<_EmailDetailSheet> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        // Body: text or the stored HTML source.
-                        Row(
+                        // Body: rendered HTML (with images), plain text, or source.
+                        Wrap(
+                          spacing: 4,
                           children: [
                             TextButton(
-                              onPressed: () => setState(() => _showHtml = false),
+                              onPressed: () => setState(() {
+                                _showRendered = true;
+                                _showHtml = false;
+                              }),
+                              child: const Text('Rendered'),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _showRendered = false;
+                                _showHtml = false;
+                              }),
                               child: const Text('Text'),
                             ),
                             TextButton(
-                              onPressed: () => setState(() => _showHtml = true),
-                              child: const Text('HTML'),
+                              onPressed: () => setState(() {
+                                _showRendered = false;
+                                _showHtml = true;
+                              }),
+                              child: const Text('HTML source'),
                             ),
                           ],
                         ),
-                        SelectableText(
-                          _showHtml
-                              ? (_content?.html.isNotEmpty == true ? _content!.html : '(No HTML stored)')
-                              : (_content?.text.isNotEmpty == true
-                                  ? _content!.text
-                                  : '(No plain text content available)'),
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            fontFamily: _showHtml ? 'monospace' : null,
+                        if (_showRendered && _content?.html.isNotEmpty == true)
+                          Html(
+                            data: _content!.html,
+                            onLinkTap: (url, _, __) async {
+                              if (url == null) return;
+                              final uri = Uri.tryParse(url.toString());
+                              if (uri == null) return;
+                              if (await canLaunchUrl(uri)) await launchUrl(uri);
+                            },
+                            style: {
+                              'body': Style(
+                                fontSize: FontSize(13),
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                            },
+                          )
+                        else
+                          SelectableText(
+                            _showHtml
+                                ? (_content?.html.isNotEmpty == true
+                                    ? _content!.html
+                                    : '(No HTML stored)')
+                                : (_content?.text.isNotEmpty == true
+                                    ? _content!.text
+                                    : '(No plain text content available)'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.5,
+                              fontFamily: _showHtml ? 'monospace' : null,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
