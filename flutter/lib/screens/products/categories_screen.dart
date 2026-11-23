@@ -165,7 +165,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         icon: const Icon(Icons.add, size: 20),
         label: const Text('New Category'),
       ),
-      body: RefreshIndicator(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        left: false,
+        right: false,
+        child: RefreshIndicator(
         onRefresh: () async {
           if (currentStore != null) {
             await prods.fetchCategories(currentStore.id);
@@ -180,7 +185,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 onButtonPressed: _showAddCategoryDialog,
               )
             : ListView.separated(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
+                padding: const EdgeInsets.all(16),
                 itemCount: prods.categories.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
@@ -231,7 +236,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     ),
                   );
                 },
-              ),
+                ),
+        ),
       ),
     );
   }

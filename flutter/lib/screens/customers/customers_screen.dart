@@ -156,7 +156,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
               label: const Text('New Customer'),
             )
           : null,
-      body: Column(
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        left: false,
+        right: false,
+        child: Column(
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -273,6 +278,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
