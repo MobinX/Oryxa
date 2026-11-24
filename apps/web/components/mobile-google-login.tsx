@@ -7,6 +7,8 @@ import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
 const REDIRECT_FLAG = 'oo.mobile-google.redirect-started';
+// localStorage survives a new Custom Tab, unlike sessionStorage.
+const RETURN_FLAG = 'oo.mobile-google.redirect-pending';
 
 type Step = 'working' | 'chooser' | 'finalizing' | 'ready' | 'done' | 'error';
 
@@ -161,20 +163,32 @@ function isRecentSignIn(value: any): boolean {
   return Number.isFinite(age) && age >= 0 && age < 15 * 1000;
 }
 
-function writeFlag(): void {
+function clearFlag(): void {
   try {
-    sessionStorage.setItem(REDIRECT_FLAG, '1');
+    sessionStorage.removeItem(REDIRECT_FLAG);
+    localStorage.removeItem(RETURN_FLAG);
   } catch {
     /* ignore */
   }
 }
 
-function clearFlag(): void {
+function markRedirectStarted(): void {
   try {
-    sessionStorage.removeItem(REDIRECT_FLAG);
+    sessionStorage.setItem(REDIRECT_FLAG, '1');
+    localStorage.setItem(RETURN_FLAG, '1');
   } catch {
     /* ignore */
   }
+}
+
+function returningFromRedirect(): boolean {
+  try {
+    if (localStorage.getItem(RETURN_FLAG) === '1') return true;
+  } catch {
+    /* ignore */
+  }
+  const referrer = document.referrer || '';
+  return referrer.includes('accounts.google.com') || referrer.includes('firebaseapp.com');
 }
 
 export function MobileGoogleLogin() {
@@ -276,7 +290,14 @@ export function MobileGoogleLogin() {
       return;
     }
 
-    logStep('page-load', `hasState=${new URLSearchParams(window.location.search).has('state')}`);
+    const isReturn = returningFromRedirect();
+    logStep(
+      'page-load',
+      `hasState=${new URLSearchParams(window.location.search).has('state')} return=${isReturn} referrer=${(document.referrer || 'none').split('/')[2] ?? 'none'}`,
+    );
+    const unsubAuth = auth.onAuthStateChanged((value) => {
+      logStep('auth-state', `signedIn=${Boolean(value)}`);
+    });
     let cancelled = false;
     (async () => {
       if (startedRef.current) {
@@ -317,6 +338,30 @@ export function MobileGoogleLogin() {
       }
       logStep('no-redirect-result');
 
+      // The SDK's pending redirect can be lost when a Custom Tab returns in a
+      // different browsing context. Wait for Firebase to restore its user
+      // before ever starting another Google round-trip.
+      if (isReturn) {
+        setMessage('Completing Google sign-in…');
+        logStep('redirect-return-wait-start');
+        const returned = await waitForCurrentUser(auth, 10000);
+        if (cancelled) return;
+        logStep('redirect-return-wait-done', `found=${Boolean(returned)}`);
+        if (returned) {
+          clearFlag();
+          await finish(returned);
+          return;
+        }
+        // Never auto-redirect a second time from a return visit: that was the
+        // infinite loop. Let the operator trigger it explicitly.
+        clearFlag();
+        startedRef.current = false;
+        setStep('ready');
+        setMessage('Google sign-in could not be completed in this browser. Tap to try again.');
+        logStep('redirect-return-loop-stopped');
+        return;
+      }
+
       // No redirect result: offer the already persisted account.
       setMessage('Checking for an existing Google account…');
       const existing = await waitForCurrentUser(auth);
@@ -333,7 +378,7 @@ export function MobileGoogleLogin() {
       setMessage('Opening Google Sign-In…');
       logStep('redirect-start');
       try {
-        writeFlag();
+        markRedirectStarted();
         await signInWithGoogleRedirect();
       } catch (error) {
         clearFlag();
@@ -346,6 +391,7 @@ export function MobileGoogleLogin() {
 
     return () => {
       cancelled = true;
+      try { unsubAuth(); } catch { /* ignore */ }
     };
   }, [finish]);
 
@@ -361,7 +407,7 @@ export function MobileGoogleLogin() {
     // Redirect works in Chrome Custom Tabs; popups are blocked there.
     logStep('manual-redirect-start');
     try {
-      writeFlag();
+      markRedirectStarted();
       await signInWithGoogleRedirect();
     } catch (error) {
       clearFlag();
