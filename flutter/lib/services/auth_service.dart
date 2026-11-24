@@ -48,6 +48,35 @@ class AuthService extends ChangeNotifier {
     apiService.setTokenRefresher(_refreshIdToken);
   }
 
+  /// Console startup deliberately skips merchant restore so a stale merchant
+  /// token cannot replace the console bearer. When the operator switches to the
+  /// merchant app, rehydrate that identity from prefs before AuthGate rebuilds.
+  Future<void> restoreMerchantSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(ApiConfig.storageKeyToken);
+    _refreshToken = prefs.getString(ApiConfig.storageKeyRefreshToken);
+    final expiryMillis = prefs.getInt(ApiConfig.storageKeyTokenExpiry);
+    _tokenExpiry = expiryMillis == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(expiryMillis);
+    final userJson = prefs.getString(ApiConfig.storageKeyUser);
+    if (userJson != null) {
+      try {
+        _currentUser = UserModel.fromJson(jsonDecode(userJson));
+      } catch (e) {
+        debugPrint('[AuthService] error restoring merchant user: $e');
+      }
+    }
+    _selectedBusinessId = prefs.getString(ApiConfig.storageKeySelectedBusiness);
+    if (_token != null && _token!.isNotEmpty) {
+      apiService.setToken(_token);
+    }
+    notifyListeners();
+    if (_isExpired && _refreshToken != null && _refreshToken!.isNotEmpty) {
+      unawaited(_refreshIdToken());
+    }
+  }
+
   UserModel? get currentUser => _currentUser;
   String? get token => _token;
   String? get selectedBusinessId => _selectedBusinessId;

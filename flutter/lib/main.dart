@@ -69,11 +69,12 @@ void main() async {
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
 
-  // Fast parallel load of persisted auth sessions from local disk
-  await Future.wait([
-    authService.init(),
-    adminProvider.init(),
-  ]);
+  // Admin state must be normalized first. A session-type flag left as
+  // "merchant" by the switch shortcut (or by an older build) otherwise lets
+  // AuthService restore a merchant bearer over the console key, which renders
+  // the console shell with credentials the API rejects.
+  await adminProvider.init();
+  await authService.init();
 
   runApp(
     MultiProvider(
@@ -147,10 +148,6 @@ class AuthGate extends StatelessWidget {
 
     if (auth.isAuthenticated) {
       return const MainScaffold();
-    }
-
-    if (admin.isAuthenticated) {
-      return const AdminScaffold();
     }
 
     return const LoginScreen();

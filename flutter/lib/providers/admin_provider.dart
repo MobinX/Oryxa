@@ -45,8 +45,28 @@ class AdminProvider extends ChangeNotifier {
   bool _officialMigrationPending = false;
   bool get officialMigrationPending => _officialMigrationPending;
 
+  bool _wasAuthAuthenticated = false;
+
   AdminProvider({required this.apiService, required this.authService}) {
     apiService.setUnauthorizedHandler(_handleUnauthorized);
+    _wasAuthAuthenticated = authService.isAuthenticated;
+    authService.addListener(_onAuthChanged);
+  }
+
+  /// A merchant session can be dropped while the console credentials are still
+  /// valid on device (expired Firebase token, merchant logout). Never leave the
+  /// console shell in that state with no bearer installed. Only react to a real
+  /// signed-in → signed-out transition so the switch to merchant is not undone.
+  void _onAuthChanged() {
+    final isAuthenticated = authService.isAuthenticated;
+    final sessionWasLost = _wasAuthAuthenticated && !isAuthenticated;
+    _wasAuthAuthenticated = isAuthenticated;
+    if (sessionWasLost &&
+        _sessionType == 'merchant' &&
+        _adminToken != null &&
+        _adminToken!.isNotEmpty) {
+      unawaited(switchToAdmin());
+    }
   }
 
   AdminUser? get adminUser => _adminUser;
@@ -91,19 +111,33 @@ class AdminProvider extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
-    _sessionType = sessionType ?? 'merchant';
+    var sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
     final savedToken = prefs.getString(ApiConfig.storageKeyAdminToken);
     final savedUserJson = prefs.getString(ApiConfig.storageKeyAdminUser);
     _adminFirebaseToken = prefs.getString(ApiConfig.storageKeyAdminFirebaseToken);
     _adminFirebaseRefreshToken =
         prefs.getString(ApiConfig.storageKeyAdminFirebaseRefreshToken);
 
-    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+    final hasAdminSession =
+        savedToken != null && savedToken.isNotEmpty && savedUserJson != null;
+    final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
+    final hasMerchantSession = merchantToken != null && merchantToken.isNotEmpty;
+
+    // Tapping "Merchant" writes the flag but keeps the console credentials so a
+    // switch back is instant. If there is no merchant session to actually use,
+    // that half-state renders the console shell with the wrong bearer and every
+    // admin call answers 401. Repair it before any request is made.
+    if (hasAdminSession && sessionType != 'admin' && !hasMerchantSession) {
+      sessionType = 'admin';
+      await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
+    }
+    _sessionType = sessionType ?? 'merchant';
+
+    if (hasAdminSession) {
       try {
         _adminToken = savedToken;
-        _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson));
-        if (sessionType == 'admin') {
+        _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson!));
+        if (_sessionType == 'admin') {
           apiService.setToken(savedToken);
           apiService.setOperatorToken(_adminFirebaseToken);
           apiService.setOperatorTokenRefresher(_refreshOperatorToken);
@@ -171,6 +205,7 @@ class AdminProvider extends ChangeNotifier {
     apiService.setToken(merchantToken);
     apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
+    unawaited(authService.restoreMerchantSession());
     _clearingSession = false;
     notifyListeners();
   }
@@ -414,6 +449,7 @@ class AdminProvider extends ChangeNotifier {
     apiService.setToken(merchantToken);
     apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
+    await authService.restoreMerchantSession();
     notifyListeners();
   }
 
