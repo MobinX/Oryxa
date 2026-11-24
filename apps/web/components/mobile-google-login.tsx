@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getFirebaseAuth, getGoogleRedirectResult, signInWithGoogleRedirect } from '@/lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
@@ -376,17 +377,7 @@ export function MobileGoogleLogin() {
       }
 
       setMessage('Opening Google Sign-In…');
-      logStep('redirect-start');
-      try {
-        markRedirectStarted();
-        await signInWithGoogleRedirect();
-      } catch (error) {
-        clearFlag();
-        if (cancelled) return;
-        logStepError('redirect-start-failed', (error as { code?: string })?.code ?? 'unknown');
-        setStep('error');
-        setMessage(mapError(error));
-      }
+      await startGoogle();
     })();
 
     return () => {
@@ -399,24 +390,54 @@ export function MobileGoogleLogin() {
     startedRef.current = true;
     setStep('working');
     setMessage('Opening Google Sign-In…');
-    if (!getFirebaseAuth()) {
+    const auth = getFirebaseAuth();
+    if (!auth) {
       setStep('error');
       setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
       return;
     }
-    // Redirect works in Chrome Custom Tabs; popups are blocked there.
-    logStep('manual-redirect-start');
+
+    // A popup returns the credential in THIS page, so no redirect persistence
+    // is needed — the Custom Tab reload kept losing the Firebase user.
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    logStep('popup-start');
+    try {
+      const cred = await signInWithPopup(auth, provider);
+      logStep('popup-success');
+      clearFlag();
+      await finish(cred.user as any);
+      return;
+    } catch (popupError) {
+      const code = (popupError as { code?: string })?.code ?? 'unknown';
+      logStep('popup-failed', `code=${code}`);
+      const blocker =
+        code === 'auth/popup-blocked' ||
+        code === 'auth/operation-not-supported-in-this-environment' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/popup-closed-by-user';
+      if (!blocker) {
+        logStepError('popup-error', code);
+        setStep('error');
+        setMessage(mapError(popupError));
+        startedRef.current = false;
+        return;
+      }
+    }
+
+    // Popup blocked: fall back to redirect, guarded against looping.
+    logStep('redirect-start');
     try {
       markRedirectStarted();
       await signInWithGoogleRedirect();
     } catch (error) {
       clearFlag();
-      logStepError('manual-redirect-failed', (error as { code?: string })?.code ?? 'unknown');
+      logStepError('redirect-start-failed', (error as { code?: string })?.code ?? 'unknown');
       setStep('error');
       setMessage(mapError(error));
       startedRef.current = false;
     }
-  }, []);
+  }, [finish]);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
