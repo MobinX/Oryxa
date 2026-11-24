@@ -47,7 +47,7 @@ const mobileLogsRoute = createRoute({
   },
 });
 
-pushRouter.openapi(mobileLogsRoute, async (c) => {
+publicPushRouter.openapi(mobileLogsRoute, async (c) => {
   const { events } = c.req.valid('json');
   for (const ev of events) {
     const isError = ev.level === 'error' || ev.level === 'critical' || !!ev.error;
