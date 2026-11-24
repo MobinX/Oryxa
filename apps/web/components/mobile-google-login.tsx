@@ -2,26 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { firebaseConfig, getGoogleRedirectResult } from '@/lib/firebase';
+import { getFirebaseAuth } from '@/lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
 const LOG_TAG = 'GOOGLE_LOGIN_STEP';
 const logSession = Math.random().toString(36).slice(2, 10);
 
-type Step = 'working' | 'relaying' | 'ready' | 'done' | 'error';
+type Step = 'working' | 'finalizing' | 'done' | 'error';
 
-interface RelayTokens {
+interface Payload {
+  v: 1;
   idToken: string;
   refreshToken: string | null;
   uid: string;
   email: string | null;
   name: string | null;
   expiresIn: number;
-}
-
-interface Payload extends RelayTokens {
-  v: 1;
   issuedAt: number;
   /** One-time nonce from the mobile app: a stale deep link must never sign in. */
   state: string;
@@ -56,50 +54,55 @@ function base64Url(value: string): string {
 }
 
 function mapError(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code ?? '';
   const message = (error as { message?: string } | null)?.message ?? '';
-  return message ? `Google sign-in failed: ${message}` : 'Google sign-in failed. Try again.';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  switch (code) {
+    case 'auth/unauthorized-domain':
+      return `This domain (${hostname}) is not authorized in Firebase. Ask the operator to add it under Firebase Console → Authentication → Settings → Authorized domains.`;
+    case 'auth/operation-not-supported-in-this-environment':
+      return 'Google sign-in is not available in this browser. Open this page in Chrome.';
+    case 'auth/network-request-failed':
+      return 'Could not reach Google. Check your connection and try again.';
+    case 'auth/cancelled-popup-request':
+    case 'auth/popup-closed-by-user':
+      return 'Google sign-in was cancelled.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with a different sign-in method.';
+    default:
+      return message ? `Google sign-in failed: ${message}` : 'Google sign-in failed. Try again.';
+  }
 }
 
-/** Firebase's hosted sign-in portal, returning to this exact page. */
-function authPortalUrl(): string {
-  const url = new URL(`https://${firebaseConfig.authDomain}/__/auth/handler`);
-  url.searchParams.set('apiKey', firebaseConfig.apiKey ?? '');
-  url.searchParams.set('appName', '[DEFAULT]');
-  url.searchParams.set('authType', 'signInViaRedirect');
-  url.searchParams.set('redirectUrl', window.location.href);
-  url.searchParams.set('v', '11.10.0');
-  url.searchParams.set('eventId', String(Date.now()));
-  url.searchParams.set('providerId', 'google.com');
-  url.searchParams.set('customParameters', JSON.stringify({ prompt: 'select_account' }));
-  url.searchParams.set('scopes', 'profile');
-  return url.toString();
-}
-
-/** Fallback for a provider token in the callback URL: exchange via Firebase REST. */
-async function exchangeGoogleToken(idToken: string): Promise<RelayTokens> {
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${firebaseConfig.apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        postBody: `id_token=${encodeURIComponent(idToken)}&providerId=google.com`,
-        requestUri: `${window.location.origin}${window.location.pathname}`,
-        returnIdpCredential: true,
-        returnSecureToken: true,
-      }),
-    },
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message ?? 'token exchange failed');
-  return {
-    idToken: data.idToken,
-    refreshToken: data.refreshToken ?? null,
-    uid: data.localId,
-    email: data.email ?? null,
-    name: data.displayName ?? null,
-    expiresIn: Number.parseInt(data.expiresIn ?? '3600', 10),
-  };
+/** Popup keeps the account picker and the result in this same page. */
+async function pickAccount(): Promise<any> {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured on this deployment.');
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  logStep('picker-open');
+  try {
+    await auth.signOut();
+  } catch {
+    /* ignore: select_account still forces the picker */
+  }
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    logStep('picker-success');
+    return credential.user;
+  } catch (error) {
+    const code = (error as { code?: string })?.code ?? 'unknown';
+    logStep('picker-failed', `code=${code}`);
+    // A transient network failure is worth one automatic retry.
+    if (code === 'auth/network-request-failed') {
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      logStep('picker-retry');
+      const retry = await signInWithPopup(auth, provider);
+      logStep('picker-retry-success');
+      return retry.user;
+    }
+    throw error;
+  }
 }
 
 export function MobileGoogleLogin() {
@@ -111,23 +114,40 @@ export function MobileGoogleLogin() {
   const finishedRef = useRef(false);
   const startedRef = useRef(false);
 
-  const relay = useCallback(async (tokens: RelayTokens) => {
+  const finish = useCallback(async (user: any) => {
     if (finishedRef.current) return;
     finishedRef.current = true;
     try {
+      // Capture everything before signOut: a signed-out user cannot mint tokens.
+      const tokenResult = await user.getIdTokenResult();
+      const refreshToken = user?.stsTokenManager?.refreshToken ?? null;
+      const state = new URLSearchParams(window.location.search).get('state') ?? '';
       const payload: Payload = {
         v: 1,
-        ...tokens,
+        idToken: tokenResult.token,
+        refreshToken,
+        uid: user.uid,
+        email: user.email ?? null,
+        name: user.displayName ?? null,
+        expiresIn: Math.max(60, Math.floor((new Date(tokenResult.expirationTime).getTime() - Date.now()) / 1000)),
         issuedAt: Date.now(),
-        state: new URLSearchParams(window.location.search).get('state') ?? '',
+        state,
       };
-      setStep('relaying');
-      setMessage('Returning to OnlyOrders…');
+      logStep('token-captured');
+
+      const auth = getFirebaseAuth();
+      if (auth) {
+        setStep('finalizing');
+        setMessage('Finishing sign-in…');
+        try { await auth.signOut(); } catch { /* ignore */ }
+      }
+
       const encoded = base64Url(JSON.stringify(payload));
       const link = `${CALLBACK_SCHEME}#p=${encoded}`;
       setDeepLink(link);
       setAccount(payload.email ?? payload.name ?? payload.uid);
       setStep('done');
+      setMessage('Signed in. Returning to OnlyOrders…');
 
       const w = window as unknown as {
         flutter_inappwebview?: { callHandler?: (name: string, args: string) => void };
@@ -135,7 +155,7 @@ export function MobileGoogleLogin() {
       };
       try { w.flutter_inappwebview?.callHandler?.('onlyOrdersAuth', JSON.stringify(payload)); } catch { /* ignore */ }
       try { w.OnlyOrdersAuth?.postMessage?.(JSON.stringify(payload)); } catch { /* ignore */ }
-      logStep('relay-to-app');
+      logStep('returning-to-app');
       window.setTimeout(() => {
         try { window.location.href = link; } catch { /* ignore */ }
       }, 400);
@@ -146,69 +166,29 @@ export function MobileGoogleLogin() {
     }
   }, []);
 
-  const openGoogle = useCallback(() => {
+  const chooseAccount = useCallback(async () => {
     setStep('working');
     setMessage('Opening Google…');
-    logStep('open-auth-portal');
-    window.location.href = authPortalUrl();
-  }, []);
+    try {
+      const user = await pickAccount();
+      await finish(user);
+    } catch (error) {
+      setStep('error');
+      setMessage(mapError(error));
+    }
+  }, [finish]);
 
   useEffect(() => {
-    logStep('relay-page-load');
+    logStep('page-load');
+    if (!getFirebaseAuth()) {
+      setStep('error');
+      setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
+      return;
+    }
     if (startedRef.current) return;
     startedRef.current = true;
-
-    (async () => {
-      // The Firebase portal calls back here with the credential.
-      let user: any = null;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        try {
-          const result = await getGoogleRedirectResult();
-          user = (result?.user as any) ?? null;
-          logStep('callback-result', `attempt=${attempt} found=${Boolean(user)}`);
-        } catch (error) {
-          logStep('callback-error');
-          break;
-        }
-        if (user) break;
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
-      }
-
-      if (user) {
-        try {
-          const tokenResult = await user.getIdTokenResult();
-          await relay({
-            idToken: tokenResult.token,
-            refreshToken: user?.stsTokenManager?.refreshToken ?? null,
-            uid: user.uid,
-            email: user.email ?? null,
-            name: user.displayName ?? null,
-            expiresIn: Math.max(60, Math.floor((new Date(tokenResult.expirationTime).getTime() - Date.now()) / 1000)),
-          });
-        } catch (error) {
-          setStep('error');
-          setMessage(mapError(error));
-        }
-        return;
-      }
-
-      // Some portals return the provider token directly in the callback URL.
-      const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search.slice(1));
-      const providerToken = params.get('id_token') || params.get('oauthIdToken');
-      if (providerToken) {
-        try {
-          await relay(await exchangeGoogleToken(providerToken));
-        } catch (error) {
-          setStep('error');
-          setMessage(mapError(error));
-        }
-        return;
-      }
-
-      setStep('ready');
-      setMessage('Choose your Google account to continue.');
-    })();
-  }, [relay]);
+    void chooseAccount();
+  }, [chooseAccount]);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
@@ -228,20 +208,20 @@ export function MobileGoogleLogin() {
       </div>
 
       <div className="w-full max-w-sm bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-xl p-7 space-y-4">
-        {(step === 'working' || step === 'relaying') && (
+        {(step === 'working' || step === 'finalizing') && (
           <div className="flex flex-col items-center gap-3 py-4">
             <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" aria-hidden />
             <p className="text-sm text-[var(--muted-foreground)] text-center font-medium">{message}</p>
           </div>
         )}
 
-        {(step === 'ready' || step === 'error') && (
+        {step === 'error' && (
           <>
-            <p className="text-sm text-[var(--muted-foreground)] text-center">{message}</p>
+            <p className="text-sm text-[var(--danger)] text-center">{message}</p>
             <button
               type="button"
               className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all"
-              onClick={openGoogle}
+              onClick={chooseAccount}
             >
               Choose Google Account
             </button>
