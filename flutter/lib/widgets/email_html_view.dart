@@ -44,7 +44,7 @@ class EmailHtmlView extends StatelessWidget {
     var out = html.replaceAll(RegExp(r'<!--[\s\S]*?-->'), ' ');
     for (final block in const ['style', 'script', 'head', 'title']) {
       out = out.replaceAll(
-        RegExp(r'<$block\b[^>]*>[\s\S]*?</$block\s*>', caseSensitive: false),
+        RegExp('<' + block + r'\b[^>]*>[\s\S]*?</' + block + r'\s*>', caseSensitive: false),
         ' ',
       );
     }
