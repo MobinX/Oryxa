@@ -66,21 +66,21 @@ class GoogleAuthService {
     final url = loginUri.replace(
       queryParameters: {...loginUri.queryParameters, 'state': nonce},
     );
-    // Use the full browser: a Custom Tab loses Firebase's redirect session on
-    // return, so the page never sees the signed-in account and loops.
-    appDiagnostics.recordMessage('Google sign-in', 'Opening browser at $url');
+    // Embedded Chrome keeps the sign-in inside the app. The page only opens a
+    // popup when the operator taps the button, so no storage handoff is needed.
+    appDiagnostics.recordMessage('Google sign-in', 'Opening embedded browser at $url');
 
     bool launched = false;
     try {
-      launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      launched = await launchUrl(url, mode: LaunchMode.inAppBrowserView);
     } catch (e) {
-      appDiagnostics.recordMessage('Google sign-in', 'External browser launch failed: $e');
+      appDiagnostics.recordMessage('Google sign-in', 'Embedded browser launch failed: $e');
     }
     if (!launched) {
       try {
-        launched = await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+        launched = await launchUrl(url, mode: LaunchMode.externalApplication);
       } catch (e) {
-        appDiagnostics.recordMessage('Google sign-in', 'Custom Tab launch failed: $e');
+        appDiagnostics.recordMessage('Google sign-in', 'External browser launch failed: $e');
       }
     }
     if (!launched) {

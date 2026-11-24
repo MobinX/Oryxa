@@ -10,7 +10,7 @@ const CALLBACK_SCHEME = 'onlyorders://auth';
 const LOG_TAG = 'GOOGLE_LOGIN_STEP';
 const logSession = Math.random().toString(36).slice(2, 10);
 
-type Step = 'working' | 'finalizing' | 'done' | 'error';
+type Step = 'working' | 'finalizing' | 'ready' | 'done' | 'error';
 
 interface Payload {
   v: 1;
@@ -81,38 +81,20 @@ async function pickAccount(): Promise<any> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   logStep('picker-open');
-  try {
-    await auth.signOut();
-  } catch {
-    /* ignore: select_account still forces the picker */
-  }
-  try {
-    const credential = await signInWithPopup(auth, provider);
-    logStep('picker-success');
-    return credential.user;
-  } catch (error) {
-    const code = (error as { code?: string })?.code ?? 'unknown';
-    logStep('picker-failed', `code=${code}`);
-    // A transient network failure is worth one automatic retry.
-    if (code === 'auth/network-request-failed') {
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
-      logStep('picker-retry');
-      const retry = await signInWithPopup(auth, provider);
-      logStep('picker-retry-success');
-      return retry.user;
-    }
-    throw error;
-  }
+  const credential = await signInWithPopup(auth, provider);
+  logStep('picker-success');
+  return credential.user;
 }
 
 export function MobileGoogleLogin() {
   const { companyName } = useBrand();
-  const [step, setStep] = useState<Step>('working');
-  const [message, setMessage] = useState('Opening Google…');
+  // Wait for an explicit tap. Auto-opening on mount fired the picker twice
+  // whenever the page/effect was mounted more than once.
+  const [step, setStep] = useState<Step>('ready');
+  const [message, setMessage] = useState('Choose your Google account to continue.');
   const [account, setAccount] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
   const finishedRef = useRef(false);
-  const startedRef = useRef(false);
 
   const finish = useCallback(async (user: any) => {
     if (finishedRef.current) return;
@@ -183,12 +165,8 @@ export function MobileGoogleLogin() {
     if (!getFirebaseAuth()) {
       setStep('error');
       setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
-      return;
     }
-    if (startedRef.current) return;
-    startedRef.current = true;
-    void chooseAccount();
-  }, [chooseAccount]);
+  }, []);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
@@ -215,9 +193,11 @@ export function MobileGoogleLogin() {
           </div>
         )}
 
-        {step === 'error' && (
+        {(step === 'ready' || step === 'error') && (
           <>
-            <p className="text-sm text-[var(--danger)] text-center">{message}</p>
+            <p className={`text-sm text-center ${step === 'error' ? 'text-[var(--danger)]' : 'text-[var(--muted-foreground)]'}`}>
+              {message}
+            </p>
             <button
               type="button"
               className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all"
