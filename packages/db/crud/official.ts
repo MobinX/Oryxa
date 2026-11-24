@@ -20,6 +20,7 @@ import {
   prospectWeights,
   prospects,
 } from '@db/schema';
+import { sinceCondition } from './since';
 
 /**
  * Official Channels CRUD: settings, tickets and onboarding prospects. Same flat
@@ -74,10 +75,13 @@ export type TicketFilters = {
   search?: string;
   limit?: number;
   offset?: number;
+  since?: unknown;
 };
 
 export async function listTickets(filters: TicketFilters): Promise<TicketRow[]> {
   const conditions = [] as ReturnType<typeof eq>[];
+  const sinceFilter = sinceCondition(tickets.updatedAt, filters.since);
+  if (sinceFilter) conditions.push(sinceFilter);
   if (filters.type) conditions.push(eq(tickets.type, filters.type));
   if (filters.status) conditions.push(eq(tickets.status, filters.status));
   if (filters.priority) conditions.push(eq(tickets.priority, filters.priority));
@@ -104,11 +108,12 @@ export async function getTicketById(ticketId: string): Promise<TicketRow | null>
   return (await db.query.tickets.findFirst({ where: eq(tickets.id, ticketId) })) ?? null;
 }
 
-export async function listTicketEvents(ticketId: string): Promise<TicketEventRow[]> {
+export async function listTicketEvents(ticketId: string, since?: unknown): Promise<TicketEventRow[]> {
+  const sinceFilter = sinceCondition(ticketEvents.updatedAt, since);
   return db
     .select()
     .from(ticketEvents)
-    .where(eq(ticketEvents.ticketId, ticketId))
+    .where(and(eq(ticketEvents.ticketId, ticketId), sinceFilter))
     .orderBy(asc(ticketEvents.createdAt));
 }
 
@@ -262,10 +267,13 @@ export type ProspectFilters = {
   search?: string;
   limit?: number;
   offset?: number;
+  since?: unknown;
 };
 
 export async function listProspects(filters: ProspectFilters): Promise<ProspectRow[]> {
   const conditions = [isNull(prospects.deletedAt)] as ReturnType<typeof eq>[];
+  const sinceFilter = sinceCondition(prospects.updatedAt, filters.since);
+  if (sinceFilter) conditions.push(sinceFilter);
   if (filters.status) conditions.push(eq(prospects.status, filters.status));
   if (filters.channelId) conditions.push(eq(prospects.channelId, filters.channelId));
   if (filters.search) {
@@ -291,11 +299,12 @@ export async function getProspectById(prospectId: string): Promise<ProspectRow |
   return (await db.query.prospects.findFirst({ where: eq(prospects.id, prospectId) })) ?? null;
 }
 
-export async function listProspectEvents(prospectId: string): Promise<ProspectEventRow[]> {
+export async function listProspectEvents(prospectId: string, since?: unknown): Promise<ProspectEventRow[]> {
+  const sinceFilter = sinceCondition(prospectEvents.updatedAt, since);
   return db
     .select()
     .from(prospectEvents)
-    .where(eq(prospectEvents.prospectId, prospectId))
+    .where(and(eq(prospectEvents.prospectId, prospectId), sinceFilter))
     .orderBy(asc(prospectEvents.createdAt));
 }
 

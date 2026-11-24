@@ -107,7 +107,7 @@ conversationsRouter.openapi(listMessagesRoute, async (c) => {
     const businessId = c.req.param('businessId');
     const conversationId = c.req.param('conversationId');
     const query = c.req.valid('query');
-    const msgs = await listMessages(conversationId, businessId, query.limit);
+    const msgs = await listMessages(conversationId, businessId, query.limit, query.since);
     if (!msgs) return c.json({ error: 'Conversation not found' }, 404);
     return c.json(msgs, 200);
   } catch (err) {

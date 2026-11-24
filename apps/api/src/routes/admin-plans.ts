@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   adminBusinessPlanSchema,
   adminPlanEditResultSchema,
@@ -71,6 +72,7 @@ const listPlansRoute = createRoute({
   path: '/admin/plans',
   tags: ['Admin'],
   security: [{ bearerAuth: [] }],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(adminPlanRowSchema) } },
@@ -79,7 +81,7 @@ const listPlansRoute = createRoute({
   },
 });
 
-adminPlansRouter.openapi(listPlansRoute, async (c) => c.json(await listAdminPlans(), 200));
+adminPlansRouter.openapi(listPlansRoute, async (c) => c.json(await listAdminPlans(c.req.valid('query').since), 200));
 
 const createPlanRoute = createRoute({
   method: 'post',
@@ -182,6 +184,7 @@ const listBusinessPlansRoute = createRoute({
   path: '/admin/plans/businesses',
   tags: ['Admin'],
   security: [{ bearerAuth: [] }],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(adminBusinessPlanSchema) } },
@@ -191,7 +194,9 @@ const listBusinessPlansRoute = createRoute({
   },
 });
 
-adminPlansRouter.openapi(listBusinessPlansRoute, async (c) => c.json(await listAdminBusinessPlans(), 200));
+adminPlansRouter.openapi(listBusinessPlansRoute, async (c) =>
+  c.json(await listAdminBusinessPlans(new Date(), c.req.valid('query').since), 200),
+);
 
 const assignBusinessPlanRoute = createRoute({
   method: 'put',
@@ -330,7 +335,10 @@ const listAssignmentsRoute = createRoute({
   path: '/admin/businesses/{businessId}/assignments',
   tags: ['Admin'],
   security: [{ bearerAuth: [] }],
-  request: { params: businessParams },
+  request: {
+    params: businessParams,
+    query: z.object({ since: sinceSchema }),
+  },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(planAssignmentSchema) } },
@@ -340,5 +348,5 @@ const listAssignmentsRoute = createRoute({
 });
 
 adminPlansRouter.openapi(listAssignmentsRoute, async (c) =>
-  c.json(await listAssignments(c.req.param('businessId')), 200),
+  c.json(await listAssignments(c.req.param('businessId'), c.req.valid('query').since), 200),
 );

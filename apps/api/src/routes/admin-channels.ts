@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { parseSince } from '@repo/db/crud/since';
 import { logsAuthMiddleware } from '@api/middleware/logs-access';
 import { safeReturnOrigin } from '@api/lib/return-origin';
 import {
@@ -27,7 +28,7 @@ adminChannelsRouter.use('/admin/channels', logsAuthMiddleware);
 adminChannelsRouter.use('/admin/channels/*', logsAuthMiddleware);
 
 adminChannelsRouter.get('/admin/channels', async (c) => {
-  const rows = await listAdminChannels();
+  const rows = await listAdminChannels(parseSince(c.req.query('since')));
   return c.json({
     channels: rows.map((row) => {
       let pageName = row.platformChannelId;

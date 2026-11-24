@@ -7,6 +7,7 @@ import {
   isEncryptedEnvelope,
 } from '@repo/integrations/crypto';
 import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
+import { sinceCondition } from './since';
 import {
   createAgentInputSchema,
   updateAgentInputSchema,
@@ -67,12 +68,14 @@ export type AdsChannelOption = {
  * Live Facebook channels for the Ads picker. Tokens never leave this module: `hasAds`
  * only says whether the channel banked a user token for Insights.
  */
-export async function listAdsChannels(businessId: string): Promise<AdsChannelOption[]> {
+export async function listAdsChannels(businessId: string, since?: unknown): Promise<AdsChannelOption[]> {
+  const sinceFilter = sinceCondition(channels.updatedAt, since);
   const rows = await db.query.channels.findMany({
     where: and(
       eq(channels.businessId, businessId),
       eq(channels.platform, 'facebook'),
       isNull(channels.deletedAt),
+      sinceFilter,
     ),
     orderBy: desc(channels.createdAt),
   });
@@ -186,9 +189,10 @@ async function assertAgentIsOwned(businessId: string, agentId: string | null | u
   if (!owned) throw new ChannelAgentError();
 }
 
-export async function listAgents(businessId: string) {
+export async function listAgents(businessId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(agents.updatedAt, since);
   return db.query.agents.findMany({
-    where: and(eq(agents.businessId, businessId), isNull(agents.deletedAt)),
+    where: and(eq(agents.businessId, businessId), isNull(agents.deletedAt), sinceFilter),
   });
 }
 
@@ -386,9 +390,10 @@ export async function getChannelById(channelId: string) {
   return row;
 }
 
-export async function listChannels(businessId: string) {
+export async function listChannels(businessId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(channels.updatedAt, since);
   const rows = await db.query.channels.findMany({
-    where: and(eq(channels.businessId, businessId), isNull(channels.deletedAt)),
+    where: and(eq(channels.businessId, businessId), isNull(channels.deletedAt), sinceFilter),
     with: { agent: true },
   });
   for (const row of rows) revealChannelToken(row);
@@ -537,9 +542,10 @@ export async function upsertAdminChannel(input: {
   return { id: created.id, created: true };
 }
 
-export async function listAdminChannels() {
+export async function listAdminChannels(since?: unknown) {
+  const sinceFilter = sinceCondition(channels.updatedAt, since);
   const rows = await db.query.channels.findMany({
-    where: and(eq(channels.isAdminOnly, true), isNull(channels.deletedAt)),
+    where: and(eq(channels.isAdminOnly, true), isNull(channels.deletedAt), sinceFilter),
     orderBy: [asc(channels.createdAt)],
   });
   for (const row of rows) revealChannelToken(row);

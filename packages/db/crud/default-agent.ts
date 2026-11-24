@@ -2,6 +2,7 @@ import { CORE_AGENT_PROMPT as DEFAULT_AGENT_PROMPT } from '@repo/shared';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { agents, businesses, defaultAgents } from '@db/schema';
+import { sinceCondition } from './since';
 
 export const DEFAULT_AGENT_NAME = 'Oryxa Sales Agent';
 
@@ -145,7 +146,9 @@ export async function resolveAnsweringAgent(override?: AgentOverride | null): Pr
  * only way the first override was found. Length is reported rather than the text because this is a list
  * to act on, not a second prompt editor.
  */
-export async function getOverrideReport() {
+export async function getOverrideReport(since?: unknown) {
+  // Agents have no updatedAt; createdAt is their only timestamp.
+  const sinceFilter = sinceCondition(agents.updatedAt, since);
   const rows = await db
     .select({
       id: agents.id,
@@ -159,7 +162,7 @@ export async function getOverrideReport() {
     })
     .from(agents)
     .innerJoin(businesses, eq(businesses.id, agents.businessId))
-    .where(and(isNull(agents.deletedAt), isNull(businesses.deletedAt)))
+    .where(and(isNull(agents.deletedAt), isNull(businesses.deletedAt), sinceFilter))
     .orderBy(desc(businesses.createdAt));
 
   return {

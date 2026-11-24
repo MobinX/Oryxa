@@ -4,6 +4,7 @@ import { products, variants, categories, productOptions, productOptionValues } f
 import { createProductInputSchema, updateProductInputSchema, updateCategoryInputSchema, type BulkImportProduct } from '@repo/shared';
 import { slugify, makeVariantId } from '@repo/utils';
 import { resolveStoredImageUrl, isB2ObjectKey } from '@repo/integrations/b2';
+import { sinceCondition } from './since';
 
 async function mapVariantWithSignedImage<T extends { imageUrl: string | null; imageUrls: string[] | null }>(variant: T) {
   return {
@@ -618,11 +619,14 @@ export function matchVariant<T extends { id: string; name: string; variantId?: s
 
 export async function listProducts(
   businessId: string,
-  options: { categoryId?: string; q?: string; limit?: number; offset?: number } = {},
+  options: { categoryId?: string; q?: string; limit?: number; offset?: number; since?: unknown } = {},
 ) {
-  const { categoryId, q, limit = 20, offset = 0 } = options;
+  const { categoryId, q, limit = 20, offset = 0, since } = options;
   const conditions = [eq(products.businessId, businessId), isNull(products.deletedAt)];
   if (categoryId) conditions.push(eq(products.categoryId, categoryId));
+  // Products are append-only with soft deletes; createdAt is their last-change instant.
+  const sinceFilter = sinceCondition(products.updatedAt, since);
+  if (sinceFilter) conditions.push(sinceFilter);
   const term = q?.trim();
   if (term) {
     conditions.push(
@@ -1017,9 +1021,10 @@ export async function deleteCategory(businessId: string, categoryId: string) {
   return { deleted: true };
 }
 
-export async function listCategories(businessId: string) {
+export async function listCategories(businessId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(categories.updatedAt, since);
   const cats = await db.query.categories.findMany({
-    where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt)),
+    where: and(eq(categories.businessId, businessId), isNull(categories.deletedAt), sinceFilter),
     orderBy: [asc(categories.name), asc(categories.id)],
   });
 

@@ -12,6 +12,7 @@ import type {
   UpdatePlanInput,
 } from '@repo/shared';
 import { cycleOf } from './billing';
+import { sinceCondition } from './since';
 
 /**
  * The operator's plan catalogue and the assignment pointer on each business.
@@ -74,11 +75,12 @@ function toPublicPlan(row: PlanRow): PublicPlan {
 }
 
 /** The offers a stranger may see on /pricing — active, never deleted, and no assignable ids. */
-export async function listPublicPlans(): Promise<PublicPlan[]> {
+export async function listPublicPlans(since?: unknown): Promise<PublicPlan[]> {
+  const sinceFilter = sinceCondition(plans.updatedAt, since);
   const rows = await db
     .select()
     .from(plans)
-    .where(and(eq(plans.active, true), isNull(plans.deletedAt)))
+    .where(and(eq(plans.active, true), isNull(plans.deletedAt), sinceFilter))
     .orderBy(asc(plans.position), asc(plans.name));
   return rows.map(toPublicPlan);
 }
@@ -90,19 +92,21 @@ export async function listPublicPlans(): Promise<PublicPlan[]> {
  * the same filter with the row that makes it assignable. Retired plans are excluded —
  * only an operator may still put a business on one.
  */
-export async function listActivePlans(): Promise<Plan[]> {
+export async function listActivePlans(since?: unknown): Promise<Plan[]> {
+  const sinceFilter = sinceCondition(plans.updatedAt, since);
   const rows = await db
     .select()
     .from(plans)
-    .where(and(eq(plans.active, true), isNull(plans.deletedAt)))
+    .where(and(eq(plans.active, true), isNull(plans.deletedAt), sinceFilter))
     .orderBy(asc(plans.position), asc(plans.name));
   return rows.map(toPlan);
 }
 
 /** Everything an admin sees, including retired plans and how many businesses each one holds. */
-export async function listAdminPlans(): Promise<AdminPlanRow[]> {
+export async function listAdminPlans(since?: unknown): Promise<AdminPlanRow[]> {
+  const sinceFilter = sinceCondition(plans.updatedAt, since);
   const [planRows, counts] = await Promise.all([
-    db.select().from(plans).where(isNull(plans.deletedAt)).orderBy(asc(plans.position), asc(plans.name)),
+    db.select().from(plans).where(and(isNull(plans.deletedAt), sinceFilter)).orderBy(asc(plans.position), asc(plans.name)),
     db
       .select({
         planId: businesses.planId,
@@ -243,12 +247,14 @@ export async function resetCycle(businessId: string, input: AssignInput): Promis
   return true;
 }
 
-export async function listAssignments(businessId: string): Promise<PlanAssignment[]> {
+export async function listAssignments(businessId: string, since?: unknown): Promise<PlanAssignment[]> {
+  // plan_assignments is an append-only audit log; createdAt is its last-change instant.
+  const sinceFilter = sinceCondition(planAssignments.updatedAt, since);
   const [rows, planRows] = await Promise.all([
     db
       .select()
       .from(planAssignments)
-      .where(eq(planAssignments.businessId, businessId))
+      .where(and(eq(planAssignments.businessId, businessId), sinceFilter))
       .orderBy(sql`${planAssignments.createdAt} desc`),
     db.select({ id: plans.id, name: plans.name }).from(plans),
   ]);
@@ -278,8 +284,9 @@ export async function listAssignments(businessId: string): Promise<PlanAssignmen
  * tiny by construction (one row per business per 30 days), so matching them in Node keeps
  * this file free of raw SQL and keeps each cycle's own key derivation in one place.
  */
-export async function listAdminBusinessPlans(now: Date = new Date()): Promise<AdminBusinessPlan[]> {
+export async function listAdminBusinessPlans(now: Date = new Date(), since?: unknown): Promise<AdminBusinessPlan[]> {
   const floorKey = new Date(now.getTime() - 60 * 86_400_000).toISOString().slice(0, 10);
+  const sinceFilter = sinceCondition(businesses.updatedAt, since);
 
   const [businessRows, planRows, usageRows] = await Promise.all([
     db
@@ -293,7 +300,7 @@ export async function listAdminBusinessPlans(now: Date = new Date()): Promise<Ad
         commentLimitOverride: businesses.commentLimitOverride,
       })
       .from(businesses)
-      .where(isNull(businesses.deletedAt)),
+      .where(and(isNull(businesses.deletedAt), sinceFilter)),
     db.select().from(plans),
     db.select().from(quotaUsage).where(gte(quotaUsage.period, floorKey)),
   ]);

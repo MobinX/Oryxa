@@ -13,6 +13,7 @@ import {
   updateExternalServiceInputSchema,
   type ExternalPostMedia,
 } from '@repo/shared';
+import { parseSince, sinceCondition } from './since';
 
 /** A unique_name that is already in use by a live service. */
 export class ExternalServiceTakenError extends Error {
@@ -108,20 +109,18 @@ export async function deleteExternalService(id: string) {
   return { deleted: true };
 }
 
-export async function searchExternalServices(query: { id?: string; uname?: string }) {
-  if (query.id) {
-    const row = await getExternalService(query.id);
-    return row ? [row] : [];
-  }
-  if (query.uname) {
-    const row = await getExternalServiceByUniqueName(query.uname);
-    return row ? [row] : [];
-  }
+export async function searchExternalServices(query: { id?: string; uname?: string; since?: unknown }) {
+  const since = parseSince(typeof query.since === 'string' || query.since instanceof Date ? String(query.since) : undefined);
+  const withinSince = (row: typeof externalServices.$inferSelect | undefined) =>
+    row && (!since || row.updatedAt >= since) ? [row] : [];
+  if (query.id) return withinSince(await getExternalService(query.id));
+  if (query.uname) return withinSince(await getExternalServiceByUniqueName(query.uname));
   return [];
 }
 
-export async function listExternalServices(page: number, limit: number) {
-  const where = isNull(externalServices.deletedAt);
+export async function listExternalServices(page: number, limit: number, since?: unknown) {
+  const sinceFilter = sinceCondition(externalServices.updatedAt, since);
+  const where = and(isNull(externalServices.deletedAt), sinceFilter);
   const [totalRow] = await db
     .select({ value: count() })
     .from(externalServices)
@@ -192,11 +191,13 @@ export async function deleteExternalServiceWebhook(serviceId: string, webhookId:
 }
 
 /** Every live webhook URL for a service, oldest first. */
-export async function listExternalServiceWebhooks(serviceId: string) {
+export async function listExternalServiceWebhooks(serviceId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(externalServiceWebhooks.updatedAt, since);
   return db.query.externalServiceWebhooks.findMany({
     where: and(
       eq(externalServiceWebhooks.serviceId, serviceId),
       isNull(externalServiceWebhooks.deletedAt),
+      sinceFilter,
     ),
     orderBy: [asc(externalServiceWebhooks.createdAt)],
   });

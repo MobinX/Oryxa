@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { sinceSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 /**
  * Platforms an external service may connect. This is deliberately narrower than the DB
@@ -30,11 +30,13 @@ export const externalServiceSchema = z.object({
 export const externalServiceListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+  since: sinceSchema,
 });
 
 export const externalServiceSearchQuerySchema = z.object({
   id: z.string().uuid().optional(),
   uname: z.string().min(1).max(255).optional(),
+  since: sinceSchema,
 });
 
 export const externalServiceListOutputSchema = z.object({

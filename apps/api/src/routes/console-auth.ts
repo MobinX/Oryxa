@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { parseSince } from '@repo/db/crud/since';
 import {
   createConsoleSession,
   createConsoleUser,
@@ -181,7 +182,7 @@ consoleAuthRouter.post('/admin/password', consoleAuthMiddleware, async (c) => {
 });
 
 consoleAuthRouter.get('/superuser/admins', superuserMiddleware, async (c) => {
-  const admins = await listConsoleUsers();
+  const admins = await listConsoleUsers(parseSince(c.req.query('since')));
   return c.json({ admins });
 });
 

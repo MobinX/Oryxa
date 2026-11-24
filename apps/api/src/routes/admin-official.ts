@@ -10,6 +10,7 @@ import {
   upsertAdminChannel,
 } from '@repo/db/crud/channel';
 import { setOfficialConversationAiPaused } from '@repo/db/crud/conversation';
+import { parseSince, sinceCondition } from '@repo/db/crud/since';
 import {
   addTicketNote,
   getProspectById,
@@ -124,7 +125,7 @@ adminOfficialRouter.patch('/admin/official/settings', async (c) => {
 const CHANNEL_LABELS = ['facebook', 'instagram', 'whatsapp'] as const;
 
 adminOfficialRouter.get('/admin/official/channels', async (c) => {
-  const rows = await listAdminChannels();
+  const rows = await listAdminChannels(parseSince(c.req.query('since')));
   return c.json({
     channels: rows.map((row) => {
       let label = row.platformChannelId;
@@ -256,6 +257,7 @@ adminOfficialRouter.get('/admin/official/conversations', async (c) => {
       status: z.enum(['pending', 'done', 'all']).optional(),
       limit: z.coerce.number().int().positive().max(100).optional(),
       offset: z.coerce.number().int().min(0).optional(),
+      since: z.coerce.date().optional(),
     })
     .safeParse({
       channelId: c.req.query('channelId') || undefined,
@@ -263,6 +265,7 @@ adminOfficialRouter.get('/admin/official/conversations', async (c) => {
       status: c.req.query('status') || 'all',
       limit: c.req.query('limit') || undefined,
       offset: c.req.query('offset') || undefined,
+      since: c.req.query('since') || undefined,
     });
   if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
   const q = parsed.data;
@@ -271,6 +274,8 @@ adminOfficialRouter.get('/admin/official/conversations', async (c) => {
   if (q.channelId) conditions.push(eq(conversations.channelId, q.channelId));
   if (q.status === 'pending') conditions.push(eq(conversations.lastMessageState, 'pending'));
   if (q.platform) conditions.push(eq(channels.platform, q.platform));
+  const sinceFilter = sinceCondition(conversations.updatedAt, q.since);
+  if (sinceFilter) conditions.push(sinceFilter);
 
   const rows = await db
     .select({
@@ -421,6 +426,7 @@ adminOfficialRouter.get('/admin/official/tickets', async (c) => {
     search: c.req.query('search') || undefined,
     limit: c.req.query('limit') || undefined,
     offset: c.req.query('offset') || undefined,
+    since: c.req.query('since') || undefined,
   });
   if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
   const rows = await listTickets(parsed.data);
@@ -430,7 +436,7 @@ adminOfficialRouter.get('/admin/official/tickets', async (c) => {
 adminOfficialRouter.get('/admin/official/tickets/:ticketId', async (c) => {
   const row = await getTicketById(c.req.param('ticketId'));
   if (!row) return c.json({ error: 'Ticket not found' }, 404);
-  const events = await listTicketEvents(row.id);
+  const events = await listTicketEvents(row.id, parseSince(c.req.query('since')));
   return c.json({
     ticket: serializeTicket(row),
     events: events.map((ev) => ({
@@ -467,6 +473,7 @@ adminOfficialRouter.get('/admin/official/prospects', async (c) => {
     search: c.req.query('search') || undefined,
     limit: c.req.query('limit') || undefined,
     offset: c.req.query('offset') || undefined,
+    since: c.req.query('since') || undefined,
   });
   if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
   const [rows, weights] = await Promise.all([listProspects(parsed.data), getWeights()]);
@@ -510,7 +517,7 @@ adminOfficialRouter.patch('/admin/official/prospects/:prospectId', async (c) => 
 });
 
 adminOfficialRouter.get('/admin/official/prospects/:prospectId/events', async (c) => {
-  const rows = await listProspectEvents(c.req.param('prospectId'));
+  const rows = await listProspectEvents(c.req.param('prospectId'), parseSince(c.req.query('since')));
   return c.json({
     events: rows.map((ev) => ({
       id: ev.id,

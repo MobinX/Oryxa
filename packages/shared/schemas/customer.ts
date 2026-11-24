@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { orderStateSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { orderStateSchema, sinceSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const createCustomerInputSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'John Doe' }),
@@ -31,6 +31,7 @@ export const listCustomersQuerySchema = z.object({
   search: z.string().optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
+  since: sinceSchema,
 });
 
 /**

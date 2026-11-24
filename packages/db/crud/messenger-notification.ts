@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, channels, messengerNotificationUsers, messengerNotifications } from '@db/schema';
 import { decryptChannelToken } from '@repo/db/crud/channel';
+import { sinceCondition } from './since';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -33,7 +34,8 @@ export async function ensureMessengerNotification(businessId: string): Promise<s
 }
 
 /** What the merchant's notification portal shows: the code (once created) and who follows it. */
-export async function getMessengerNotificationOverview(businessId: string) {
+export async function getMessengerNotificationOverview(businessId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(messengerNotificationUsers.updatedAt, since);
   const [codeRow] = await db
     .select({ token: messengerNotifications.token })
     .from(messengerNotifications)
@@ -48,7 +50,7 @@ export async function getMessengerNotificationOverview(businessId: string) {
       createdAt: messengerNotificationUsers.createdAt,
     })
     .from(messengerNotificationUsers)
-    .where(eq(messengerNotificationUsers.businessId, businessId))
+    .where(and(eq(messengerNotificationUsers.businessId, businessId), sinceFilter))
     .orderBy(asc(messengerNotificationUsers.createdAt));
 
   return { code: codeRow?.token ?? null, users };

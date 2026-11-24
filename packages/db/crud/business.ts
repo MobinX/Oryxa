@@ -4,6 +4,7 @@ import { businesses } from '@db/schema';
 import { createBusinessInputSchema, updateBusinessInputSchema } from '@repo/shared';
 import { assignPlan, getPlanBySlug } from '@repo/db/crud/plans';
 import { ensureDefaultAgent } from '@repo/db/crud/default-agent';
+import { sinceCondition } from './since';
 
 /** The plan every new store starts on. Seeded by migration 0012. */
 const DEFAULT_PLAN_SLUG = 'free';
@@ -56,9 +57,11 @@ export async function updateBusiness(id: string, userId: string, input: unknown)
   return { success: true };
 }
 
-export async function listBusinessesByUserId(userId: string) {
+export async function listBusinessesByUserId(userId: string, since?: unknown) {
+  // Businesses have no updatedAt; createdAt is their only timestamp.
+  const sinceFilter = sinceCondition(businesses.updatedAt, since);
   return db.query.businesses.findMany({
-    where: and(eq(businesses.userId, userId), isNull(businesses.deletedAt)),
+    where: and(eq(businesses.userId, userId), isNull(businesses.deletedAt), sinceFilter),
     orderBy: [desc(businesses.createdAt)],
   });
 }

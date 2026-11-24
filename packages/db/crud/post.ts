@@ -1,6 +1,7 @@
 import { eq, and, desc, isNull } from 'drizzle-orm';
 import { db } from '@db/client';
 import { posts, postSyncs } from '@db/schema';
+import { sinceCondition } from './since';
 
 export async function createPost(
   businessId: string,
@@ -52,6 +53,7 @@ export async function listPosts(
     channelId?: string;
     state?: 'draft' | 'scheduled' | 'published' | 'failed';
     limit?: number;
+    since?: unknown;
   },
 ) {
   const limit = opts?.limit ?? 50;
@@ -59,6 +61,9 @@ export async function listPosts(
     eq(posts.businessId, businessId),
     isNull(posts.deletedAt),
   ];
+  // Posts have no updatedAt; createdAt is their last-change instant.
+  const sinceFilter = sinceCondition(posts.updatedAt, opts?.since);
+  if (sinceFilter) whereConditions.push(sinceFilter);
 
   if (opts?.channelId) {
     whereConditions.push(eq(posts.channelId, opts.channelId));

@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { sinceSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 const currencySchema = z
   .string()
@@ -134,6 +134,7 @@ export const listProductsQuerySchema = z.object({
   q: z.string().max(120).optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
+  since: sinceSchema,
 });
 
 export const listProductItemSchema = selectProductSchema.extend({

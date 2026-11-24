@@ -428,6 +428,13 @@
       "when": 1795173000000,
       "tag": "0060_external_service_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795500000000,
+      "tag": "0061_readable_tables_updated_at",
+      "breakpoints": true
     }
   ]
 }

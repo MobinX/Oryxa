@@ -1,4 +1,5 @@
 import { isOperatorEmail } from '@api/lib/operators';
+import { parseSince } from '@repo/db/crud/since';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   createBusinessInputSchema,
@@ -43,7 +44,7 @@ const listRoute = createRoute({
 
 businessesRouter.openapi(listRoute, async (c) => {
   const user = c.get('user');
-  const rows = await listBusinessesByUserId(user.id);
+  const rows = await listBusinessesByUserId(user.id, parseSince(c.req.query('since')));
 
   // Operators always have access to the sandbox store
   const userEmail = user.email?.toLowerCase().trim();

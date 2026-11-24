@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   createAgentInputSchema,
   createAgentOutputSchema,
@@ -99,7 +100,10 @@ const listAgentsRoute = createRoute({
   path: '/{businessId}/agents',
   tags: ['Agents'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: z.object({ since: sinceSchema }),
+  },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(selectAgentSchema) } },
@@ -110,7 +114,7 @@ const listAgentsRoute = createRoute({
 
 channelsRouter.openapi(listAgentsRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const agents = await listAgents(businessId);
+  const agents = await listAgents(businessId, c.req.valid('query').since);
   return c.json(
     agents.map((a) => ({
       id: a.id,
@@ -279,7 +283,10 @@ const listChannelsRoute = createRoute({
   path: '/{businessId}/channels',
   tags: ['Channels'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: z.object({ since: sinceSchema }),
+  },
   responses: {
     200: {
       content: {
@@ -302,7 +309,7 @@ const listChannelsRoute = createRoute({
 
 channelsRouter.openapi(listChannelsRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const channels = await listChannels(businessId);
+  const channels = await listChannels(businessId, c.req.valid('query').since);
   return c.json(
     channels.map((ch) => {
       let pageName: string | null = null;

@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   adminStatsResponseSchema,
   agentOverrideReportSchema,
@@ -334,6 +335,7 @@ function resolveMonthWindow(month: string | undefined, now = new Date()) {
 const monthQuery = z.object({
   // `optional()` and hand-parsed like `days`: an empty `<select>` sends `month=`.
   month: z.string().optional(),
+  since: sinceSchema,
 });
 
 const listTokenUsageRoute = createRoute({
@@ -360,7 +362,8 @@ const listTokenUsageRoute = createRoute({
 
 adminRouter.openapi(listTokenUsageRoute, async (c) => {
   const { start, end, month } = resolveMonthWindow(c.req.valid('query').month);
-  const businesses = await listBusinessTokenUsage(start, end);
+  const since = c.req.valid('query').since;
+  const businesses = await listBusinessTokenUsage(start, end, since);
 
   const sum = (pick: (row: (typeof businesses)[number]) => number) =>
     businesses.reduce((total, row) => total + pick(row), 0);
@@ -423,7 +426,7 @@ const tokenUsageDetailRoute = createRoute({
 adminRouter.openapi(tokenUsageDetailRoute, async (c) => {
   const businessId = c.req.valid('param').businessId;
   const { start, end, month } = resolveMonthWindow(c.req.valid('query').month);
-  const detail = await getBusinessTokenUsageDetail(businessId, start, end);
+  const detail = await getBusinessTokenUsageDetail(businessId, start, end, c.req.valid('query').since);
   if (!detail) return c.json({ error: 'Business not found' }, 404);
 
   return c.json({ month, startTime: start.toISOString(), endTime: end.toISOString(), ...detail }, 200);
@@ -520,6 +523,7 @@ const getOverridesRoute = createRoute({
   path: '/admin/default-agent/overrides',
   tags: ['Admin'],
   security: [{ bearerAuth: [] }],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: {
       content: { 'application/json': { schema: agentOverrideReportSchema } },
@@ -536,7 +540,9 @@ const getOverridesRoute = createRoute({
   },
 });
 
-adminRouter.openapi(getOverridesRoute, async (c) => c.json(await getOverrideReport(), 200));
+adminRouter.openapi(getOverridesRoute, async (c) =>
+  c.json(await getOverrideReport(c.req.valid('query').since), 200),
+);
 
 const followDefaultAgentRoute = createRoute({
   method: 'post',
@@ -583,6 +589,7 @@ const listSubagentsRoute = createRoute({
   path: '/admin/subagents',
   tags: ['Admin'],
   security: [{ bearerAuth: [] }],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: {
       content: { 'application/json': { schema: subagentListSchema } },
@@ -599,7 +606,9 @@ const listSubagentsRoute = createRoute({
   },
 });
 
-adminRouter.openapi(listSubagentsRoute, async (c) => c.json({ subagents: await listSubagents() }, 200));
+adminRouter.openapi(listSubagentsRoute, async (c) =>
+  c.json({ subagents: await listSubagents(c.req.valid('query').since) }, 200),
+);
 
 const getSubagentRoute = createRoute({
   method: 'get',

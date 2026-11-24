@@ -3,6 +3,19 @@ import { z } from '@hono/zod-openapi';
 export const uuidSchema = z.string().uuid().openapi({ example: '123e4567-e89b-12d3-a456-426614174000' });
 export const timestampSchema = z.string().datetime().or(z.coerce.date().transform((d) => d.toISOString()));
 
+/**
+ * Inclusive lower bound on a row's last-change timestamp, sent as an ISO-8601 instant.
+ * Read endpoints use it to return only rows changed at or after this instant, so a client
+ * can sync incrementally instead of pulling the whole table on every poll. Absent means
+ * no filter; a malformed value is rejected at the boundary rather than silently ignored.
+ */
+export const sinceSchema = z
+  .preprocess((v) => (v === '' ? undefined : v), z.coerce.date().optional())
+  .openapi({
+    description: 'ISO-8601 timestamp: return rows last changed at or after this instant. Empty = no filter.',
+    example: '2026-01-01T00:00:00.000Z',
+  });
+
 export const platformSchema = z.enum(['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter']);
 export const orderStateSchema = z.enum(['pending', 'acknowledged', 'onDelivery', 'done']);
 export const messageFromSchema = z.enum(['self', 'customer']);

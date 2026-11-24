@@ -32,8 +32,8 @@ const getStoreRoute = createRoute({
 
 storeRouter.openapi(getStoreRoute, async (c) => {
   const slug = c.req.param('slug');
-  const { q, category, sort, min, max } = c.req.valid('query');
-  const store = await getPublicStore(slug, { q, category, sort, min, max });
+  const { q, category, sort, min, max, since } = c.req.valid('query');
+  const store = await getPublicStore(slug, { q, category, sort, min, max, since });
   if (!store) return c.json({ error: 'Store not found' }, 404);
   return c.json(store, 200);
 });

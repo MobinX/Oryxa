@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { llmTokenLogs, hourlyTokenAnalytics } from '@db/schema';
 import type { IntegrationType } from '@repo/shared';
 import { getModelBilling, ratesOf, tokenCostUsd } from './model-billing';
+import { sinceCondition } from './since';
 
 export interface RecordTokenUsageInput {
   businessId: string;
@@ -194,11 +195,13 @@ export async function getBusinessTokenAnalytics(businessId: string, hours: numbe
   };
 }
 
-export async function listTokenLogs(businessId: string, limit: number = 50) {
+export async function listTokenLogs(businessId: string, limit: number = 50, since?: unknown) {
+  // Token logs are append-only; createdAt is their only timestamp.
+  const sinceFilter = sinceCondition(llmTokenLogs.updatedAt, since);
   return db
     .select()
     .from(llmTokenLogs)
-    .where(eq(llmTokenLogs.businessId, businessId))
+    .where(and(eq(llmTokenLogs.businessId, businessId), sinceFilter))
     .orderBy(desc(llmTokenLogs.createdAt))
     .limit(limit);
 }

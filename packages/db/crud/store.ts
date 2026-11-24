@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { businesses, products, variants } from '@db/schema';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { createOrder, deleteOrder } from './order';
+import { parseSince } from './since';
 import { PAYMENT_STRATEGY_LABELS, resolvePaymentStrategy, type PaymentStrategy } from '@repo/shared';
 
 export async function getBusinessBySlug(slug: string) {
@@ -17,6 +18,7 @@ export type StoreFilters = {
   sort?: 'newest' | 'price_asc' | 'price_desc';
   min?: number;
   max?: number;
+  since?: unknown;
 };
 
 async function mapProduct(p: {
@@ -26,6 +28,7 @@ async function mapProduct(p: {
   description: string | null;
   paymentStrategyOverride?: string | null;
   createdAt: Date;
+  updatedAt: Date | null;
   category: { name: string; deletedAt: Date | null } | null;
   variants: Array<{
     id: string;
@@ -62,6 +65,7 @@ async function mapProduct(p: {
     inStock: p.variants.length === 0 ? true : p.variants.some((v) => v.isAvailable && v.stock > 0),
     variants: mappedVariants,
     _createdAt: p.createdAt,
+    _updatedAt: p.updatedAt,
   };
 }
 
@@ -97,6 +101,8 @@ function applyFilters(
   }
   if (f.min != null) out = out.filter((p) => p.price >= f.min!);
   if (f.max != null) out = out.filter((p) => p.price <= f.max!);
+  const since = parseSince(typeof f.since === 'string' || f.since instanceof Date ? String(f.since) : undefined);
+  if (since) out = out.filter((p) => p._updatedAt !== null && p._updatedAt >= since);
   if (f.sort === 'price_asc') out = [...out].sort((a, b) => a.price - b.price);
   else if (f.sort === 'price_desc') out = [...out].sort((a, b) => b.price - a.price);
   else out = [...out].sort((a, b) => b._createdAt.getTime() - a._createdAt.getTime());
@@ -121,7 +127,7 @@ export async function getPublicStore(slug: string, filters: StoreFilters = {}) {
     paymentStrategy: (business as { paymentStrategy?: string | null }).paymentStrategy ?? 'cod',
     theme: business.storeTheme ?? null,
     categories,
-    products: filtered.map(({ _createdAt, ...rest }) => rest),
+    products: filtered.map(({ _createdAt, _updatedAt, ...rest }) => rest),
   };
 }
 
@@ -140,7 +146,7 @@ export async function getPublicProduct(slug: string, productId: string) {
     limit: 1,
   });
   if (!rows.length) return null;
-  const { _createdAt, ...product } = await mapProduct(rows[0]);
+  const { _createdAt, _updatedAt, ...product } = await mapProduct(rows[0]);
   return product;
 }
 

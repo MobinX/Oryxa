@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import { publicPlanSchema } from '@repo/shared';
 import { listPublicPlans } from '@repo/db/crud/plans';
 
@@ -16,6 +17,7 @@ const listPlansRoute = createRoute({
   method: 'get',
   path: '/plans',
   tags: ['Plans'],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(publicPlanSchema) } },
@@ -24,4 +26,4 @@ const listPlansRoute = createRoute({
   },
 });
 
-plansRouter.openapi(listPlansRoute, async (c) => c.json(await listPublicPlans(), 200));
+plansRouter.openapi(listPlansRoute, async (c) => c.json(await listPublicPlans(c.req.valid('query').since), 200));

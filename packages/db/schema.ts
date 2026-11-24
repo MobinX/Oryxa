@@ -203,6 +203,7 @@ export const capacityReservations = pgTable('capacity_reservations', {
   /** active | released */
   status: varchar('status', { length: 20 }).default('active').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   releasedAt: timestamp('released_at'),
 }, (t) => ({
   businessStatusIdx: index('capacity_reservations_business_idx').on(t.businessId, t.status),
@@ -255,6 +256,7 @@ export const leadEvents = pgTable('lead_events', {
   kind: varchar('kind', { length: 40 }).notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   leadTimeIdx: index('lead_events_lead_time_idx').on(t.leadId, t.createdAt),
 }));
@@ -332,6 +334,7 @@ export const ticketEvents = pgTable('ticket_events', {
   kind: varchar('kind', { length: 40 }).notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   ticketTimeIdx: index('ticket_events_ticket_time_idx').on(t.ticketId, t.createdAt),
 }));
@@ -383,6 +386,7 @@ export const prospectEvents = pgTable('prospect_events', {
   kind: varchar('kind', { length: 40 }).notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   prospectTimeIdx: index('prospect_events_prospect_time_idx').on(t.prospectId, t.createdAt),
 }));
@@ -462,6 +466,7 @@ export const users = pgTable('users', {
   firebaseUid: varchar('firebase_uid', { length: 255 }).unique().notNull(),
   signInMethod: varchar('sign_in_method', { length: 50 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 });
 
@@ -472,6 +477,7 @@ export const companies = pgTable('companies', {
   description: text('description'),
   phone: varchar('phone', { length: 20 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 });
 
 export const customers = pgTable('customers', {
@@ -483,6 +489,7 @@ export const customers = pgTable('customers', {
   address: text('address'),
   avatar: varchar('avatar', { length: 500 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   idx: index('customers_company_idx').on(t.companyId, t.name),
   phoneIdx: index('customers_company_phone_idx').on(t.companyId, t.phone),
@@ -550,6 +557,7 @@ export const businesses = pgTable('businesses', {
    */
   planStartedAt: timestamp('plan_started_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   slugUniq: uniqueIndex('businesses_slug_idx').on(t.slug),
@@ -563,6 +571,7 @@ export const categories = pgTable('categories', {
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('categories_business_slug_idx')
@@ -598,6 +607,7 @@ export const products = pgTable('products', {
    */
   paymentStrategyOverride: varchar('payment_strategy_override', { length: 30 }).$type<PaymentStrategy>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('products_business_slug_idx')
@@ -636,6 +646,7 @@ export const variants = pgTable(
      */
     options: jsonb('options').$type<Record<string, string>>().default(sql`'{}'::jsonb`).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at'),
     deletedAt: timestamp('deleted_at'),
   },
   (t) => ({
@@ -657,6 +668,7 @@ export const productOptions = pgTable(
       .notNull(),
     name: varchar('name', { length: 80 }).notNull(),
     position: integer('position').default(0).notNull(),
+    updatedAt: timestamp('updated_at'),
   },
   (t) => ({
     productIdx: index('product_options_product_idx').on(t.productId),
@@ -672,6 +684,7 @@ export const productOptionValues = pgTable(
       .notNull(),
     value: varchar('value', { length: 80 }).notNull(),
     position: integer('position').default(0).notNull(),
+    updatedAt: timestamp('updated_at'),
   },
   (t) => ({
     optionIdx: index('product_option_values_option_idx').on(t.optionId),
@@ -718,6 +731,7 @@ export const orders = pgTable('orders', {
   paymentStrategy: varchar('payment_strategy', { length: 30 }).$type<PaymentStrategy>(),
   conversationId: uuid('conversation_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   // The order-history lookup: this store, this customer, newest first.
@@ -744,6 +758,7 @@ export const agents = pgTable('agents', {
    */
   followsDefault: boolean('follows_default').notNull().default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 });
 
@@ -801,6 +816,7 @@ export const channels = pgTable('channels', {
    */
   isAdminOnly: boolean('is_admin_only'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('channels_business_platform_channel_idx').on(t.businessId, t.platform, t.platformChannelId),
@@ -885,6 +901,7 @@ export const externalServicePendingPages = pgTable('external_service_pending_pag
   refreshToken: text('refresh_token'),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   uniq: uniqueIndex('external_service_pending_page_business_page_idx').on(t.businessId, t.pageId),
 }));
@@ -920,6 +937,7 @@ export const messengerNotifications = pgTable('messenger_notification', {
   businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
   token: uuid('token').defaultRandom().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   businessUniq: uniqueIndex('messenger_notification_business_uniq_idx').on(t.businessId),
   tokenUniq: uniqueIndex('messenger_notification_token_uniq_idx').on(t.token),
@@ -944,6 +962,7 @@ export const messengerNotificationUsers = pgTable('messenger_notification_user_i
    */
   lastPingAt: timestamp('last_ping_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   uniq: uniqueIndex('messenger_notification_user_business_platform_uniq_idx').on(t.businessId, t.platformUserId),
   businessIdx: index('messenger_notification_user_business_idx').on(t.businessId),
@@ -970,6 +989,7 @@ export const conversations = pgTable('conversations', {
    */
   autoPilot: boolean('auto_pilot').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('conversations_channel_customer_idx').on(t.channelId, t.customerPlatformId),
@@ -996,6 +1016,7 @@ export const messages = pgTable('messages', {
    * person sent it from a dashboard. Null on legacy rows — the inbox renders those plainly.
    */
   sentBy: varchar('sent_by', { length: 10 }),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('messages_conversation_time_idx').on(t.conversationId, t.time),
@@ -1102,6 +1123,7 @@ export const commentThreads = pgTable('comment_threads', {
   /** Tracks when lastCommentState last changed — used by the stale-runner watchdog. */
   lastStateAt: timestamp('last_state_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   uniq: uniqueIndex('comment_threads_channel_item_commenter_idx').on(t.channelId, t.platformItemId, t.commenterPlatformId),
@@ -1119,6 +1141,7 @@ export const comments = pgTable('comments', {
   externalId: varchar('external_id', { length: 100 }),
   /** The platform comment id this row replies to (bot reply → the customer comment it answered). */
   parentExternalId: varchar('parent_external_id', { length: 100 }),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('comments_thread_time_idx').on(t.commentThreadId, t.time),
@@ -1148,6 +1171,7 @@ export const posts = pgTable('posts', {
   platformPostId: varchar('platform_post_id', { length: 255 }),
   aiPrompt: text('ai_prompt'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
   idx: index('posts_business_channel_idx').on(t.businessId, t.channelId),
@@ -1161,6 +1185,7 @@ export const postSyncs = pgTable('post_syncs', {
   shareCount: integer('share_count').default(0).notNull(),
   reachCount: integer('reach_count').default(0).notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 });
 
 export const postRelations = relations(posts, ({ one, many }) => ({
@@ -1194,6 +1219,7 @@ export const llmTokenLogs = pgTable('llm_token_logs', {
   latencyMs: integer('latency_ms').default(0).notNull(),
   estimatedCostUsd: numeric('estimated_cost_usd', { precision: 10, scale: 6 }).default('0.000000').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   businessTimeIdx: index('llm_token_logs_business_time_idx').on(t.businessId, t.createdAt),
   businessIntegrationIdx: index('llm_token_logs_business_integration_idx').on(t.businessId, t.integrationType, t.createdAt),
@@ -1267,6 +1293,7 @@ export const visits = pgTable('visits', {
   visitor: varchar('visitor', { length: 64 }).notNull(),
   path: varchar('path', { length: 500 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   timeIdx: index('visits_created_at_idx').on(t.createdAt),
   businessTimeIdx: index('visits_business_created_at_idx').on(t.businessId, t.createdAt),
@@ -1359,6 +1386,7 @@ export const notifications = pgTable('notifications', {
   messengerDetail: text('messenger_detail'),
   readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   businessKindPeriodUniq: uniqueIndex('notifications_business_kind_period_uniq_idx').on(t.businessId, t.kind, t.period),
   businessUnreadIdx: index('notifications_business_unread_idx').on(t.businessId, t.readAt, t.createdAt),
@@ -1378,6 +1406,7 @@ export const planAssignments = pgTable('plan_assignments', {
   actorKind: planActorKindEnum('actor_kind').notNull(),
   actorUserId: uuid('actor_user_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   businessTimeIdx: index('plan_assignments_business_time_idx').on(t.businessId, t.createdAt),
   planIdx: index('plan_assignments_plan_idx').on(t.planId),
@@ -1401,6 +1430,7 @@ export const pushTokens = pgTable('push_tokens', {
   businessId: uuid('business_id').references(() => businesses.id, { onDelete: 'cascade' }).notNull(),
   token: text('token').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   uniq: uniqueIndex('push_tokens_business_token_uniq_idx').on(t.businessId, t.token),
   businessIdx: index('push_tokens_business_idx').on(t.businessId),
@@ -1441,6 +1471,7 @@ export const consoleSessions = pgTable('console_sessions', {
   userId: uuid('user_id').references(() => consoleUsers.id, { onDelete: 'cascade' }).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at'),
 }, (t) => ({
   userIdx: index('console_sessions_user_idx').on(t.userId),
   expiryIdx: index('console_sessions_expiry_idx').on(t.expiresAt),

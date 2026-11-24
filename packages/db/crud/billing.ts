@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { businesses, commentThreads, conversations, notifications, plans, quotaUsage } from '@db/schema';
 import type { NotificationItem, NotificationKind, QuotaCycle, QuotaKind, QuotaStatus, QuotaThreshold } from '@repo/shared';
 import { announceNotice } from './notification';
+import { sinceCondition } from './since';
 
 /**
  * Allowances, the gate's read, and the atomic counter.
@@ -415,11 +416,13 @@ export async function refundQuotaUnit(businessId: string, kind: QuotaKind, perio
 }
 
 /** The bell on the dashboard. Newest first, and nothing here writes. */
-export async function listNotifications(businessId: string, limit = 50): Promise<NotificationItem[]> {
+export async function listNotifications(businessId: string, limit = 50, since?: unknown): Promise<NotificationItem[]> {
+  // Notifications are never updated in place; createdAt is their last-change instant.
+  const sinceFilter = sinceCondition(notifications.updatedAt, since);
   const rows = await db
     .select()
     .from(notifications)
-    .where(eq(notifications.businessId, businessId))
+    .where(and(eq(notifications.businessId, businessId), sinceFilter))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
 

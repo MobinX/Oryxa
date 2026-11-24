@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { uuidSchema } from '@shared/schemas/base';
+import { sinceSchema, uuidSchema } from '@shared/schemas/base';
 
 /**
  * Official Channels (spec §4): settings, tickets and onboarding prospects. These are the
@@ -32,6 +32,7 @@ export const ticketListQuerySchema = z.object({
   search: z.string().max(200).optional(),
   limit: z.coerce.number().int().positive().max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
+  since: sinceSchema,
 });
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
 
@@ -62,6 +63,7 @@ export const prospectListQuerySchema = z.object({
   search: z.string().max(200).optional(),
   limit: z.coerce.number().int().positive().max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
+  since: sinceSchema,
 });
 export type ProspectListQuery = z.infer<typeof prospectListQuerySchema>;
 
@@ -95,5 +97,6 @@ export const officialConversationListQuerySchema = z.object({
   platform: z.enum(['facebook', 'instagram', 'whatsapp', 'telegram', 'twitter', 'tiktok']).optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
+  since: sinceSchema,
 });
 export type OfficialConversationListQuery = z.infer<typeof officialConversationListQuerySchema>;

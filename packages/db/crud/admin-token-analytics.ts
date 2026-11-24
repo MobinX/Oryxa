@@ -2,6 +2,7 @@ import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@db/client';
 import { businesses, hourlyTokenAnalytics } from '@db/schema';
 import { getModelBilling, ratesOf, tokenCostUsd } from './model-billing';
+import { sinceCondition } from './since';
 
 /**
  * Per-business LLM usage for the operator console, read from the hourly rollup the agent
@@ -66,8 +67,10 @@ export type AdminBusinessTokenUsage = {
 export async function listBusinessTokenUsage(
   start: Date,
   end: Date,
+  since?: unknown,
 ): Promise<AdminBusinessTokenUsage[]> {
   const rates = ratesOf(await getModelBilling());
+  const sinceFilter = sinceCondition(hourlyTokenAnalytics.updatedAt, since);
   const rows = await db
     .select({
       businessId: hourlyTokenAnalytics.businessId,
@@ -84,7 +87,7 @@ export async function listBusinessTokenUsage(
     })
     .from(hourlyTokenAnalytics)
     .innerJoin(businesses, eq(businesses.id, hourlyTokenAnalytics.businessId))
-    .where(and(bucketWindow(start, end), isNull(businesses.deletedAt)))
+    .where(and(bucketWindow(start, end), isNull(businesses.deletedAt), sinceFilter))
     .groupBy(hourlyTokenAnalytics.businessId, businesses.name, businesses.slug);
 
   // The dollars are derived from the token counts at read time, so changing the rate card
@@ -140,11 +143,14 @@ export async function getBusinessTokenUsageDetail(
   businessId: string,
   start: Date,
   end: Date,
+  since?: unknown,
 ): Promise<AdminBusinessTokenDetail | null> {
+  const sinceFilter = sinceCondition(hourlyTokenAnalytics.updatedAt, since);
   const inWindow = and(
     eq(hourlyTokenAnalytics.businessId, businessId),
     gte(hourlyTokenAnalytics.hourBucket, start),
     lt(hourlyTokenAnalytics.hourBucket, end),
+    sinceFilter,
   );
   const byDay = sql`1`;
   const rates = ratesOf(await getModelBilling());
