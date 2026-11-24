@@ -2,16 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getFirebaseAuth, getGoogleRedirectResult, signInWithGoogleRedirect } from '@/lib/firebase';
-import { GoogleAuthProvider } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
-const RETURN_FLAG = 'oo.mobile-google.redirect-pending';
 const LOG_TAG = 'GOOGLE_LOGIN_STEP';
 const logSession = Math.random().toString(36).slice(2, 10);
 
-type Step = 'working' | 'finalizing' | 'ready' | 'done' | 'error';
+type Step = 'working' | 'finalizing' | 'done' | 'error';
 
 interface Payload {
   v: 1;
@@ -64,7 +63,7 @@ function mapError(error: unknown): string {
     case 'auth/operation-not-supported-in-this-environment':
       return 'Google sign-in is not available in this browser. Open this page in Chrome.';
     case 'auth/network-request-failed':
-      return 'Could not reach Firebase. Check your connection and try again.';
+      return 'Could not reach Google. Check your connection and try again.';
     case 'auth/cancelled-popup-request':
     case 'auth/popup-closed-by-user':
       return 'Google sign-in was cancelled.';
@@ -75,43 +74,35 @@ function mapError(error: unknown): string {
   }
 }
 
-function markRedirectStarted(): void {
-  try {
-    localStorage.setItem(RETURN_FLAG, '1');
-  } catch {
-    /* ignore */
-  }
-}
-
-function clearRedirectFlag(): void {
-  try {
-    localStorage.removeItem(RETURN_FLAG);
-  } catch {
-    /* ignore */
-  }
-}
-
-function isRedirectReturn(): boolean {
-  try {
-    return localStorage.getItem(RETURN_FLAG) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** Force the account picker, then let Google return to this page. */
-async function openAccountPicker(): Promise<void> {
+/** Popup keeps the account picker and the result in this same page. */
+async function pickAccount(): Promise<any> {
   const auth = getFirebaseAuth();
   if (!auth) throw new Error('Firebase is not configured on this deployment.');
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  logStep('picker-open');
   try {
     await auth.signOut();
   } catch {
     /* ignore: select_account still forces the picker */
   }
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-  markRedirectStarted();
-  await signInWithGoogleRedirect();
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    logStep('picker-success');
+    return credential.user;
+  } catch (error) {
+    const code = (error as { code?: string })?.code ?? 'unknown';
+    logStep('picker-failed', `code=${code}`);
+    // A transient network failure is worth one automatic retry.
+    if (code === 'auth/network-request-failed') {
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      logStep('picker-retry');
+      const retry = await signInWithPopup(auth, provider);
+      logStep('picker-retry-success');
+      return retry.user;
+    }
+    throw error;
+  }
 }
 
 export function MobileGoogleLogin() {
@@ -126,7 +117,6 @@ export function MobileGoogleLogin() {
   const finish = useCallback(async (user: any) => {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    logStep('result-received');
     try {
       // Capture everything before signOut: a signed-out user cannot mint tokens.
       const tokenResult = await user.getIdTokenResult();
@@ -143,6 +133,7 @@ export function MobileGoogleLogin() {
         issuedAt: Date.now(),
         state,
       };
+      logStep('token-captured');
 
       const auth = getFirebaseAuth();
       if (auth) {
@@ -150,7 +141,6 @@ export function MobileGoogleLogin() {
         setMessage('Finishing sign-in…');
         try { await auth.signOut(); } catch { /* ignore */ }
       }
-      clearRedirectFlag();
 
       const encoded = base64Url(JSON.stringify(payload));
       const link = `${CALLBACK_SCHEME}#p=${encoded}`;
@@ -171,84 +161,34 @@ export function MobileGoogleLogin() {
       }, 400);
     } catch (error) {
       finishedRef.current = false;
-      clearRedirectFlag();
       setStep('error');
       setMessage(mapError(error));
     }
   }, []);
-
-  useEffect(() => {
-    if (!getFirebaseAuth()) {
-      setStep('error');
-      setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
-      return;
-    }
-
-    const wasReturn = isRedirectReturn();
-    logStep('page-load', `return=${wasReturn}`);
-    let cancelled = false;
-
-    (async () => {
-      if (startedRef.current) return;
-      startedRef.current = true;
-
-      // Google returned here: consume the one pending redirect result.
-      if (wasReturn) {
-        let user: any = null;
-        for (let attempt = 0; attempt < 6; attempt += 1) {
-          try {
-            const result = await getGoogleRedirectResult();
-            user = (result?.user as any) ?? null;
-            logStep('redirect-result', `attempt=${attempt} found=${Boolean(user)}`);
-          } catch (error) {
-            if (cancelled) return;
-            setStep('error');
-            setMessage(mapError(error));
-            return;
-          }
-          if (user) break;
-          await new Promise((resolve) => window.setTimeout(resolve, 400));
-        }
-        if (cancelled) return;
-        if (user) {
-          await finish(user);
-          return;
-        }
-        // The result was lost. Do not silently open Google again: that loops.
-        clearRedirectFlag();
-        startedRef.current = false;
-        setStep('ready');
-        setMessage('Sign-in was interrupted. Choose your Google account again.');
-        logStep('result-lost');
-        return;
-      }
-
-      // Fresh visit from the app: straight to the account picker.
-      setMessage('Opening Google…');
-      try {
-        await openAccountPicker();
-      } catch (error) {
-        if (cancelled) return;
-        setStep('error');
-        setMessage(mapError(error));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [finish]);
 
   const chooseAccount = useCallback(async () => {
     setStep('working');
     setMessage('Opening Google…');
     try {
-      await openAccountPicker();
+      const user = await pickAccount();
+      await finish(user);
     } catch (error) {
       setStep('error');
       setMessage(mapError(error));
     }
-  }, []);
+  }, [finish]);
+
+  useEffect(() => {
+    logStep('page-load');
+    if (!getFirebaseAuth()) {
+      setStep('error');
+      setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
+      return;
+    }
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void chooseAccount();
+  }, [chooseAccount]);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
@@ -275,28 +215,15 @@ export function MobileGoogleLogin() {
           </div>
         )}
 
-        {step === 'ready' && (
-          <>
-            <p className="text-sm text-[var(--muted-foreground)] text-center">{message}</p>
-            <button
-              type="button"
-              className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all shadow-sm"
-              onClick={chooseAccount}
-            >
-              Choose Google Account
-            </button>
-          </>
-        )}
-
         {step === 'error' && (
           <>
             <p className="text-sm text-[var(--danger)] text-center">{message}</p>
             <button
               type="button"
-              className="w-full h-12 rounded-[14px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] font-semibold hover:bg-[var(--muted)] transition-colors"
+              className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all"
               onClick={chooseAccount}
             >
-              Try again
+              Choose Google Account
             </button>
           </>
         )}
