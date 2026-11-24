@@ -9,7 +9,66 @@ import { useBrand } from '@/components/brand-provider';
 const CALLBACK_SCHEME = 'onlyorders://auth';
 const REDIRECT_FLAG = 'oo.mobile-google.redirect-started';
 
-type Step = 'working' | 'ready' | 'done' | 'error';
+type Step = 'working' | 'chooser' | 'finalizing' | 'ready' | 'done' | 'error';
+
+type FirebaseAuth = NonNullable<ReturnType<typeof getFirebaseAuth>>;
+
+/** Firebase restores its persisted user asynchronously, so wait briefly for a
+ * restored account instead of trusting a synchronous currentUser read. */
+function waitForCurrentUser(auth: FirebaseAuth, timeoutMs = 1000): Promise<any> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let unsub: (() => void) | null = null;
+    let timer: number | undefined;
+    const done = (value: any) => {
+      if (settled) return;
+      settled = true;
+      try { unsub?.(); } catch { /* ignore */ }
+      if (timer !== undefined) window.clearTimeout(timer);
+      resolve(value);
+    };
+    timer = window.setTimeout(() => done(null), timeoutMs);
+    try {
+      unsub = auth.onAuthStateChanged((value) => {
+        if (value) done(value);
+      });
+    } catch {
+      done(null);
+    }
+  });
+}
+
+/** Sign out and wait until Firebase confirms there is no current user before
+ * starting a new-account flow or handing the preserved payload to the app. */
+function signOutAndWait(auth: FirebaseAuth, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let unsub: (() => void) | null = null;
+    let timer: number | undefined;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      try { unsub?.(); } catch { /* ignore */ }
+      if (timer !== undefined) window.clearTimeout(timer);
+      resolve();
+    };
+    try {
+      unsub = auth.onAuthStateChanged((value) => {
+        if (!value) done();
+      });
+    } catch { /* ignore */ }
+    timer = window.setTimeout(done, timeoutMs);
+    try {
+      Promise.resolve(auth.signOut())
+        .catch(() => undefined)
+        .then(() => {
+          if (auth.currentUser === null) done();
+        });
+    } catch {
+      done();
+    }
+  });
+}
 
 interface Payload {
   v: 1;
@@ -85,6 +144,8 @@ export function MobileGoogleLogin() {
   const [message, setMessage] = useState('Taking you to Google…');
   const [account, setAccount] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
+  const [existingEmail, setExistingEmail] = useState<string | null>(null);
+  const existingUserRef = useRef<any>(null);
   const finishedRef = useRef(false);
   const startedRef = useRef(false);
 
@@ -109,12 +170,23 @@ export function MobileGoogleLogin() {
         state,
       };
 
-      const encoded = base64Url(JSON.stringify(payload));
+      // Preserve the sign-in info first. A signed-out user object can no longer
+      // mint tokens, but the captured ID token stays valid until its expiry.
+      const preserved = payload;
+
+      const auth = getFirebaseAuth();
+      if (auth) {
+        setStep('finalizing');
+        setMessage('Finishing sign-in…');
+        await signOutAndWait(auth);
+      }
+
+      const encoded = base64Url(JSON.stringify(preserved));
       const link = `${CALLBACK_SCHEME}#p=${encoded}`;
       setDeepLink(link);
-      setAccount(payload.email ?? payload.name ?? payload.uid);
+      setAccount(preserved.email ?? preserved.name ?? preserved.uid);
       setStep('done');
-      setMessage(refreshToken ? 'Signed in. Returning to OnlyOrders…' : 'Signed in. Returning to OnlyOrders…');
+      setMessage('Signed in. Returning to OnlyOrders…');
 
       // Bridge for an embedded WebView, if this page is ever hosted inside one.
       const w = window as unknown as {
@@ -122,12 +194,12 @@ export function MobileGoogleLogin() {
         OnlyOrdersAuth?: { postMessage?: (value: string) => void };
       };
       try {
-        w.flutter_inappwebview?.callHandler?.('onlyOrdersAuth', JSON.stringify(payload));
+        w.flutter_inappwebview?.callHandler?.('onlyOrdersAuth', JSON.stringify(preserved));
       } catch {
         /* ignore */
       }
       try {
-        w.OnlyOrdersAuth?.postMessage?.(JSON.stringify(payload));
+        w.OnlyOrdersAuth?.postMessage?.(JSON.stringify(preserved));
       } catch {
         /* ignore */
       }
@@ -257,20 +329,22 @@ export function MobileGoogleLogin() {
         return;
       }
 
-      // Initial visit from mobile app: always sign out of any existing Firebase account first!
+      // Initial visit from the app: never sign out first. Offer to continue
+      // with an already signed-in account, or sign out explicitly for a new one.
       if (startedRef.current) return;
       startedRef.current = true;
-      setMessage('Signing out of existing session & opening Google Sign-In…');
+      setMessage('Checking for an existing Google account…');
 
-      // Always sign out, even when currentUser is still null at this instant:
-      // Firebase restores persistence asynchronously, so a conditional check
-      // can skip the sign-out and let the previous account survive the redirect.
-      try {
-        await auth.signOut();
-      } catch {
-        /* ignore */
+      const existing = await waitForCurrentUser(auth);
+      if (cancelled) return;
+      if (existing) {
+        existingUserRef.current = existing;
+        setExistingEmail(existing.email ?? existing.displayName ?? existing.uid ?? 'this account');
+        setStep('chooser');
+        return;
       }
 
+      setMessage('Opening Google Sign-In…');
       try {
         writeFlag();
         await signInWithGoogleRedirect();
@@ -290,19 +364,12 @@ export function MobileGoogleLogin() {
   const startGoogle = useCallback(async () => {
     startedRef.current = true;
     setStep('working');
-    setMessage('Signing out previous session & opening Google Sign-In…');
+    setMessage('Opening Google Sign-In…');
     const auth = getFirebaseAuth();
     if (!auth) {
       setStep('error');
       setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
       return;
-    }
-    try {
-      if (auth.currentUser) {
-        await auth.signOut();
-      }
-    } catch {
-      /* ignore */
     }
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
@@ -352,7 +419,7 @@ export function MobileGoogleLogin() {
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">{companyName}</h1>
         <p className="mt-2 text-[var(--muted-foreground)] text-sm max-w-xs">
-          Sign in with Google to use the mobile app. Any previous session is automatically logged out.
+          Sign in with Google to use the mobile app. You can continue with your current account or choose a new one.
         </p>
       </div>
 
@@ -362,9 +429,44 @@ export function MobileGoogleLogin() {
             <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" aria-hidden />
             <p className="text-sm text-[var(--muted-foreground)] text-center font-medium">{message}</p>
             <p className="text-xs text-[var(--muted-foreground)] text-center">
-              Logging out any active session and opening Google account picker…
+              Preparing Google sign-in…
             </p>
           </div>
+        )}
+
+        {step === 'finalizing' && (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--primary)]" aria-hidden />
+            <p className="text-sm text-[var(--muted-foreground)] text-center font-medium">{message}</p>
+          </div>
+        )}
+
+        {step === 'chooser' && (
+          <>
+            <p className="text-sm text-[var(--muted-foreground)] text-center">
+              You are already signed in as <span className="font-semibold">{existingEmail}</span>.
+            </p>
+            <button
+              type="button"
+              className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all shadow-sm"
+              onClick={() => finish(existingUserRef.current)}
+            >
+              Continue with {existingEmail}
+            </button>
+            <button
+              type="button"
+              className="w-full h-12 rounded-[14px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] font-semibold hover:bg-[var(--muted)] transition-colors shadow-sm"
+              onClick={async () => {
+                const auth = getFirebaseAuth();
+                setStep('working');
+                setMessage('Signing out…');
+                if (auth) await signOutAndWait(auth);
+                startGoogle();
+              }}
+            >
+              Sign out and login with new account
+            </button>
+          </>
         )}
 
         {step === 'ready' && (

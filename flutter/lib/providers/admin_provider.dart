@@ -389,28 +389,33 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> adminLogout() async {
-    // Stop this device's mailbox alerts while the admin token is still valid. The API
-    // logout below also revokes the session on the server, so a failed call here is not
-    // a hole.
+  /// Console sign-out in three visible stages: stop mailbox push, revoke the
+  /// session on the server, then clear local credentials. Import order matters,
+  /// so every stage is awaited before the next one starts.
+  Future<void> adminLogout({void Function(String)? onProgress}) async {
+    final token = _adminToken;
+
+    onProgress?.call('Unsubscribing notification…');
     try {
       await NotificationService.instance
           .unsubscribeAdminMailPush(apiService)
-          .timeout(const Duration(seconds: 6), onTimeout: () {});
+          .timeout(const Duration(seconds: 80));
     } catch (e) {
       debugPrint('[AdminProvider] Mail push unsubscribe skipped: $e');
       _setApiError(e);
     }
 
+    onProgress?.call('Signing out from server…');
     try {
-      if (_adminToken != null) {
+      if (token != null && token.isNotEmpty) {
         await http.post(
           Uri.parse('${ApiConfig.webOrigin(apiService.baseUrl)}${ApiConfig.pathAdminLogout}'),
-          headers: {'Authorization': 'Bearer $_adminToken'},
+          headers: {'Authorization': 'Bearer $token'},
         ).timeout(const Duration(seconds: 5));
       }
     } catch (_) {}
 
+    onProgress?.call('Fully logging out…');
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;

@@ -242,11 +242,11 @@ class AuthService extends ChangeNotifier {
 
   /// Signs in with Google via the embedded Chrome page. The page returns a Firebase ID
   /// token (and, when available, a refresh token) through a custom scheme redirect.
-  /// Always logs out from any existing session first to allow fresh account selection.
+  /// The webpage decides whether to continue with the current account or sign out
+  /// first, so the app keeps its session until a result comes back.
   Future<UserModel> loginWithGoogle() async {
-    appDiagnostics.recordMessage('Google sign-in', 'Logging out existing session before Google sign-in');
+    appDiagnostics.recordMessage('Google sign-in', 'Opening Google sign-in page');
     try {
-      await logout();
       final result = await _googleAuth.signIn();
       return await _applyGoogleResult(result);
     } catch (e) {
@@ -537,13 +537,21 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  /// Signs out in visible stages. Push registration is removed first, then the
+  /// app-level credentials are cleared. Navigation stays blocked until both
+  /// stages finish so the user cannot land on a screen backed by a device that
+  /// still receives notifications for the previous account.
+  Future<void> logout({void Function(String)? onProgress}) async {
+    onProgress?.call('Unsubscribing notification…');
     try {
-      await NotificationService.instance.onUserLoggedOut(apiService);
+      await NotificationService.instance
+          .onUserLoggedOut(apiService)
+          .timeout(const Duration(seconds: 80));
     } catch (e) {
       debugPrint('[AuthService] logout notification unsubscribe error: $e');
     }
 
+    onProgress?.call('Fully logging out…');
     _token = null;
     _refreshToken = null;
     _tokenExpiry = null;
@@ -557,6 +565,8 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(ApiConfig.storageKeyTokenExpiry);
     await prefs.remove(ApiConfig.storageKeyUser);
     await prefs.remove(ApiConfig.storageKeySelectedBusiness);
+
+    notifyListeners();
   }
 
   Map<String, dynamic> _decodeJson(String body) {

@@ -76,6 +76,60 @@ class AppBuildErrorWidget extends StatelessWidget {
   }
 }
 
+/// Runs a staged logout while showing its current progress. Navigation stays
+/// blocked until every service has confirmed completion, so the app never
+/// returns to a screen backed by credentials that were only partially cleared.
+Future<void> runWithLogoutProgress(
+  BuildContext context,
+  Future<void> Function(void Function(String) setProgress) action,
+) async {
+  var stage = 'Unsubscribing notification…';
+  StateSetter? setDialogState;
+  final dialog = showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => PopScope<void>(
+      canPop: false,
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          setDialogState = setState;
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 18),
+                  Text(
+                    stage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+  try {
+    await action((text) {
+      stage = text;
+      setDialogState?.call(() {});
+    });
+  } finally {
+    setDialogState = null;
+    if (context.mounted) {
+      final navigator = Navigator.of(context, rootNavigator: true);
+      if (navigator.canPop()) navigator.pop();
+    }
+  }
+  await dialog;
+}
+
 void showAppSnack(
   String message, {
   bool isError = false,
