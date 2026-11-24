@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:app_links/app_links.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/api_config.dart';
@@ -37,6 +38,24 @@ class GoogleAuthService {
   StreamSubscription<Uri>? _subscription;
   Completer<GoogleSignInResult>? _pending;
   String? _pendingState;
+  String? _apiKey;
+  String? _authDomain;
+
+  /// Public Firebase web config, used only to build the hosted auth handler URL.
+  Future<void> _loadFirebaseConfig() async {
+    if (_apiKey != null && _authDomain != null) return;
+    try {
+      final res = await http
+          .get(Uri.parse(ApiConfig.mobileFirebaseConfigUrl(apiBaseUrl)))
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return;
+      final map = jsonDecode(res.body) as Map<String, dynamic>;
+      _apiKey = map['apiKey']?.toString();
+      _authDomain = map['authDomain']?.toString();
+    } catch (e) {
+      appDiagnostics.recordMessage('Google sign-in', 'Firebase config read failed: $e');
+    }
+  }
 
   void Function(GoogleSignInResult)? onUnhandledResult;
 
@@ -62,13 +81,35 @@ class GoogleAuthService {
       List<int>.generate(24, (_) => Random.secure().nextInt(256)),
     );
     _pendingState = nonce;
+    await _loadFirebaseConfig();
+    final apiKey = _apiKey;
+    final authDomain = _authDomain;
+    if (apiKey == null || apiKey.isEmpty || authDomain == null || authDomain.isEmpty) {
+      _pending = null;
+      _pendingState = null;
+      throw AuthException('Firebase web configuration is unavailable.');
+    }
+
     final loginUri = Uri.parse(ApiConfig.mobileGoogleLoginUrl(apiBaseUrl));
-    final url = loginUri.replace(
+    final redirectUrl = loginUri.replace(
       queryParameters: {...loginUri.queryParameters, 'state': nonce},
-    );
-    // Use the full browser: a Custom Tab loses Firebase's redirect session on
-    // return, so the page never sees the signed-in account and loops.
-    appDiagnostics.recordMessage('Google sign-in', 'Opening browser at $url');
+    ).toString();
+
+    // Open Firebase's hosted auth handler directly. Google signs the operator
+    // in on that portal, then Firebase calls back to our relay page with the
+    // credential; the relay hands it to the app through the deep link.
+    final url = Uri.https(authDomain, '/__/auth/handler', {
+      'apiKey': apiKey,
+      'appName': '[DEFAULT]',
+      'authType': 'signInViaRedirect',
+      'redirectUrl': redirectUrl,
+      'v': '11.10.0',
+      'eventId': DateTime.now().millisecondsSinceEpoch.toString(),
+      'providerId': 'google.com',
+      'customParameters': jsonEncode({'prompt': 'select_account'}),
+      'scopes': 'profile',
+    });
+    appDiagnostics.recordMessage('Google sign-in', 'Opening Firebase auth portal');
 
     bool launched = false;
     try {
