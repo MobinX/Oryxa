@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getFirebaseAuth, getGoogleRedirectResult, signInWithGoogleRedirect } from '@/lib/firebase';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useBrand } from '@/components/brand-provider';
 
 const CALLBACK_SCHEME = 'onlyorders://auth';
@@ -113,13 +112,11 @@ function mapError(error: unknown): string {
   }
 }
 
-function readFlag(): boolean {
-  try {
-    const value = sessionStorage.getItem(REDIRECT_FLAG);
-    return value === '1';
-  } catch {
-    return false;
-  }
+/** A redirect result is only trusted when the sign-in happened moments ago. */
+function isRecentSignIn(value: any): boolean {
+  const last = value?.metadata?.lastSignInTime;
+  const age = last ? Date.now() - Date.parse(last) : Number.NaN;
+  return Number.isFinite(age) && age >= 0 && age < 15 * 1000;
 }
 
 function writeFlag(): void {
@@ -226,115 +223,41 @@ export function MobileGoogleLogin() {
       return;
     }
 
-    const started = readFlag();
     let cancelled = false;
     (async () => {
-      // Returning from Google: the redirect credential is the first choice.
-      // A persisted auth.currentUser is only a fallback, and only on a page load
-      // that this tab marked as a redirect return — otherwise an old account
-      // could be mistaken for the one just picked. The nonce in the payload is
-      // still the final gate on the Flutter side.
-      if (started) {
-        let user: any = null;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          try {
-            const result = await getGoogleRedirectResult();
-            if (cancelled) return;
-            user = (result?.user as any) ?? null;
-          } catch (error) {
-            if (cancelled) return;
-            clearFlag();
-            setStep('error');
-            setMessage(mapError(error));
-            return;
-          }
-          if (user) break;
-          // Firebase's pending redirect is occasionally still being written
-          // when the page first runs (Custom Tabs / slow storage).
-          await new Promise((resolve) => window.setTimeout(resolve, 300));
-        }
-        if (cancelled) return;
-        if (user) {
-          clearFlag();
-          await finish(user);
-          return;
-        }
+      if (startedRef.current) return;
+      startedRef.current = true;
 
-        // Firebase often restores the redirect user to persistence a beat after
-        // getRedirectResult() is called. Because the redirect flag proves this
-        // tab actually started the flow, waiting briefly for auth state is safe.
-        const restored = await new Promise<any>((resolve) => {
-          let settled = false;
-          let unsub: (() => void) | null = null;
-          let timer: number | undefined;
-          const done = (value: any) => {
-            if (settled) return;
-            settled = true;
-            try { unsub?.(); } catch { /* ignore */ }
-            if (timer !== undefined) window.clearTimeout(timer);
-            resolve(value);
-          };
-          timer = window.setTimeout(() => done(null), 3000);
-          try {
-            unsub = auth.onAuthStateChanged((value) => {
-              if (!value) return;
-              // Only accept an account that signed in during this flow. A stale
-              // persisted account must not masquerade as the one just picked.
-              const last = (value as any)?.metadata?.lastSignInTime;
-              const age = last ? Date.now() - Date.parse(last) : Number.NaN;
-              if (Number.isFinite(age) && age >= 0 && age < 10 * 60 * 1000) {
-                done(value);
-              }
-            });
-          } catch {
-            done(null);
-          }
-        });
-        if (cancelled) return;
-        if (restored) {
-          clearFlag();
-          await finish(restored);
-          return;
-        }
-
-        // The result was genuinely lost. Try a popup immediately so the first
-        // selection still completes without making the operator tap again.
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
+      // The SDK stores a pending redirect result in its own persistence, not in
+      // our tab's sessionStorage. A Custom Tab can return from Google in a new
+      // tab where that flag is gone, so read the result on EVERY load. Gating
+      // this on the flag made the return look like a fresh visit and sent the
+      // operator through Google a second time.
+      let user: any = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          const cred = await signInWithPopup(auth, provider);
+          const result = await getGoogleRedirectResult();
           if (cancelled) return;
-          clearFlag();
-          await finish(cred.user as any);
+          user = (result?.user as any) ?? null;
+        } catch (error) {
+          if (cancelled) return;
+          setStep('error');
+          setMessage(mapError(error));
           return;
-        } catch (popupError) {
-          const code = (popupError as { code?: string } | null)?.code ?? '';
-          const expected =
-            code === 'auth/popup-blocked' ||
-            code === 'auth/operation-not-supported-in-this-environment' ||
-            code === 'auth/cancelled-popup-request' ||
-            code === 'auth/popup-closed-by-user';
-          if (!expected) {
-            if (cancelled) return;
-            clearFlag();
-            setStep('error');
-            setMessage(mapError(popupError));
-            return;
-          }
         }
-        if (cancelled) return;
+        if (user && isRecentSignIn(user)) break;
+        user = null;
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
+      if (cancelled) return;
+      if (user) {
         clearFlag();
-        setStep('ready');
-        setMessage('Google sign-in was not completed. Tap below to select your Google account.');
+        await finish(user);
         return;
       }
 
-      // Initial visit from the app: never sign out first. Offer to continue
-      // with an already signed-in account, or sign out explicitly for a new one.
-      if (startedRef.current) return;
-      startedRef.current = true;
+      // No redirect result: offer the already persisted account.
       setMessage('Checking for an existing Google account…');
-
       const existing = await waitForCurrentUser(auth);
       if (cancelled) return;
       if (existing) {
@@ -365,32 +288,12 @@ export function MobileGoogleLogin() {
     startedRef.current = true;
     setStep('working');
     setMessage('Opening Google Sign-In…');
-    const auth = getFirebaseAuth();
-    if (!auth) {
+    if (!getFirebaseAuth()) {
       setStep('error');
       setMessage('Firebase is not configured on this deployment. Sign in is unavailable.');
       return;
     }
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    try {
-      const cred = await signInWithPopup(auth, provider);
-      clearFlag();
-      await finish(cred.user as any);
-      return;
-    } catch (popupError) {
-      const code = (popupError as { code?: string } | null)?.code ?? '';
-      if (code !== 'auth/popup-blocked' && code !== 'auth/operation-not-supported-in-this-environment' && code !== 'auth/cancelled-popup-request') {
-        // Fall through to redirect only for blockers; otherwise surface the error.
-        if (code !== 'auth/popup-closed-by-user') {
-          clearFlag();
-          setStep('error');
-          setMessage(mapError(popupError));
-          startedRef.current = false;
-          return;
-        }
-      }
-    }
+    // Redirect works in Chrome Custom Tabs; popups are blocked there.
     try {
       writeFlag();
       await signInWithGoogleRedirect();
@@ -400,7 +303,7 @@ export function MobileGoogleLogin() {
       setMessage(mapError(error));
       startedRef.current = false;
     }
-  }, [finish]);
+  }, []);
 
   const openApp = useCallback(() => {
     if (!deepLink) return;
