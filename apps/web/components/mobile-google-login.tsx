@@ -37,6 +37,48 @@ function waitForCurrentUser(auth: FirebaseAuth, timeoutMs = 1000): Promise<any> 
   });
 }
 
+const LOG_TAG = 'GOOGLE_LOGIN_STEP';
+const logSession = Math.random().toString(36).slice(2, 10);
+
+/** One event per POST so Axiom keeps every step (batch dedupes by level). */
+function logStep(step: string, detail = ''): void {
+  try {
+    void fetch('/api/v1/mobile/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [{
+          level: 'info',
+          tag: LOG_TAG,
+          message: `step=${step} sid=${logSession}${detail ? ` ${detail}` : ''}`,
+        }],
+      }),
+      keepalive: true,
+    });
+  } catch {
+    /* diagnostics must never break sign-in */
+  }
+}
+
+function logStepError(step: string, code: string): void {
+  try {
+    void fetch('/api/v1/mobile/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [{
+          level: 'error',
+          tag: LOG_TAG,
+          message: `step=${step} sid=${logSession} code=${code}`,
+        }],
+      }),
+      keepalive: true,
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Sign out and wait until Firebase confirms there is no current user before
  * starting a new-account flow or handing the preserved payload to the app. */
 function signOutAndWait(auth: FirebaseAuth, timeoutMs = 3000): Promise<void> {
@@ -147,10 +189,15 @@ export function MobileGoogleLogin() {
   const startedRef = useRef(false);
 
   const finish = useCallback(async (user: { uid: string; email: string | null; displayName: string | null; getIdTokenResult: () => Promise<{ token: string; expirationTime: string }>; } & Record<string, unknown>) => {
-    if (finishedRef.current) return;
+    if (finishedRef.current) {
+      logStep('finish-duplicate-call');
+      return;
+    }
     finishedRef.current = true;
+    logStep('finish-start');
     try {
       const tokenResult = await (user as any).getIdTokenResult();
+      logStep('token-captured', `hasRefresh=${Boolean((user as any)?.stsTokenManager?.refreshToken)}`);
       const internal = user as unknown as { stsTokenManager?: { refreshToken?: string } };
       const refreshToken = internal.stsTokenManager?.refreshToken ?? null;
       const expiresIn = Math.max(60, Math.floor((new Date(tokenResult.expirationTime).getTime() - Date.now()) / 1000));
@@ -175,11 +222,14 @@ export function MobileGoogleLogin() {
       if (auth) {
         setStep('finalizing');
         setMessage('Finishing sign-in…');
+        logStep('finish-signout-start');
         await signOutAndWait(auth);
+        logStep('finish-signout-done', `currentUserNull=${auth.currentUser === null}`);
       }
 
       const encoded = base64Url(JSON.stringify(preserved));
       const link = `${CALLBACK_SCHEME}#p=${encoded}`;
+      logStep('deeplink-built', `hasState=${state.length > 0}`);
       setDeepLink(link);
       setAccount(preserved.email ?? preserved.name ?? preserved.uid);
       setStep('done');
@@ -201,8 +251,10 @@ export function MobileGoogleLogin() {
         /* ignore */
       }
 
+      logStep('navigate-to-app-scheduled');
       window.setTimeout(() => {
         try {
+          logStep('navigate-to-app');
           window.location.href = link;
         } catch {
           /* ignore */
@@ -210,6 +262,7 @@ export function MobileGoogleLogin() {
       }, 600);
     } catch (error) {
       finishedRef.current = false;
+      logStepError('finish-failed', (error as { code?: string })?.code ?? 'unknown');
       setStep('error');
       setMessage(mapError(error));
     }
@@ -223,9 +276,13 @@ export function MobileGoogleLogin() {
       return;
     }
 
+    logStep('page-load', `hasState=${new URLSearchParams(window.location.search).has('state')}`);
     let cancelled = false;
     (async () => {
-      if (startedRef.current) return;
+      if (startedRef.current) {
+        logStep('effect-reentry-skipped');
+        return;
+      }
       startedRef.current = true;
 
       // The SDK stores a pending redirect result in its own persistence, not in
@@ -239,8 +296,10 @@ export function MobileGoogleLogin() {
           const result = await getGoogleRedirectResult();
           if (cancelled) return;
           user = (result?.user as any) ?? null;
+          logStep('redirect-result', `attempt=${attempt} found=${Boolean(user)} recent=${user ? isRecentSignIn(user) : false}`);
         } catch (error) {
           if (cancelled) return;
+          logStepError('redirect-result-failed', (error as { code?: string })?.code ?? 'unknown');
           setStep('error');
           setMessage(mapError(error));
           return;
@@ -252,28 +311,34 @@ export function MobileGoogleLogin() {
       if (cancelled) return;
       if (user) {
         clearFlag();
+        logStep('redirect-result-accepted');
         await finish(user);
         return;
       }
+      logStep('no-redirect-result');
 
       // No redirect result: offer the already persisted account.
       setMessage('Checking for an existing Google account…');
       const existing = await waitForCurrentUser(auth);
       if (cancelled) return;
+      logStep('persisted-user-check', `found=${Boolean(existing)}`);
       if (existing) {
         existingUserRef.current = existing;
         setExistingEmail(existing.email ?? existing.displayName ?? existing.uid ?? 'this account');
         setStep('chooser');
+        logStep('chooser-shown');
         return;
       }
 
       setMessage('Opening Google Sign-In…');
+      logStep('redirect-start');
       try {
         writeFlag();
         await signInWithGoogleRedirect();
       } catch (error) {
         clearFlag();
         if (cancelled) return;
+        logStepError('redirect-start-failed', (error as { code?: string })?.code ?? 'unknown');
         setStep('error');
         setMessage(mapError(error));
       }
@@ -294,11 +359,13 @@ export function MobileGoogleLogin() {
       return;
     }
     // Redirect works in Chrome Custom Tabs; popups are blocked there.
+    logStep('manual-redirect-start');
     try {
       writeFlag();
       await signInWithGoogleRedirect();
     } catch (error) {
       clearFlag();
+      logStepError('manual-redirect-failed', (error as { code?: string })?.code ?? 'unknown');
       setStep('error');
       setMessage(mapError(error));
       startedRef.current = false;
@@ -352,7 +419,10 @@ export function MobileGoogleLogin() {
             <button
               type="button"
               className="w-full h-12 rounded-[14px] bg-[var(--primary)] text-white font-semibold hover:brightness-105 transition-all shadow-sm"
-              onClick={() => finish(existingUserRef.current)}
+              onClick={() => {
+                logStep('chooser-continue-clicked');
+                finish(existingUserRef.current);
+              }}
             >
               Continue with {existingEmail}
             </button>
@@ -361,9 +431,14 @@ export function MobileGoogleLogin() {
               className="w-full h-12 rounded-[14px] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] font-semibold hover:bg-[var(--muted)] transition-colors shadow-sm"
               onClick={async () => {
                 const auth = getFirebaseAuth();
+                logStep('chooser-new-account-clicked');
                 setStep('working');
                 setMessage('Signing out…');
-                if (auth) await signOutAndWait(auth);
+                if (auth) {
+                  logStep('chooser-signout-start');
+                  await signOutAndWait(auth);
+                  logStep('chooser-signout-done');
+                }
                 startGoogle();
               }}
             >
