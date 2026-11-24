@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import '../models/business.dart';
@@ -54,8 +56,9 @@ class BusinessProvider extends ChangeNotifier {
           _currentBusiness ??= _businesses.first;
         }
 
-        // Fetch stats and channels for current business
-        await loadActiveBusinessData();
+        // Start the dashboard reads now so they overlap the conversation,
+        // order and product requests MainScaffold fires after /businesses.
+        unawaited(loadActiveBusinessData());
       }
       _isLoading = false;
       notifyListeners();

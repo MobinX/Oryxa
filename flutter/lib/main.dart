@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_patcher/flutter_patcher.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'config/app_theme.dart';
@@ -25,6 +26,10 @@ import 'widgets/app_feedback.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inter ships inside the app assets. Fail loudly in debug if a weight is
+  // missing instead of silently fetching a font from the network.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // A build failure in a pushed screen must leave a trace the merchant can read;
   // the Diagnostics screen shows this log and streams directly to Axiom.

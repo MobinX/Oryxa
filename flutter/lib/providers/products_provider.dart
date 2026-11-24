@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import '../models/product.dart';
@@ -62,7 +64,8 @@ class ProductsProvider extends ChangeNotifier {
         _products = res.map((p) => ProductModel.fromJson(p as Map<String, dynamic>)).toList();
       }
 
-      await fetchCategories(businessId);
+      // Categories are independent of the product list; overlap the two reads.
+      unawaited(fetchCategories(businessId));
 
       _isLoading = false;
       notifyListeners();
