@@ -21,7 +21,14 @@ const nextConfig: NextConfig = {
     '@repo/integrations',
     '@repo/utils',
   ],
-  serverExternalPackages: ['firebase-admin', '@neondatabase/serverless', 'postgres', 'ffmpeg-static'],
+  serverExternalPackages: [
+    'firebase-admin',
+    '@neondatabase/serverless',
+    'postgres',
+    'ffmpeg-static',
+    '@resvg/resvg-js',
+    'satori',
+  ],
   // The transcoder binary is not JavaScript, so the tracer has to be told about it explicitly —
   // without this the voice path works until it asks ffmpeg for a file that was never shipped.
   outputFileTracingIncludes: {
@@ -34,8 +41,12 @@ const nextConfig: NextConfig = {
     // Typecheck runs across workspace-linked `api` sources (path aliases, duplicate hono typings).
     ignoreBuildErrors: true,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = { ...config.resolve.alias, ...monorepoAliases };
+    if (isServer) {
+      const externals = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
+      config.externals = [...externals, '@resvg/resvg-js', /^@resvg\/resvg-js/, 'satori'];
+    }
     return config;
   },
   turbopack: {

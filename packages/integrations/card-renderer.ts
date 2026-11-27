@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import satori from 'satori';
-import { Resvg } from '@resvg/resvg-js';
 import { getB2ObjectBytes, isB2ObjectKey, putImageAtKey } from './b2';
 
 const require = createRequire(import.meta.url);
@@ -384,7 +382,11 @@ export async function renderProductCardPng(input: ProductCardRenderInput): Promi
     },
   };
 
-  const svg = await satori(node as any, {
+  const satoriMod = require('satori');
+  const satoriFn = satoriMod.default ?? satoriMod;
+  const { Resvg } = require('@resvg/resvg-js') as typeof import('@resvg/resvg-js');
+
+  const svg = await satoriFn(node as any, {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     fonts: fonts.length > 0 ? fonts : [],

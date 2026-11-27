@@ -87,6 +87,7 @@ report.md
 report*.md
 suggestion*.md
 RTK.md
+ai-prompt.md
 .codex/
 .qoder/
 OnlyOrders Landing-html/
@@ -109,3 +110,8 @@ flutter/android/.gradle/
 flutter/android/local.properties
 flutter/worker/node_modules/
 flutter/worker/.wrangler/
+
+# =========================
+# Architecture docs (local-only AI knowledge base)
+# =========================
+architecture/
