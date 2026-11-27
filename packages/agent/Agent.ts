@@ -451,15 +451,16 @@ export class Agent {
           })
     );
 
-    // Dynamic tool selection: bind canonical composite suite in fixed alphabetical order (maxTools: 5)
-    const activeTools = this.config.tools ?? selectToolsForTurn({
+    // Dynamic tool selection: bind canonical composite suite in fixed alphabetical order (maxTools: 5),
+    // unless a legacy productInfoLlm test double is injected (bind full toolset so helper calls work).
+    const activeTools = this.config.tools ?? (this.config.productInfoLlm ? tools : selectToolsForTurn({
       intents: decisionResult.intents as JevIntentCategory[],
       agentState: this.config.agentState,
       allTools: Object.fromEntries(tools.map((t) => [t.name, t])),
       enableCompositeTools: true,
       maxTools: 5,
       hasImages,
-    });
+    }));
 
     const agent = createReactAgent({ llm, tools: activeTools });
 

@@ -193,13 +193,13 @@ describe('Azure Speech F0 Free Tier Support', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses F0 Short Audio REST endpoint when AZURE_SPEECH_ENHANCED=false', async () => {
+  it('uses F0 Short Audio REST endpoint when AZURE_SPEECH_TIER=f0', async () => {
     const prevKey = process.env.AZURE_SPEECH_KEY;
-    const prevEnhanced = process.env.AZURE_SPEECH_ENHANCED;
+    const prevTier = process.env.AZURE_SPEECH_TIER;
     const prevRegion = process.env.AZURE_SPEECH_REGION;
 
     process.env.AZURE_SPEECH_KEY = 'f0-test-key';
-    process.env.AZURE_SPEECH_ENHANCED = 'false';
+    process.env.AZURE_SPEECH_TIER = 'f0';
     process.env.AZURE_SPEECH_REGION = 'southeastasia';
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -217,7 +217,7 @@ describe('Azure Speech F0 Free Tier Support', () => {
       );
     } finally {
       process.env.AZURE_SPEECH_KEY = prevKey;
-      process.env.AZURE_SPEECH_ENHANCED = prevEnhanced;
+      process.env.AZURE_SPEECH_TIER = prevTier;
       process.env.AZURE_SPEECH_REGION = prevRegion;
     }
   });

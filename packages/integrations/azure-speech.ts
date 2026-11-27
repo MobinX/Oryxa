@@ -317,8 +317,13 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
   }
 
   const endpoint = (process.env.AZURE_SPEECH_ENDPOINT?.trim() || DEFAULT_ENDPOINT).replace(/\/+$/, '');
-  const enhancedEnabled = process.env.AZURE_SPEECH_ENHANCED !== 'false' && process.env.AZURE_SPEECH_TIER !== 'f0';
+  const tierF0 = process.env.AZURE_SPEECH_TIER?.toLowerCase() === 'f0';
+  const enhancedEnabled = !tierF0 && process.env.AZURE_SPEECH_ENHANCED !== 'false';
   const mime = contentType.split(';')[0].trim() || 'audio/mp4';
+
+  if (tierF0) {
+    return transcribeShortAudioF0(key, { buffer, contentType: mime });
+  }
 
   if (enhancedEnabled) {
     const prepared = await transcodeForEnhanced(buffer, mime);
@@ -333,10 +338,14 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
       });
       if (text) return text;
     }
-    const std = await requestTranscription(endpoint, key, { buffer, contentType: mime }, {});
-    if (std) return std;
   }
 
-  // Free-tier (F0) Short Audio REST fallback (5 free hours/month, works when AZURE_SPEECH_ENHANCED=false or F0 key rejects fast transcription)
-  return transcribeShortAudioF0(key, { buffer, contentType: mime });
+  const std = await requestTranscription(endpoint, key, { buffer, contentType: mime }, {});
+  if (std) return std;
+
+  // Free-tier (F0) Short Audio REST fallback if Fast Transcription is unsupported on this key
+  if (process.env.AZURE_SPEECH_REGION) {
+    return transcribeShortAudioF0(key, { buffer, contentType: mime });
+  }
+  return null;
 }
