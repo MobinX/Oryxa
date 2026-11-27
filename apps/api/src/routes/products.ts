@@ -1,4 +1,8 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { eq, and } from 'drizzle-orm';
+import { db } from '@repo/db/client';
+import { products } from '@repo/db/schema';
+import { runInBackground } from '@api/lib/background';
 import { sinceSchema } from '@api/lib/since';
 import {
   createProductBodySchema,
@@ -90,6 +94,71 @@ productsRouter.openapi(listCategoriesRoute, async (c) => {
   return c.json(cats);
 });
 
+async function scheduleProductV2PostSave(businessId: string, productId: string): Promise<void> {
+  if (process.env.NODE_ENV === 'test') return;
+  try {
+    const prod = await getProductById(businessId, productId);
+    if (!prod) return;
+
+    const firstPhoto =
+      prod.variants.find((v) => v.isAvailable && v.stock > 0 && v.imageUrl)?.imageUrl ??
+      prod.variants.find((v) => v.imageUrl)?.imageUrl ??
+      null;
+
+    if (process.env.B2_BUCKET_NAME && firstPhoto) {
+      try {
+        const { renderAndUploadProductCard } = await import('@repo/integrations/card-renderer');
+        const uploaded = await renderAndUploadProductCard({
+          businessId,
+          productId,
+          name: prod.name,
+          price: prod.price,
+          currency: prod.currency,
+          hasDiscount: prod.hasDiscount,
+          discountPercent: prod.discountPercent ?? undefined,
+          variantSummary: prod.variants.slice(0, 5).map((v) => v.name).join(' · '),
+          highlight: prod.enrichedSpecs?.highlights?.[0] ?? prod.description ?? undefined,
+          inStock: prod.variants.length === 0 || prod.variants.some((v) => v.isAvailable && v.stock > 0),
+          imageKeyOrUrl: firstPhoto,
+          existingCardKey: prod.cardImageKey,
+        });
+        if (!uploaded.skipped) {
+          await db
+            .update(products)
+            .set({ cardImageKey: uploaded.key })
+            .where(and(eq(products.id, productId), eq(products.businessId, businessId)));
+        }
+      } catch (err) {
+        console.warn('[products-route] card render skipped/failed:', err instanceof Error ? err.message : err);
+      }
+    }
+
+    if (!prod.enrichedSpecs && (process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY)) {
+      try {
+        const { enrichProductSpecs } = await import('@repo/agent');
+        const specs = await enrichProductSpecs({
+          name: prod.name,
+          price: prod.price,
+          currency: prod.currency,
+          description: prod.description,
+          variantNames: prod.variants.map((v) => v.name),
+          imageUrl: firstPhoto,
+        });
+        if (specs) {
+          await db
+            .update(products)
+            .set({ enrichedSpecs: specs })
+            .where(and(eq(products.id, productId), eq(products.businessId, businessId)));
+        }
+      } catch (err) {
+        console.warn('[products-route] enrichment skipped/failed:', err instanceof Error ? err.message : err);
+      }
+    }
+  } catch {
+    /* non-fatal background enhancement */
+  }
+}
+
 const createProductRoute = createRoute({
   method: 'post',
   path: '/{businessId}/products',
@@ -112,6 +181,7 @@ productsRouter.openapi(createProductRoute, async (c) => {
     return c.json({ error: 'Customer not found for this business company' }, 400);
   }
   const product = await createProduct({ ...data, businessId });
+  runInBackground(c, scheduleProductV2PostSave(businessId, product.id), 'product-v2-post-save');
   return c.json(product, 201);
 });
 
@@ -255,6 +325,7 @@ productsRouter.openapi(updateProductRoute, async (c) => {
   try {
     const result = await updateProduct(businessId, productId, data);
     if (!result) return c.json({ error: 'Product entity missing' }, 404);
+    runInBackground(c, scheduleProductV2PostSave(businessId, productId), 'product-v2-post-save');
     return c.json(result, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update product';

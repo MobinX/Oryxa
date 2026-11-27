@@ -26,3 +26,4 @@ export {
   stripDisallowedSuggestionWords,
 } from '@agent/suggestions';
 export type { InboxSuggestion, SuggestionProduct } from '@agent/suggestions';
+export { enrichProductSpecs, type ProductEnrichmentInput } from '@agent/enrich-product';

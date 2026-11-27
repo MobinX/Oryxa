@@ -27,9 +27,11 @@ import { spendQuotaUnit, refundQuotaUnit } from '@repo/db/crud/billing';
 import {
   sendMessage as fbSendMessage,
   sendButtons as fbSendButtons,
+  detailsProductPayload,
   type MessagingPlatform,
   type MessengerCard,
 } from '@repo/integrations/facebook';
+import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import type { SseEmitter } from '@agent/Agent';
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
@@ -94,7 +96,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
    * Consolidated product search, category browsing, variant exclusion, and card presentation.
    */
   const browseCatalogTool = tool(
-    async ({ query, category, startingLimit, endLimit, excludeColors, excludeSizes }) => {
+    async ({ query, category, startingLimit, endLimit, excludeColors, excludeSizes, sendCards = true }) => {
       const logResult = (result: string) => {
         context.emitSse?.('tool_result', { name: 'browse_catalog', result });
         return result;
@@ -155,6 +157,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
           price: p.price,
           currency: p.currency,
           availableVariantCount: sellableVariants.length,
+          ...(p.enrichedSpecs ? { enrichedSpecs: p.enrichedSpecs } : {}),
           variants: sellableVariants.slice(0, 6).map((v) => {
             const attrs = parseVariantAttributes(v.name);
             return {
@@ -169,11 +172,84 @@ export function createCompositeTools(context: CompositeToolsContext) {
         };
       });
 
+      let cardsAlreadySent = false;
+      if (sendCards && matches.length > 0 && context.pageToken && context.customerPlatformId) {
+        const cards: MessengerCard[] = [];
+        for (const p of matches.slice(0, CARD_LIST_LIMIT)) {
+          const sellable = p.variants.filter((v) => v.isAvailable && v.stock > 0);
+          const photoVar = sellable.find((v) => v.cardImageKey || v.imageUrl) ?? p.variants.find((v) => v.cardImageKey || v.imageUrl);
+          const rawKey = (p as any).cardImageKey || photoVar?.cardImageKey || photoVar?.imageUrl || null;
+          const imageUrl = rawKey ? await resolveStoredImageUrl(rawKey) : null;
+          if (!imageUrl) continue;
+          const colors = [...new Set(sellable.map((v) => parseVariantAttributes(v.name).color).filter(Boolean))].slice(0, 3);
+          const subtitle = `${money(p.price, p.currency)}${colors.length ? ` · ${colors.join(', ')}` : ''}`;
+          cards.push({
+            title: oneLine(p.name, 80),
+            subtitle: oneLine(subtitle, 80),
+            imageUrl,
+            button: {
+              title: 'Order',
+              payload: `place order with ${p.id} and ${p.name}`,
+            },
+            extraButtons: [{ title: 'Details', payload: detailsProductPayload(p.id) }],
+          });
+        }
+
+        if (cards.length > 0) {
+          let chargedPeriod: string | null = null;
+          let allowed = true;
+          if (!context.sendMessageOverride) {
+            try {
+              const budget = await spendQuotaUnit(context.businessId, 'message');
+              if (budget.spent) chargedPeriod = budget.period;
+              else allowed = false;
+            } catch {
+              /* fail open */
+            }
+          }
+          if (allowed) {
+            const summaryText = cards.map((c) => `${c.title} — ${c.subtitle}`).join('\n');
+            try {
+              if (context.sendMessageOverride) {
+                await context.sendMessageOverride(context.pageToken, context.customerPlatformId, summaryText);
+              } else {
+                await fbSendMessage(context.pageToken, context.customerPlatformId, cards, { platform: context.platform });
+              }
+              cardsAlreadySent = true;
+              if (context.conversationId) {
+                await createMessage({
+                  conversationId: context.conversationId,
+                  from: 'self',
+                  content: summaryText,
+                  state: 'done',
+                }).catch(() => {});
+              }
+              context.onSent?.(summaryText, 'card');
+            } catch (sendErr) {
+              if (chargedPeriod) {
+                await refundQuotaUnit(context.businessId, 'message', chargedPeriod).catch(() => {});
+              }
+              console.warn('[composite-tool] browse_catalog card send failed:', sendErr);
+            }
+          }
+        }
+      }
+
+      if (context.agentState) {
+        context.agentState.catalogCursor = {
+          query: word || undefined,
+          category: categoryHitName ?? undefined,
+          nextOffset: from + filteredItems.length,
+          total,
+        };
+      }
+
       return logResult(
         JSON.stringify({
           found: filteredItems.length > 0,
           totalMatching: total,
           category: categoryHitName,
+          cardsAlreadySent,
           items: filteredItems,
           hasMore: from + size < total,
         })
@@ -182,7 +258,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
     {
       name: 'browse_catalog',
       description:
-        'Search and browse store products by keyword, category, or attributes with optional color/size exclusions. Returns matching products and their available variants.',
+        'Search and browse store products by keyword, category, or attributes with optional color/size exclusions. Automatically sends visual product cards when sendCards is true and returns matching products and variants.',
       schema: z.object({
         query: z.string().optional().describe('Product name, keyword, or SKU'),
         category: z.string().optional().describe('Category name (e.g. Saree, Electronics)'),
@@ -190,6 +266,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
         endLimit: z.number().int().min(1).optional().describe('Page stop index (defaults to 10)'),
         excludeColors: z.array(z.string()).optional().describe('Colors to filter out'),
         excludeSizes: z.array(z.string()).optional().describe('Sizes to filter out'),
+        sendCards: z.boolean().optional().describe('Whether to send visual product cards directly to the buyer (defaults to true)'),
       }),
     }
   );
@@ -324,6 +401,7 @@ export function createCompositeTools(context: CompositeToolsContext) {
         availableSizes,
         paymentStrategy: PAYMENT_STRATEGY_LABELS[effectiveStrategy.effective],
         paymentStrategyDetails: PAYMENT_STRATEGY_DESCRIPTIONS[effectiveStrategy.effective],
+        ...(targetProduct.enrichedSpecs ? { enrichedSpecs: targetProduct.enrichedSpecs } : {}),
       };
 
       return logResult(JSON.stringify(quote));
@@ -382,7 +460,38 @@ export function createCompositeTools(context: CompositeToolsContext) {
       }
 
       const variant = product.variants?.find((v: any) => v.id === variantId) ?? product.variants?.[0] ?? null;
-      const effectivePrice = variant?.price ?? product.price;
+      if (variant && (!variant.isAvailable || variant.stock < orderCount)) {
+        return logResult(
+          JSON.stringify({
+            created: false,
+            reason: `${product.name} (${variant.name}) has only ${variant.stock} left in stock.`,
+            missing: ['variantId'],
+            instruction: 'Ask the customer to choose an available size/color or lower quantity.',
+          })
+        );
+      }
+
+      if (!customerPhone?.trim()) {
+        return logResult(
+          JSON.stringify({
+            created: false,
+            missing: ['customerPhone'],
+            reason: 'Customer phone number is required.',
+            instruction: 'Ask the customer for their 11-digit mobile number.',
+          })
+        );
+      }
+
+      if (!customerAddress?.trim()) {
+        return logResult(
+          JSON.stringify({
+            created: false,
+            missing: ['customerAddress'],
+            reason: 'Delivery address is required.',
+            instruction: 'Ask the customer for their full delivery address and area.',
+          })
+        );
+      }
 
       // Automatically resolve delivery fee if omitted
       let resolvedShippingCost = typeof shippingCost === 'number' && shippingCost >= 0 ? shippingCost : undefined;
@@ -390,7 +499,51 @@ export function createCompositeTools(context: CompositeToolsContext) {
         const resolution = resolveDeliveryZone(customerAddress, context.deliveryZones);
         if (resolution.status === 'resolved' && resolution.zone) {
           resolvedShippingCost = resolution.zone.price;
+        } else if (resolution.status === 'unsupported_international') {
+          return logResult(
+            JSON.stringify({
+              created: false,
+              missing: ['deliveryArea'],
+              reason: 'International delivery is not supported.',
+              instruction: 'Politely explain delivery is available inside Bangladesh only, or escalate if requested.',
+            })
+          );
         }
+      }
+
+      // Validate payment strategy & transactionId requirements before DB insert
+      const unitPrice = parseFloat(String(variant?.price ?? product.price));
+      const subtotal = Number.isFinite(unitPrice) ? unitPrice * orderCount : 0;
+      const effectiveStrategy = resolvePaymentStrategy(
+        context.paymentStrategy ?? 'cod',
+        product.paymentStrategyOverride as PaymentStrategy | null | undefined,
+      );
+      const paymentCheck = checkOrderPayment({
+        paymentMethod,
+        transactionId: paidTransactionId,
+        paymentMethods: context.paymentMethods ?? [],
+        strategy: effectiveStrategy.effective,
+        shippingCost: resolvedShippingCost ?? 0,
+      });
+
+      if (!paymentCheck.ok) {
+        const configuredAccounts = (context.paymentMethods ?? [])
+          .map((m) => `${m.name}${m.info ? `: ${m.info}` : ''}`)
+          .join('; ');
+        const dueNow = upfrontAmount(effectiveStrategy.effective, {
+          itemsTotal: subtotal,
+          shippingCost: resolvedShippingCost ?? 0,
+        });
+        return logResult(
+          JSON.stringify({
+            created: false,
+            missing: paymentCheck.missing,
+            reason: paymentCheck.message,
+            paymentInfo: paymentCheck.paymentInfo ?? (configuredAccounts || 'Configured non-COD payment methods'),
+            upfrontRequired: dueNow > 0 ? money(dueNow, product.currency) : undefined,
+            instruction: `Explain the required payment (${paymentCheck.message}) with account details (${configuredAccounts}) and ask for the TrxID before retrying place_order.`,
+          })
+        );
       }
 
       // Create order in database
@@ -444,7 +597,8 @@ export function createCompositeTools(context: CompositeToolsContext) {
         );
       } catch (err) {
         console.error('[composite-tool] place_order failed:', err);
-        return logResult(JSON.stringify({ created: false, reason: 'Failed to create order in database.' }));
+        const reason = err instanceof Error ? err.message : 'Failed to create order in database.';
+        return logResult(JSON.stringify({ created: false, reason }));
       }
     },
     {

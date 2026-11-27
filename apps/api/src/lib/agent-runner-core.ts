@@ -4,8 +4,15 @@ import { currentContext, tagContext } from '@api/lib/ctx';
 import { agentInputFields, createAgentTrace, tokenFields } from '@api/lib/agent-trace';
 import { RUN_LOOP_DEPTH_THRESHOLD, STALE_RUNNER_MS } from '@api/lib/config';
 import { refundQuotaUnit, spendQuotaUnit } from '@repo/db/crud/billing';
-import { parseConversationAgentState, stripEmDashes } from '@repo/shared';
+import {
+  classifyTurnDecision,
+  classifyTurnIntent,
+  formatCompactAgentState,
+  parseConversationAgentState,
+  stripEmDashes,
+} from '@repo/shared';
 import { INSTAGRAM_AGENT_GUIDANCE } from '@repo/agent';
+import { runFastPath, type FastPathResult } from '@api/lib/fast-path';
 
 /**
  * How many of the customer's turns a picture stays pixels for. Counted in turns rather than raw
@@ -292,6 +299,69 @@ export async function runAgentCore(
   // "nothing reaches the wire", which is how the message budget knows not to charge.
   const resolvedSendMessage = sendMessageOverride ?? sendMessage;
 
+  // Run V2 Decision Router before Agent instantiation to check zero-LLM fast-path eligibility
+  const decision = await classifyTurnDecision({
+    latestMessage: latestCustomerText,
+    lastTurns: history.slice(-3).map((m) => `${m.from}: ${m.content}`),
+    compactAgentState: formatCompactAgentState(agentState),
+    hasImages: pendingMsgs.some((m) => (m.imageKeys?.length ?? 0) > 0),
+  }).catch(() => undefined);
+
+  const detIntent = classifyTurnIntent(latestCustomerText, agentState);
+  if (decision && detIntent !== 'comment_silent') {
+    const fp = await runFastPath(decision, {
+      businessId,
+      businessName: conv.business?.name ?? 'Store',
+      conversationId: conv.id,
+      customerPlatformId: conv.customerPlatformId,
+      customerText: latestCustomerText,
+      pageToken: conv.channel.apiToken,
+      platform: platform === 'instagram' ? 'instagram' : 'facebook',
+      deliveryZones: conv.business?.deliveryZones,
+      paymentMethods: conv.business?.paymentMethods,
+      paymentStrategy: conv.business?.paymentStrategy,
+      sendMessageOverride,
+    }).catch((err): FastPathResult => {
+      console.warn('[agent-runner-core] fast-path failed, falling back to Agent:', err);
+      return { handled: false, fastPath: false, totalTokens: 0 };
+    });
+
+    if (fp.handled) {
+      if (fp.chips?.length) {
+        agentState.lastSuggestions = fp.chips;
+        await updateConversationAgentState(conv.id, agentState).catch(() => {});
+      }
+      emit('agent_run', {
+        conversationId: conv.id,
+        businessId,
+        fastPath: true,
+        totalTokens: 0,
+        route: decision.template_route,
+      });
+      emitSse('message_sent', { text: fp.replyText ?? '', fastPath: true });
+      emitSse('done', { reply: fp.replyText ?? '', fastPath: true });
+      return {
+        replyText: fp.replyText ?? '',
+        sentTexts: fp.replyText ? [fp.replyText] : [],
+        messages: [],
+        chips: fp.chips,
+        decision,
+        metrics: {
+          provider: decision.source,
+          model: decision.template_route,
+          inputTokens: decision.inputTokens,
+          outputTokens: 0,
+          totalTokens: decision.inputTokens,
+          cacheHitTokens: 0,
+          cacheMissTokens: decision.inputTokens,
+          cacheHitPercent: 0,
+          latencyMs: decision.latencyMs,
+          estimatedCostUsd: decision.estimatedCostUsd,
+        },
+      };
+    }
+  }
+
   const agent = new Agent({
     systemPrompt: answering.systemPrompt,
     business: conv.business ?? { id: businessId, name: 'Store' },
@@ -302,6 +372,7 @@ export async function runAgentCore(
     customerPlatformId: conv.customerPlatformId,
     customerName: conv.customerName,
     catalogSummary,
+    decision,
     emitSse,
     sendMessageOverride,
     platform,

@@ -47,9 +47,9 @@ describe('the model billing row', () => {
     expect(initial.provider).toBe('openai');
     expect(initial.model).toBe('gpt-6-luna');
     expect(ratesOf(initial)).toEqual({
-      inputUsdPerMillion: 0.15,
-      outputUsdPerMillion: 0.6,
-      cachedInputUsdPerMillion: 0.075,
+      inputUsdPerMillion: 0.1,
+      outputUsdPerMillion: 0.5,
+      cachedInputUsdPerMillion: 0.01,
     });
 
     const saved = await updateModelBilling({

@@ -227,6 +227,84 @@ async function requestTranscription(
   return null;
 }
 
+async function transcodeToWavForF0(
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (contentType === 'audio/wav' || contentType === 'audio/x-wav' || contentType === 'audio/wave') {
+    return { buffer, contentType: 'audio/wav' };
+  }
+  if (contentType === 'audio/ogg' || contentType === 'audio/opus') {
+    return { buffer, contentType: 'audio/ogg; codecs=opus' };
+  }
+  const binary = await resolveFfmpegPath(true);
+  if (!binary) return null;
+
+  const dir = await mkdtemp(join(tmpdir(), 'oryxa-f0-'));
+  const input = join(dir, `voice.${extensionFor(contentType)}`);
+  const output = join(dir, 'voice.wav');
+  try {
+    await writeFile(input, buffer);
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        binary,
+        ['-y', '-i', input, '-vn', '-ar', '16000', '-ac', '1', '-f', 'wav', output],
+        { timeout: 15_000 },
+        (err) => (err ? reject(err) : resolve()),
+      );
+    });
+    const converted = await readFile(output);
+    return converted.byteLength > 0 ? { buffer: converted, contentType: 'audio/wav' } : null;
+  } catch (err) {
+    console.warn('[speech] F0 wav transcode failed:', err instanceof Error ? err.message : err);
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function transcribeShortAudioF0(
+  key: string,
+  audio: { buffer: Buffer; contentType: string },
+): Promise<string | null> {
+  const region = (process.env.AZURE_SPEECH_REGION?.trim() || 'southeastasia').toLowerCase();
+  const prepared = await transcodeToWavForF0(audio.buffer, audio.contentType);
+  if (!prepared) return null;
+
+  const locales = [
+    process.env.AZURE_SPEECH_LOCALE?.trim() || 'bn-BD',
+    process.env.AZURE_SPEECH_FALLBACK_LOCALE?.trim() || 'en-US',
+  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+
+  for (const locale of locales) {
+    const url = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(locale)}&format=simple`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': key,
+          'Content-Type': prepared.contentType,
+          Accept: 'application/json',
+        },
+        body: new Uint8Array(prepared.buffer),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        console.warn(`[speech] F0 short-audio failed (${res.status}, ${locale}): ${detail.slice(0, 200)}`);
+        continue;
+      }
+      const data = (await res.json()) as { RecognitionStatus?: string; DisplayText?: string };
+      if (data.RecognitionStatus === 'Success' && data.DisplayText?.trim()) {
+        return data.DisplayText.trim();
+      }
+    } catch (err) {
+      console.warn(`[speech] F0 short-audio errored (${locale}):`, err instanceof Error ? err.message : err);
+    }
+  }
+  return null;
+}
+
 export async function transcribeAudio(buffer: Buffer, contentType: string): Promise<string | null> {
   const key = process.env.AZURE_SPEECH_KEY?.trim();
   if (!key) {
@@ -239,14 +317,19 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
   }
 
   const endpoint = (process.env.AZURE_SPEECH_ENDPOINT?.trim() || DEFAULT_ENDPOINT).replace(/\/+$/, '');
-  const enhancedEnabled = process.env.AZURE_SPEECH_ENHANCED !== 'false';
+  const tierF0 = process.env.AZURE_SPEECH_TIER?.toLowerCase() === 'f0';
+  const enhancedEnabled = !tierF0 && process.env.AZURE_SPEECH_ENHANCED !== 'false';
   const mime = contentType.split(';')[0].trim() || 'audio/mp4';
+
+  if (tierF0) {
+    const f0Res = await transcribeShortAudioF0(key, { buffer, contentType: mime });
+    if (f0Res) return f0Res;
+  }
 
   if (enhancedEnabled) {
     const prepared = await transcodeForEnhanced(buffer, mime);
     if (prepared) {
-      // No locales: mai-transcribe-2 identifies the language itself. (AZURE_SPEECH_LOCALE
-      // used to pin one language here, which garbled every note in another language.)
+      // No locales: mai-transcribe-2 identifies the language itself.
       const text = await requestTranscription(endpoint, key, prepared, {
         enhancedMode: {
           enabled: true,
@@ -258,7 +341,12 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
     }
   }
 
-  // No locales: the multilingual model identifies Bangla, English and code-mixed speech on its
-  // own, and accepts the clip exactly as Facebook sent it.
-  return requestTranscription(endpoint, key, { buffer, contentType: mime }, {});
+  const std = await requestTranscription(endpoint, key, { buffer, contentType: mime }, {});
+  if (std) return std;
+
+  // Free-tier (F0) Short Audio REST fallback if Fast Transcription is unsupported on this key
+  if (process.env.AZURE_SPEECH_REGION) {
+    return transcribeShortAudioF0(key, { buffer, contentType: mime });
+  }
+  return null;
 }

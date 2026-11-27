@@ -435,6 +435,20 @@
       "when": 1795500000000,
       "tag": "0061_readable_tables_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0062_visual_cards_and_enriched_specs",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1795600100000,
+      "tag": "0063_default_agent_closer_v2",
+      "breakpoints": true
     }
   ]
 }

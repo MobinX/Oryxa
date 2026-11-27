@@ -68,6 +68,23 @@ export const conversationAgentStateSchema = z.object({
    * allowed through, so the agent can repeat a question when it really needs to.
    */
   suggestionRepeatSkipped: z.boolean().default(false),
+  salesPlan: z
+    .object({
+      goal: z.enum(['close_order', 'upsell_combo', 'recover_objection', 'post_order_support']).default('close_order'),
+      stage: z.enum(['hook', 'discovery', 'pitch', 'price_objection', 'trust_objection', 'closing', 'won', 'declined']).default('hook'),
+      nextMove: z.string().max(120).optional(),
+      buyerClues: z
+        .object({
+          occasion: z.string().max(40).optional(),
+          budgetBdt: z.number().optional(),
+          priorityItem: z.string().max(60).optional(),
+          objections: z.array(z.string()).max(4).default([]),
+        })
+        .default({}),
+      turnsWithoutProgress: z.number().int().default(0),
+      closedReason: z.enum(['order_placed', 'explicit_refusal', 'timeout', 'escalated']).nullable().default(null),
+    })
+    .optional(),
 });
 
 export type ConversationAgentState = z.infer<typeof conversationAgentStateSchema>;
@@ -99,6 +116,101 @@ export function formatCompactAgentState(state: ConversationAgentState): string {
   if (state.catalogCursor) compact.catalogCursor = state.catalogCursor;
   if (state.languageOverride) compact.languageOverride = state.languageOverride;
   if (state.lastReplyLanguage) compact.lastReplyLanguage = state.lastReplyLanguage;
+  if (state.salesPlan) compact.salesPlan = state.salesPlan;
 
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : '';
+}
+
+const PLAN_REGEX = /\n?<<PLAN:\s*(.+?)>>/gi;
+
+export type SalesPlan = NonNullable<ConversationAgentState['salesPlan']>;
+
+const VALID_GOALS = new Set(['close_order', 'upsell_combo', 'recover_objection', 'post_order_support']);
+const VALID_STAGES = new Set(['hook', 'discovery', 'pitch', 'price_objection', 'trust_objection', 'closing', 'won', 'declined']);
+const VALID_CLOSED_REASONS = new Set(['order_placed', 'explicit_refusal', 'timeout', 'escalated']);
+
+export function extractSalesPlan(rawText: string): { text: string; plan: Record<string, unknown> | null } {
+  const matches = [...rawText.matchAll(PLAN_REGEX)];
+  if (matches.length === 0) return { text: rawText.trim(), plan: null };
+  const lastMatch = matches[matches.length - 1];
+  const plan: Record<string, unknown> = {};
+  const body = lastMatch[1] ?? '';
+  for (const m of body.matchAll(/(\w+)=("([^"]*)"|'([^']*)'|([^|\s]+))/g)) {
+    const key = m[1];
+    const val = m[3] ?? m[4] ?? m[5];
+    if (key && val !== undefined) plan[key] = val;
+  }
+  const text = rawText.replace(PLAN_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { text, plan: Object.keys(plan).length > 0 ? plan : null };
+}
+
+export function mergeSalesPlan(
+  existing: ConversationAgentState['salesPlan'] | undefined,
+  extracted: Record<string, unknown> | null,
+): SalesPlan {
+  const base: SalesPlan = {
+    goal: existing?.goal ?? 'close_order',
+    stage: existing?.stage ?? 'hook',
+    nextMove: existing?.nextMove,
+    buyerClues: {
+      occasion: existing?.buyerClues?.occasion,
+      budgetBdt: existing?.buyerClues?.budgetBdt,
+      priorityItem: existing?.buyerClues?.priorityItem,
+      objections: [...(existing?.buyerClues?.objections ?? [])],
+    },
+    turnsWithoutProgress: existing?.turnsWithoutProgress ?? 0,
+    closedReason: existing?.closedReason ?? null,
+  };
+  if (!extracted) return base;
+
+  const goalVal = String(extracted.goal ?? '');
+  if (VALID_GOALS.has(goalVal)) base.goal = goalVal as SalesPlan['goal'];
+
+  const stageVal = String(extracted.stage ?? '');
+  const prevStage = base.stage;
+  if (VALID_STAGES.has(stageVal)) base.stage = stageVal as SalesPlan['stage'];
+
+  const nextVal = extracted.next ?? extracted.nextMove;
+  if (typeof nextVal === 'string' && nextVal.trim()) {
+    base.nextMove = nextVal.trim().slice(0, 120);
+  }
+
+  const occasionVal = extracted.occasion;
+  if (typeof occasionVal === 'string' && occasionVal.trim()) {
+    base.buyerClues.occasion = occasionVal.trim().slice(0, 40);
+  }
+
+  const rawBudget = extracted.budget ?? extracted.budgetBdt;
+  if (rawBudget !== undefined) {
+    const parsedBudget = Number(String(rawBudget).replace(/[^\d.]/g, ''));
+    if (Number.isFinite(parsedBudget) && parsedBudget > 0) {
+      base.buyerClues.budgetBdt = parsedBudget;
+    }
+  }
+
+  const priorityVal = extracted.priority ?? extracted.priorityItem;
+  if (typeof priorityVal === 'string' && priorityVal.trim()) {
+    base.buyerClues.priorityItem = priorityVal.trim().slice(0, 60);
+  }
+
+  const objectionVal = extracted.objection ?? extracted.objections;
+  if (typeof objectionVal === 'string' && objectionVal.trim()) {
+    const obj = objectionVal.trim();
+    if (!base.buyerClues.objections.includes(obj)) {
+      base.buyerClues.objections = [...base.buyerClues.objections, obj].slice(-4);
+    }
+  }
+
+  const closedVal = String(extracted.closedReason ?? '');
+  if (VALID_CLOSED_REASONS.has(closedVal)) {
+    base.closedReason = closedVal as SalesPlan['closedReason'];
+  }
+
+  if (base.stage !== prevStage || base.stage === 'won') {
+    base.turnsWithoutProgress = 0;
+  } else if (base.closedReason === null) {
+    base.turnsWithoutProgress += 1;
+  }
+
+  return base;
 }
