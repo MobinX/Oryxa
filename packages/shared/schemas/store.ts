@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { uuidSchema } from '@shared/schemas/base';
+import { sinceSchema, uuidSchema } from '@shared/schemas/base';
 
 /**
  * Named look-and-feel bundles a merchant picks on the Storefront page. The preset
@@ -83,6 +83,7 @@ export const storeProductsQuerySchema = z.object({
   sort: z.enum(['newest', 'price_asc', 'price_desc']).default('newest'),
   min: z.coerce.number().min(0).optional(),
   max: z.coerce.number().min(0).optional(),
+  since: sinceSchema,
 });
 
 export const checkoutItemSchema = z.object({

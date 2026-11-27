@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   createPostInputSchema,
   updatePostInputSchema,
@@ -60,6 +61,7 @@ const listPostsRoute = createRoute({
     query: z.object({
       channelId: z.string().uuid().optional(),
       state: z.enum(['draft', 'scheduled', 'published', 'failed']).optional(),
+      since: sinceSchema,
     }),
   },
   responses: {

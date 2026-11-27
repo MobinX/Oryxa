@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { businesses, companies, customers, orders, products, variants } from '@db/schema';
 import { createCustomerInputSchema, updateCustomerInputSchema } from '@repo/shared';
 import { getBusinessById } from './business';
+import { sinceCondition } from './since';
 
 /**
  * `0300-1234567`, `0300 1234567` and `+92 300 1234567` are the same buyer typing the
@@ -82,11 +83,14 @@ export async function getCustomerById(id: string) {
 
 export async function listCustomers(
   companyId: string,
-  options: { search?: string; limit?: number; offset?: number } = {},
+  options: { search?: string; limit?: number; offset?: number; since?: unknown } = {},
 ) {
-  const { search, limit = 20, offset = 0 } = options;
+  const { search, limit = 20, offset = 0, since } = options;
   const conditions = [eq(customers.companyId, companyId)];
   if (search) conditions.push(ilike(customers.name, `%${search}%`));
+  // Customers have no updatedAt; createdAt is their only timestamp.
+  const sinceFilter = sinceCondition(customers.updatedAt, since);
+  if (sinceFilter) conditions.push(sinceFilter);
 
   const items = await db.query.customers.findMany({
     where: and(...conditions),

@@ -30,6 +30,7 @@ class ApiService {
   /// cookie and uses it for merchant endpoints (playground, catalog, etc.) while
   /// console APIs use the DB session bearer above.
   String? _operatorToken;
+  Future<String?> Function()? _operatorTokenRefresher;
 
   /// Called when a request comes back 401. It returns a fresh ID token, or null when
   /// the session cannot be renewed (the caller then gets the original 401).
@@ -67,6 +68,10 @@ class ApiService {
 
   void setOperatorToken(String? token) {
     _operatorToken = token;
+  }
+
+  void setOperatorTokenRefresher(Future<String?> Function()? refresher) {
+    _operatorTokenRefresher = refresher;
   }
 
   bool _isConsoleApiPath(String path) {
@@ -117,8 +122,27 @@ class ApiService {
   /// Runs one request and, if it is rejected because the Firebase ID token expired,
   /// refreshes the token and retries once. A Firebase token only lives an hour, so
   /// without this every write after the first hour looks like "Unauthorized".
-  Future<http.Response> _send(Future<http.Response> Function() request) async {
+  Future<http.Response> _send(
+    Future<http.Response> Function() request, {
+    String path = '',
+  }) async {
     var response = await request();
+    // Admin playground calls use the operator Firebase token, which also lives
+    // one hour. Refresh it independently from the merchant/console bearer.
+    if (response.statusCode == 401 &&
+        _operatorToken != null &&
+        _operatorTokenRefresher != null &&
+        _bearerFor(path) == _operatorToken) {
+      try {
+        final fresh = await _operatorTokenRefresher!.call();
+        if (fresh != null && fresh.isNotEmpty) {
+          _operatorToken = fresh;
+          response = await request();
+        }
+      } catch (e) {
+        debugPrint('[API OPERATOR REFRESH ERROR] $e');
+      }
+    }
     if (response.statusCode == 401 && _tokenRefresher != null && !_isRefreshing) {
       final refreshed = await _refreshToken();
       if (refreshed) response = await request();
@@ -152,6 +176,7 @@ class ApiService {
     try {
       final res = await _send(
         () => http.get(uri, headers: _headers(path)).timeout(const Duration(seconds: 15)),
+        path: path,
       );
       return _handleResponse(res);
     } catch (e) {
@@ -166,6 +191,7 @@ class ApiService {
     final uri = _buildUri(path);
     final res = await _send(
       () => http.get(uri, headers: _headers(path)).timeout(const Duration(seconds: 30)),
+      path: path,
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException('HTTP ${res.statusCode}', statusCode: res.statusCode);
@@ -200,6 +226,7 @@ class ApiService {
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
+        path: path,
       );
       return _handleResponse(res);
     } catch (e) {
@@ -221,6 +248,7 @@ class ApiService {
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
+        path: path,
       );
       return _handleResponse(res);
     } catch (e) {
@@ -242,6 +270,7 @@ class ApiService {
               body: body != null ? jsonEncode(body) : null,
             )
             .timeout(const Duration(seconds: 25)),
+        path: path,
       );
       return _handleResponse(res);
     } catch (e) {
@@ -257,6 +286,7 @@ class ApiService {
     try {
       final res = await _send(
         () => http.delete(uri, headers: _headers(path)).timeout(const Duration(seconds: 20)),
+        path: path,
       );
       return _handleResponse(res);
     } catch (e) {
@@ -363,7 +393,20 @@ class ApiService {
 
     final client = http.Client();
     try {
-      final response = await client.send(request);
+      var response = await client.send(request);
+      if (response.statusCode == 401 &&
+          _operatorToken != null &&
+          _operatorTokenRefresher != null &&
+          bearer == _operatorToken) {
+        // Consume the error body, then retry once with a fresh operator token.
+        await response.stream.drain();
+        final fresh = await _operatorTokenRefresher!.call();
+        if (fresh != null && fresh.isNotEmpty) {
+          _operatorToken = fresh;
+          request.headers['Authorization'] = 'Bearer $fresh';
+          response = await client.send(request);
+        }
+      }
       if (response.statusCode >= 400) {
         final errText = await response.stream.bytesToString();
         String message = 'Request failed (${response.statusCode})';

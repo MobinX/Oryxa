@@ -19,6 +19,7 @@ class AdminProvider extends ChangeNotifier {
   AdminUser? _adminUser;
   String? _adminToken;
   String? _adminFirebaseToken;
+  String? _adminFirebaseRefreshToken;
   String _sessionType = 'merchant';
   bool _isLoading = false;
   String? _errorMessage;
@@ -44,8 +45,28 @@ class AdminProvider extends ChangeNotifier {
   bool _officialMigrationPending = false;
   bool get officialMigrationPending => _officialMigrationPending;
 
+  bool _wasAuthAuthenticated = false;
+
   AdminProvider({required this.apiService, required this.authService}) {
     apiService.setUnauthorizedHandler(_handleUnauthorized);
+    _wasAuthAuthenticated = authService.isAuthenticated;
+    authService.addListener(_onAuthChanged);
+  }
+
+  /// A merchant session can be dropped while the console credentials are still
+  /// valid on device (expired Firebase token, merchant logout). Never leave the
+  /// console shell in that state with no bearer installed. Only react to a real
+  /// signed-in → signed-out transition so the switch to merchant is not undone.
+  void _onAuthChanged() {
+    final isAuthenticated = authService.isAuthenticated;
+    final sessionWasLost = _wasAuthAuthenticated && !isAuthenticated;
+    _wasAuthAuthenticated = isAuthenticated;
+    if (sessionWasLost &&
+        _sessionType == 'merchant' &&
+        _adminToken != null &&
+        _adminToken!.isNotEmpty) {
+      unawaited(switchToAdmin());
+    }
   }
 
   AdminUser? get adminUser => _adminUser;
@@ -90,19 +111,36 @@ class AdminProvider extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
-    _sessionType = sessionType ?? 'merchant';
+    var sessionType = prefs.getString(ApiConfig.storageKeyUserSessionType);
     final savedToken = prefs.getString(ApiConfig.storageKeyAdminToken);
     final savedUserJson = prefs.getString(ApiConfig.storageKeyAdminUser);
     _adminFirebaseToken = prefs.getString(ApiConfig.storageKeyAdminFirebaseToken);
+    _adminFirebaseRefreshToken =
+        prefs.getString(ApiConfig.storageKeyAdminFirebaseRefreshToken);
 
-    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+    final hasAdminSession =
+        savedToken != null && savedToken.isNotEmpty && savedUserJson != null;
+    final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
+    final hasMerchantSession = merchantToken != null && merchantToken.isNotEmpty;
+
+    // Tapping "Merchant" writes the flag but keeps the console credentials so a
+    // switch back is instant. If there is no merchant session to actually use,
+    // that half-state renders the console shell with the wrong bearer and every
+    // admin call answers 401. Repair it before any request is made.
+    if (hasAdminSession && sessionType != 'admin' && !hasMerchantSession) {
+      sessionType = 'admin';
+      await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
+    }
+    _sessionType = sessionType ?? 'merchant';
+
+    if (hasAdminSession) {
       try {
         _adminToken = savedToken;
-        _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson));
-        if (sessionType == 'admin') {
+        _adminUser = AdminUser.fromJson(jsonDecode(savedUserJson!));
+        if (_sessionType == 'admin') {
           apiService.setToken(savedToken);
           apiService.setOperatorToken(_adminFirebaseToken);
+          apiService.setOperatorTokenRefresher(_refreshOperatorToken);
           // The merchant Firebase refresher must never run on a console bearer.
           apiService.setTokenRefresher(null);
         }
@@ -142,7 +180,9 @@ class AdminProvider extends ChangeNotifier {
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;
+    _adminFirebaseRefreshToken = null;
     apiService.setOperatorToken(null);
+    apiService.setOperatorTokenRefresher(null);
     _mailbox = null;
     _storage = null;
     _emails = [];
@@ -158,12 +198,14 @@ class AdminProvider extends ChangeNotifier {
     await prefs.remove(ApiConfig.storageKeyAdminToken);
     await prefs.remove(ApiConfig.storageKeyAdminUser);
     await prefs.remove(ApiConfig.storageKeyAdminFirebaseToken);
+    await prefs.remove(ApiConfig.storageKeyAdminFirebaseRefreshToken);
     await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
 
     final merchantToken = prefs.getString(ApiConfig.storageKeyToken);
     apiService.setToken(merchantToken);
     apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
+    unawaited(authService.restoreMerchantSession());
     _clearingSession = false;
     notifyListeners();
   }
@@ -191,6 +233,22 @@ class AdminProvider extends ChangeNotifier {
       debugPrint('[AdminProvider] session check failed: $e');
       _setApiError(e);
     }
+  }
+
+  Future<String?> _refreshOperatorToken() async {
+    final refresh = _adminFirebaseRefreshToken;
+    if (refresh == null || refresh.isEmpty) return null;
+    final session = await authService.refreshFirebaseSession(refresh);
+    if (session == null) return null;
+    _adminFirebaseToken = session.idToken;
+    _adminFirebaseRefreshToken = session.refreshToken;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(ApiConfig.storageKeyAdminFirebaseToken, session.idToken);
+    await prefs.setString(
+      ApiConfig.storageKeyAdminFirebaseRefreshToken,
+      session.refreshToken,
+    );
+    return session.idToken;
   }
 
   /// Logs into the console using the admin endpoint. Automatically performs Firebase
@@ -247,6 +305,7 @@ class AdminProvider extends ChangeNotifier {
       // cannot renew a console session and would replace this bearer on 401.
       apiService.setToken(token);
       apiService.setOperatorToken(null);
+      apiService.setOperatorTokenRefresher(null);
       apiService.setTokenRefresher(null);
 
       // Entering the console ends merchant store alerts on this device. Without
@@ -280,13 +339,23 @@ class AdminProvider extends ChangeNotifier {
       fbPassword ??= 'admin123';
 
       try {
-        final fbToken = await authService.signInWithFirebaseCredentials(fbEmail, fbPassword);
-        if (fbToken != null && fbToken.isNotEmpty) {
-          _adminFirebaseToken = fbToken;
-          await prefs.setString(ApiConfig.storageKeyAdminFirebaseToken, fbToken);
+        final fbSession =
+            await authService.signInWithFirebaseCredentials(fbEmail, fbPassword);
+        if (fbSession != null && fbSession.idToken.isNotEmpty) {
+          _adminFirebaseToken = fbSession.idToken;
+          _adminFirebaseRefreshToken = fbSession.refreshToken;
+          await prefs.setString(
+            ApiConfig.storageKeyAdminFirebaseToken,
+            fbSession.idToken,
+          );
+          await prefs.setString(
+            ApiConfig.storageKeyAdminFirebaseRefreshToken,
+            fbSession.refreshToken,
+          );
           // Merchant/playground calls use this operator Firebase token, exactly
           // like the web console's httpOnly oryxa_operator_token cookie.
-          apiService.setOperatorToken(fbToken);
+          apiService.setOperatorToken(fbSession.idToken);
+          apiService.setOperatorTokenRefresher(_refreshOperatorToken);
 
           // Notify web firebase-session if available
           try {
@@ -297,7 +366,7 @@ class AdminProvider extends ChangeNotifier {
                 'Authorization': 'Bearer $token',
                 'Cookie': 'oryxa_console_session=$token',
               },
-              body: jsonEncode({'idToken': fbToken}),
+              body: jsonEncode({'idToken': fbSession.idToken}),
             ).timeout(const Duration(seconds: 5));
           } catch (_) {}
         }
@@ -320,32 +389,39 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> adminLogout() async {
-    // Stop this device's mailbox alerts while the admin token is still valid. The API
-    // logout below also revokes the session on the server, so a failed call here is not
-    // a hole.
+  /// Console sign-out in three visible stages: stop mailbox push, revoke the
+  /// session on the server, then clear local credentials. Import order matters,
+  /// so every stage is awaited before the next one starts.
+  Future<void> adminLogout({void Function(String)? onProgress}) async {
+    final token = _adminToken;
+
+    onProgress?.call('Unsubscribing notification…');
     try {
       await NotificationService.instance
           .unsubscribeAdminMailPush(apiService)
-          .timeout(const Duration(seconds: 6), onTimeout: () {});
+          .timeout(const Duration(seconds: 80));
     } catch (e) {
       debugPrint('[AdminProvider] Mail push unsubscribe skipped: $e');
       _setApiError(e);
     }
 
+    onProgress?.call('Signing out from server…');
     try {
-      if (_adminToken != null) {
+      if (token != null && token.isNotEmpty) {
         await http.post(
           Uri.parse('${ApiConfig.webOrigin(apiService.baseUrl)}${ApiConfig.pathAdminLogout}'),
-          headers: {'Authorization': 'Bearer $_adminToken'},
+          headers: {'Authorization': 'Bearer $token'},
         ).timeout(const Duration(seconds: 5));
       }
     } catch (_) {}
 
+    onProgress?.call('Fully logging out…');
     _adminToken = null;
     _adminUser = null;
     _adminFirebaseToken = null;
+    _adminFirebaseRefreshToken = null;
     apiService.setOperatorToken(null);
+    apiService.setOperatorTokenRefresher(null);
     _sessionType = 'merchant';
     _mailbox = null;
     _storage = null;
@@ -358,6 +434,7 @@ class AdminProvider extends ChangeNotifier {
     await prefs.remove(ApiConfig.storageKeyAdminToken);
     await prefs.remove(ApiConfig.storageKeyAdminUser);
     await prefs.remove(ApiConfig.storageKeyAdminFirebaseToken);
+    await prefs.remove(ApiConfig.storageKeyAdminFirebaseRefreshToken);
     await prefs.setString(ApiConfig.storageKeyUserSessionType, 'merchant');
 
     // Restore merchant token if available
@@ -377,6 +454,7 @@ class AdminProvider extends ChangeNotifier {
     apiService.setToken(merchantToken);
     apiService.setOperatorToken(null);
     authService.attachTokenRefresher();
+    await authService.restoreMerchantSession();
     notifyListeners();
   }
 
@@ -387,6 +465,7 @@ class AdminProvider extends ChangeNotifier {
       await prefs.setString(ApiConfig.storageKeyUserSessionType, 'admin');
       apiService.setToken(_adminToken);
       apiService.setOperatorToken(_adminFirebaseToken);
+      apiService.setOperatorTokenRefresher(_refreshOperatorToken);
       apiService.setTokenRefresher(null);
       unawaited(NotificationService.instance.onUserLoggedOut(apiService));
       unawaited(validateSession());
@@ -400,6 +479,7 @@ class AdminProvider extends ChangeNotifier {
       if (_adminToken != null) {
         apiService.setToken(_adminToken);
         apiService.setOperatorToken(_adminFirebaseToken);
+        apiService.setOperatorTokenRefresher(_refreshOperatorToken);
       }
       apiService.setTokenRefresher(null);
     } else {

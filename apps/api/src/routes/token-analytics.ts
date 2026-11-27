@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import { tokenAnalyticsResponseSchema, errorSchema } from '@repo/shared';
 import { getBusinessTokenAnalytics, listTokenLogs } from '@repo/db/crud/token-analytics';
 import { authMiddleware } from '@api/middleware/auth';
@@ -47,6 +48,7 @@ const listTokenLogsRoute = createRoute({
     params: z.object({ businessId: z.string().uuid() }),
     query: z.object({
       limit: z.string().transform((v) => parseInt(v, 10)).pipe(z.number().positive()).optional().default('50'),
+      since: sinceSchema,
     }),
   },
   responses: {
@@ -59,7 +61,7 @@ const listTokenLogsRoute = createRoute({
 
 tokenAnalyticsRouter.openapi(listTokenLogsRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const { limit } = c.req.valid('query');
-  const logs = await listTokenLogs(businessId, limit);
+  const { limit, since } = c.req.valid('query');
+  const logs = await listTokenLogs(businessId, limit, since);
   return c.json(logs, 200);
 });

@@ -28,6 +28,7 @@ import 'settings/settings_screen.dart';
 import 'storefront/storefront_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/app_feedback.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -618,8 +619,11 @@ class _MainScaffoldState extends State<MainScaffold> {
               title: const Text('Log Out', style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600)),
               onTap: () async {
                 Navigator.pop(context);
-                // Let the FCM unsubscribe finish before the app can be killed.
-                await auth.logout();
+                if (!context.mounted) return;
+                await runWithLogoutProgress(
+                  context,
+                  (setProgress) => auth.logout(onProgress: setProgress),
+                );
               },
             ),
           ],

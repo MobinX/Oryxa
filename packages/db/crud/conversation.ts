@@ -4,6 +4,7 @@ import { conversations, messages } from '@db/schema';
 import type { ConversationAgentState } from '@repo/shared';
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { decryptChannelToken } from '@repo/db/crud/channel';
+import { sinceCondition } from './since';
 
 export async function getOrCreateConversation(
   businessId: string,
@@ -306,12 +307,15 @@ export async function resetStaleConversation(
 
 export async function listConversations(
   businessId: string,
-  options: { state?: string; limit?: number; channelId?: string; offset?: number } = {},
+  options: { state?: string; limit?: number; channelId?: string; offset?: number; since?: unknown } = {},
 ) {
-  const { state, limit = 20, channelId, offset = 0 } = options;
+  const { state, limit = 20, channelId, offset = 0, since } = options;
   const conditions = [eq(conversations.businessId, businessId), isNull(conversations.deletedAt)];
   if (state) conditions.push(eq(conversations.lastMessageState, state as 'pending'));
   if (channelId) conditions.push(eq(conversations.channelId, channelId));
+  // No updatedAt: lastStateAt is the column that moves when a thread actually changes.
+  const sinceFilter = sinceCondition(conversations.updatedAt, since);
+  if (sinceFilter) conditions.push(sinceFilter);
 
   return db.query.conversations.findMany({
     where: and(...conditions),
@@ -358,14 +362,16 @@ export async function setConversationAutoPilot(
   return row ?? null;
 }
 
-export async function listMessages(conversationId: string, businessId: string, limit = 50) {
+export async function listMessages(conversationId: string, businessId: string, limit = 50, since?: unknown) {
   const conv = await db.query.conversations.findFirst({
     where: and(eq(conversations.id, conversationId), eq(conversations.businessId, businessId), isNull(conversations.deletedAt)),
   });
   if (!conv) return null;
 
+  // Messages are immutable rows; `time` is their only timestamp and doubles as last-change.
+  const sinceFilter = sinceCondition(messages.updatedAt, since);
   const msgs = await db.query.messages.findMany({
-    where: and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)),
+    where: and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt), sinceFilter),
     // Newest *window*, oldest-first output. `limit` without a direction keeps the oldest N
     // rows, so in a thread longer than the page the reply that just arrived — and every
     // message after the first 50 — can never be fetched at all.

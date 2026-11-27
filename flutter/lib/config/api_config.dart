@@ -36,6 +36,7 @@ class ApiConfig {
   static const String storageKeyAdminToken = 'admin_token';
   static const String storageKeyAdminUser = 'admin_user';
   static const String storageKeyAdminFirebaseToken = 'admin_firebase_token';
+  static const String storageKeyAdminFirebaseRefreshToken = 'admin_firebase_refresh_token';
 
   /// Origin of the web dashboard for a given API base URL. `…/api/v1` becomes the host
   /// the dashboard is served from; anything unparseable falls back to production.

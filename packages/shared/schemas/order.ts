@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { orderStateSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { orderStateSchema, sinceSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const createOrderInputSchema = z.object({
   businessId: uuidSchema,
@@ -45,6 +45,7 @@ export const createOrderOutputSchema = z.object({
 export const listOrdersQuerySchema = z.object({
   state: orderStateSchema.optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
+  since: sinceSchema,
 });
 
 export const orderListItemSchema = z.object({

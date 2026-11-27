@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   assignPlanInputSchema,
   billingOverviewSchema,
@@ -148,7 +149,7 @@ const listNotificationsRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: {
     params,
-    query: z.object({ unread: z.enum(['true', 'false']).optional() }),
+    query: z.object({ unread: z.enum(['true', 'false']).optional(), since: sinceSchema }),
   },
   responses: {
     200: {
@@ -162,7 +163,7 @@ const listNotificationsRoute = createRoute({
 billingRouter.openapi(listNotificationsRoute, async (c) => {
   const businessId = c.req.param('businessId');
   const [items, unreadCount] = await Promise.all([
-    listNotifications(businessId),
+    listNotifications(businessId, 50, c.req.valid('query').since),
     countUnreadNotifications(businessId),
   ]);
   const onlyUnread = c.req.valid('query').unread === 'true';

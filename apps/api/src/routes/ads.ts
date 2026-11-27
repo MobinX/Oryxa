@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
 import {
@@ -89,6 +90,7 @@ const adsChannelsRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ businessId: z.string().uuid() }),
+    query: z.object({ since: sinceSchema }),
   },
   responses: {
     200: {
@@ -113,7 +115,7 @@ const adsChannelsRoute = createRoute({
 
 adsRouter.openapi(adsChannelsRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const channels = await listAdsChannels(businessId);
+  const channels = await listAdsChannels(businessId, c.req.valid('query').since);
   return c.json({ channels }, 200);
 });
 

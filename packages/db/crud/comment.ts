@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { commentThreads, comments } from '@db/schema';
 
 import { decryptChannelToken } from '@repo/db/crud/channel';
+import { sinceCondition } from './since';
 
 export async function getOrCreateCommentThreadWithFlag(
   businessId: string,
@@ -320,12 +321,15 @@ export async function checkPendingComments(threadId: string): Promise<boolean> {
  * agent sees when processing the next pending comment — newer pending comments
  * are excluded so history stays clean.
  */
-export async function listDoneCommentHistory(threadId: string) {
+export async function listDoneCommentHistory(threadId: string, since?: unknown) {
+  // A comment's state may flip to done, but `time` is the only timestamp it carries.
+  const sinceFilter = sinceCondition(comments.updatedAt, since);
   const history = await db.query.comments.findMany({
     where: and(
       eq(comments.commentThreadId, threadId),
       eq(comments.state, 'done'),
       isNull(comments.deletedAt),
+      sinceFilter,
     ),
     orderBy: [desc(comments.time)],
     limit: 8,
@@ -448,9 +452,10 @@ export async function persistPageReply(opts: {
   return { threadId };
 }
 
-export async function listComments(threadId: string) {
+export async function listComments(threadId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(comments.updatedAt, since);
   return db.query.comments.findMany({
-    where: and(eq(comments.commentThreadId, threadId), isNull(comments.deletedAt)),
+    where: and(eq(comments.commentThreadId, threadId), isNull(comments.deletedAt), sinceFilter),
     orderBy: [asc(comments.time)],
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_patcher/flutter_patcher.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'config/app_theme.dart';
@@ -25,6 +26,10 @@ import 'widgets/app_feedback.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inter ships inside the app assets. Fail loudly in debug if a weight is
+  // missing instead of silently fetching a font from the network.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // A build failure in a pushed screen must leave a trace the merchant can read;
   // the Diagnostics screen shows this log and streams directly to Axiom.
@@ -69,11 +74,12 @@ void main() async {
   final patchService = PatchService();
   final facebookConnectService = FacebookConnectService(apiService: apiService);
 
-  // Fast parallel load of persisted auth sessions from local disk
-  await Future.wait([
-    authService.init(),
-    adminProvider.init(),
-  ]);
+  // Admin state must be normalized first. A session-type flag left as
+  // "merchant" by the switch shortcut (or by an older build) otherwise lets
+  // AuthService restore a merchant bearer over the console key, which renders
+  // the console shell with credentials the API rejects.
+  await adminProvider.init();
+  await authService.init();
 
   runApp(
     MultiProvider(
@@ -147,10 +153,6 @@ class AuthGate extends StatelessWidget {
 
     if (auth.isAuthenticated) {
       return const MainScaffold();
-    }
-
-    if (admin.isAuthenticated) {
-      return const AdminScaffold();
     }
 
     return const LoginScreen();

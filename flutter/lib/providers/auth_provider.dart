@@ -64,8 +64,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
-    await authService.logout();
+  Future<void> logout({void Function(String)? onProgress}) async {
+    await authService.logout(onProgress: onProgress);
     notifyListeners();
   }
 }

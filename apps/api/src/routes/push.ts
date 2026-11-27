@@ -7,6 +7,23 @@ import { registerPushToken, unregisterPushToken, unregisterTokenFromAll } from '
 
 export const pushRouter = new OpenAPIHono();
 
+/**
+ * Logout cleanup must work after the Firebase bearer expires. This lives in its
+ * own router so it can be mounted before every `/:businessId/*` router — those
+ * wildcards match even single-segment paths and would otherwise answer 401
+ * before this public route is reached.
+ */
+export const publicPushRouter = new OpenAPIHono();
+publicPushRouter.post('/push-unsubscribe', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  if (token.length < 20 || token.length > 500) {
+    return c.json({ error: 'A device token is required' }, 400);
+  }
+  await unregisterTokenFromAll(token);
+  return c.json({ unsubscribed: true }, 200);
+});
+
 const mobileLogsRoute = createRoute({
   method: 'post',
   path: '/mobile/logs',
@@ -30,7 +47,7 @@ const mobileLogsRoute = createRoute({
   },
 });
 
-pushRouter.openapi(mobileLogsRoute, async (c) => {
+publicPushRouter.openapi(mobileLogsRoute, async (c) => {
   const { events } = c.req.valid('json');
   for (const ev of events) {
     const isError = ev.level === 'error' || ev.level === 'critical' || !!ev.error;
@@ -73,22 +90,6 @@ pushRouter.use('/push/unsubscribe', authMiddleware);
 pushRouter.openapi(globalUnsubscribeRoute, async (c) => {
   const { token } = c.req.valid('json');
   await unregisterTokenFromAll(token.trim());
-  return c.json({ unsubscribed: true }, 200);
-});
-
-/**
- * Logout cleanup that must work after the Firebase token has expired. The FCM
- * registration token is high-entropy and device-local, so presenting it is enough
- * to remove that one registration; without this, a dead session leaves notices
- * arriving to a logged-out app.
- */
-pushRouter.post('/push-unsubscribe', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
-  const token = typeof body.token === 'string' ? body.token.trim() : '';
-  if (token.length < 20 || token.length > 500) {
-    return c.json({ error: 'A device token is required' }, 400);
-  }
-  await unregisterTokenFromAll(token);
   return c.json({ unsubscribed: true }, 200);
 });
 

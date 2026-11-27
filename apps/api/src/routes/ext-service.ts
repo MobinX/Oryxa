@@ -148,7 +148,7 @@ extServiceRouter.get('/ext-service/search', async (c) => {
 extServiceRouter.get('/ext-service/all', async (c) => {
   const parsed = externalServiceListQuerySchema.safeParse(c.req.query());
   if (!parsed.success) return c.json(badRequest('Invalid query', parsed.error.flatten()), 400);
-  const result = await listExternalServices(parsed.data.page, parsed.data.limit);
+  const result = await listExternalServices(parsed.data.page, parsed.data.limit, parsed.data.since);
   return c.json({
     items: result.items.map(serviceJson),
     page: result.page,

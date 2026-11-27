@@ -6,6 +6,10 @@ import 'package:http/http.dart' as http;
 
 import 'diagnostics_service.dart';
 
+/// Hashing a multi-megabyte patch on the UI isolate freezes the app during an
+/// update check. `compute` moves it to a background isolate (Dart-only, no plugin).
+String verifyPatchMd5(List<int> bytes) => md5.convert(bytes).toString();
+
 class PatchService extends ChangeNotifier {
   static const String defaultWorkerUrl =
       'https://oryxa-flutter-patch-worker.mobin-devx.workers.dev';
@@ -158,7 +162,7 @@ class PatchService extends ChangeNotifier {
 
       // Verify MD5 checksum
       if (expectedMd5.isNotEmpty) {
-        final computedMd5 = md5.convert(bytes).toString();
+        final computedMd5 = await compute(verifyPatchMd5, bytes);
         if (computedMd5.toLowerCase() != expectedMd5.toLowerCase()) {
           _log('Security Error: MD5 mismatch! expected=$expectedMd5, computed=$computedMd5');
           appDiagnostics.recordMessage(

@@ -5,7 +5,7 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const KEY_BYTES = 64;
 const SESSION_PREFIX = 'adm_';
-export const CONSOLE_SESSION_MS = 12 * 60 * 60 * 1000;
+export const CONSOLE_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function scryptAsync(password: string, salt: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {

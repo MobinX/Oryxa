@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { sinceSchema } from '@api/lib/since';
 import {
   createCompanyInputSchema,
   updateCompanyInputSchema,
@@ -59,6 +60,7 @@ const listCompaniesRoute = createRoute({
   path: '/',
   tags: ['Companies'],
   security: [{ bearerAuth: [] }],
+  request: { query: z.object({ since: sinceSchema }) },
   responses: {
     200: { content: { 'application/json': { schema: listCompaniesOutputSchema } }, description: 'Companies' },
   },
@@ -66,7 +68,7 @@ const listCompaniesRoute = createRoute({
 
 companiesRouter.openapi(listCompaniesRoute, async (c) => {
   const user = c.get('user');
-  const companies = await listCompaniesByUserId(user.id);
+  const companies = await listCompaniesByUserId(user.id, c.req.valid('query').since);
   return c.json({
     companies: companies.map(serializeCompany),
     totalCount: companies.length,
@@ -141,7 +143,10 @@ const companyBusinessesRoute = createRoute({
   path: '/{id}/businesses',
   tags: ['Companies'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ id: z.string().uuid() }) },
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+    query: z.object({ since: sinceSchema }),
+  },
   responses: {
     200: {
       content: {
@@ -158,7 +163,7 @@ const companyBusinessesRoute = createRoute({
 
 companiesRouter.openapi(companyBusinessesRoute, async (c) => {
   const id = c.req.param('id');
-  const businesses = await listCompanyBusinesses(id);
+  const businesses = await listCompanyBusinesses(id, c.req.valid('query').since);
   return c.json({ businesses: businesses.map((b) => ({ id: b.id, name: b.name })) });
 });
 

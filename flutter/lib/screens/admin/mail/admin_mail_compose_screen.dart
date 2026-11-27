@@ -1,0 +1,529 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
+import 'package:provider/provider.dart';
+
+import '../../../config/app_theme.dart';
+import '../../../providers/admin_provider.dart';
+import '../../../widgets/email_html_view.dart';
+
+String _escapeHtml(String text) => text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+String _inlineMarkdown(String text) {
+  var html = _escapeHtml(text);
+  html = html.replaceAllMapped(
+    RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
+    (m) => '<a href="${m.group(2)}">${m.group(1)}</a>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'__(.+?)__'),
+    (m) => '<b>${m.group(1)}</b>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'\*([^*]+)\*'),
+    (m) => '<i>${m.group(1)}</i>',
+  );
+  html = html.replaceAllMapped(
+    RegExp(r'`([^`]+)`'),
+    (m) => '<code>${m.group(1)}</code>',
+  );
+  return html;
+}
+
+/// A small Flutter-only Markdown-to-HTML converter for the compose preview and
+/// the HTML part sent to the mail worker.
+String mailMarkdownToHtml(String markdown) {
+  final out = <String>[];
+  var inList = false;
+  void closeList() {
+    if (inList) {
+      out.add('</ul>');
+      inList = false;
+    }
+  }
+
+  for (final line in markdown.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('- ')) {
+      if (!inList) {
+        out.add('<ul>');
+        inList = true;
+      }
+      out.add('<li>${_inlineMarkdown(trimmed.substring(2))}</li>');
+      continue;
+    }
+    closeList();
+    if (trimmed.isEmpty) {
+      out.add('<br/>');
+    } else if (trimmed.startsWith('### ')) {
+      out.add('<h3>${_inlineMarkdown(trimmed.substring(4))}</h3>');
+    } else if (trimmed.startsWith('## ')) {
+      out.add('<h2>${_inlineMarkdown(trimmed.substring(3))}</h2>');
+    } else if (trimmed.startsWith('# ')) {
+      out.add('<h1>${_inlineMarkdown(trimmed.substring(2))}</h1>');
+    } else {
+      out.add('<p>${_inlineMarkdown(trimmed)}</p>');
+    }
+  }
+  closeList();
+  return out.join('\n');
+}
+
+String mailMarkdownToPlainText(String markdown) {
+  var text = markdown
+      .replaceAllMapped(
+        RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
+        (m) => '${m.group(1)} (${m.group(2)})',
+      )
+      .replaceAll('__', '')
+      .replaceAll('`', '')
+      .replaceAll('*', '');
+  text = text.replaceAllMapped(RegExp(r'(?m)^\s*#+\s*'), (_) => '');
+  text = text.replaceAllMapped(RegExp(r'(?m)^\s*-\s+'), (_) => '');
+  return text.trim();
+}
+
+class AdminMailComposeScreen extends StatefulWidget {
+  final String? replyTo;
+  final String? initialSubject;
+  final String? initialBody;
+  final String? replyId;
+  final String? forwardId;
+
+  const AdminMailComposeScreen({
+    super.key,
+    this.replyTo,
+    this.initialSubject,
+    this.initialBody,
+    this.replyId,
+    this.forwardId,
+  });
+
+  @override
+  State<AdminMailComposeScreen> createState() => _AdminMailComposeScreenState();
+}
+
+class _AdminMailComposeScreenState extends State<AdminMailComposeScreen> {
+  final _to = TextEditingController();
+  final _cc = TextEditingController();
+  final _bcc = TextEditingController();
+  final _subject = TextEditingController();
+  final _body = TextEditingController();
+  final List<Map<String, dynamic>> _uploads = [];
+  final List<String> _attachmentNames = [];
+  final List<MapEntry<String, String>> _links = [];
+  bool _isSending = false;
+  bool _isPicking = false;
+  bool _showPreview = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.replyTo != null) _to.text = widget.replyTo!;
+    if (widget.initialSubject != null) _subject.text = widget.initialSubject!;
+    if (widget.initialBody != null) _body.text = widget.initialBody!;
+  }
+
+  @override
+  void dispose() {
+    _to.dispose();
+    _cc.dispose();
+    _bcc.dispose();
+    _subject.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  List<String> _addresses(String raw) => raw
+      .split(RegExp(r'[,;]'))
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  void _wrapSelection(String marker) {
+    final selected = _body.selection;
+    final text = _body.text;
+    final start = selected.start;
+    final end = selected.end;
+    final inner = text.substring(start, end);
+    final replacement = '$marker$inner$marker';
+    _body.text = '${text.substring(0, start)}$replacement${text.substring(end)}';
+    _body.selection = TextSelection(
+      baseOffset: start + marker.length,
+      extentOffset: start + marker.length + inner.length,
+    );
+    setState(() => _showPreview = false);
+  }
+
+  void _prefixLine(String marker) {
+    final cursor = _body.selection.start;
+    final lineStart = _body.text.lastIndexOf('\n', cursor - 1) + 1;
+    _body.text = _body.text.substring(0, lineStart) +
+        marker +
+        _body.text.substring(lineStart);
+    _body.selection = TextSelection.collapsed(offset: cursor + marker.length);
+    setState(() => _showPreview = false);
+  }
+
+  Future<void> _addAttachment(Map<String, dynamic> signed, String filename) async {
+    setState(() {
+      _uploads.add(signed);
+      _attachmentNames.add(filename);
+    });
+  }
+
+  Future<void> _pickPhoto() async {
+    setState(() => _isPicking = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 90,
+      );
+      if (picked == null) return;
+      Uint8List bytes = await picked.readAsBytes();
+
+      final edited = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(
+          builder: (_) => ProImageEditor.memory(
+            bytes,
+            callbacks: ProImageEditorCallbacks(
+              onImageEditingComplete: (Uint8List result) async {
+                Navigator.of(context).pop(result);
+              },
+            ),
+            configs: const ProImageEditorConfigs(),
+          ),
+        ),
+      );
+      if (edited != null) bytes = edited;
+
+      await _uploadBytes(
+        bytes: bytes,
+        filename: picked.name,
+        contentType: 'image/jpeg',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not attach photo: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  Future<void> _addLink() async {
+    final label = TextEditingController();
+    final url = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Attach a link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: label,
+              decoration: const InputDecoration(
+                labelText: 'Label',
+                hintText: 'e.g. Invoice PDF',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: url,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'URL',
+                hintText: 'https://…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true && mounted) {
+      final link = url.text.trim();
+      if (link.isEmpty) return;
+      final name = label.text.trim().isEmpty ? link : label.text.trim();
+      setState(() => _links.add(MapEntry(name, link)));
+    }
+  }
+
+  Future<void> _uploadBytes({
+    required Uint8List bytes,
+    required String filename,
+    required String contentType,
+  }) async {
+    final admin = context.read<AdminProvider>();
+    final signed = await admin.signMailAttachment(
+      filename: filename,
+      contentType: contentType,
+      size: bytes.length,
+    );
+    await admin.apiService.putBytes(
+      signed['uploadUrl'].toString(),
+      bytes,
+      contentType,
+    );
+    if (!mounted) return;
+    await _addAttachment(signed, signed['filename']?.toString() ?? filename);
+  }
+
+  String _composeMarkdown() {
+    if (_links.isEmpty) return _body.text;
+    final links = _links.map((e) => '[${e.key}](${e.value})').join('\n');
+    return '${_body.text}\n\n$links';
+  }
+
+  Future<void> _send() async {
+    final recipients = _addresses(_to.text);
+    final isForward = widget.forwardId != null;
+    final isReply = widget.replyId != null;
+    if (recipients.isEmpty && !isReply && !isForward) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a recipient')),
+      );
+      return;
+    }
+    final markdown = _composeMarkdown();
+    final html = mailMarkdownToHtml(markdown);
+    final plain = mailMarkdownToPlainText(markdown);
+    if (plain.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please write a message')),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
+    try {
+      final admin = context.read<AdminProvider>();
+      if (isReply) {
+        await admin.replyEmail(
+          widget.replyId!,
+          text: plain,
+          html: html,
+          cc: _addresses(_cc.text),
+          bcc: _addresses(_bcc.text),
+          uploadedAttachments: _uploads,
+        );
+      } else if (isForward) {
+        await admin.forwardEmail(
+          widget.forwardId!,
+          to: recipients,
+          cc: _addresses(_cc.text),
+          bcc: _addresses(_bcc.text),
+          text: plain,
+          uploadedAttachments: _uploads,
+        );
+      } else {
+        await admin.sendEmail(
+          to: recipients,
+          cc: _addresses(_cc.text),
+          bcc: _addresses(_bcc.text),
+          subject: _subject.text.trim(),
+          text: plain,
+          html: html,
+          uploadedAttachments: _uploads,
+        );
+      }
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController controller, {bool enabled = true}) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isForward = widget.forwardId != null;
+    final isReply = widget.replyId != null;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.forwardId != null
+              ? 'Forward message'
+              : widget.replyId != null
+                  ? 'Reply'
+                  : 'Compose message',
+        ),
+        actions: [
+          IconButton(
+            onPressed: () => setState(() => _showPreview = !_showPreview),
+            icon: Icon(_showPreview ? Icons.edit : Icons.visibility),
+            tooltip: _showPreview ? 'Edit' : 'Preview',
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: ElevatedButton.icon(
+              onPressed: _isSending ? null : _send,
+              icon: const Icon(Icons.send, size: 16),
+              label: Text(_isSending ? 'Sending…' : 'Send'),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        bottom: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Column(
+            children: [
+              _field('To', _to, enabled: !isReply && !isForward),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _field('Cc', _cc)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _field('Bcc', _bcc)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _field('Subject', _subject, enabled: !isForward && !isReply),
+              const SizedBox(height: 8),
+              if (!_showPreview)
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    IconButton.outlined(
+                      onPressed: () => _wrapSelection('__'),
+                      icon: const Text('B', style: TextStyle(fontWeight: FontWeight.bold)),
+                      tooltip: 'Bold',
+                    ),
+                    IconButton.outlined(
+                      onPressed: () => _wrapSelection('*'),
+                      icon: const Text('I', style: TextStyle(fontStyle: FontStyle.italic)),
+                      tooltip: 'Italic',
+                    ),
+                    IconButton.outlined(
+                      onPressed: () => _wrapSelection('`'),
+                      icon: const Icon(Icons.code, size: 18),
+                      tooltip: 'Code',
+                    ),
+                    IconButton.outlined(
+                      onPressed: () => _prefixLine('## '),
+                      icon: const Icon(Icons.title, size: 18),
+                      tooltip: 'Heading',
+                    ),
+                    IconButton.outlined(
+                      onPressed: () => _prefixLine('- '),
+                      icon: const Icon(Icons.format_list_bulleted, size: 18),
+                      tooltip: 'Bullet list',
+                    ),
+                    IconButton.outlined(
+                      onPressed: _pickPhoto,
+                      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                      tooltip: 'Edit & attach photo',
+                    ),
+                    IconButton.outlined(
+                      onPressed: _addLink,
+                      icon: const Icon(Icons.link, size: 18),
+                      tooltip: 'Attach link',
+                    ),
+                  ],
+                ),
+              if (_isPicking)
+                const LinearProgressIndicator(minHeight: 2),
+              if (_attachmentNames.isNotEmpty)
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _attachmentNames.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) => Chip(
+                      avatar: const Icon(Icons.attachment, size: 16),
+                      label: Text(_attachmentNames[index], overflow: TextOverflow.ellipsis),
+                      onDeleted: () => setState(() {
+                        _uploads.removeAt(index);
+                        _attachmentNames.removeAt(index);
+                      }),
+                    ),
+                  ),
+                ),
+              if (_links.isNotEmpty)
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _links.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) => Chip(
+                      avatar: const Icon(Icons.link, size: 16),
+                      label: Text(_links[index].key, overflow: TextOverflow.ellipsis),
+                      onDeleted: () => setState(() => _links.removeAt(index)),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: _showPreview
+                    ? SingleChildScrollView(
+                        child: EmailHtmlView(
+                          html: mailMarkdownToHtml(_composeMarkdown()),
+                        ),
+                      )
+                    : TextField(
+                        controller: _body,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 14,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Write a message… Markdown formatting is supported.',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

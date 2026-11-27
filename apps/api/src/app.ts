@@ -18,7 +18,7 @@ import { tokenAnalyticsRouter } from '@api/routes/token-analytics';
 import { plansRouter } from '@api/routes/plans';
 import { chatRouter } from '@api/routes/chat';
 import { billingRouter } from '@api/routes/billing';
-import { pushRouter } from '@api/routes/push';
+import { publicPushRouter, pushRouter } from '@api/routes/push';
 import { messengerNotificationsRouter } from '@api/routes/messenger-notifications';
 import { adminChannelsRouter } from '@api/routes/admin-channels';
 import { adminOfficialRouter } from '@api/routes/admin-official';
@@ -98,6 +98,10 @@ app.route('/api/v1', visitsRouter);
 // Same reason, and it has to be *before* the routers below: their
 // `use('/:businessId/*')` matches a single-segment path too, so a price list mounted
 // after them would answer 401 to the shoppers who have not signed up yet.
+// Public logout cleanup. Must be before every `/:businessId/*` router below:
+// those wildcards match a single segment such as "push-unsubscribe" and would
+// answer 401 before a later route is considered.
+app.route('/api/v1', publicPushRouter);
 app.route('/api/v1', plansRouter);
 // OAuth callback must register before /:businessId/* routers (otherwise "auth" matches as businessId)
 app.route('/api/v1', facebookCallbackRouter);

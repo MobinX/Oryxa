@@ -8,6 +8,7 @@ import {
   type SubagentDefinition,
   type SubagentKey,
 } from '@repo/shared';
+import { sinceCondition } from './since';
 
 /**
  * The hidden helper agents' instructions, read from the database rather than a code constant.
@@ -72,8 +73,12 @@ export async function getSubagent(key: string): Promise<SubagentRow | null> {
 }
 
 /** Every registered subagent, in a stable order, for the console's list. */
-export async function listSubagents(): Promise<SubagentRow[]> {
-  const rows = await db.query.subagents.findMany({ orderBy: [asc(subagents.key)] });
+export async function listSubagents(since?: unknown): Promise<SubagentRow[]> {
+  const sinceFilter = sinceCondition(subagents.updatedAt, since);
+  const rows = await db.query.subagents.findMany({
+    where: sinceFilter,
+    orderBy: [asc(subagents.key)],
+  });
   const known = rows
     .map((row) => {
       const definition = subagentDefinition(row.key);

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../config/app_theme.dart';
 import '../../providers/admin_provider.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/app_feedback.dart';
 import '../auth/login_screen.dart';
 import '../main_scaffold.dart';
 import 'channels/admin_channels_screen.dart';
@@ -475,7 +476,11 @@ class _AdminScaffoldState extends State<AdminScaffold> with WidgetsBindingObserv
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       onTap: () async {
                         Navigator.of(context).pop();
-                        await admin.adminLogout();
+                        if (!context.mounted) return;
+                        await runWithLogoutProgress(
+                          context,
+                          (setProgress) => admin.adminLogout(onProgress: setProgress),
+                        );
                         if (context.mounted) {
                           Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(builder: (_) => const LoginScreen()),

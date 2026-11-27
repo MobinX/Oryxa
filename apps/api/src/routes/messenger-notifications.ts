@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { authMiddleware } from '@api/middleware/auth';
 import { businessAccessMiddleware } from '@api/middleware/business';
+import { parseSince } from '@repo/db/crud/since';
 import {
   ensureMessengerNotification,
   getMessengerNotificationOverview,
@@ -18,7 +19,7 @@ messengerNotificationsRouter.use('/:businessId/*', authMiddleware, businessAcces
  */
 messengerNotificationsRouter.get('/:businessId/messenger-notifications', async (c) => {
   const businessId = c.req.param('businessId');
-  const overview = await getMessengerNotificationOverview(businessId);
+  const overview = await getMessengerNotificationOverview(businessId, parseSince(c.req.query('since')));
   return c.json({
     code: overview.code,
     users: overview.users.map((user) => ({

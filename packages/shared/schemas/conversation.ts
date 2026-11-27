@@ -1,9 +1,10 @@
 import { z } from '@hono/zod-openapi';
-import { messageFromSchema, messageStateSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
+import { messageFromSchema, messageStateSchema, sinceSchema, timestampSchema, uuidSchema } from '@shared/schemas/base';
 
 export const listConversationsQuerySchema = z.object({
   state: messageStateSchema.optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),
+  since: sinceSchema,
   // One page of a single channel's threads. Without it a caller that only wants one Page's
   // conversations has to take the whole store's newest N and filter afterwards — which silently
   // returns nothing once a busier store's other threads fill the page.
@@ -184,6 +185,7 @@ export const messageSchema = z.object({
 
 export const listMessagesQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(50),
+  since: sinceSchema,
 });
 
 export const createMessageInputSchema = z.object({

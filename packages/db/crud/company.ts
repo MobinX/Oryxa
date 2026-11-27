@@ -3,6 +3,7 @@ import { db } from '@db/client';
 import { companies, businesses } from '@db/schema';
 import { createCompanyInputSchema, updateCompanyInputSchema } from '@repo/shared';
 import { getBusinessById } from './business';
+import { sinceCondition } from './since';
 
 export async function createCompany(userId: string, input: unknown) {
   const parsed = createCompanyInputSchema.parse(input);
@@ -19,9 +20,11 @@ export async function getCompanyById(id: string) {
   });
 }
 
-export async function listCompaniesByUserId(userId: string) {
+export async function listCompaniesByUserId(userId: string, since?: unknown) {
+  // Companies are append-only; createdAt is their last-change instant.
+  const sinceFilter = sinceCondition(companies.updatedAt, since);
   return db.query.companies.findMany({
-    where: eq(companies.userId, userId),
+    where: and(eq(companies.userId, userId), sinceFilter),
     orderBy: [desc(companies.createdAt)],
   });
 }
@@ -48,9 +51,10 @@ export async function verifyCompanyOwnership(companyId: string, userId: string) 
   return company?.userId === userId;
 }
 
-export async function listCompanyBusinesses(companyId: string) {
+export async function listCompanyBusinesses(companyId: string, since?: unknown) {
+  const sinceFilter = sinceCondition(businesses.updatedAt, since);
   return db.query.businesses.findMany({
-    where: and(eq(businesses.companyId, companyId), isNull(businesses.deletedAt)),
+    where: and(eq(businesses.companyId, companyId), isNull(businesses.deletedAt), sinceFilter),
   });
 }
 

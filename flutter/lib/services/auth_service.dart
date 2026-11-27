@@ -48,6 +48,35 @@ class AuthService extends ChangeNotifier {
     apiService.setTokenRefresher(_refreshIdToken);
   }
 
+  /// Console startup deliberately skips merchant restore so a stale merchant
+  /// token cannot replace the console bearer. When the operator switches to the
+  /// merchant app, rehydrate that identity from prefs before AuthGate rebuilds.
+  Future<void> restoreMerchantSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(ApiConfig.storageKeyToken);
+    _refreshToken = prefs.getString(ApiConfig.storageKeyRefreshToken);
+    final expiryMillis = prefs.getInt(ApiConfig.storageKeyTokenExpiry);
+    _tokenExpiry = expiryMillis == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(expiryMillis);
+    final userJson = prefs.getString(ApiConfig.storageKeyUser);
+    if (userJson != null) {
+      try {
+        _currentUser = UserModel.fromJson(jsonDecode(userJson));
+      } catch (e) {
+        debugPrint('[AuthService] error restoring merchant user: $e');
+      }
+    }
+    _selectedBusinessId = prefs.getString(ApiConfig.storageKeySelectedBusiness);
+    if (_token != null && _token!.isNotEmpty) {
+      apiService.setToken(_token);
+    }
+    notifyListeners();
+    if (_isExpired && _refreshToken != null && _refreshToken!.isNotEmpty) {
+      unawaited(_refreshIdToken());
+    }
+  }
+
   UserModel? get currentUser => _currentUser;
   String? get token => _token;
   String? get selectedBusinessId => _selectedBusinessId;
@@ -213,11 +242,11 @@ class AuthService extends ChangeNotifier {
 
   /// Signs in with Google via the embedded Chrome page. The page returns a Firebase ID
   /// token (and, when available, a refresh token) through a custom scheme redirect.
-  /// Always logs out from any existing session first to allow fresh account selection.
+  /// The webpage decides whether to continue with the current account or sign out
+  /// first, so the app keeps its session until a result comes back.
   Future<UserModel> loginWithGoogle() async {
-    appDiagnostics.recordMessage('Google sign-in', 'Logging out existing session before Google sign-in');
+    appDiagnostics.recordMessage('Google sign-in', 'Opening Google sign-in page');
     try {
-      await logout();
       final result = await _googleAuth.signIn();
       return await _applyGoogleResult(result);
     } catch (e) {
@@ -252,13 +281,50 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Signs into Firebase using explicit credentials (e.g. admin fallback compatibility).
-  Future<String?> signInWithFirebaseCredentials(String email, String password) async {
+  Future<FirebaseSession?> signInWithFirebaseCredentials(
+    String email,
+    String password,
+  ) async {
     try {
       final apiKey = await _resolveFirebaseApiKey();
-      final session = await _signInWithPassword(apiKey, email.trim(), password);
-      return session.idToken;
+      return await _signInWithPassword(apiKey, email.trim(), password);
     } catch (e) {
       debugPrint('[AuthService] Firebase compatibility sign-in warning: $e');
+      return null;
+    }
+  }
+
+  /// Refreshes the operator Firebase session without touching merchant auth.
+  /// ID tokens live one hour; the refresh token keeps the playground usable for
+  /// the full 30-day console session.
+  Future<FirebaseSession?> refreshFirebaseSession(String refreshToken) async {
+    if (refreshToken.isEmpty) return null;
+    try {
+      final apiKey = await _resolveFirebaseApiKey();
+      final res = await http
+          .post(
+            Uri.parse('$_secureTokenUrl?key=$apiKey'),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: {
+              'grant_type': 'refresh_token',
+              'refresh_token': refreshToken,
+            },
+          )
+          .timeout(const Duration(seconds: 20));
+      final body = _decodeJson(res.body);
+      if (res.statusCode < 200 || res.statusCode >= 300) return null;
+      final idToken = body['id_token']?.toString();
+      if (idToken == null || idToken.isEmpty) return null;
+      return FirebaseSession(
+        idToken: idToken,
+        refreshToken: (body['refresh_token']?.toString() ?? refreshToken),
+        expiresIn: int.tryParse(body['expires_in']?.toString() ?? '') ?? 3600,
+      );
+    } catch (e) {
+      debugPrint('[AuthService] operator token refresh failed: $e');
       return null;
     }
   }
@@ -320,7 +386,7 @@ class AuthService extends ChangeNotifier {
     return user;
   }
 
-  Future<_FirebaseSession> _signInWithPassword(String apiKey, String email, String password) async {
+  Future<FirebaseSession> _signInWithPassword(String apiKey, String email, String password) async {
     final uri = Uri.parse('$_identityToolkitBase/accounts:signInWithPassword?key=$apiKey');
     http.Response res;
     try {
@@ -350,7 +416,7 @@ class AuthService extends ChangeNotifier {
       throw AuthException('The sign-in service returned an unexpected response.');
     }
 
-    return _FirebaseSession(
+    return FirebaseSession(
       idToken: idToken,
       refreshToken: refreshToken,
       expiresIn: int.tryParse(body['expiresIn']?.toString() ?? '') ?? 3600,
@@ -471,13 +537,21 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  /// Signs out in visible stages. Push registration is removed first, then the
+  /// app-level credentials are cleared. Navigation stays blocked until both
+  /// stages finish so the user cannot land on a screen backed by a device that
+  /// still receives notifications for the previous account.
+  Future<void> logout({void Function(String)? onProgress}) async {
+    onProgress?.call('Unsubscribing notification…');
     try {
-      await NotificationService.instance.onUserLoggedOut(apiService);
+      await NotificationService.instance
+          .onUserLoggedOut(apiService)
+          .timeout(const Duration(seconds: 80));
     } catch (e) {
       debugPrint('[AuthService] logout notification unsubscribe error: $e');
     }
 
+    onProgress?.call('Fully logging out…');
     _token = null;
     _refreshToken = null;
     _tokenExpiry = null;
@@ -491,6 +565,8 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(ApiConfig.storageKeyTokenExpiry);
     await prefs.remove(ApiConfig.storageKeyUser);
     await prefs.remove(ApiConfig.storageKeySelectedBusiness);
+
+    notifyListeners();
   }
 
   Map<String, dynamic> _decodeJson(String body) {
@@ -540,7 +616,7 @@ class AuthService extends ChangeNotifier {
   }
 }
 
-class _FirebaseSession {
+class FirebaseSession {
   final String idToken;
   final String refreshToken;
   final int expiresIn;
@@ -548,7 +624,7 @@ class _FirebaseSession {
   final String? email;
   final String? displayName;
 
-  _FirebaseSession({
+  FirebaseSession({
     required this.idToken,
     required this.refreshToken,
     required this.expiresIn,

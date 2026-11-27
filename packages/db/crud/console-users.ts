@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, lt, ne } from 'drizzle-orm';
 import { db } from '@db/client';
 import { consoleSessions, consoleUsers } from '@db/schema';
+import { sinceCondition } from './since';
 
 export type ConsoleRole = 'superuser' | 'admin';
 export type ConsoleUserRow = typeof consoleUsers.$inferSelect;
@@ -23,10 +24,12 @@ const PUBLIC_COLUMNS = {
   updatedAt: consoleUsers.updatedAt,
 };
 
-export async function listConsoleUsers(): Promise<ConsoleUserPublic[]> {
+export async function listConsoleUsers(since?: unknown): Promise<ConsoleUserPublic[]> {
+  const sinceFilter = sinceCondition(consoleUsers.updatedAt, since);
   const rows = await db
     .select(PUBLIC_COLUMNS)
     .from(consoleUsers)
+    .where(sinceFilter)
     .orderBy(asc(consoleUsers.role), asc(consoleUsers.createdAt));
   return rows as ConsoleUserPublic[];
 }

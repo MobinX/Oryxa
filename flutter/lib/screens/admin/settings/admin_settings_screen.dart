@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../config/app_theme.dart';
 import '../../../providers/admin_provider.dart';
+import '../../../widgets/app_feedback.dart';
 import '../../auth/login_screen.dart';
 import '../../main_scaffold.dart';
 
@@ -166,7 +167,10 @@ class AdminSettingsScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    await admin.adminLogout();
+                    await runWithLogoutProgress(
+                      context,
+                      (setProgress) => admin.adminLogout(onProgress: setProgress),
+                    );
                     if (context.mounted) {
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(builder: (_) => const LoginScreen()),

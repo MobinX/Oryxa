@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '@repo/db/client';
 import { products } from '@repo/db/schema';
 import { runInBackground } from '@api/lib/background';
+import { sinceSchema } from '@api/lib/since';
 import {
   createProductBodySchema,
   createProductOutputSchema,
@@ -75,7 +76,10 @@ const listCategoriesRoute = createRoute({
   path: '/{businessId}/categories',
   tags: ['Catalog'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ businessId: z.string().uuid() }) },
+  request: {
+    params: z.object({ businessId: z.string().uuid() }),
+    query: z.object({ since: sinceSchema }),
+  },
   responses: {
     200: {
       content: { 'application/json': { schema: z.array(selectCategorySchema) } },
@@ -86,7 +90,7 @@ const listCategoriesRoute = createRoute({
 
 productsRouter.openapi(listCategoriesRoute, async (c) => {
   const businessId = c.req.param('businessId');
-  const cats = await listCategories(businessId);
+  const cats = await listCategories(businessId, c.req.valid('query').since);
   return c.json(cats);
 });
 

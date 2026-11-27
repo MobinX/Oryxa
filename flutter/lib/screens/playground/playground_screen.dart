@@ -85,6 +85,18 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
   String _sandboxPageId(String businessId) => 'mock-channel-$businessId';
 
+  /// Isolated so a missing/failed agent endpoint cannot fail the whole sandbox
+  /// load when it runs alongside the channels request.
+  Future<AgentModel?> _loadDefaultAgent(ApiService api, String businessId) async {
+    try {
+      final res = await api.get(ApiConfig.pathDefaultAgent(businessId));
+      return res is Map ? AgentModel.fromJson(Map<String, dynamic>.from(res)) : null;
+    } catch (e) {
+      debugPrint('[Playground] Default agent load error: $e');
+      return null;
+    }
+  }
+
   Future<void> _loadSandbox() async {
     final biz = _effectiveBusiness;
     if (biz == null) {
@@ -92,12 +104,19 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       return;
     }
 
-    setState(() => _loadingSandbox = true);
+    if (mounted) setState(() => _loadingSandbox = true);
     final api = context.read<ApiService>();
 
     try {
-      // 1. Load or provision sandbox channel
-      final channelsRes = await api.get(ApiConfig.pathChannels(biz.id));
+      // Channels and the default agent are independent reads. Fetch them in
+      // parallel so the playground is usable after one round-trip, not two.
+      final results = await Future.wait<Object?>([
+        api.get(ApiConfig.pathChannels(biz.id)),
+        _loadDefaultAgent(api, biz.id),
+      ]);
+      final channelsRes = results[0];
+      _agent = results[1] as AgentModel?;
+
       List<ChannelModel> channelList = [];
       if (channelsRes is List) {
         channelList = channelsRes
@@ -129,17 +148,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
 
       _activeChannel = sandbox.id.isNotEmpty ? sandbox : null;
 
-      // 2. Load default agent
-      try {
-        final agentRes = await api.get(ApiConfig.pathDefaultAgent(biz.id));
-        if (agentRes is Map) {
-          _agent = AgentModel.fromJson(Map<String, dynamic>.from(agentRes));
-        }
-      } catch (e) {
-        debugPrint('[Playground] Default agent load error: $e');
-      }
-
-      // 3. Load conversations for sandbox channel
+      // Conversations need the channel id, so they start only once the channel
+      // is known. Messages in turn follow the selected conversation.
       if (_activeChannel != null) {
         await _loadConversations();
       }
@@ -1253,7 +1263,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                                         'replyGuidance': messengerCtrl.text.trim(),
                                         'commentReplyGuidance': commentCtrl.text.trim(),
                                       };
-                                      await api.patch(ApiConfig.pathAgentDetail(biz.id, agent.id), body: payload);
+                                      await api.put(ApiConfig.pathAgentDetail(biz.id, agent.id), body: payload);
                                       setState(() {
                                         _agent = agent.copyWith(
                                           systemPrompt: promptCtrl.text.trim(),
@@ -1381,9 +1391,9 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
           ),
         ],
       ),
-      body: _loadingSandbox
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      // Render the shell immediately; data fills in progressively. A blocking
+      // full-screen spinner here made the playground feel frozen on slow links.
+      body: Column(
               children: [
                 // Top control banner: Mode selector + conversation button
                 Container(

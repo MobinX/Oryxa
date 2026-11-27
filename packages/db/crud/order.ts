@@ -12,6 +12,7 @@ import {
 import { resolveStoredImageUrl } from '@repo/integrations/b2';
 import { findOrCreateCustomerByPhone, ensureCompanyIdForBusiness, normalizePhone } from './customer';
 import { createBusinessNotification } from './notification';
+import { sinceCondition } from './since';
 
 /** A page of order history: ten, because that is what one Messenger card list can carry. */
 const ORDER_HISTORY_PAGE = 10;
@@ -203,11 +204,14 @@ export async function getOrderById(businessId: string, orderId: string) {
 
 export async function listOrders(
   businessId: string,
-  options: { state?: string; limit?: number } = {},
+  options: { state?: string; limit?: number; since?: unknown } = {},
 ) {
-  const { state, limit = 20 } = options;
+  const { state, limit = 20, since } = options;
   const conditions = [eq(orders.businessId, businessId), isNull(orders.deletedAt)];
   if (state) conditions.push(eq(orders.state, state as typeof orders.state.enumValues[number]));
+  // Orders are append-only: createdAt is the moment the row last changed.
+  const sinceFilter = sinceCondition(orders.updatedAt, since);
+  if (sinceFilter) conditions.push(sinceFilter);
 
   const items = await db.query.orders.findMany({
     where: and(...conditions),
