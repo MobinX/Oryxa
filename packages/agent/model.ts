@@ -27,6 +27,25 @@ export interface StoreModelOptions {
 }
 
 /**
+ * Resolves the active base URL for the store agent model.
+ * When running on Microsoft Foundry / Azure with AZURE_API_KEY, protects against rogue
+ * local proxies (e.g. 127.0.0.1 or api.openai.com) hijacking Azure traffic.
+ */
+export function resolveOpenAiBaseUrl(): string {
+  if (process.env.AZURE_OPENAI_BASE_URL) {
+    return process.env.AZURE_OPENAI_BASE_URL;
+  }
+  const configured = process.env.OPENAI_BASE_URL;
+  if (
+    process.env.AZURE_API_KEY &&
+    (!configured || configured.includes('127.0.0.1') || configured.includes('localhost') || configured.includes('api.openai.com'))
+  ) {
+    return 'https://oryxa.openai.azure.com/openai/v1';
+  }
+  return configured || 'https://oryxa.openai.azure.com/openai/v1';
+}
+
+/**
  * A chat model built from Microsoft Foundry / Azure OpenAI credentials:
  * `AZURE_API_KEY`/`OPENAI_API_KEY` + `OPENAI_BASE_URL` on the Responses API.
  */
@@ -35,7 +54,7 @@ export function createStoreAgentModel(options: StoreModelOptions = {}): BaseChat
     model: agentModelName(options.provider ?? defaultAgentProvider()),
     apiKey: process.env.AZURE_API_KEY || process.env.OPENAI_API_KEY,
     configuration: {
-      baseURL: process.env.OPENAI_BASE_URL || 'https://oryxa.openai.azure.com/openai/v1',
+      baseURL: resolveOpenAiBaseUrl(),
     },
     // The Responses API forwards `reasoning` to a reasoning deployment without setting `max_tokens`.
     reasoning: { effort: options.reasoningEffort ?? 'low' },

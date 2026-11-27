@@ -41,6 +41,14 @@ const forceMock = process.argv.includes('--mock');
 // Set necessary environment defaults
 process.env.NODE_ENV = 'test';
 process.env.OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-6-luna';
+if (
+  process.env.AZURE_API_KEY &&
+  (!process.env.OPENAI_BASE_URL ||
+    process.env.OPENAI_BASE_URL.includes('127.0.0.1') ||
+    process.env.OPENAI_BASE_URL.includes('localhost'))
+) {
+  process.env.OPENAI_BASE_URL = 'https://oryxa.openai.azure.com/openai/v1';
+}
 
 // Color formatting for terminal
 const cyan = (text: string) => `\x1b[36m${text}\x1b[0m`;
