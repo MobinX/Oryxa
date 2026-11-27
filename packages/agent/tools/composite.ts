@@ -444,7 +444,8 @@ export function createCompositeTools(context: CompositeToolsContext) {
         );
       } catch (err) {
         console.error('[composite-tool] place_order failed:', err);
-        return logResult(JSON.stringify({ created: false, reason: 'Failed to create order in database.' }));
+        const reason = err instanceof Error ? err.message : 'Failed to create order in database.';
+        return logResult(JSON.stringify({ created: false, reason }));
       }
     },
     {

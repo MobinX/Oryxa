@@ -271,8 +271,8 @@ export function createProductInfoTool(context: ProductInfoToolContext) {
           totalTokens: usage.inputTokens + usage.outputTokens,
           cacheHitTokens: usage.cacheHitTokens,
           estimatedCostUsd: Number(
-            (((usage.inputTokens / 1e6) * (provider === 'openai' ? 0.15 : 0.075))
-              + ((usage.outputTokens / 1e6) * (provider === 'openai' ? 0.60 : 0.30))).toFixed(6),
+            (((usage.inputTokens / 1e6) * (provider === 'openai' ? 0.10 : 0.075))
+              + ((usage.outputTokens / 1e6) * (provider === 'openai' ? 0.50 : 0.30))).toFixed(6),
           ),
           ...(generated.length === 0 ? { errorName: 'EmptyAnswer' } : {}),
         });

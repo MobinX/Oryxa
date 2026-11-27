@@ -11,10 +11,13 @@ import { COMMENT_REPLY_GUIDANCE, DEFAULT_REPLY_GUIDANCE } from '@agent/guidance'
 import type { ConversationAgentState, PaymentMethodConfig, PaymentStrategy } from '@repo/shared';
 import {
   formatCompactAgentState,
+  extractSalesPlan,
+  mergeSalesPlan,
   detectTurnLanguage,
   classifyTurnIntent,
   classifyTurnHybrid,
-  type JevClassificationResult,
+  classifyTurnDecision,
+  type DecisionResult,
   type JevIntentCategory,
   validateAndSanitizeReply,
   isRepeatAnswer,
@@ -116,7 +119,9 @@ export interface AgentConfig {
   customerPlatformId: string;
   customerName?: string | null;
   /** Which inbox this token answers as; tools use it for the platform's text limit and wording. */
-  platform?: 'facebook' | 'instagram';
+  platform?: 'facebook' | 'instagram' | 'whatsapp';
+  /** Pre-computed Decision Router result (passed by agent-runner-core to avoid double classification). */
+  decision?: DecisionResult;
   /** True on the turn right after a customer typed instead of tapping the offered chips. */
   suppressSuggestions?: boolean;
   catalogSummary?: string;
@@ -195,6 +200,8 @@ export interface AgentRunResult {
   messages: TraceMessage[];
   /** Optional quick reply suggestion chips extracted from <<CHIPS: ...>> footer */
   chips?: string[];
+  /** Decision Router result used on this turn */
+  decision?: DecisionResult;
 }
 
 const CHIPS_REGEX = /\n?<<CHIPS:\s*(.+?)>>\s*$/i;
@@ -203,6 +210,8 @@ const CHIPS_REGEX = /\n?<<CHIPS:\s*(.+?)>>\s*$/i;
  * Extracts inline quick-reply suggestion chips from the model's final response text.
  * Cuts an entire 3.5s LLM ReAct round-trip by emitting chips in-band via <<CHIPS: A | B | C>>.
  */
+export { extractSalesPlan } from '@repo/shared';
+
 export function extractQuickReplies(rawText: string): { text: string; chips: string[] } {
   const match = rawText.match(CHIPS_REGEX);
   if (!match) return { text: rawText.trim(), chips: [] };
@@ -394,7 +403,7 @@ export class Agent {
           businessName: this.config.business.name,
           productInfoLlm: this.config.productInfoLlm,
           onTokenUsage: (usage) => usageCollector.add(usage),
-          platform: this.config.platform,
+          platform: this.config.platform as any,
           suppressSuggestions: this.config.suppressSuggestions,
           emitSse,
           sendMessageOverride,
@@ -496,7 +505,7 @@ export class Agent {
         ? `Your previous reply to this customer${answerAgeSeconds != null ? ` (${answerAgeSeconds} seconds ago)` : ''} was: "${previousAnswer.trim().slice(0, 240)}". They see it on screen already. If their newest message is a fragment, a typo, or asks the same thing again, do NOT restate that reply — build on it: name one specific product with its price, ask a single narrower question (category, size, colour, quantity), or answer the part you have not answered yet. Saying something new every turn is the job; a repeated sentence reads to the customer as a broken bot.`
         : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
-      compactState ? `Conversation state (verified facts):\n${JSON.stringify(compactState)}` : '',
+      compactState ? `Conversation state (verified facts):\n${compactState}` : '',
       `Reply language: ${turnLanguage === 'bn' ? 'Bangla (শুদ্ধ বাংলা)' : 'English'} (strict matching required).`,
       turnIntent ? `Turn intent: ${turnIntent}.` : '',
     ].filter(Boolean).join('\n');
@@ -617,8 +626,8 @@ export class Agent {
     
     // Estimate cost (Gemini: $0.075/1M in, $0.30/1M out). The OpenAI rates are the ones gpt-5-mini was
     // priced at and have NOT been re-checked for gpt-6-luna, so estimated_cost_usd is a scale, not a bill.
-    const rateIn = provider === 'openai' ? 0.15 : 0.075;
-    const rateOut = provider === 'openai' ? 0.60 : 0.30;
+    const rateIn = provider === 'openai' ? 0.10 : 0.075;
+    const rateOut = provider === 'openai' ? 0.50 : 0.30;
     const estimatedCostUsd = parseFloat(((inputTokens / 1e6) * rateIn + (outputTokens / 1e6) * rateOut).toFixed(6));
 
     const metrics: TokenUsageMetrics = {
@@ -637,8 +646,13 @@ export class Agent {
     // Extract inline quick reply chips emitted via <<CHIPS: ...>>
     const { text: cleanReply, chips } = extractQuickReplies(replyText);
     replyText = cleanReply;
+    const { text: cleanReply2, plan } = extractSalesPlan(replyText);
+    replyText = cleanReply2;
     if (chips.length > 0 && this.config.agentState) {
       this.config.agentState.lastSuggestions = chips;
+    }
+    if (plan && this.config.agentState) {
+      this.config.agentState.salesPlan = { ...(this.config.agentState.salesPlan ?? {}), ...plan } as any;
     }
 
     console.log(`[agent] run complete — sentTexts=${sentTexts.length} totalTokens=${totalTokens} cacheHit%=${cacheHitPercent}% finalReply="${replyText.slice(0, 120)}${replyText.length > 120 ? '…' : ''}"`);

@@ -9,6 +9,15 @@ const currencySchema = z
   .regex(/^[A-Za-z]{3,8}$/, 'Use an ISO currency code such as BDT or USD')
   .transform((value) => value.toUpperCase());
 
+export const enrichedProductSpecsSchema = z.object({
+  highlights: z.array(z.string()).max(6).default([]),
+  materialAndFeel: z.string().default(''),
+  occasionHooks: z.array(z.string()).max(6).default([]),
+  objectionCounters: z.array(z.string()).max(4).default([]),
+});
+
+export type EnrichedProductSpecs = z.infer<typeof enrichedProductSpecsSchema>;
+
 export const baseProductSchema = z.object({
   businessId: uuidSchema,
   categoryId: uuidSchema.nullable().optional(),
@@ -27,6 +36,10 @@ export const baseProductSchema = z.object({
   showInStorefront: z.boolean().default(true),
   /** This product's own payment strategy; null/absent follows the store default. */
   paymentStrategyOverride: z.enum(['cod', 'delivery_prepaid', 'full_prepaid']).nullable().optional(),
+  /** B2 object key of the pre-rendered 1080x1080 product card PNG. */
+  cardImageKey: z.string().nullable().optional(),
+  /** One-time AI-enriched selling highlights and material/occasion details. */
+  enrichedSpecs: enrichedProductSpecsSchema.nullable().optional(),
 }).openapi('Product');
 
 /** One knob a product is sold in — "Color", "Size" — and the values it may take. */
@@ -58,6 +71,7 @@ export const baseVariantSchema = z.object({
   stock: z.number().int().min(0).default(0),
   isAvailable: z.boolean().default(true),
   rating: z.coerce.number().min(0).max(5).optional(),
+  cardImageKey: z.string().nullable().optional(),
 }).openapi('Variant');
 
 export const variantInputSchema = baseVariantSchema

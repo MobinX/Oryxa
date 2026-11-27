@@ -11,11 +11,17 @@
     "./whatsapp": "./whatsapp.ts",
     "./b2": "./b2.ts",
     "./azure-speech": "./azure-speech.ts",
-    "./http-log": "./http-log.ts"
+    "./http-log": "./http-log.ts",
+    "./card-renderer": "./card-renderer.ts",
+    "./visual-renderer": "./visual-renderer.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
-    "@aws-sdk/s3-request-presigner": "^3.750.0"
+    "@aws-sdk/s3-request-presigner": "^3.750.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/noto-sans-bengali": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "satori": "^0.63.2"
   },
   "optionalDependencies": {
     "ffmpeg-static": "^5.3.0"

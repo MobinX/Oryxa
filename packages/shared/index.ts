@@ -28,6 +28,7 @@ export * from './payment-strategy';
 export * from './language';
 export * from './deliveryZone';
 export * from './jev';
+export * from './decision-router';
 export * from '@shared/timezone';
 
 export { z } from '@hono/zod-openapi';

@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, text, integer, boolean, numeric, timestamp, pgEnum, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
-import type { ConversationAgentState, ExternalPostMedia } from '@repo/shared';
+import type { ConversationAgentState, EnrichedProductSpecs, ExternalPostMedia } from '@repo/shared';
 
 /** One region the merchant delivers to and the charge they quote for it. */
 export type DeliveryZone = {
@@ -597,6 +597,10 @@ export const products = pgTable('products', {
    * store: most products never override, and a store-wide change then reaches them all.
    */
   paymentStrategyOverride: varchar('payment_strategy_override', { length: 30 }).$type<PaymentStrategy>(),
+  /** B2 object key of the pre-rendered 1080x1080 product card PNG. */
+  cardImageKey: varchar('card_image_key', { length: 500 }),
+  /** One-time gpt-6-luna catalog enrichment payload (highlights, materialAndFeel, occasionHooks, objectionCounters). */
+  enrichedSpecs: jsonb('enriched_specs').$type<EnrichedProductSpecs | null>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),
 }, (t) => ({
@@ -635,6 +639,8 @@ export const variants = pgTable(
      * skip options entirely, but a product that declares them has no variant without a full set.
      */
     options: jsonb('options').$type<Record<string, string>>().default(sql`'{}'::jsonb`).notNull(),
+    /** B2 object key of the pre-rendered 1080x1080 variant card PNG. */
+    cardImageKey: varchar('card_image_key', { length: 500 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
   },
@@ -1228,9 +1234,9 @@ export const modelBilling = pgTable('model_billing', {
   id: uuid('id').primaryKey().defaultRandom(),
   provider: varchar('provider', { length: 50 }).default('openai').notNull(),
   model: varchar('model', { length: 100 }).default('gpt-6-luna').notNull(),
-  inputUsdPerMillion: numeric('input_usd_per_million', { precision: 12, scale: 6 }).default('0.150000').notNull(),
-  outputUsdPerMillion: numeric('output_usd_per_million', { precision: 12, scale: 6 }).default('0.600000').notNull(),
-  cachedInputUsdPerMillion: numeric('cached_input_usd_per_million', { precision: 12, scale: 6 }).default('0.075000').notNull(),
+  inputUsdPerMillion: numeric('input_usd_per_million', { precision: 12, scale: 6 }).default('0.100000').notNull(),
+  outputUsdPerMillion: numeric('output_usd_per_million', { precision: 12, scale: 6 }).default('0.500000').notNull(),
+  cachedInputUsdPerMillion: numeric('cached_input_usd_per_million', { precision: 12, scale: 6 }).default('0.010000').notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => ({
   singletonUniq: uniqueIndex('model_billing_singleton_idx').on(sql`true`),
