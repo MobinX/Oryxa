@@ -322,7 +322,8 @@ export async function transcribeAudio(buffer: Buffer, contentType: string): Prom
   const mime = contentType.split(';')[0].trim() || 'audio/mp4';
 
   if (tierF0) {
-    return transcribeShortAudioF0(key, { buffer, contentType: mime });
+    const f0Res = await transcribeShortAudioF0(key, { buffer, contentType: mime });
+    if (f0Res) return f0Res;
   }
 
   if (enhancedEnabled) {

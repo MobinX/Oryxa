@@ -21,6 +21,7 @@ describe('voice transcription (packages/integrations/azure-speech.ts)', () => {
     vi.stubEnv('AZURE_SPEECH_KEY', 'test-key');
     vi.stubEnv('AZURE_SPEECH_ENDPOINT', 'https://speech.test');
     vi.stubEnv('AZURE_SPEECH_ENHANCED', '');
+    vi.stubEnv('AZURE_SPEECH_TIER', '');
     fetchMock.mockReset();
   });
 
