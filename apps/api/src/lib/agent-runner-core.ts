@@ -131,16 +131,28 @@ export async function runAgentCore(
 
   console.log(`[agent-runner-core] claimed conversation ${conversationId} — starting agent run`);
 
-  tagContext({ conversationId: conv.id, businessId, channelId: conv.channelId });
-  const runDepth = currentContext()?.runDepth ?? 0;
-  if (runDepth >= RUN_LOOP_DEPTH_THRESHOLD) {
-    emitAnomaly('run_loop_depth', { count: runDepth });
-  }
+  const started = performance.now();
+  let ok = false;
+  let replyText = '';
+  let metrics: TokenUsageMetrics | undefined;
+  let run: AgentRunResult | undefined;
+  let sentViaFallback = 0;
+  let clearedCount = 0;
+  let stateSetTo = 'working';
+  let runError: unknown;
+  let agent: Agent | undefined;
 
-  if (!sendMessageOverride) {
-    await senderAction(conv.channel.apiToken, conv.customerPlatformId, 'typing_on');
-  }
-  emitSse('runner_start', { conversationId });
+  try {
+    tagContext({ conversationId: conv.id, businessId, channelId: conv.channelId });
+    const runDepth = currentContext()?.runDepth ?? 0;
+    if (runDepth >= RUN_LOOP_DEPTH_THRESHOLD) {
+      emitAnomaly('run_loop_depth', { count: runDepth });
+    }
+
+    if (!sendMessageOverride) {
+      await senderAction(conv.channel.apiToken, conv.customerPlatformId, 'typing_on');
+    }
+    emitSse('runner_start', { conversationId });
 
   // Drain the ENTIRE backlog in this run: snapshot every pending customer
   // message (oldest first, no cap) so the agent replies to all of them in order
@@ -331,6 +343,8 @@ export async function runAgentCore(
         agentState.lastSuggestions = fp.chips;
         await updateConversationAgentState(conv.id, agentState).catch(() => {});
       }
+      await markMessagesDoneByIds(conv.id, repliedMessageIds);
+      await updateConversationState(conv.id, 'done');
       emit('agent_run', {
         conversationId: conv.id,
         businessId,
@@ -362,7 +376,7 @@ export async function runAgentCore(
     }
   }
 
-  const agent = new Agent({
+  agent = new Agent({
     systemPrompt: answering.systemPrompt,
     business: conv.business ?? { id: businessId, name: 'Store' },
     history,
@@ -409,18 +423,7 @@ export async function runAgentCore(
     },
   });
 
-  const started = performance.now();
-  let ok = false;
-  let replyText = '';
-  let metrics: TokenUsageMetrics | undefined;
-  let run: AgentRunResult | undefined;
-  let sentViaFallback = 0;
-  let clearedCount = 0;
-  let stateSetTo = 'working';
-  let runError: unknown;
-
-  try {
-    run = await agent.run();
+  run = await agent.run();
     replyText = run.replyText;
     metrics = run.metrics;
 
@@ -536,12 +539,12 @@ export async function runAgentCore(
     // Pre-existing behaviour: a failed run releases the lock as `done` rather
     // than `error`, so a later webhook can pick the conversation up again. The
     // messages stay pending, but the state never says this run broke.
-    await updateConversationState(conv.id, 'done');
+    await updateConversationState(conv.id, 'done').catch(() => {});
     stateSetTo = 'done';
     runError = err;
   }
 
-  const sentViaTool = agent.sentTexts.length;
+  const sentViaTool = agent?.sentTexts?.length ?? 0;
   if (runError && stateSetTo === 'done') {
     // The run broke, yet the conversation is `done` like any other: nothing in
     // the data says this turn failed, so only the log can tell the story.
