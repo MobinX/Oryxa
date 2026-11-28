@@ -359,7 +359,7 @@ export class Agent {
     // Keep reasoning_effort constant to avoid model-parameter cache invalidation between turns
     const reasoningEffort = this.config.reasoningEffort
       ?? (process.env.OPENAI_REASONING_EFFORT as 'low' | 'medium' | 'high' | undefined)
-      ?? 'low';
+      ?? 'medium';
 
     const llm =
       this.config.llm ??
@@ -473,8 +473,12 @@ export class Agent {
     // [TIER 1] 100% global static V2 Closer prompt + permanent Image Security + inline chips
     // ZERO dynamic business or conversation variables allowed here.
     const isCompositeDefault = !this.config.tools;
+    const isLegacyDefaultPrompt =
+      this.config.systemPrompt === CORE_AGENT_PROMPT ||
+      this.config.systemPrompt.startsWith('# Identity & Language') ||
+      this.config.systemPrompt.startsWith('You are the official Sales and Support Representative');
     const effectiveSystemPrompt =
-      isCompositeDefault && this.config.systemPrompt === CORE_AGENT_PROMPT
+      isCompositeDefault && isLegacyDefaultPrompt
         ? CLOSER_V2_PROMPT
         : this.config.systemPrompt;
     const effectiveReplyGuidance =
@@ -538,7 +542,9 @@ export class Agent {
         : '',
       this.config.postContext ? `Post being commented on:\n${this.config.postContext}` : '',
       compactState ? `Conversation state (verified facts):\n${compactState}` : '',
-      `Reply language: ${turnLanguage === 'bn' ? 'Bangla (natural Dhaka Bangla+English)' : 'English'} (strict matching required).`,
+      turnLanguage === 'bn'
+        ? 'Reply language: STRICTLY Bangla (বাংলা লিপি). The customer\'s latest message is in Bangla/Banglish, so you MUST reply in clean, natural Bangla script even if earlier turns were in English.'
+        : 'Reply language: STRICTLY English. The customer\'s latest message is in English, so you MUST reply in polished, professional English with ZERO Bangla script or Banglish words, even if earlier turns were in Bangla.',
       turnIntent ? `Turn intent: ${turnIntent}.` : '',
       `Decision router: stage=${decisionResult.sales_stage} ui=${decisionResult.ui_action} intents=${decisionResult.intents.join(',')}.`,
     ].filter(Boolean).join('\n');
@@ -574,12 +580,14 @@ export class Agent {
     const latencyMs = Date.now() - startTime;
     let loopMessages = result.messages;
 
+    let lastViolations: string[] = [];
     const validateReply = (text: string): string => {
       const validation = validateAndSanitizeReply(text, {
         expectedLanguage: turnLanguage,
         channel: replyChannel,
         isSilentExpected: turnIntent === 'comment_silent',
       });
+      lastViolations = validation.violations;
       if (!validation.isValid) {
         console.log(`[agent] reply sanitized violations: ${validation.violations.join(', ')}`);
       }
@@ -587,6 +595,29 @@ export class Agent {
     };
 
     let replyText = validateReply(contentText(loopMessages[loopMessages.length - 1].content));
+
+    // Corrective retry if the model replied in the wrong language (e.g. English when customer spoke Bangla/Banglish or vice versa)
+    const hasLanguageMismatch =
+      replyText.trim() !== 'SILENT' &&
+      (lastViolations.includes('R3_LANGUAGE_MISMATCH_EXPECTED_BN') ||
+        lastViolations.includes('R3_LANGUAGE_MISMATCH_EXPECTED_EN'));
+
+    if (hasLanguageMismatch) {
+      const langInstruction =
+        turnLanguage === 'bn'
+          ? 'LANGUAGE CORRECTION: Your draft was not in Bangla. Rewrite your exact same answer strictly in clean, natural Bangladeshi Bangla script (বাংলা লিপি), keeping only product names, prices, and <<CHIPS:...>> / <<PLAN:...>> tags. Do not call any tools.'
+          : 'LANGUAGE CORRECTION: Your draft contained Bangla. Rewrite your exact same answer strictly in polished, professional English with ZERO Bangla characters, keeping <<CHIPS:...>> / <<PLAN:...>> tags. Do not call any tools.';
+      try {
+        const langRetried = await agent.invoke(
+          { messages: [...loopMessages, new HumanMessage(langInstruction)] },
+          { recursionLimit: 4 },
+        );
+        loopMessages = langRetried.messages;
+        replyText = validateReply(contentText(loopMessages[loopMessages.length - 1].content));
+      } catch (err) {
+        console.error('[agent] language corrective retry failed, keeping first reply:', err);
+      }
+    }
 
     /**
      * A restated answer is refused out loud, not quietly dropped: the model is shown what it

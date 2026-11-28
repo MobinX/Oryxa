@@ -33,22 +33,24 @@ export const TOOL_NARRATION_PATTERNS = [
  * excluded — they appear in pure English messages and must not trigger 'bn' on their own.
  */
 export const BANGLISH_LEXICON = new Set([
-  'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnader', 'amader', 'amar', 'tomar', 'apnar',
-  'amake', 'tomake', 'apnake',
+  'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnra', 'apnader', 'amar', 'tomar', 'apnar',
+  'amake', 'tomake', 'apnake', 'apnare', 'miya',
   'koto', 'koto?', 'dam', 'daam', 'ache', 'ase', 'ase?', 'ache?', 'thakbe', 'thakbe?',
   'ki', 'ki?', 'kire', 'kemon', 'kemon?', 'koyta', 'koita', 'koyta?', 'koita?',
   'shob', 'shobgulo', 'sob', 'sobgulo', 'chobi', 'chobigulo', 'picgulo',
   'dekhao', 'dekhan', 'dekhte', 'chai', 'dekte', 'dekhbo', 'dekhi', 'dekho', 'dekhun',
-  'lagbe', 'hobe', 'hobe?',
-  'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben', 'bodole', 'onno', 'arekta', 'ar',
-  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'eita', 'oita', 'er', 'tar',
+  'lagbe', 'hobe', 'hobe?', 'hoitase', 'hoitese', 'panr',
+  'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben', 'dite', 'bodole', 'onno', 'arekta', 'ar',
+  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'eita', 'oita', 'er', 'tar', 'sheta', 'seta',
   'kache', 'thikana', 'thik', 'dhaka', 'chattogram',
   'pathan', 'pathaben', 'korte', 'kore', 'koren', 'korbo', 'koro', 'korun', 'korben',
-  'korechi', 'korchi', 'koreche', 'korechen', 'korechilam', 'korlam', 'kora',
+  'korechi', 'korchi', 'korsi', 'koreche', 'korechen', 'korechilam', 'korlam', 'kora',
   'khub', 'valo', 'bhalo', 'bhai', 'bhaiya', 'apu', 'didi', 'dada', 'dost', 'dosto',
-  'shundor', 'sundor', 'beshi', 'kom', 'kichu', 'akta', 'ekta', 'duita', 'tin ta', 'tinta',
-  'pice', 'bolun', 'bolo', 'janan', 'parben', 'parben?',
-  'kintu', 'jante', 'peyechi', 'diyechi', 'niyechi', 'keno', 'kothay', 'kivabe', 'kokhon',
+  'shundor', 'sundor', 'beshi', 'kom', 'kichu', 'kisu', 'akta', 'ekta', 'ektai', 'duita', 'tin ta', 'tinta',
+  'pice', 'bolun', 'bolo', 'boilen', 'janan', 'parben', 'parben?', 'parbo', 'parina', 'pari',
+  'kintu', 'jante', 'peyechi', 'diyechi', 'niyechi', 'keno', 'kn', 'ken', 'kno', 'kothay', 'kivabe', 'kokhon',
+  'mane', 'jemon', 'bechen', 'jaigaise', 'bistarito', 'naki', 'toh', 'ekhon', 'akhon', 'baje',
+  'asole', 'ashole', 'sotti', 'shotti', 'lagse', 'lagche', 'tahole', 'taile', 'kono', 'kon', 'kotha', 'jinish', 'karon',
 ]);
 
 /**
@@ -57,16 +59,17 @@ export const BANGLISH_LEXICON = new Set([
  * Generic English words (please, order, price, delivery, etc.) are intentionally excluded.
  */
 export const STRONG_BANGLISH_MARKERS = new Set([
-  'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnader', 'amader', 'amar', 'tomar', 'apnar',
-  'amake', 'tomake', 'apnake',
-  'korte', 'kore', 'koren', 'korbo', 'koro', 'korun', 'korben', 'korechi', 'korchi',
+  'ami', 'amra', 'tumi', 'tomra', 'apni', 'apnara', 'apnra', 'apnader', 'amar', 'tomar', 'apnar',
+  'amake', 'tomake', 'apnake', 'apnare',
+  'korte', 'kore', 'koren', 'korbo', 'koro', 'korun', 'korben', 'korechi', 'korchi', 'korsi',
   'koreche', 'korechen', 'korechilam', 'korlam',
-  'chai', 'ache', 'ase', 'thakbe', 'lagbe', 'hobe', 'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben',
+  'chai', 'ache', 'ase', 'thakbe', 'lagbe', 'hobe', 'hoitase', 'hoitese', 'dibo', 'nibo', 'nebo', 'den', 'dao', 'diben',
   'dekhao', 'dekhan', 'dekhte', 'dekhi', 'dekhbo', 'dekte', 'dekho', 'dekhun',
   'koto', 'koyta', 'koita', 'kemon', 'dam', 'daam', 'thikana', 'chobi', 'bodole',
-  'kache', 'pathan', 'pathaben', 'parben', 'bolun', 'bolo', 'janan',
-  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'er', 'tar',
-  'kintu', 'jante', 'peyechi',
+  'kache', 'pathan', 'pathaben', 'parben', 'parbo', 'parina', 'bolun', 'bolo', 'boilen', 'janan',
+  'ei', 'oi', 'etar', 'otar', 'eta', 'ota', 'eita', 'oita', 'er', 'tar', 'sheta', 'seta',
+  'kintu', 'jante', 'peyechi', 'mane', 'jemon', 'bechen', 'jaigaise', 'bistarito', 'ektai',
+  'keno', 'kn', 'kno', 'kothay', 'kivabe', 'kokhon', 'ekhon', 'akhon', 'tahole', 'taile', 'ashole', 'asole',
 ]);
 
 export interface LanguageDetectionContext {
@@ -113,10 +116,11 @@ export function detectTurnLanguage(
     return context.languageOverride;
   }
 
-  // 3. Short affirmations / button taps / single numbers keep previous reply language
+  // 3. Truly language-neutral short affirmations, numbers, or punctuation keep previous reply language.
+  // English words like "hello", "hi", "thanks", "price?" must switch to 'en' immediately.
   const isShortMessage =
-    cleanInput.length <= 6 ||
-    /^(ok|okay|ha|haa|hmm|thik ache|yes|no|done|fine|sure|\d+|[^\w\s]+)$/i.test(lower);
+    /^(ok|okay|k|ha|haa|hmm|hm|thik ache|yes|no|y|n|done|fine|sure|\d+|[^\w\s]+)$/i.test(cleanInput) ||
+    (cleanInput.length <= 2 && !/[a-zA-Z\u0980-\u09FF]/.test(cleanInput));
 
   if (isShortMessage) {
     if (context?.lastReplyLanguage) {

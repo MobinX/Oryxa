@@ -53,6 +53,14 @@ describe('P1 Language Detection & Preservation', () => {
     expect(detectTurnLanguage('Please answer in English')).toBe('en');
     expect(detectTurnLanguage('Please speak in English')).toBe('en');
   });
+
+  it('switches immediately between Banglish and English mid-conversation', () => {
+    expect(detectTurnLanguage('Mane why should I buy this', { lastReplyLanguage: 'en' })).toBe('bn');
+    expect(detectTurnLanguage('Mane jemon?', { lastReplyLanguage: 'en' })).toBe('bn');
+    expect(detectTurnLanguage('Bhai apnra ki bechen?', { lastReplyLanguage: 'en' })).toBe('bn');
+    expect(detectTurnLanguage('Hello', { lastReplyLanguage: 'bn' })).toBe('en');
+    expect(detectTurnLanguage('Please tell me the price', { lastReplyLanguage: 'bn' })).toBe('en');
+  });
 });
 
 describe('P2 Em-Dash, Code & Narration Sanitization', () => {

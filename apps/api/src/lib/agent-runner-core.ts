@@ -141,6 +141,7 @@ export async function runAgentCore(
   let stateSetTo = 'working';
   let runError: unknown;
   let agent: Agent | undefined;
+  let repliedMessageIds: string[] = [];
 
   try {
     tagContext({ conversationId: conv.id, businessId, channelId: conv.channelId });
@@ -159,7 +160,7 @@ export async function runAgentCore(
   // instead of only the most recent 10 and leaving older ones for a later,
   // out-of-order follow-up run.
   const pendingMsgs = await listPendingCustomerMessages(conv.id);
-  const repliedMessageIds = pendingMsgs.map((m) => m.id);
+  repliedMessageIds = pendingMsgs.map((m) => m.id);
   console.log(`[agent-runner-core] pending messages in backlog: ${pendingMsgs.length}`);
 
   // Build the agent's history: all pending customer messages (the backlog,
